@@ -6,18 +6,34 @@ services:
       POSTGRES_PASSWORD: pass
     ports:
       - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
     networks:
       - awa-net
   minio:
     image: minio/minio
+    command: server /data --console-address :9001
     environment:
       MINIO_ROOT_USER: minio
       MINIO_ROOT_PASSWORD: minio123
     ports:
       - "9000:9000"
       - "9001:9001"
-    command: server /data --console-address :9001
+    volumes:
+      - miniodata:/data
     networks:
       - awa-net
+  etl:
+    build: ./services/etl
+    environment:
+      ENABLE_LIVE: "0"
+    depends_on:
+      - postgres
+      - minio
+    networks:
+      - awa-net
+volumes:
+  pgdata:
+  miniodata:
 networks:
   awa-net:
