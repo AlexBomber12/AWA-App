@@ -1,7 +1,11 @@
-import types
-import sys
-import os
 import asyncio
+import importlib
+import os
+import sys
+import types
+from types import ModuleType
+from typing import cast
+
 
 
 class FakePool:
@@ -41,15 +45,17 @@ class FakeSPModule:
         return self.instance
 
 
-sys.modules["asyncpg"] = types.SimpleNamespace(create_pool=fake_create_pool)
+sys.modules["asyncpg"] = cast(
+    ModuleType, types.SimpleNamespace(create_pool=fake_create_pool)
+)
 fake_sp = FakeSPModule()
-sys.modules["sp_api.api"] = fake_sp
+sys.modules["sp_api.api"] = cast(ModuleType, fake_sp)
+
+repricer = importlib.import_module("services.repricer.repricer")
 
 
 def test_main():
-    import importlib
 
-    repricer = importlib.import_module("services.repricer.repricer")
     os.environ["PG_DSN"] = "d"
     os.environ["SP_REFRESH_TOKEN"] = "t"
     os.environ["SP_CLIENT_ID"] = "i"
