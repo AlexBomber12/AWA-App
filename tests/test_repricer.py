@@ -7,6 +7,7 @@ from types import ModuleType
 from typing import cast
 
 
+
 class FakePool:
     def __init__(self):
         self.log = []
@@ -43,7 +44,6 @@ class FakeSPModule:
     def Listings(self, credentials):
         return self.instance
 
-
 sys.modules["asyncpg"] = cast(
     ModuleType, types.SimpleNamespace(create_pool=fake_create_pool)
 )
@@ -54,6 +54,7 @@ repricer = importlib.import_module("services.repricer.repricer")
 
 
 def test_main():
+
     os.environ["PG_DSN"] = "d"
     os.environ["SP_REFRESH_TOKEN"] = "t"
     os.environ["SP_CLIENT_ID"] = "i"
