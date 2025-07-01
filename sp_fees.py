@@ -16,7 +16,7 @@ def main():
             cur.execute("INSERT INTO fees_raw VALUES (%s, %s)", (sku, data))
     else:
         for sku in skus:
-            cur.execute("INSERT INTO fees_raw VALUES (%s, %s)", (sku, '{}'))
+            cur.execute("INSERT INTO fees_raw VALUES (%s, %s)", (sku, "{}"))
     conn.commit()
     cur.close()
     conn.close()

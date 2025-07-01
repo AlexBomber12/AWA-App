@@ -1,0 +1,15 @@
+name: ci
+on: [push, pull_request]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r services/api/requirements.txt -r services/etl/requirements.txt -r services/repricer/requirements.txt black ruff mypy pytest
+      - run: ruff check .
+      - run: black --check .
+      - run: mypy services || true
+      - run: pytest -q
