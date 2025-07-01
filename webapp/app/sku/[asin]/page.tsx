@@ -2,6 +2,8 @@ import { Card } from "../../../components/Card";
 import PriceChart from "../../../components/PriceChart";
 import ApproveButton from "./approve-button";
 
+export const dynamic = 'force-dynamic';
+
 interface SkuData {
   title: string;
   roi: number;
@@ -10,7 +12,8 @@ interface SkuData {
 }
 
 export default async function Page({ params }: { params: { asin: string } }) {
-  const res = await fetch(`/sku/${params.asin}`);
+  const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+  const res = await fetch(`${base}/sku/${params.asin}`);
   const data: SkuData = await res.json();
 
   return (

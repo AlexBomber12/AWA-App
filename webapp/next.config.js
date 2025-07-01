@@ -1,1 +1,1 @@
-module.exports = { reactStrictMode: true, experimental: { typedRoutes: true } }
+module.exports = { reactStrictMode: true }
