@@ -1,37 +1,48 @@
-'use client';
+'use client'
 
-import { useRouter } from 'next/navigation';
+import { useRouter } from 'next/navigation'
+import {
+  Table,
+  TableHeader,
+  TableBody,
+  TableHead,
+  TableRow,
+  TableCell,
+} from './ui/table'
+import StatBadge from './StatBadge'
 
 export interface DataItem {
-  asin: string;
-  title: string;
-  roi: number;
+  asin: string
+  title: string
+  roi: number
 }
 
 export function DataTable({ data }: { data: DataItem[] }) {
-  const router = useRouter();
+  const router = useRouter()
   return (
-    <table className="w-full text-sm">
-      <thead>
-        <tr>
-          <th className="text-left p-2">ASIN</th>
-          <th className="text-left p-2">Title</th>
-          <th className="text-left p-2">ROI</th>
-        </tr>
-      </thead>
-      <tbody>
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <TableHead>ASIN</TableHead>
+          <TableHead>Title</TableHead>
+          <TableHead>ROI</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
         {data.map((item) => (
-          <tr
+          <TableRow
             key={item.asin}
-            className="cursor-pointer hover:bg-accent"
+            className="cursor-pointer"
             onClick={() => router.push(`/sku/${item.asin}`)}
           >
-            <td className="p-2">{item.asin}</td>
-            <td className="p-2">{item.title}</td>
-            <td className="p-2">{item.roi}</td>
-          </tr>
+            <TableCell>{item.asin}</TableCell>
+            <TableCell>{item.title}</TableCell>
+            <TableCell>
+              <StatBadge roi={item.roi} />
+            </TableCell>
+          </TableRow>
         ))}
-      </tbody>
-    </table>
-  );
+      </TableBody>
+    </Table>
+  )
 }
