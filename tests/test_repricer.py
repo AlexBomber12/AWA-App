@@ -7,7 +7,6 @@ from types import ModuleType
 from typing import cast
 
 
-
 class FakePool:
     def __init__(self):
         self.log = []

@@ -8,14 +8,13 @@ def main() -> int:
     refresh_token = os.environ["SP_REFRESH_TOKEN"]
     client_id = os.environ["SP_CLIENT_ID"]
     client_secret = os.environ["SP_CLIENT_SECRET"]
-    seller_id = os.environ["SELLER_ID"]
     region = os.environ["REGION"]
     dsn = os.environ["PG_DSN"]
     skus = ["DUMMY1", "DUMMY2"]
     if live:
         from sp_api.api import SellingPartnerAPI
 
-        api = SellingPartnerAPI(
+        api = SellingPartnerAPI(  # type: ignore[call-arg]
             refresh_token=refresh_token,
             client_id=client_id,
             client_secret=client_secret,
@@ -24,10 +23,9 @@ def main() -> int:
         results = []
         for sku in skus:
             r = api.get_my_fees_estimate_for_sku(sku)
-            amt = (
-                r["payload"]["FeesEstimateResult"]["FeesEstimate"]
-                ["TotalFeesEstimate"]["Amount"]
-            )
+            amt = r["payload"]["FeesEstimateResult"]["FeesEstimate"][
+                "TotalFeesEstimate"
+            ]["Amount"]
             results.append((sku, amt))
     else:
         with open("tests/fixtures/spapi_fees_sample.json") as f:
@@ -35,7 +33,9 @@ def main() -> int:
         results = [
             (
                 r["sku"],
-                r["payload"]["FeesEstimateResult"]["FeesEstimate"]["TotalFeesEstimate"]["Amount"],
+                r["payload"]["FeesEstimateResult"]["FeesEstimate"]["TotalFeesEstimate"][
+                    "Amount"
+                ],
             )
             for r in data
         ]
@@ -59,4 +59,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
