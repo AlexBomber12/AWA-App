@@ -1,9 +1,10 @@
-import types
-import sys
-import os
 import asyncio
-from typing import cast
+import importlib
+import os
+import sys
+import types
 from types import ModuleType
+from typing import cast
 
 
 class FakePool:
@@ -49,7 +50,7 @@ sys.modules["asyncpg"] = cast(
 fake_sp = FakeSPModule()
 sys.modules["sp_api.api"] = cast(ModuleType, fake_sp)
 
-from services.repricer import repricer
+repricer = importlib.import_module("services.repricer.repricer")
 
 
 def test_main():

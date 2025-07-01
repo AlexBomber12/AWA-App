@@ -1,4 +1,10 @@
-import os, sys, json, datetime, time, io
+import datetime
+import io
+import json
+import os
+import sys
+import time
+
 import keepa
 from minio import Minio
 import psycopg2
