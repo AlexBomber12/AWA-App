@@ -6,6 +6,11 @@ import os
 app = FastAPI()
 
 
+@app.get("/health")
+def health() -> dict[str, str]:
+    return {"status": "ok"}
+
+
 @app.on_event("startup")
 async def startup():
     app.state.pool = await asyncpg.create_pool(os.environ["DATABASE_URL"])
