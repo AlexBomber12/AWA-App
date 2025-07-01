@@ -16,3 +16,9 @@ class FastAPI:
             return func
 
         return decorator
+
+    def get(self, path):
+        def decorator(func):
+            return func
+
+        return decorator
