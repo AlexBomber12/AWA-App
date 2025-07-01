@@ -18,7 +18,7 @@ if shutil.which("docker") is None:
     pytest.skip("Docker not installed", allow_module_level=True)
 
 
-def wait_for_server(url: str, timeout: int = 30) -> None:
+def wait_for_server(url: str, timeout: int = 60) -> None:
     for _ in range(timeout):
         try:
             with request.urlopen(url) as resp:  # noqa: S310
