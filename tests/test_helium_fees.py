@@ -40,7 +40,9 @@ def test_offline(monkeypatch):
 
     monkeypatch.setitem(sys.modules, "requests", types.SimpleNamespace(get=fake_get))
     conn = FakeConn()
-    monkeypatch.setitem(sys.modules, "psycopg2", types.SimpleNamespace(connect=lambda dsn: conn))
+    monkeypatch.setitem(
+        sys.modules, "psycopg2", types.SimpleNamespace(connect=lambda dsn: conn)
+    )
     helium_fees = importlib.import_module("helium_fees")
 
     helium_fees.main()
