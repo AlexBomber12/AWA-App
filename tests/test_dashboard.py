@@ -31,9 +31,8 @@ def wait_for_server(url: str, timeout: int = 60) -> None:
 
 
 def test_dashboard_local_compose():
-    subprocess.run(["docker", "compose", "up", "-d"], check=True)
+    subprocess.check_call("docker compose up -d --wait --wait-timeout 120", shell=True)
     try:
-        wait_for_server("http://localhost:3000")
         with sync_playwright() as p:
             try:
                 browser = p.chromium.launch()
