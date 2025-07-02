@@ -2,12 +2,11 @@ import os
 from sp_api.api import SellingPartnerAPI
 import sqlite3
 import psycopg2
-from db import pg_dsn
 
 
 def main():
     live = os.getenv("ENABLE_LIVE") == "1"
-    dsn = pg_dsn()
+    dsn = os.environ["DATABASE_URL"]
     if dsn.startswith("sqlite"):
         conn = sqlite3.connect(dsn.replace("sqlite:///", ""))
         cur = conn.cursor()

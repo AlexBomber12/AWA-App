@@ -55,7 +55,7 @@ repricer = importlib.import_module("services.repricer.repricer")
 
 def test_main():
 
-    os.environ["PG_DSN"] = "d"
+    os.environ["DATABASE_URL"] = "d"
     os.environ["SP_REFRESH_TOKEN"] = "t"
     os.environ["SP_CLIENT_ID"] = "i"
     os.environ["SP_CLIENT_SECRET"] = "s"

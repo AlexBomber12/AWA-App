@@ -4,7 +4,6 @@ import urllib.request
 
 import sqlite3
 import psycopg2
-from db import pg_dsn
 
 
 ASINS = ["DUMMY1", "DUMMY2"]
@@ -13,7 +12,7 @@ ASINS = ["DUMMY1", "DUMMY2"]
 def main() -> int:
     live = os.getenv("ENABLE_LIVE") == "1"
     api_key = os.environ["HELIUM_API_KEY"]
-    dsn = pg_dsn()
+    dsn = os.environ["DATABASE_URL"]
     if live:
         results = []
         for asin in ASINS:

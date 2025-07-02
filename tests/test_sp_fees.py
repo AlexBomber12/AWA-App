@@ -38,7 +38,7 @@ class FakeSP:
 
 def test_main_offline(monkeypatch):
     os.environ.pop("ENABLE_LIVE", None)
-    os.environ["PG_DSN"] = "d"
+    os.environ["DATABASE_URL"] = "d"
     fake_api = FakeSP()
     monkeypatch.setitem(
         sys.modules,

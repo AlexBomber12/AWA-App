@@ -1,0 +1,46 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: awa
+      POSTGRES_PASSWORD: awa
+      POSTGRES_DB: awa
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U awa"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - awa-pgdata:/var/lib/postgresql/data
+
+  api:
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - .env.postgres
+    build:
+      context: .
+      dockerfile: services/api/Dockerfile
+
+  etl:
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - .env.postgres
+
+  repricer:
+    build: ./services/repricer
+    env_file:
+      - .env.postgres
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - awa-net
+    volumes:
+      - awa-data:/data
+
+volumes:
+  awa-pgdata:

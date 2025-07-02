@@ -3,7 +3,6 @@ import asyncio
 import asyncpg
 import aiosqlite
 from sp_api.api import Listings
-from db import pg_dsn
 
 
 query = """
@@ -14,7 +13,7 @@ query = """
 
 
 async def main():
-    dsn = pg_dsn()
+    dsn = os.environ["DATABASE_URL"]
     if dsn.startswith("sqlite"):
         db = await aiosqlite.connect(dsn.replace("sqlite:///", ""))
         db.row_factory = aiosqlite.Row

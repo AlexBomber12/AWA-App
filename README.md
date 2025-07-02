@@ -15,14 +15,15 @@ The ETL and API services expect a Postgres instance configured via
 environment variables. A typical local setup might use:
 
 ```bash
-export POSTGRES_USER=appuser
-export POSTGRES_PASSWORD=apppass
-export POSTGRES_DB=appdb
-export POSTGRES_HOST=postgres
-export POSTGRES_PORT=5432
-export PG_DSN="postgresql://appuser:apppass@postgres:5432/appdb"
+export DATABASE_URL="postgresql+asyncpg://awa:awa@postgres:5432/awa"
 ```
 
-All connection helpers fall back to these defaults, ensuring we never
-attempt to connect using the `root` role.
+
+SQLite remains the default for local development. To run with Postgres just run:
+
+```bash
+docker compose -f docker-compose.postgres.yml up -d --wait
+```
+
+Then visit `http://localhost:8000/health`.
 

@@ -38,6 +38,6 @@ sys.modules["psycopg2"].connect = fake_connect
 def test_offline(monkeypatch):
     os.environ["ENABLE_LIVE"] = "0"
     os.environ["HELIUM_API_KEY"] = "k"
-    os.environ["PG_DSN"] = "dsn"
+    os.environ["DATABASE_URL"] = "dsn"
     res = helium_fees_ingestor.main()
     assert res == 0
