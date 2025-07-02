@@ -14,8 +14,8 @@ services:
       - awa-net
   api:
     build: ./services/api
-    environment:
-      DATABASE_URL: sqlite:///data/awa.db
+    env_file:
+      - .env
     ports:
       - "8000:8000"
     healthcheck:
@@ -26,12 +26,11 @@ services:
     networks:
       - awa-net
     volumes:
-      - ./data/sqlite:/data
+      - awa-data:/data
   etl:
     build: ./services/etl
-    environment:
-      ENABLE_LIVE: "0"
-      DATABASE_URL: sqlite:///data/awa.db
+    env_file:
+      - .env
     depends_on:
       - minio
     healthcheck:
@@ -39,7 +38,7 @@ services:
     networks:
       - awa-net
     volumes:
-      - ./data/sqlite:/data
+      - awa-data:/data
   web:
     build: ./webapp
     environment:
@@ -57,5 +56,6 @@ services:
       - awa-net
 volumes:
   miniodata:
+  awa-data:
 networks:
   awa-net:
