@@ -1,7 +1,8 @@
 from typing import List
 from fastapi import FastAPI
 import asyncpg
-import os
+from db import pg_dsn
+
 
 app = FastAPI()
 
@@ -13,7 +14,7 @@ def health() -> dict[str, str]:
 
 @app.on_event("startup")
 async def startup():
-    app.state.pool = await asyncpg.create_pool(os.environ["DATABASE_URL"])
+    app.state.pool = await asyncpg.create_pool(pg_dsn())
 
 
 @app.on_event("shutdown")

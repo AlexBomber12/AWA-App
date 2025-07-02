@@ -1,11 +1,12 @@
 import os
 from sp_api.api import SellingPartnerAPI
 import psycopg2
+from db import pg_dsn
 
 
 def main():
     live = os.getenv("ENABLE_LIVE") == "1"
-    dsn = os.environ.get("PG_DSN", "postgresql://postgres:pass@postgres/postgres")
+    dsn = pg_dsn()
     conn = psycopg2.connect(dsn)
     cur = conn.cursor()
     skus = ["SKU1", "SKU2"]

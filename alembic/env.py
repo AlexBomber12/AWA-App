@@ -1,8 +1,9 @@
 from __future__ import annotations
-import os
 from logging.config import fileConfig
 from sqlalchemy import engine_from_config, pool
 from alembic import context
+from db import pg_dsn
+
 
 config = context.config
 if config.config_file_name is not None:
@@ -12,7 +13,7 @@ target_metadata = None
 
 
 def run_migrations_offline() -> None:
-    url = os.environ.get("PG_DSN", "postgresql://postgres:pass@postgres/postgres")
+    url = pg_dsn()
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -25,7 +26,7 @@ def run_migrations_offline() -> None:
 
 def run_migrations_online() -> None:
     connectable = engine_from_config(
-        {"sqlalchemy.url": os.environ.get("PG_DSN", "postgresql://postgres:pass@postgres/postgres")},
+        {"sqlalchemy.url": pg_dsn()},
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
     )

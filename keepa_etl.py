@@ -8,12 +8,14 @@ import time
 import keepa
 from minio import Minio
 import psycopg2
+from db import pg_dsn
+
 
 key = os.environ["KEEPA_KEY"]
 minio_endpoint = os.environ["MINIO_ENDPOINT"]
 minio_access = os.environ["MINIO_ACCESS_KEY"]
 minio_secret = os.environ["MINIO_SECRET_KEY"]
-pg_dsn = os.environ.get("PG_DSN", "postgresql://postgres:pass@postgres/postgres")
+dsn = pg_dsn()
 
 start = time.time()
 if os.getenv("ENABLE_LIVE") == "1":
@@ -39,7 +41,7 @@ mc = Minio(
 if not mc.bucket_exists(bucket):
     mc.make_bucket(bucket)
 mc.put_object(bucket, path, io.BytesIO(data), len(data))
-conn = psycopg2.connect(pg_dsn)
+conn = psycopg2.connect(dsn)
 cur = conn.cursor()
 cur.execute(
     "INSERT INTO etl_log(date,asin_count,duration_sec) VALUES (%s,%s,%s)",

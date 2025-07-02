@@ -2,6 +2,8 @@ import os
 import asyncio
 import asyncpg
 from sp_api.api import Listings
+from db import pg_dsn
+
 
 query = """
     SELECT offer_id, asin, target_min
@@ -11,7 +13,7 @@ query = """
 
 
 async def main():
-    dsn = os.environ.get("PG_DSN", "postgresql://postgres:pass@postgres/postgres")
+    dsn = pg_dsn()
     pool = await asyncpg.create_pool(dsn)
     rows = await pool.fetch(query)
     listings = Listings(

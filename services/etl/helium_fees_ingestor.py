@@ -3,6 +3,7 @@ import os
 import urllib.request
 
 import psycopg2
+from db import pg_dsn
 
 
 ASINS = ["DUMMY1", "DUMMY2"]
@@ -11,7 +12,7 @@ ASINS = ["DUMMY1", "DUMMY2"]
 def main() -> int:
     live = os.getenv("ENABLE_LIVE") == "1"
     api_key = os.environ["HELIUM_API_KEY"]
-    dsn = os.environ.get("PG_DSN", "postgresql://postgres:pass@postgres/postgres")
+    dsn = pg_dsn()
     if live:
         results = []
         for asin in ASINS:
