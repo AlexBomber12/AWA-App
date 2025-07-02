@@ -22,7 +22,7 @@ export DATABASE_URL="postgresql+asyncpg://awa:awa@postgres:5432/awa"
 SQLite remains the default for local development. To run with Postgres just run:
 
 ```bash
-docker compose -f docker-compose.postgres.yml up -d --wait
+docker compose -f docker-compose.yml -f docker-compose.postgres.yml up -d --wait
 ```
 
 Then visit `http://localhost:8000/health`.
