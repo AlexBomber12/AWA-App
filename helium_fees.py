@@ -5,7 +5,7 @@ import psycopg2
 
 def main():
     live = os.getenv("ENABLE_LIVE") == "1"
-    dsn = os.environ["PG_DSN"]
+    dsn = os.environ.get("PG_DSN", "postgresql://postgres:pass@postgres/postgres")
     conn = psycopg2.connect(dsn)
     cur = conn.cursor()
     skus = ["DUMMY1", "DUMMY2"]

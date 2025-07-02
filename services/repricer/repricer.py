@@ -11,7 +11,8 @@ query = """
 
 
 async def main():
-    pool = await asyncpg.create_pool(os.environ["PG_DSN"])
+    dsn = os.environ.get("PG_DSN", "postgresql://postgres:pass@postgres/postgres")
+    pool = await asyncpg.create_pool(dsn)
     rows = await pool.fetch(query)
     listings = Listings(
         credentials={
