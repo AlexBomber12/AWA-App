@@ -2,7 +2,7 @@ import types
 
 
 class FastAPI:
-    def __init__(self):
+    def __init__(self, *args, **kwargs):
         self.state = types.SimpleNamespace()
 
     def on_event(self, event):
@@ -11,13 +11,13 @@ class FastAPI:
 
         return decorator
 
-    def post(self, path):
+    def post(self, path, *args, **kwargs):
         def decorator(func):
             return func
 
         return decorator
 
-    def get(self, path):
+    def get(self, path, *args, **kwargs):
         def decorator(func):
             return func
 
