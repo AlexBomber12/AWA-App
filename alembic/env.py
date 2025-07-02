@@ -12,7 +12,7 @@ target_metadata = None
 
 
 def run_migrations_offline() -> None:
-    url = os.environ["PG_DSN"]
+    url = os.environ.get("PG_DSN", "postgresql://postgres:pass@postgres/postgres")
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -25,7 +25,7 @@ def run_migrations_offline() -> None:
 
 def run_migrations_online() -> None:
     connectable = engine_from_config(
-        {"sqlalchemy.url": os.environ["PG_DSN"]},
+        {"sqlalchemy.url": os.environ.get("PG_DSN", "postgresql://postgres:pass@postgres/postgres")},
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
     )

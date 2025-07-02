@@ -11,7 +11,7 @@ ASINS = ["DUMMY1", "DUMMY2"]
 def main() -> int:
     live = os.getenv("ENABLE_LIVE") == "1"
     api_key = os.environ["HELIUM_API_KEY"]
-    dsn = os.environ["PG_DSN"]
+    dsn = os.environ.get("PG_DSN", "postgresql://postgres:pass@postgres/postgres")
     if live:
         results = []
         for asin in ASINS:

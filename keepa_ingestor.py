@@ -16,7 +16,7 @@ def main():
     endpoint = os.environ.get("MINIO_ENDPOINT")
     access = os.environ.get("MINIO_ACCESS_KEY")
     secret = os.environ.get("MINIO_SECRET_KEY")
-    dsn = os.environ.get("PG_DSN")
+    dsn = os.environ.get("PG_DSN", "postgresql://postgres:pass@postgres/postgres")
     start = time.time()
     if live:
         api = keepa.Keepa(key)

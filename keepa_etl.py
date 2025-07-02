@@ -13,7 +13,7 @@ key = os.environ["KEEPA_KEY"]
 minio_endpoint = os.environ["MINIO_ENDPOINT"]
 minio_access = os.environ["MINIO_ACCESS_KEY"]
 minio_secret = os.environ["MINIO_SECRET_KEY"]
-pg_dsn = os.environ["PG_DSN"]
+pg_dsn = os.environ.get("PG_DSN", "postgresql://postgres:pass@postgres/postgres")
 
 start = time.time()
 if os.getenv("ENABLE_LIVE") == "1":
