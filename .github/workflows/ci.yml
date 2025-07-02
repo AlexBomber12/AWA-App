@@ -30,3 +30,24 @@ jobs:
       - run: black --check .
       - run: mypy services || true
       - run: pytest -q
+
+  postgres:
+    needs: build
+    runs-on: ubuntu-latest
+    env:
+      ENABLE_LIVE: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - run: |
+          pip install -r services/etl/requirements.txt
+          pip install -r services/api/requirements.txt
+          pip install -r services/repricer/requirements.txt
+          pip install pytest ruff black mypy
+      - run: docker compose -f docker-compose.postgres.yml up -d --wait
+      - run: ruff check .
+      - run: black --check .
+      - run: mypy services || true
+      - run: pytest -q

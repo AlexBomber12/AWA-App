@@ -2,7 +2,6 @@ import os
 import json
 import sqlite3
 import psycopg2
-from db import pg_dsn
 
 
 def main() -> int:
@@ -11,7 +10,7 @@ def main() -> int:
     client_id = os.environ["SP_CLIENT_ID"]
     client_secret = os.environ["SP_CLIENT_SECRET"]
     region = os.environ["REGION"]
-    dsn = pg_dsn()
+    dsn = os.environ["DATABASE_URL"]
     skus = ["DUMMY1", "DUMMY2"]
     if live:
         from sp_api.api import SellingPartnerAPI

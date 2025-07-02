@@ -2,7 +2,6 @@ from typing import List
 import asyncpg
 import aiosqlite
 from fastapi import FastAPI
-from db import pg_dsn
 import os
 import pathlib
 
@@ -39,7 +38,7 @@ def health() -> dict[str, str]:
 
 @app.on_event("startup")
 async def startup():
-    dsn = pg_dsn()
+    dsn = DATABASE_URL
     if dsn.startswith("sqlite"):
         path = dsn.replace("sqlite:///", "").replace("sqlite+aiosqlite:///", "")
         app.state.db = await aiosqlite.connect(path)

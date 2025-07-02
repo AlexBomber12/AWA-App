@@ -8,7 +8,6 @@ from pathlib import Path
 import keepa
 from minio import Minio
 import psycopg2
-from db import pg_dsn
 
 
 def main():
@@ -17,7 +16,7 @@ def main():
     endpoint = os.environ.get("MINIO_ENDPOINT")
     access = os.environ.get("MINIO_ACCESS_KEY")
     secret = os.environ.get("MINIO_SECRET_KEY")
-    dsn = pg_dsn()
+    dsn = os.environ["DATABASE_URL"]
     start = time.time()
     if live:
         api = keepa.Keepa(key)

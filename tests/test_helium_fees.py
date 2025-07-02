@@ -31,7 +31,7 @@ class FakeConn:
 
 def test_offline(monkeypatch):
     os.environ.pop("ENABLE_LIVE", None)
-    os.environ["PG_DSN"] = "d"
+    os.environ["DATABASE_URL"] = "d"
     called = {"n": 0}
 
     def fake_get(url):

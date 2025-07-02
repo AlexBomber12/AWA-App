@@ -8,14 +8,13 @@ import time
 import keepa
 from minio import Minio
 import psycopg2
-from db import pg_dsn
 
 
 key = os.environ["KEEPA_KEY"]
 minio_endpoint = os.environ["MINIO_ENDPOINT"]
 minio_access = os.environ["MINIO_ACCESS_KEY"]
 minio_secret = os.environ["MINIO_SECRET_KEY"]
-dsn = pg_dsn()
+dsn = os.environ["DATABASE_URL"]
 
 start = time.time()
 if os.getenv("ENABLE_LIVE") == "1":
