@@ -15,12 +15,12 @@ The ETL and API services expect a Postgres instance configured via
 environment variables. A typical local setup might use:
 
 ```bash
-export POSTGRES_USER=postgres
-export POSTGRES_PASSWORD=pass
-export POSTGRES_DB=postgres
+export POSTGRES_USER=appuser
+export POSTGRES_PASSWORD=apppass
+export POSTGRES_DB=appdb
 export POSTGRES_HOST=postgres
 export POSTGRES_PORT=5432
-export PG_DSN="postgresql://postgres:pass@postgres:5432/postgres"
+export PG_DSN="postgresql://appuser:apppass@postgres:5432/appdb"
 ```
 
 All connection helpers fall back to these defaults, ensuring we never

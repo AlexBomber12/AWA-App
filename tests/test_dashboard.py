@@ -3,7 +3,7 @@ import subprocess
 import pytest
 
 if shutil.which("docker") is None:
-    pytest.skip("Docker not available", allow_module_level=True)
+    pytest.skip("Docker not available in this environment", allow_module_level=True)
 
 
 def test_compose_up() -> None:
