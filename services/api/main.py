@@ -3,6 +3,14 @@ import asyncpg
 import aiosqlite
 from fastapi import FastAPI
 from db import pg_dsn
+import os
+import pathlib
+
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///data/awa.db")
+# propagate default to env for other modules
+os.environ.setdefault("DATABASE_URL", DATABASE_URL)
+# ensure /data exists in the container so SQLite can create the file
+pathlib.Path("/data").mkdir(parents=True, exist_ok=True)
 
 
 app = FastAPI()
@@ -17,7 +25,7 @@ def health() -> dict[str, str]:
 async def startup():
     dsn = pg_dsn()
     if dsn.startswith("sqlite"):
-        path = dsn.replace("sqlite:///", "")
+        path = dsn.replace("sqlite:///", "").replace("sqlite+aiosqlite:///", "")
         app.state.db = await aiosqlite.connect(path)
         app.state.kind = "sqlite"
     else:
