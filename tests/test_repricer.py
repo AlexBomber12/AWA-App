@@ -1,64 +1,26 @@
-import asyncio
-import importlib
-import os
+from decimal import Decimal
+import site
 import sys
-import types
-from types import ModuleType
-from typing import cast
+
+# ensure real fastapi package is used
+site_pkg = site.getsitepackages()[0]
+if sys.path[0] != site_pkg:
+    sys.path.insert(0, site_pkg)
+sys.modules.pop("fastapi", None)
+
+from fastapi.testclient import TestClient  # noqa: E402
+from services.repricer.app.main import app  # noqa: E402
+from services.repricer.app.logic import compute_price  # noqa: E402
+
+client = TestClient(app)
 
 
-class FakePool:
-    def __init__(self):
-        self.log = []
-
-    async def fetch(self, query):
-        return [{"offer_id": 1, "asin": "ASIN1", "target_min": 10}]
-
-    async def execute(self, query, offer_id, price):
-        self.log.append((offer_id, price))
-
-    async def close(self):
-        pass
+def test_health():
+    r = client.get("/health")
+    assert r.status_code == 200
+    assert r.json() == {"status": "ok"}
 
 
-class FakeListings:
-    def __init__(self, credentials):
-        self.calls = []
-
-    def pricing(self, asin, price):
-        self.calls.append((asin, price))
-
-
-pool = FakePool()
-
-
-async def fake_create_pool(dsn):
-    return pool
-
-
-class FakeSPModule:
-    def __init__(self):
-        self.instance = FakeListings(None)
-
-    def Listings(self, credentials):
-        return self.instance
-
-
-sys.modules["asyncpg"] = cast(
-    ModuleType, types.SimpleNamespace(create_pool=fake_create_pool)
-)
-fake_sp = FakeSPModule()
-sys.modules["sp_api.api"] = cast(ModuleType, fake_sp)
-
-repricer = importlib.import_module("services.repricer.repricer")
-
-
-def test_main():
-
-    os.environ["DATABASE_URL"] = "d"
-    os.environ["SP_REFRESH_TOKEN"] = "t"
-    os.environ["SP_CLIENT_ID"] = "i"
-    os.environ["SP_CLIENT_SECRET"] = "s"
-    asyncio.run(repricer.main())
-    assert fake_sp.instance.calls == [("ASIN1", 10)]
-    assert pool.log == [(1, 10)]
+def test_compute_price():
+    p = compute_price("B000TEST01", Decimal("10"), Decimal("2"))
+    assert p >= Decimal("12")

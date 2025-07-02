@@ -1,5 +1,8 @@
 # AWA App
 
+## Quick Start
+Repricer API → http://localhost:8100/health
+
 ## Development setup
 
 ### Code style
