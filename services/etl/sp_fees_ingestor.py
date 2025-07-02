@@ -3,13 +3,24 @@ import json
 import psycopg2
 
 
+def pg_dsn() -> str:
+    if "PG_DSN" in os.environ:
+        return os.environ["PG_DSN"]
+    user = os.getenv("POSTGRES_USER", "postgres")
+    password = os.getenv("POSTGRES_PASSWORD", "pass")
+    host = os.getenv("POSTGRES_HOST", "postgres")
+    port = os.getenv("POSTGRES_PORT", "5432")
+    database = os.getenv("POSTGRES_DB", "postgres")
+    return f"postgresql://{user}:{password}@{host}:{port}/{database}"
+
+
 def main() -> int:
     live = os.getenv("ENABLE_LIVE") == "1"
     refresh_token = os.environ["SP_REFRESH_TOKEN"]
     client_id = os.environ["SP_CLIENT_ID"]
     client_secret = os.environ["SP_CLIENT_SECRET"]
     region = os.environ["REGION"]
-    dsn = os.environ.get("PG_DSN", "postgresql://postgres:pass@postgres/postgres")
+    dsn = pg_dsn()
     skus = ["DUMMY1", "DUMMY2"]
     if live:
         from sp_api.api import SellingPartnerAPI

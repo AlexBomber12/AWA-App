@@ -10,13 +10,24 @@ from minio import Minio
 import psycopg2
 
 
+def pg_dsn() -> str:
+    if "PG_DSN" in os.environ:
+        return os.environ["PG_DSN"]
+    user = os.getenv("POSTGRES_USER", "postgres")
+    password = os.getenv("POSTGRES_PASSWORD", "pass")
+    host = os.getenv("POSTGRES_HOST", "postgres")
+    port = os.getenv("POSTGRES_PORT", "5432")
+    database = os.getenv("POSTGRES_DB", "postgres")
+    return f"postgresql://{user}:{password}@{host}:{port}/{database}"
+
+
 def main():
     live = os.getenv("ENABLE_LIVE") == "1"
     key = os.environ.get("KEEPA_KEY")
     endpoint = os.environ.get("MINIO_ENDPOINT")
     access = os.environ.get("MINIO_ACCESS_KEY")
     secret = os.environ.get("MINIO_SECRET_KEY")
-    dsn = os.environ.get("PG_DSN", "postgresql://postgres:pass@postgres/postgres")
+    dsn = pg_dsn()
     start = time.time()
     if live:
         api = keepa.Keepa(key)

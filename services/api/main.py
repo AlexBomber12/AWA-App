@@ -3,6 +3,18 @@ from fastapi import FastAPI
 import asyncpg
 import os
 
+
+def pg_dsn() -> str:
+    if "DATABASE_URL" in os.environ:
+        return os.environ["DATABASE_URL"]
+    user = os.getenv("POSTGRES_USER", "postgres")
+    password = os.getenv("POSTGRES_PASSWORD", "pass")
+    host = os.getenv("POSTGRES_HOST", "postgres")
+    port = os.getenv("POSTGRES_PORT", "5432")
+    database = os.getenv("POSTGRES_DB", "postgres")
+    return f"postgresql://{user}:{password}@{host}:{port}/{database}"
+
+
 app = FastAPI()
 
 
@@ -13,7 +25,7 @@ def health() -> dict[str, str]:
 
 @app.on_event("startup")
 async def startup():
-    app.state.pool = await asyncpg.create_pool(os.environ["DATABASE_URL"])
+    app.state.pool = await asyncpg.create_pool(pg_dsn())
 
 
 @app.on_event("shutdown")

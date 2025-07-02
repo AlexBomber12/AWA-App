@@ -4,6 +4,18 @@ from logging.config import fileConfig
 from sqlalchemy import engine_from_config, pool
 from alembic import context
 
+
+def pg_dsn() -> str:
+    if "PG_DSN" in os.environ:
+        return os.environ["PG_DSN"]
+    user = os.getenv("POSTGRES_USER", "postgres")
+    password = os.getenv("POSTGRES_PASSWORD", "pass")
+    host = os.getenv("POSTGRES_HOST", "postgres")
+    port = os.getenv("POSTGRES_PORT", "5432")
+    database = os.getenv("POSTGRES_DB", "postgres")
+    return f"postgresql://{user}:{password}@{host}:{port}/{database}"
+
+
 config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
@@ -12,7 +24,7 @@ target_metadata = None
 
 
 def run_migrations_offline() -> None:
-    url = os.environ.get("PG_DSN", "postgresql://postgres:pass@postgres/postgres")
+    url = pg_dsn()
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -25,7 +37,7 @@ def run_migrations_offline() -> None:
 
 def run_migrations_online() -> None:
     connectable = engine_from_config(
-        {"sqlalchemy.url": os.environ.get("PG_DSN", "postgresql://postgres:pass@postgres/postgres")},
+        {"sqlalchemy.url": pg_dsn()},
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
     )
