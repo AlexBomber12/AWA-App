@@ -1,6 +1,7 @@
 import os
 import asyncio
 import asyncpg
+import aiosqlite
 from sp_api.api import Listings
 from db import pg_dsn
 
@@ -14,8 +15,14 @@ query = """
 
 async def main():
     dsn = pg_dsn()
-    pool = await asyncpg.create_pool(dsn)
-    rows = await pool.fetch(query)
+    if dsn.startswith("sqlite"):
+        db = await aiosqlite.connect(dsn.replace("sqlite:///", ""))
+        db.row_factory = aiosqlite.Row
+        async with db.execute(query) as cur:
+            rows = await cur.fetchall()
+    else:
+        pool = await asyncpg.create_pool(dsn)
+        rows = await pool.fetch(query)
     listings = Listings(
         credentials={
             "refresh_token": os.environ["SP_REFRESH_TOKEN"],
@@ -25,12 +32,22 @@ async def main():
     )
     for r in rows:
         listings.pricing(asin=r["asin"], price=r["target_min"])
-        await pool.execute(
-            "INSERT INTO repricer_log (offer_id, new_price) VALUES ($1, $2)",
-            r["offer_id"],
-            r["target_min"],
-        )
-    await pool.close()
+        if dsn.startswith("sqlite"):
+            await db.execute(
+                "INSERT INTO repricer_log (offer_id, new_price) VALUES (?, ?)",
+                (r["offer_id"], r["target_min"]),
+            )
+        else:
+            await pool.execute(
+                "INSERT INTO repricer_log (offer_id, new_price) VALUES ($1, $2)",
+                r["offer_id"],
+                r["target_min"],
+            )
+    if dsn.startswith("sqlite"):
+        await db.commit()
+        await db.close()
+    else:
+        await pool.close()
 
 
 if __name__ == "__main__":

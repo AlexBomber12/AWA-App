@@ -1,22 +1,4 @@
 services:
-  postgres:
-    image: postgres:15
-    environment:
-      POSTGRES_USER: appuser
-      POSTGRES_PASSWORD: apppass
-      POSTGRES_DB: appdb
-    expose:
-      - "5432"
-    healthcheck:
-      test: ["CMD", "pg_isready", "-U", "appuser"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-      - ./services/db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
-    networks:
-      - awa-net
   minio:
     image: minio/minio
     command: server /data --console-address :9001
@@ -33,41 +15,31 @@ services:
   api:
     build: ./services/api
     environment:
-      POSTGRES_USER: appuser
-      POSTGRES_PASSWORD: apppass
-      POSTGRES_DB: appdb
-      POSTGRES_HOST: postgres
-      POSTGRES_PORT: 5432
-      DATABASE_URL: postgresql://appuser:apppass@postgres:5432/appdb
-      PG_DSN: postgresql://appuser:apppass@postgres:5432/appdb
-    depends_on:
-      - postgres
+      DATABASE_URL: sqlite:///data/awa.db
     ports:
       - "8000:8000"
     healthcheck:
       test: ["CMD", "curl", "-fsSL", "http://localhost:8000/health"]
-      interval: 5s
+      interval: 10s
       timeout: 3s
-      retries: 24
+      retries: 12
     networks:
       - awa-net
+    volumes:
+      - ./data/sqlite:/data
   etl:
     build: ./services/etl
     environment:
       ENABLE_LIVE: "0"
-      POSTGRES_USER: appuser
-      POSTGRES_PASSWORD: apppass
-      POSTGRES_DB: appdb
-      POSTGRES_HOST: postgres
-      POSTGRES_PORT: 5432
-      PG_DSN: postgresql://appuser:apppass@postgres:5432/appdb
+      DATABASE_URL: sqlite:///data/awa.db
     depends_on:
-      - postgres
       - minio
     healthcheck:
       test: ["CMD", "true"]
     networks:
       - awa-net
+    volumes:
+      - ./data/sqlite:/data
   web:
     build: ./webapp
     environment:
@@ -84,7 +56,6 @@ services:
     networks:
       - awa-net
 volumes:
-  pgdata:
   miniodata:
 networks:
   awa-net:
