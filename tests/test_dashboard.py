@@ -4,8 +4,8 @@ import time
 import requests
 import pytest
 
-if shutil.which("docker") is None:
-    pytest.skip("Docker not available in this runtime", allow_module_level=True)
+if shutil.which("docker") is None or shutil.which("docker-compose") is None:
+    pytest.skip("Docker is not installed on this runner", allow_module_level=True)
 
 
 def test_compose_up() -> None:
