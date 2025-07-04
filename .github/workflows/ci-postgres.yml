@@ -22,6 +22,10 @@ jobs:
           pip install -r services/repricer/requirements.txt
           pip install -r requirements-dev.txt
           pip install pytest
+      - name: Load env
+        run: |
+          cat .env.postgres >> $GITHUB_ENV
+          echo "PG_PASSWORD=postgres" >> $GITHUB_ENV
       - name: Start services
         run: docker compose -f docker-compose.yml -f docker-compose.postgres.yml up -d --wait
       - run: |
@@ -29,8 +33,5 @@ jobs:
             -f docker-compose.yml \
             -f docker-compose.postgres.yml \
             logs postgres
-      - run: echo "PG_PASSWORD=pass" >> $GITHUB_ENV
       - name: Run tests
-        run: |
-          source .env.postgres
-          pytest -q
+        run: pytest -q

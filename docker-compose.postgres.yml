@@ -1,19 +1,18 @@
 services:
   postgres:
-    image: postgres:15
+    image: postgres:15-alpine
     environment:
       POSTGRES_DB: awa
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: pass
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
       - "5432:5432"
     volumes:
       - awa-pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER"]
       interval: 5s
-      timeout: 3s
-      retries: 5
+      retries: 12
     networks:
       - awa-net
 
@@ -38,7 +37,7 @@ services:
     env_file:
       - ./.env.postgres
     environment:
-      DATABASE_URL: postgresql+psycopg://postgres:pass@postgres:5432/awa
+      - DATABASE_URL=${DATABASE_URL}
     depends_on:
       postgres:
         condition: service_healthy
@@ -61,7 +60,7 @@ services:
     env_file:
       - ./.env.postgres
     environment:
-      DATABASE_URL: postgresql+psycopg://postgres:pass@postgres:5432/awa
+      - DATABASE_URL=${DATABASE_URL}
     depends_on:
       postgres:
         condition: service_healthy
@@ -105,7 +104,7 @@ services:
     env_file:
       - ./.env.postgres
     environment:
-      DATABASE_URL: postgresql+psycopg://postgres:pass@postgres:5432/awa
+      - DATABASE_URL=${DATABASE_URL}
     depends_on:
       api:
         condition: service_healthy

@@ -40,13 +40,18 @@ def upgrade() -> None:
         sa.Column("row_cnt", sa.Integer()),
     )
     op.execute(
-        """CREATE VIEW roi_view as\n"
-        "   select p.asin,\n"
-        "          max(o.price_cents)/100.0 - f.fulf_fee - f.referral_fee - f.storage_fee as roi_eur\n"
-        "   from products p\n"
-        "   join offers   o on o.asin = p.asin\n"
-        "   join fees_raw f on f.asin = p.asin\n"
-        "   group by p.asin, f.fulf_fee, f.referral_fee, f.storage_fee;\n"
+        """
+        CREATE VIEW roi_view AS
+        SELECT
+          p.asin,
+          MAX(o.price_cents) / 100.0
+              - f.fulf_fee
+              - f.referral_fee
+              - f.storage_fee        AS roi_eur
+        FROM products p
+        JOIN offers   o ON o.asin = p.asin
+        JOIN fees_raw f ON f.asin = p.asin
+        GROUP BY p.asin, f.fulf_fee, f.referral_fee, f.storage_fee;
         """
     )
 
