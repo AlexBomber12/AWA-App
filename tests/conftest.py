@@ -4,12 +4,12 @@ import pytest
 import site
 import sys
 
-if not os.getenv("DATABASE_URL") and os.path.exists(".env.postgres"):
-    with open(".env.postgres") as f:
-        for line in f:
-            if "=" in line and not line.startswith("#"):
-                k, v = line.strip().split("=", 1)
-                os.environ.setdefault(k, v)
+from services.common.db_url import build_db_url
+
+os.environ.setdefault("ENABLE_LIVE", "0")
+
+os.makedirs("/data", exist_ok=True)
+os.makedirs("data", exist_ok=True)
 
 # ensure real fastapi package is used
 site_pkg = site.getsitepackages()[0]
@@ -21,11 +21,15 @@ from services.api.main import app  # noqa: E402
 
 
 def pytest_sessionstart(session):
-    if os.getenv("DATABASE_URL"):
-        try:
-            subprocess.run(["alembic", "upgrade", "head"], check=True)
-        except Exception:
-            pass
+    url = build_db_url()
+    if url.startswith("sqlite"):
+        path = url.split("///", 1)[1]
+        if os.path.exists(path):
+            os.remove(path)
+    try:
+        subprocess.run(["alembic", "upgrade", "head"], check=True)
+    except Exception:
+        pass
 
 
 @pytest.fixture
