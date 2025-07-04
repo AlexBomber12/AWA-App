@@ -13,6 +13,8 @@ app = FastAPI()
 
 @app.on_event("startup")
 async def _wait_for_db() -> None:
+    """Block application startup until the database becomes available."""
+    delay = 0.3
     for _ in range(10):
         try:
             async for session in get_session():
@@ -20,7 +22,8 @@ async def _wait_for_db() -> None:
             subprocess.run(["alembic", "upgrade", "head"], check=True)
             return
         except Exception:
-            await asyncio.sleep(2)
+            await asyncio.sleep(delay)
+            delay = min(delay * 2, 3)
     raise RuntimeError("Database not available")
 
 
