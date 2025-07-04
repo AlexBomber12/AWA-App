@@ -1,4 +1,6 @@
 from alembic import op  # type: ignore
+from sqlalchemy import text
+from textwrap import dedent
 
 revision = "0002_create_roi_view"
 down_revision = "0001_baseline"
@@ -7,25 +9,28 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.execute(
-        """
-        CREATE VIEW roi_view AS
-          SELECT
-            p.asin,
-            max(o.price_cents) / 100.0
-            - f.fulf_fee
-            - f.referral_fee
-            - f.storage_fee AS roi_eur
-          FROM products p
-          JOIN offers   o ON o.asin = p.asin
-          JOIN fees_raw f ON f.asin = p.asin
-          GROUP BY
-            p.asin,
-            f.fulf_fee,
-            f.referral_fee,
-            f.storage_fee;
-        """
+    create_roi_view = text(
+        dedent(
+            """
+            CREATE VIEW roi_view AS
+              SELECT
+                p.asin,
+                max(o.price_cents) / 100.0
+                - f.fulf_fee
+                - f.referral_fee
+                - f.storage_fee AS roi_eur
+              FROM products p
+              JOIN offers   o ON o.asin = p.asin
+              JOIN fees_raw f ON f.asin = p.asin
+              GROUP BY
+                p.asin,
+                f.fulf_fee,
+                f.referral_fee,
+                f.storage_fee;
+            """
+        )
     )
+    op.execute(create_roi_view)
 
 
 def downgrade() -> None:
