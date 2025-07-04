@@ -36,7 +36,7 @@ async def score(asins: List[str], session: AsyncSession = Depends(get_session)):
     query = text(
         """
         SELECT p.asin, (p.price - o.cost) / o.cost AS roi
-        FROM product p
+        FROM products p
         JOIN offers o ON p.asin = o.asin
         WHERE p.asin IN :asins
         ORDER BY roi DESC
