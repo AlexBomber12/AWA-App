@@ -14,17 +14,12 @@ Black auto-formats every commit; CI enforces `git diff --exit-code`.
 
 ### Database configuration
 
-The ETL and API services can run against SQLite by default or Postgres when
-the following variables are set:
+The ETL and API services can run against SQLite by default or Postgres. Set a
+database password and start the Postgres profile:
 
 ```bash
-export POSTGRES_USER=api
-export POSTGRES_PASSWORD=pass
-export POSTGRES_DB=awa
-export POSTGRES_HOST=postgres
-export POSTGRES_PORT=5432
+export PG_PASSWORD=pass
 ```
-
 
 SQLite remains the default for local development. To run with Postgres just run:
 
