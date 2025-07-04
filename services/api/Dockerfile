@@ -7,14 +7,12 @@ COPY services/api/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy wait helper
-COPY scripts/wait-for.sh /wait-for.sh
-RUN chmod +x /wait-for.sh
-
-# Copy helper script for database readiness and migrations
-COPY scripts/wait_for_db.py /wait_for_db.py
+COPY docker-entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
 # Copy application source
-COPY services/api .
+COPY services/api /app/services/api
+COPY config.py /app/config.py
+COPY alembic.ini /app/alembic.ini
 
-ENTRYPOINT ["/wait-for.sh", "postgres:5432"]
-CMD ["python", "/wait_for_db.py", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+ENTRYPOINT ["/entrypoint.sh"]
