@@ -1,7 +1,7 @@
 from typing import List, AsyncGenerator
 import asyncio
 import os
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI  # type: ignore[attr-defined]
 from sqlalchemy import bindparam, text
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
