@@ -1,6 +1,7 @@
 from __future__ import annotations
 from logging.config import fileConfig
 from sqlalchemy import create_engine
+from sqlalchemy.engine import make_url
 from alembic import context  # type: ignore
 import os
 import time
@@ -21,11 +22,13 @@ url = os.getenv(
     "postgresql+psycopg://postgres:pass@postgres:5432/postgres",
 )
 
-# Migrations run synchronously, but the runtime connection string may use the
-# asyncpg driver. If so, switch to the synchronous psycopg driver so Alembic
-# can establish a connection without requiring greenlets.
-if url.startswith("postgresql+asyncpg"):
-    url = url.replace("+asyncpg", "+psycopg")
+# Migrations run synchronously. If the provided DATABASE_URL uses an async driver
+# like ``asyncpg``, convert it to the equivalent synchronous ``psycopg`` driver
+# so Alembic can connect without greenlets.
+url_obj = make_url(url)
+if url_obj.drivername.endswith("asyncpg"):
+    url_obj = url_obj.set(drivername=url_obj.drivername.replace("asyncpg", "psycopg"))
+url = str(url_obj)
 
 connectable = create_engine(url, pool_pre_ping=True)
 
