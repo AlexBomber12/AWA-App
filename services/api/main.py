@@ -3,7 +3,7 @@ import asyncio
 from fastapi import FastAPI
 from sqlalchemy import text, bindparam
 
-from .db import AsyncSession
+from db import AsyncSession
 
 app = FastAPI()
 
