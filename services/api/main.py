@@ -1,6 +1,5 @@
 from typing import List
 import asyncio
-import subprocess
 from fastapi import Depends, FastAPI
 from sqlalchemy import bindparam, text
 
@@ -19,7 +18,6 @@ async def _wait_for_db() -> None:
         try:
             async for session in get_session():
                 await session.execute(text("SELECT 1"))
-            subprocess.run(["alembic", "upgrade", "head"], check=True)
             return
         except Exception:
             await asyncio.sleep(delay)
