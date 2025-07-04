@@ -1,14 +1,15 @@
 from typing import List, AsyncGenerator
 import asyncio
+import os
 from fastapi import Depends, FastAPI
 from sqlalchemy import bindparam, text
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from config import get_settings
 
-settings = get_settings()
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///data/awa.db")
+
 engine = create_async_engine(
-    settings.dsn,
+    DATABASE_URL,
     pool_pre_ping=True,
     future=True,
     echo=False,
