@@ -1,6 +1,11 @@
 # syntax=docker/dockerfile:1
 FROM python:3.11-slim AS base
 
+# install pg_isready via postgresql client
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends postgresql-client \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 # Install API dependencies
 COPY services/api/requirements.txt .
