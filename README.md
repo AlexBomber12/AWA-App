@@ -16,10 +16,11 @@ Black auto-formats every commit; CI enforces `git diff --exit-code`.
 
 The ETL and API services can run against SQLite by default or Postgres. Provide
 `POSTGRES_USER`, `POSTGRES_PASSWORD` and `POSTGRES_DB` in your `.env` along with
-`PG_PASSWORD` for the database container. Then start the Postgres profile:
+`PG_PASSWORD` for the database container. One convenient option is to copy
+`.env.postgres` to `.env` and then start the Postgres profile:
 
 ```bash
-export PG_PASSWORD=pass
+cp .env.postgres .env
 ```
 
 SQLite remains the default for local development. To run with Postgres just run:
