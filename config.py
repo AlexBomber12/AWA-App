@@ -1,15 +1,36 @@
-import os
+from functools import lru_cache
+from pydantic import BaseSettings
+
+
+class Settings(BaseSettings):
+    enable_live: int = 0
+    database_url: str | None = None
+    postgres_user: str = "root"
+    postgres_password: str = "pass"
+    postgres_db: str = "awa"
+    postgres_host: str = "postgres"
+    postgres_port: int = 5432
+
+    class Config:
+        env_file = ".env"
+        case_sensitive = False
+
+    @property
+    def dsn(self) -> str:
+        if self.database_url:
+            return self.database_url
+        if self.enable_live:
+            return (
+                f"postgresql+asyncpg://{self.postgres_user}:{self.postgres_password}"
+                f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
+            )
+        return "sqlite+aiosqlite:///data/awa.db"
+
+
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()
 
 
 def database_url() -> str:
-    url = os.getenv("DATABASE_URL")
-    if url:
-        return url
-    user = os.getenv("POSTGRES_USER")
-    password = os.getenv("POSTGRES_PASSWORD")
-    db = os.getenv("POSTGRES_DB")
-    host = os.getenv("POSTGRES_HOST", "postgres")
-    port = os.getenv("POSTGRES_PORT", "5432")
-    if user and password and db:
-        return f"postgresql+asyncpg://{user}:{password}@{host}:{port}/{db}"
-    return "sqlite+aiosqlite:///data/awa.db"
+    return get_settings().dsn
