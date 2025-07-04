@@ -1,0 +1,1 @@
+The CI pipeline failed when running the Postgres profile because the API container could not connect to the database. This prompt asked Codex to update docker compose files, environment variables and service images so that a Postgres database is available for all services. We also needed a wait script for container startup and to run Alembic migrations during tests.

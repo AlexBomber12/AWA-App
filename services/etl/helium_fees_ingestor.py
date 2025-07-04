@@ -41,7 +41,7 @@ def main() -> int:
                 (sku, fee),
             )
     else:
-        conn = psycopg2.connect(dsn)
+        conn = psycopg2.connect(dsn.replace("postgresql+asyncpg://", "postgresql://"))
         cur = conn.cursor()
         cur.execute(
             "CREATE TABLE IF NOT EXISTS fees_raw("
