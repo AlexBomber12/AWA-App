@@ -10,7 +10,10 @@ def main() -> int:
     client_id = os.environ["SP_CLIENT_ID"]
     client_secret = os.environ["SP_CLIENT_SECRET"]
     region = os.environ["REGION"]
-    dsn = os.environ["DATABASE_URL"]
+    dsn = os.getenv(
+        "DATABASE_URL",
+        "postgresql+psycopg://postgres:pass@postgres:5432/postgres",
+    )
     skus = ["DUMMY1", "DUMMY2"]
     if live:
         from sp_api.api import SellingPartnerAPI
