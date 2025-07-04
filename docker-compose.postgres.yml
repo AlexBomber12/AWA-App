@@ -3,9 +3,9 @@ services:
     image: postgres:15
     user: postgres
     environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${PG_PASSWORD}
+      POSTGRES_DB: awa
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER"]
       interval: 5s
@@ -21,6 +21,8 @@ services:
         condition: service_healthy
     env_file:
       - .env.postgres
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:${PG_PASSWORD}@postgres:5432/awa
 
   etl:
     depends_on:
@@ -28,6 +30,8 @@ services:
         condition: service_healthy
     env_file:
       - .env.postgres
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:${PG_PASSWORD}@postgres:5432/awa
 
   repricer:
     build:
@@ -39,6 +43,8 @@ services:
         condition: service_healthy
       postgres:
         condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:${PG_PASSWORD}@postgres:5432/awa
 
 volumes:
   awa-pgdata:
