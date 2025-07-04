@@ -1,10 +1,9 @@
-version: "3.9"
 services:
   postgres:
     image: postgres:15-alpine
     environment:
-      POSTGRES_DB: awa
-      POSTGRES_USER: root
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
       POSTGRES_PASSWORD: pass
     volumes:
       - awa-pgdata:/var/lib/postgresql/data
@@ -37,7 +36,7 @@ services:
     env_file:
       - .env.example
     environment:
-      DATABASE_URL: postgresql+psycopg://root:pass@postgres:5432/awa
+      DATABASE_URL: postgresql+asyncpg://postgres:pass@postgres:5432/postgres
     depends_on:
       postgres:
         condition: service_healthy
@@ -58,6 +57,8 @@ services:
       context: ./services/etl
     env_file:
       - .env.example
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:pass@postgres:5432/postgres
     depends_on:
       postgres:
         condition: service_healthy
@@ -92,6 +93,8 @@ services:
   repricer:
     build:
       context: ./services/repricer
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:pass@postgres:5432/postgres
     ports:
       - "8100:8100"
     healthcheck:

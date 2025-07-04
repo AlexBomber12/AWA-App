@@ -1,11 +1,24 @@
-from typing import List
+from typing import List, AsyncGenerator
 import asyncio
 from fastapi import Depends, FastAPI
 from sqlalchemy import bindparam, text
 
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from config import get_settings
 
-from db import get_session
+settings = get_settings()
+engine = create_async_engine(
+    settings.dsn,
+    pool_pre_ping=True,
+    future=True,
+    echo=False,
+)
+async_session = async_sessionmaker(engine, expire_on_commit=False)
+
+
+async def get_session() -> AsyncGenerator[AsyncSession, None]:
+    async with async_session() as session:
+        yield session
 
 app = FastAPI()
 
@@ -13,7 +26,7 @@ app = FastAPI()
 @app.on_event("startup")
 async def _wait_for_db() -> None:
     """Block application startup until the database becomes available."""
-    delay = 0.3
+    delay = 0.2
     for _ in range(10):
         try:
             async for session in get_session():
@@ -21,7 +34,6 @@ async def _wait_for_db() -> None:
             return
         except Exception:
             await asyncio.sleep(delay)
-            delay = min(delay * 2, 3)
     raise RuntimeError("Database not available")
 
 
