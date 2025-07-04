@@ -39,6 +39,7 @@ jobs:
     env:
       ENABLE_LIVE: "1"
       PGPASSWORD: pass
+      DATABASE_URL: postgresql+asyncpg://postgres:pass@postgres:5432/postgres
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v4
@@ -53,6 +54,8 @@ jobs:
           pip install pytest ruff black mypy
       - name: Copy env (Postgres)
         run: cp .env.postgres .env
+      - name: Install API deps
+        run: pip install -r services/api/requirements.txt
       - name: Compose up (Postgres)
         run: |
           docker compose \
@@ -65,4 +68,7 @@ jobs:
       - run: ruff check .
       - run: black --check .
       - run: mypy services || true
-      - run: pytest -q
+      - name: Run tests
+        run: |
+          export $(cat .env.postgres | xargs)
+          pytest -q

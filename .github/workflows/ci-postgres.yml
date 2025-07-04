@@ -11,6 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       ENABLE_LIVE: "1"
+      DATABASE_URL: postgresql+asyncpg://postgres:pass@postgres:5432/postgres
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v4
@@ -23,6 +24,9 @@ jobs:
           pip install -r requirements-dev.txt
           pip install pytest
       - name: Start services
-        run: docker compose -f docker-compose.postgres.yml up -d --wait
+        run: docker compose -f docker-compose.yml -f docker-compose.postgres.yml up -d --wait
       - run: docker compose logs postgres
-      - run: pytest -q
+      - name: Run tests
+        run: |
+          export $(cat .env.postgres | xargs)
+          pytest -q
