@@ -6,7 +6,10 @@ from sqlalchemy import bindparam, text
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-DATABASE_URL = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///data/awa.db")
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    "postgresql+psycopg://postgres:pass@postgres:5432/postgres",
+)
 
 engine = create_async_engine(
     DATABASE_URL,
