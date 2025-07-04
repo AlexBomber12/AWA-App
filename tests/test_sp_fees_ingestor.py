@@ -42,6 +42,6 @@ def test_offline(monkeypatch, tmp_path):
     os.environ["SP_CLIENT_SECRET"] = "s"
     os.environ["SELLER_ID"] = "seller"
     os.environ["REGION"] = "EU"
-    os.environ["DATABASE_URL"] = "dsn"
+    os.environ["DATABASE_URL"] = os.getenv("DATABASE_URL", "dsn")
     res = sp_fees_ingestor.main()
     assert res == 0
