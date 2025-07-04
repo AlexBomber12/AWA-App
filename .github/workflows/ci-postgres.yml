@@ -22,16 +22,17 @@ jobs:
           pip install -r services/repricer/requirements.txt
           pip install -r requirements-dev.txt
           pip install pytest
+      - name: Load env
+        run: |
+          echo "PG_PASSWORD=pass" >> $GITHUB_ENV
+          source .env.postgres
+          cat .env.postgres >> $GITHUB_ENV
       - name: Start services
-        run: docker compose -f docker-compose.yml -f docker-compose.postgres.yml up -d --wait
+        run: docker compose --env-file .env.postgres -f docker-compose.yml -f docker-compose.postgres.yml up -d --wait
       - run: |
           docker compose \
             -f docker-compose.yml \
             -f docker-compose.postgres.yml \
             logs postgres
-      - name: Set DATABASE_URL
-        run: echo "DATABASE_URL=postgresql+psycopg://postgres:pass@localhost:5432/postgres" >> $GITHUB_ENV
       - name: Run tests
-        run: |
-          export $(cat .env.postgres | xargs)
-          pytest -q
+        run: pytest -q

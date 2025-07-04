@@ -23,3 +23,9 @@ async def test_health_ok():
         r = await client.get("/health")
         assert r.status_code == 200
         assert r.json() == {"db": "ok"}
+
+
+def test_health(api_client):
+    r = api_client.get("/health")
+    assert r.status_code == 200
+    assert r.json() == {"db": "ok"}
