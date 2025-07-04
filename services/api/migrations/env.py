@@ -20,6 +20,13 @@ url = os.getenv(
     "DATABASE_URL",
     "postgresql+psycopg://postgres:pass@postgres:5432/postgres",
 )
+
+# Migrations run synchronously, but the runtime connection string may use the
+# asyncpg driver. If so, switch to the synchronous psycopg driver so Alembic
+# can establish a connection without requiring greenlets.
+if url.startswith("postgresql+asyncpg"):
+    url = url.replace("+asyncpg", "+psycopg")
+
 connectable = create_engine(url, pool_pre_ping=True)
 
 
