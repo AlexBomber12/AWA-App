@@ -1,10 +1,12 @@
 from typing import List
 import asyncio
 import subprocess
-from fastapi import FastAPI
-from sqlalchemy import text, bindparam
+from fastapi import Depends, FastAPI
+from sqlalchemy import bindparam, text
 
-from db import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from db import get_session
 
 app = FastAPI()
 
@@ -13,7 +15,7 @@ app = FastAPI()
 async def _wait_for_db() -> None:
     for _ in range(10):
         try:
-            async with AsyncSession() as session:
+            async for session in get_session():
                 await session.execute(text("SELECT 1"))
             subprocess.run(["alembic", "upgrade", "head"], check=True)
             return
@@ -23,14 +25,13 @@ async def _wait_for_db() -> None:
 
 
 @app.get("/health")
-async def health() -> dict[str, str]:
-    async with AsyncSession() as session:
-        await session.execute(text("SELECT 1"))
-    return {"status": "ok"}
+async def health(session: AsyncSession = Depends(get_session)) -> dict[str, str]:
+    await session.execute(text("SELECT 1"))
+    return {"db": "ok"}
 
 
 @app.post("/score")
-async def score(asins: List[str]):
+async def score(asins: List[str], session: AsyncSession = Depends(get_session)):
     query = text(
         """
         SELECT p.asin, (p.price - o.cost) / o.cost AS roi
@@ -40,7 +41,6 @@ async def score(asins: List[str]):
         ORDER BY roi DESC
         """
     ).bindparams(bindparam("asins", expanding=True))
-    async with AsyncSession() as session:
-        result = await session.execute(query, {"asins": tuple(asins)})
-        rows = result.fetchall()
+    result = await session.execute(query, {"asins": tuple(asins)})
+    rows = result.fetchall()
     return [{"asin": r[0], "roi": r[1]} for r in rows]
