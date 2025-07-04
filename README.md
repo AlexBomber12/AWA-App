@@ -14,11 +14,15 @@ Black auto-formats every commit; CI enforces `git diff --exit-code`.
 
 ### Database configuration
 
-The ETL and API services expect a Postgres instance configured via
-environment variables. A typical local setup might use:
+The ETL and API services can run against SQLite by default or Postgres when
+the following variables are set:
 
 ```bash
-export DATABASE_URL="postgresql+asyncpg://awa:awa@postgres:5432/awa"
+export POSTGRES_USER=api
+export POSTGRES_PASSWORD=pass
+export POSTGRES_DB=awa
+export POSTGRES_HOST=postgres
+export POSTGRES_PORT=5432
 ```
 
 

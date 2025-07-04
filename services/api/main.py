@@ -1,10 +1,23 @@
 from typing import List
+import asyncio
 from fastapi import FastAPI
 from sqlalchemy import text, bindparam
 
 from .db import AsyncSession
 
 app = FastAPI()
+
+
+@app.on_event("startup")
+async def _wait_for_db() -> None:
+    for _ in range(10):
+        try:
+            async with AsyncSession() as session:
+                await session.execute(text("SELECT 1"))
+            return
+        except Exception:
+            await asyncio.sleep(2)
+    raise RuntimeError("Database not available")
 
 
 @app.get("/health")
