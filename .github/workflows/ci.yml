@@ -73,11 +73,17 @@ jobs:
             -f docker-compose.yml \
             -f docker-compose.postgres.yml \
             logs api --tail=100
+      - name: Wait for Postgres
+        run: scripts/wait_for_pg.sh
+      - name: Prepare DB
+        run: createdb -h localhost -p 5432 -U postgres awa
+      - name: Export DATABASE_URL
+        run: echo "DATABASE_URL=postgresql+psycopg://postgres:pass@localhost:5432/awa" >> $GITHUB_ENV
+      - name: Run migrations
+        run: alembic upgrade head
       - run: ruff check .
       - run: black --check .
       - run: mypy services || true
-      - name: Set DATABASE_URL
-        run: echo "DATABASE_URL=postgresql+psycopg://postgres:pass@localhost:5432/postgres" >> $GITHUB_ENV
       - name: Run tests
         run: |
           export $(cat .env.postgres | xargs)
