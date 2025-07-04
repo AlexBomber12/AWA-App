@@ -14,6 +14,7 @@ def _port_open(host: str, port: int) -> bool:
     except OSError:
         return False
 
+
 @pytest.mark.asyncio
 async def test_health_ok():
     if not _port_open("localhost", 8000):
