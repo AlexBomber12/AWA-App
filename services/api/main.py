@@ -1,28 +1,10 @@
-from typing import List, AsyncGenerator
+from typing import List
 import asyncio
-import os
 from fastapi import Depends, FastAPI  # type: ignore[attr-defined]
 from sqlalchemy import bindparam, text
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql+psycopg://postgres:pass@postgres:5432/postgres",
-)
-
-engine = create_async_engine(
-    DATABASE_URL,
-    pool_pre_ping=True,
-    future=True,
-    echo=False,
-)
-async_session = async_sessionmaker(engine, expire_on_commit=False)
-
-
-async def get_session() -> AsyncGenerator[AsyncSession, None]:
-    async with async_session() as session:
-        yield session
+from .db import get_session
 
 
 app = FastAPI()
