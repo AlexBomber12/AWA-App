@@ -26,8 +26,8 @@ url = os.getenv(
 # like ``asyncpg``, convert it to the equivalent synchronous ``psycopg`` driver
 # so Alembic can connect without greenlets.
 url_obj = make_url(url)
-if url_obj.drivername.endswith("asyncpg"):
-    url_obj = url_obj.set(drivername=url_obj.drivername.replace("asyncpg", "psycopg"))
+if "psycopg" not in url_obj.drivername:
+    url_obj = url_obj.set(drivername="postgresql+psycopg")
 url = str(url_obj)
 
 connectable = create_engine(url, pool_pre_ping=True)
