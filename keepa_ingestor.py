@@ -40,7 +40,7 @@ def main():
         mc.put_object(
             "keepa", path, io.BytesIO(data), len(data), content_type="application/json"
         )
-        conn = psycopg2.connect(dsn)
+        conn = psycopg2.connect(dsn.replace("postgresql+asyncpg://", "postgresql://"))
         conn.autocommit = True
         cur = conn.cursor()
         cur.execute(

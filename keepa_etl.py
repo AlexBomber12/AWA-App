@@ -40,7 +40,7 @@ mc = Minio(
 if not mc.bucket_exists(bucket):
     mc.make_bucket(bucket)
 mc.put_object(bucket, path, io.BytesIO(data), len(data))
-conn = psycopg2.connect(dsn)
+conn = psycopg2.connect(dsn.replace("postgresql+asyncpg://", "postgresql://"))
 cur = conn.cursor()
 cur.execute(
     "INSERT INTO etl_log(date,asin_count,duration_sec) VALUES (%s,%s,%s)",

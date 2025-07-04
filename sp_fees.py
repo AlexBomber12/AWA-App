@@ -11,7 +11,7 @@ def main():
         conn = sqlite3.connect(dsn.replace("sqlite:///", ""))
         cur = conn.cursor()
     else:
-        conn = psycopg2.connect(dsn)
+        conn = psycopg2.connect(dsn.replace("postgresql+asyncpg://", "postgresql://"))
         cur = conn.cursor()
     skus = ["SKU1", "SKU2"]
     if live:

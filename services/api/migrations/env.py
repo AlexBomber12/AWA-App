@@ -6,14 +6,19 @@ import os
 
 
 config = context.config
-if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+if config.config_file_name and os.path.exists(config.config_file_name):
+    try:
+        fileConfig(config.config_file_name)
+    except Exception:
+        pass
 
 target_metadata = None
 
 
 def run_migrations_offline() -> None:
-    url = os.environ["DATABASE_URL"]
+    url = os.environ["DATABASE_URL"].replace(
+        "postgresql+asyncpg://", "postgresql+psycopg://"
+    )
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -26,7 +31,11 @@ def run_migrations_offline() -> None:
 
 def run_migrations_online() -> None:
     connectable = engine_from_config(
-        {"sqlalchemy.url": os.environ["DATABASE_URL"]},
+        {
+            "sqlalchemy.url": os.environ["DATABASE_URL"].replace(
+                "postgresql+asyncpg://", "postgresql+psycopg://"
+            )
+        },
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
     )
