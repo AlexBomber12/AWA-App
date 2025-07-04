@@ -17,10 +17,12 @@ if config.config_file_name and os.path.exists(config.config_file_name):
 target_metadata = None
 
 
-url = os.getenv(
-    "DATABASE_URL",
-    "postgresql+psycopg://postgres:pass@postgres:5432/postgres",
-)
+url = os.getenv("DATABASE_URL")
+if not url:
+    if os.getenv("ENABLE_LIVE") == "0":
+        url = "sqlite+aiosqlite:///data/awa.db"
+    else:
+        raise RuntimeError("DATABASE_URL environment variable required")
 
 # Migrations run synchronously. If the provided DATABASE_URL uses an async driver
 # like ``asyncpg``, convert it to the equivalent synchronous ``psycopg`` driver
