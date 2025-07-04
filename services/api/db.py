@@ -1,10 +1,10 @@
 from typing import AsyncGenerator
 
+import os
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from config import database_url
 
 
-DATABASE_URL = database_url()
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///data/awa.db")
 
 engine = create_async_engine(
     DATABASE_URL,
