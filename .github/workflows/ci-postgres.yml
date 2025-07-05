@@ -29,10 +29,13 @@ jobs:
           cat .env.postgres >> $GITHUB_ENV
       - name: Start services
         run: docker compose --env-file .env.postgres -f docker-compose.yml -f docker-compose.postgres.yml up -d --wait
-      - run: |
-          docker compose \
-            -f docker-compose.yml \
-            -f docker-compose.postgres.yml \
-            logs postgres
+      - name: Show Postgres logs
+        if: always()
+        run: |
+          # list containers so the log makes sense in the summary
+          docker compose -f docker-compose.yml -f docker-compose.postgres.yml ps
+          # dump the last 200 lines of the postgres service logs
+          docker compose -f docker-compose.yml -f docker-compose.postgres.yml \
+            logs --no-color --timestamps --tail 200 postgres
       - name: Run tests
         run: pytest -q
