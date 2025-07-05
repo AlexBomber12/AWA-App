@@ -14,6 +14,7 @@ from services.common.db_url import build_url
 
 DATA_DIR = pathlib.Path(os.getenv("DATA_DIR", tempfile.gettempdir())) / "awa-data"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
+os.environ["DATA_DIR"] = str(DATA_DIR)
 
 # ensure real fastapi package is used
 site_pkg = site.getsitepackages()[0]

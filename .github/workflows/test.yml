@@ -1,0 +1,52 @@
+name: test
+
+on:
+  push:
+    branches: [dev, main]
+  pull_request:
+    branches: [dev, main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      ENABLE_LIVE: "1"
+      DATA_DIR: ${{ runner.temp }}/awa-data
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - run: |
+          pip install -r services/etl/requirements.txt
+          pip install -r services/api/requirements.txt
+          pip install -r services/repricer/requirements.txt
+          pip install -r requirements-dev.txt
+          pip install pytest
+      - name: Load env
+        run: |
+          echo "PG_PASSWORD=pass" >> $GITHUB_ENV
+          source .env.postgres
+          cat .env.postgres >> $GITHUB_ENV
+      - name: Start Postgres
+        run: docker compose --env-file .env.postgres -f docker-compose.postgres.yml up -d --wait postgres
+      - name: Prepare DB
+        run: |
+          createdb -h localhost -U $PG_USER $PG_DATABASE || true
+          echo "DATABASE_URL=postgresql+psycopg://$PG_USER:$PG_PASSWORD@localhost:5432/$PG_DATABASE" >> $GITHUB_ENV
+          alembic upgrade head
+        env:
+          PGPASSWORD: ${{ env.PG_PASSWORD }}
+      - name: Start services
+        run: docker compose -f docker-compose.yml -f docker-compose.postgres.yml up -d --wait
+      - name: Run tests
+        run: pytest -q
+      - name: Dump compose logs
+        if: failure()
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.postgres.yml ps -a
+          for s in $(docker compose ps --format json | jq -r '.[].Name'); do
+            echo "::group::$s logs"
+            docker compose logs --no-color --timestamps --tail=200 "$s"
+            echo "::endgroup::"
+          done
