@@ -6,9 +6,9 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-from services.common.db_url import build_db_url
+from services.common.settings import settings
 
-DATABASE_URL = build_db_url()
+DATABASE_URL = settings.DATABASE_URL
 
 engine = create_async_engine(
     DATABASE_URL,

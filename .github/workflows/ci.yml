@@ -69,18 +69,20 @@ jobs:
           pip install pytest ruff black mypy
       - name: Copy env (Postgres)
         run: cp .env.postgres .env
-      - name: Install API deps
-        run: pip install -r services/api/requirements.txt
-      - name: Wait for Postgres
-        run: until pg_isready -h localhost -p 5432 -U postgres ; do sleep 2 ; done
-      - name: Prepare DB
-        run: createdb -h localhost -p 5432 -U postgres awa
+      - name: Override host
+        run: echo "PG_HOST=localhost" >> $GITHUB_ENV
+      - name: Export DATABASE_URL
+        run: |
+          python - <<'PY'
+          from services.common.settings import Settings
+          print(f"DATABASE_URL={Settings().DATABASE_URL}")
+          PY >> $GITHUB_ENV
+      - name: Compose up
+        run: docker compose -f docker-compose.yml -f docker-compose.postgres.yml up -d --wait
       - name: Run migrations
         run: alembic upgrade head
       - run: ruff check .
       - run: black --check .
       - run: mypy services || true
       - name: Run tests
-        run: |
-          export $(cat .env.postgres | xargs)
-          pytest -q
+        run: pytest -q

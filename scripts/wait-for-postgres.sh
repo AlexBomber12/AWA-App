@@ -1,6 +1,8 @@
-#!/bin/sh
+#!/usr/bin/env bash
 set -e
-while ! pg_isready -U awa -h ${POSTGRES_HOST:-postgres} >/dev/null 2>&1; do
+for i in {1..30}; do
+  pg_isready -h "${PG_HOST:-localhost}" -p "${PG_PORT:-5432}" -U "${PG_USER:-postgres}" && exit 0
   sleep 1
 done
-exec "$@"
+echo "Postgres never became ready" >&2
+exit 1
