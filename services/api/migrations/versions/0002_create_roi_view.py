@@ -1,4 +1,4 @@
-from alembic import op
+from alembic import op  # type: ignore[attr-defined]
 from sqlalchemy import text
 from textwrap import dedent
 
@@ -10,7 +10,7 @@ depends_on = None
 create_roi_view = text(
     dedent(
         """
-        CREATE OR REPLACE VIEW roi_view AS
+        CREATE VIEW roi_view AS
           SELECT
             p.asin,
             max(o.price_cents) / 100.0
@@ -33,6 +33,7 @@ drop_roi_view = text("DROP VIEW IF EXISTS roi_view;")
 
 
 def upgrade() -> None:
+    op.execute(drop_roi_view)
     op.execute(create_roi_view)
 
 

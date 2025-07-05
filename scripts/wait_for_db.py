@@ -9,7 +9,7 @@ async def wait_for_db(url: str) -> None:
     delay = 0.3
     for _ in range(10):
         try:
-            conn = await asyncpg.connect(url)
+            conn = await asyncpg.connect(url)  # type: ignore[attr-defined]
             await conn.execute("SELECT 1")
             await conn.close()
             subprocess.run(["alembic", "upgrade", "head"], check=True)

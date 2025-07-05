@@ -13,6 +13,7 @@ from alembic import context  # type: ignore
 sys.path.append(str(Path(__file__).resolve().parents[3]))
 
 from services.common.db_url import build_url
+from services.common.base import Base
 
 config = context.config
 if config.config_file_name and os.path.exists(config.config_file_name):
@@ -21,7 +22,7 @@ if config.config_file_name and os.path.exists(config.config_file_name):
     except Exception:
         pass
 
-target_metadata = None
+target_metadata = Base.metadata
 
 
 url = build_url(async_=False)

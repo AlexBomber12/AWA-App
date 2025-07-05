@@ -1,4 +1,4 @@
-from alembic import op
+from alembic import op  # type: ignore[attr-defined]
 import sqlalchemy as sa
 
 revision = "0001"

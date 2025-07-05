@@ -1,6 +1,6 @@
 from sqlalchemy import create_engine, text
-from alembic.config import Config
-from alembic import command
+from alembic.config import Config  # type: ignore[attr-defined]
+from alembic import command  # type: ignore[attr-defined]
 from services.common.db_url import build_url
 
 
@@ -10,6 +10,8 @@ def test_upgrade_storage_fee_column_exists(tmp_path, monkeypatch):
     db_path = tmp_path / "awa.db"
     if db_path.exists():
         db_path.unlink()
+    if db_path.exists():
+        db_path.unlink(missing_ok=True)
     cfg = Config("alembic.ini")
     command.upgrade(cfg, "head")
     command.upgrade(cfg, "head")

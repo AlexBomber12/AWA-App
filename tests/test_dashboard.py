@@ -1,7 +1,7 @@
 import shutil
 import subprocess
 import time
-import requests
+import requests  # type: ignore
 import pytest
 
 if shutil.which("docker") is None or shutil.which("docker-compose") is None:

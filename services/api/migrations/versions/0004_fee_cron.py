@@ -1,5 +1,6 @@
-from alembic import op
+from alembic import op  # type: ignore[attr-defined]
 import sqlalchemy as sa
+from sqlalchemy import inspect
 
 revision = "0004_fee_cron"
 down_revision = "0003_vendor_prices"
@@ -8,33 +9,60 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # 0 – rename fulf_fee ➜ fulfil_fee so view will work
-    with op.batch_alter_table("fees_raw") as t:
-        t.alter_column(
+    bind = op.get_bind()
+    cols = {c["name"] for c in inspect(bind).get_columns("fees_raw")}
+
+    # 0 – drop outdated views so column rename succeeds
+    op.execute("DROP VIEW IF EXISTS roi_view")
+    op.execute("DROP VIEW IF EXISTS v_roi_full")
+
+    # 1 – rename fulf_fee ➜ fulfil_fee so view will work
+    if "fulf_fee" in cols and "fulfil_fee" not in cols:
+        op.alter_column(
+            "fees_raw",
             "fulf_fee",
             new_column_name="fulfil_fee",
             existing_type=sa.Numeric(10, 2),
             existing_nullable=False,
         )
 
-    # 1 – add new columns idempotently
-    op.execute(
-        """
-        ALTER TABLE fees_raw
-            ADD COLUMN IF NOT EXISTS storage_fee NUMERIC(10,2) NOT NULL DEFAULT 0,
-            ADD COLUMN IF NOT EXISTS currency     CHAR(3)      NOT NULL DEFAULT '€',
-            ADD COLUMN IF NOT EXISTS updated_at   TIMESTAMPTZ  NOT NULL DEFAULT now();
-        """
-    )
+    # 2 – add new columns idempotently
+    if "storage_fee" not in cols:
+        op.add_column(
+            "fees_raw",
+            sa.Column(
+                "storage_fee", sa.Numeric(10, 2), nullable=False, server_default="0"
+            ),
+        )
+    if "currency" not in cols:
+        op.add_column(
+            "fees_raw",
+            sa.Column("currency", sa.String(3), nullable=False, server_default="€"),
+        )
+    if "updated_at" not in cols:
+        op.add_column(
+            "fees_raw",
+            sa.Column(
+                "updated_at",
+                sa.TIMESTAMP(timezone=True),
+                nullable=False,
+                server_default=sa.text("CURRENT_TIMESTAMP"),
+            ),
+        )
 
-    # 2 – re-create roi_view with correct column name
-    op.execute("DROP VIEW IF EXISTS roi_view CASCADE")
+    # 3 – re-create roi_view with correct column name
+    op.execute("DROP VIEW IF EXISTS roi_view")
     op.execute(
         """
         CREATE VIEW roi_view AS
         SELECT
           p.asin,
-          vp.cost,
+          (
+            SELECT cost FROM vendor_prices vp
+            WHERE vp.sku = p.asin
+            ORDER BY vp.updated_at DESC
+            LIMIT 1
+          ) AS cost,
           f.fulfil_fee,
           f.referral_fee,
           f.storage_fee,
@@ -42,40 +70,89 @@ def upgrade() -> None:
           ROUND(
             100 * (
               k.buybox_price
-            - vp.cost
-            - f.fulfil_fee
-            - f.referral_fee
-            - f.storage_fee
-          ) / k.buybox_price, 2) AS roi_pct
+              - (
+                SELECT cost FROM vendor_prices vp
+                WHERE vp.sku = p.asin
+                ORDER BY vp.updated_at DESC
+                LIMIT 1
+              )
+              - f.fulfil_fee
+              - f.referral_fee
+              - f.storage_fee
+            ) / k.buybox_price,
+          2) AS roi_pct
         FROM products p
         JOIN keepa_offers k ON k.asin = p.asin
-        JOIN fees_raw      f ON f.asin = p.asin
-        JOIN LATERAL (
-          SELECT cost
-          FROM vendor_prices vp
-          WHERE vp.sku = p.asin
-          ORDER BY vp.updated_at DESC
-          LIMIT 1
-        ) vp ON TRUE;
+        JOIN fees_raw      f ON f.asin = p.asin;
+        """
+    )
+
+    op.execute(
+        """
+        CREATE VIEW v_roi_full AS
+        SELECT
+          p.asin,
+          (
+            SELECT cost FROM vendor_prices vp
+            WHERE vp.sku = p.asin
+            ORDER BY vp.updated_at DESC
+            LIMIT 1
+          ) AS cost,
+          f.fulfil_fee,
+          f.referral_fee,
+          f.storage_fee,
+          k.buybox_price,
+          ROUND(
+            100 * (
+              k.buybox_price
+              - (
+                SELECT cost FROM vendor_prices vp
+                WHERE vp.sku = p.asin
+                ORDER BY vp.updated_at DESC
+                LIMIT 1
+              )
+              - f.fulfil_fee
+              - f.referral_fee
+              - f.storage_fee
+            ) / k.buybox_price,
+          2) AS roi_pct
+        FROM products p
+        JOIN keepa_offers k  ON k.asin = p.asin
+        JOIN fees_raw    f  ON f.asin = p.asin;
         """
     )
 
 
 def downgrade() -> None:
     op.execute("DROP VIEW IF EXISTS roi_view")
-    with op.batch_alter_table("fees_raw") as t:
-        t.alter_column(
+    op.execute("DROP VIEW IF EXISTS v_roi_full")
+    bind = op.get_bind()
+    cols = {c["name"] for c in inspect(bind).get_columns("fees_raw")}
+    if "fulfil_fee" in cols and "fulf_fee" not in cols:
+        op.alter_column(
+            "fees_raw",
             "fulfil_fee",
             new_column_name="fulf_fee",
             existing_type=sa.Numeric(10, 2),
             existing_nullable=False,
         )
+    if "updated_at" in cols:
+        op.drop_column("fees_raw", "updated_at")
+    if "currency" in cols:
+        op.drop_column("fees_raw", "currency")
+    if "storage_fee" in cols:
+        op.drop_column("fees_raw", "storage_fee")
     op.execute(
         """
         CREATE VIEW roi_view AS
         SELECT
           p.asin,
-          vp.cost,
+          (
+            SELECT cost FROM vendor_prices vp
+            WHERE vp.sku = p.asin
+            ORDER BY vp.updated_at DESC
+            LIMIT 1
+          ) AS cost,
           f.fulf_fee,
           f.referral_fee,
           f.storage_fee,
@@ -83,20 +160,54 @@ def downgrade() -> None:
           ROUND(
             100 * (
               k.buybox_price
-            - vp.cost
-            - f.fulf_fee
-            - f.referral_fee
-            - f.storage_fee
-          ) / k.buybox_price, 2) AS roi_pct
+              - (
+                SELECT cost FROM vendor_prices vp
+                WHERE vp.sku = p.asin
+                ORDER BY vp.updated_at DESC
+                LIMIT 1
+              )
+              - f.fulf_fee
+              - f.referral_fee
+              - f.storage_fee
+            ) / k.buybox_price,
+          2) AS roi_pct
         FROM products p
         JOIN keepa_offers k ON k.asin = p.asin
-        JOIN fees_raw      f ON f.asin = p.asin
-        JOIN LATERAL (
-          SELECT cost
-          FROM vendor_prices vp
-          WHERE vp.sku = p.asin
-          ORDER BY vp.updated_at DESC
-          LIMIT 1
-        ) vp ON TRUE;
+        JOIN fees_raw      f ON f.asin = p.asin;
+        """
+    )
+
+    op.execute(
+        """
+        CREATE VIEW v_roi_full AS
+        SELECT
+          p.asin,
+          (
+            SELECT cost FROM vendor_prices vp
+            WHERE vp.sku = p.asin
+            ORDER BY vp.updated_at DESC
+            LIMIT 1
+          ) AS cost,
+          f.fulf_fee,
+          f.referral_fee,
+          f.storage_fee,
+          k.buybox_price,
+          ROUND(
+            100 * (
+              k.buybox_price
+              - (
+                SELECT cost FROM vendor_prices vp
+                WHERE vp.sku = p.asin
+                ORDER BY vp.updated_at DESC
+                LIMIT 1
+              )
+              - f.fulf_fee
+              - f.referral_fee
+              - f.storage_fee
+            ) / k.buybox_price,
+          2) AS roi_pct
+        FROM products p
+        JOIN keepa_offers k  ON k.asin = p.asin
+        JOIN fees_raw    f  ON f.asin = p.asin;
         """
     )

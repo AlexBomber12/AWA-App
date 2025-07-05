@@ -1,5 +1,6 @@
-from alembic import op
+from alembic import op  # type: ignore[attr-defined]
 import sqlalchemy as sa
+from sqlalchemy import inspect
 
 revision = "0001_baseline"
 down_revision = None
@@ -8,6 +9,9 @@ depends_on = None
 
 
 def upgrade() -> None:
+    bind = op.get_bind()
+    if "products" in inspect(bind).get_table_names():
+        return  # already bootstrapped
     op.create_table(
         "products",
         sa.Column("asin", sa.TEXT(), primary_key=True),
@@ -35,7 +39,9 @@ def upgrade() -> None:
         "etl_log",
         sa.Column("job", sa.TEXT()),
         sa.Column(
-            "run_at", sa.TIMESTAMP(timezone=True), server_default=sa.text("now()")
+            "run_at",
+            sa.TIMESTAMP(timezone=True),
+            server_default=sa.text("CURRENT_TIMESTAMP"),
         ),
         sa.Column("row_cnt", sa.Integer()),
     )
