@@ -1,4 +1,6 @@
 from functools import lru_cache
+from pathlib import Path
+
 from pydantic import BaseSettings
 
 
@@ -10,6 +12,7 @@ class Settings(BaseSettings):
     postgres_db: str = "awa"
     postgres_host: str = "postgres"
     postgres_port: int = 5432
+    data_dir: Path = Path.cwd() / "data"
 
     class Config:
         env_file = ".env"
@@ -24,7 +27,7 @@ class Settings(BaseSettings):
                 f"postgresql+asyncpg://{self.postgres_user}:{self.postgres_password}"
                 f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
             )
-        return "sqlite+aiosqlite:///data/awa.db"
+        return f"sqlite+aiosqlite:///{self.data_dir / 'awa.db'}"
 
 
 @lru_cache

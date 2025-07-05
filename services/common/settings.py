@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -8,13 +10,14 @@ class Settings(BaseSettings):
     PG_HOST: str = "localhost"
     PG_PORT: int = 5432
     PG_DATABASE: str = "awa"
+    DATA_DIR: Path = Path.cwd() / "data"
 
     model_config = SettingsConfigDict(env_file=".env", case_sensitive=False)
 
     @property
     def DATABASE_URL(self) -> str:
         if self.ENABLE_LIVE == 0:
-            return "sqlite+aiosqlite:///data/awa.db"
+            return f"sqlite+aiosqlite:///{self.DATA_DIR / 'awa.db'}"
         return f"postgresql+asyncpg://{self.PG_USER}:{self.PG_PASSWORD}@{self.PG_HOST}:{self.PG_PORT}/{self.PG_DATABASE}"
 
 

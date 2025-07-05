@@ -5,12 +5,13 @@ import site
 import sys
 
 import time
+from pathlib import Path
 
 os.environ.setdefault("ENABLE_LIVE", "0")
 from services.common.settings import settings
 
-os.makedirs("/data", exist_ok=True)
-os.makedirs("data", exist_ok=True)
+DATA_DIR = Path(os.getenv("DATA_DIR", Path.cwd() / "data"))
+DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 # ensure real fastapi package is used
 site_pkg = site.getsitepackages()[0]
@@ -63,3 +64,8 @@ def pytest_sessionstart(session):
 @pytest.fixture
 def api_client() -> TestClient:
     return TestClient(app)
+
+
+@pytest.fixture
+def data_dir() -> Path:
+    return DATA_DIR
