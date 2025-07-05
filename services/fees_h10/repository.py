@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any, Dict
+
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from services.common.db_url import build_url
@@ -14,7 +16,7 @@ def _get_engine() -> AsyncEngine:
     return _engine
 
 
-async def upsert(row: dict) -> None:
+async def upsert(row: Dict[str, Any]) -> None:
     query = text(
         """
         INSERT INTO fees_raw (asin, fulfil_fee, referral_fee, storage_fee, currency)

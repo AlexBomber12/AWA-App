@@ -19,7 +19,7 @@ app.conf.beat_schedule = {
 }
 
 
-@shared_task(name="fees.refresh")
+@shared_task(name="fees.refresh")  # type: ignore[misc]
 def refresh_fees() -> None:
     asins = list_active_asins()
     asyncio.run(_bulk(asins))

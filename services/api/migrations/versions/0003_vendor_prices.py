@@ -1,5 +1,5 @@
 from textwrap import dedent
-from alembic import op  # type: ignore
+from alembic import op
 import sqlalchemy as sa
 
 revision = "0003_vendor_prices"
