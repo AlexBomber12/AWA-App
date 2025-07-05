@@ -3,6 +3,8 @@ from pathlib import Path
 import importlib
 
 import pytest
+
+pytest.importorskip("celery")
 from httpx import Response
 from sqlalchemy import create_engine, text
 
