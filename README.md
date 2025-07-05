@@ -14,10 +14,9 @@ Black auto-formats every commit; CI enforces `git diff --exit-code`.
 
 ### Database configuration
 
-The ETL and API services can run against SQLite by default or Postgres. Provide
-`POSTGRES_USER`, `POSTGRES_PASSWORD` and `POSTGRES_DB` in your `.env` along with
-`PG_PASSWORD` for the database container. One convenient option is to copy
-`.env.postgres` to `.env` and then start the Postgres profile:
+The ETL and API services read Postgres credentials from environment variables.
+Copy `.env.postgres` to `.env` to provide `PG_USER`, `PG_PASSWORD`, `PG_HOST`,
+`PG_PORT` and `PG_DATABASE`:
 
 ```bash
 cp .env.postgres .env
@@ -26,7 +25,7 @@ cp .env.postgres .env
 SQLite remains the default for local development. To run with Postgres just run:
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.postgres.yml up -d --wait
+docker compose --env-file .env.postgres -f docker-compose.yml -f docker-compose.postgres.yml up -d --wait
 ```
 
 Then visit `http://localhost:8000/health` which should return `{"db": "ok"}`.

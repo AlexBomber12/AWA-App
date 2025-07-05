@@ -9,6 +9,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      DATA_DIR: /tmp/awa-data
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v4
@@ -39,7 +41,23 @@ jobs:
     env:
       ENABLE_LIVE: "1"
       PGPASSWORD: pass
-      DATABASE_URL: postgresql+asyncpg://postgres:pass@postgres:5432/postgres
+      PG_USER: postgres
+      PG_PASSWORD: pass
+      PG_HOST: localhost
+      PG_DATABASE: awa
+      DATA_DIR: /tmp/awa-data
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: pass
+          POSTGRES_DB: awa
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v4
@@ -52,33 +70,22 @@ jobs:
           pip install -r requirements-dev.txt
           # core dev tools
           pip install pytest ruff black mypy
-      - name: Copy env (Postgres)
-        run: cp .env.postgres .env
-      - name: Install API deps
-        run: pip install -r services/api/requirements.txt
-      - name: Compose up (Postgres)
+      - name: Wait for Postgres
         run: |
-          docker compose \
-            -f docker-compose.yml \
-            -f docker-compose.postgres.yml \
-            up -d --wait
-      - if: failure()
-        run: |
-          docker compose \
-            -f docker-compose.yml \
-            -f docker-compose.postgres.yml \
-            logs --no-color
-      - run: |
-          docker compose \
-            -f docker-compose.yml \
-            -f docker-compose.postgres.yml \
-            logs api --tail=100
+          until pg_isready -h localhost -p 5432 -U postgres; do sleep 1; done
+          psql -h localhost -U postgres -c 'select 1' || true
+        env:
+          PGPASSWORD: pass
+      - name: Prepare DB
+        run: createdb -h localhost -p 5432 -U postgres awa
+        env:
+          PGPASSWORD: pass
+      - name: Export DATABASE_URL
+        run: echo "DATABASE_URL=postgresql+psycopg://postgres:pass@localhost:5432/awa" >> $GITHUB_ENV
+      - name: Run migrations
+        run: alembic upgrade head
       - run: ruff check .
       - run: black --check .
       - run: mypy services || true
-      - name: Set DATABASE_URL
-        run: echo "DATABASE_URL=postgresql+psycopg://postgres:pass@localhost:5432/postgres" >> $GITHUB_ENV
       - name: Run tests
-        run: |
-          export $(cat .env.postgres | xargs)
-          pytest -q
+        run: pytest -q

@@ -1,5 +1,6 @@
 from typing import List
 import asyncio
+from contextlib import asynccontextmanager
 from fastapi import Depends, FastAPI  # type: ignore[attr-defined]
 from sqlalchemy import bindparam, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -7,10 +8,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from .db import get_session
 
 
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await _wait_for_db()
+    yield
 
 
-@app.on_event("startup")
+app = FastAPI(lifespan=lifespan)
+
+
 async def _wait_for_db() -> None:
     """Block application startup until the database becomes available."""
     delay = 0.2

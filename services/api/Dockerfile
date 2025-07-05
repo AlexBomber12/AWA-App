@@ -12,5 +12,7 @@ COPY services/api /app/services/api
 COPY services/api/migrations/ /app/migrations/
 COPY config.py /app/config.py
 COPY alembic.ini /app/alembic.ini
-
-CMD ["bash", "-c", "alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port 8000"]
+COPY scripts/wait_db.sh /app/wait_db.sh
+COPY services/api/entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/wait_db.sh /app/entrypoint.sh
+ENTRYPOINT ["/bin/bash", "/app/entrypoint.sh"]

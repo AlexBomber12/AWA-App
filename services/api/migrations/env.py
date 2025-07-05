@@ -4,7 +4,13 @@ from sqlalchemy import create_engine
 from sqlalchemy.engine import make_url
 from alembic import context  # type: ignore
 import os
+import sys
 import time
+from pathlib import Path
+
+sys.path.append(str(Path(__file__).resolve().parents[3]))
+
+from services.common.db_url import build_url
 
 
 config = context.config
@@ -17,19 +23,16 @@ if config.config_file_name and os.path.exists(config.config_file_name):
 target_metadata = None
 
 
-url = os.getenv("DATABASE_URL")
-if not url:
-    if os.getenv("ENABLE_LIVE") == "0":
-        url = "sqlite+aiosqlite:///data/awa.db"
-    else:
-        raise RuntimeError("DATABASE_URL environment variable required")
+url = build_url()
 
 # Migrations run synchronously. If the provided DATABASE_URL uses an async driver
 # like ``asyncpg``, convert it to the equivalent synchronous ``psycopg`` driver
 # so Alembic can connect without greenlets.
 url_obj = make_url(url)
-if "psycopg" not in url_obj.drivername:
+if "asyncpg" in url_obj.drivername:
     url_obj = url_obj.set(drivername="postgresql+psycopg")
+elif "aiosqlite" in url_obj.drivername:
+    url_obj = url_obj.set(drivername="sqlite")
 url = str(url_obj)
 
 connectable = create_engine(url, pool_pre_ping=True)
