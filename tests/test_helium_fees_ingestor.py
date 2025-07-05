@@ -32,7 +32,7 @@ def fake_connect(dsn):
     return FakeConn()
 
 
-sys.modules["psycopg2"].connect = fake_connect
+sys.modules["psycopg2"].connect = fake_connect  # type: ignore[attr-defined]
 
 
 def test_offline(monkeypatch):

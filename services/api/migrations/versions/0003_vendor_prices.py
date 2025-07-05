@@ -56,7 +56,7 @@ def upgrade() -> None:
                 ORDER BY vp.updated_at DESC
                 LIMIT 1
               ) AS cost,
-              f.fulf_fee,
+              f.fulfil_fee,
               f.referral_fee,
               f.storage_fee,
               k.buybox_price,
@@ -69,7 +69,7 @@ def upgrade() -> None:
                     ORDER BY vp.updated_at DESC
                     LIMIT 1
                   )
-                  - f.fulf_fee
+                  - f.fulfil_fee
                   - f.referral_fee
                   - f.storage_fee
                 ) / k.buybox_price,

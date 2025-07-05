@@ -14,7 +14,7 @@ create_roi_view = text(
           SELECT
             p.asin,
             max(o.price_cents) / 100.0
-            - f.fulf_fee
+            - f.fulfil_fee
             - f.referral_fee
             - f.storage_fee AS roi_eur
           FROM products p
@@ -22,7 +22,7 @@ create_roi_view = text(
           JOIN fees_raw f ON f.asin = p.asin
           GROUP BY
             p.asin,
-            f.fulf_fee,
+            f.fulfil_fee,
             f.referral_fee,
             f.storage_fee;
         """
