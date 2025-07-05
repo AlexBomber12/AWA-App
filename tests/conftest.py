@@ -106,11 +106,23 @@ def create_tables():
             )
             conn.exec_driver_sql(
                 """
+                CREATE TABLE IF NOT EXISTS fees_raw (
+                    asin TEXT PRIMARY KEY,
+                    fulfil_fee NUMERIC(10,2) NOT NULL,
+                    referral_fee NUMERIC(10,2) NOT NULL,
+                    storage_fee NUMERIC(10,2) NOT NULL DEFAULT 0,
+                    currency CHAR(3) NOT NULL DEFAULT '€',
+                    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+                );
+                """
+            )
+            conn.exec_driver_sql(
+                """
                 CREATE VIEW IF NOT EXISTS v_roi_full AS
                 SELECT
                   p.asin,
                   (SELECT cost FROM vendor_prices vp WHERE vp.sku = p.asin ORDER BY vp.updated_at DESC LIMIT 1) AS cost,
-                  f.fulf_fee,
+                  f.fulfil_fee,
                   f.referral_fee,
                   f.storage_fee,
                   k.buybox_price,
@@ -118,7 +130,7 @@ def create_tables():
                     100 * (
                       k.buybox_price
                       - (SELECT cost FROM vendor_prices vp WHERE vp.sku = p.asin ORDER BY vp.updated_at DESC LIMIT 1)
-                      - f.fulf_fee
+                      - f.fulfil_fee
                       - f.referral_fee
                       - f.storage_fee
                     ) / k.buybox_price,

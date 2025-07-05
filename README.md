@@ -39,3 +39,18 @@ Use the price importer to load vendor spreadsheets into the database:
 python -m price_importer.import tests/fixtures/sample_prices.csv --vendor "ACME GmbH"
 ```
 This updates `vendor_prices` and recomputes ROI via the `v_roi_full` view.
+
+## Helium10 fee cron
+Add your Helium10 API key to `.env.postgres` and run the fee cron container:
+
+```yaml
+fees_h10:
+  build: services/fees_h10
+  command: ["celery", "-A", "services.fees_h10.worker", "beat", "-l", "info"]
+  env_file: .env.postgres
+  depends_on:
+    postgres:
+      condition: service_healthy
+```
+
+`docker compose up fees_h10` fetches daily FBA fees into `fees_raw`.
