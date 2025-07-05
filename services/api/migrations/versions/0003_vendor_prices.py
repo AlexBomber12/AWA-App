@@ -1,6 +1,7 @@
 from textwrap import dedent
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy import inspect
 
 revision = "0003_vendor_prices"
 down_revision = "0002_create_roi_view"
@@ -9,34 +10,44 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.create_table(
-        "vendors",
-        sa.Column("id", sa.Integer(), primary_key=True),
-        sa.Column("name", sa.Text(), unique=True, nullable=False),
-    )
-    op.create_table(
-        "vendor_prices",
-        sa.Column("id", sa.Integer(), primary_key=True),
-        sa.Column("vendor_id", sa.Integer(), sa.ForeignKey("vendors.id")),
-        sa.Column("sku", sa.Text(), nullable=False),
-        sa.Column("cost", sa.Numeric(10, 2), nullable=False),
-        sa.Column("moq", sa.Integer(), server_default="0"),
-        sa.Column("lead_time_days", sa.Integer(), server_default="0"),
-        sa.Column("currency", sa.String(3), server_default="EUR"),
-        sa.Column(
-            "updated_at", sa.TIMESTAMP(timezone=True), server_default=sa.text("now()")
-        ),
-        sa.UniqueConstraint("vendor_id", "sku", name="u_vendor_sku"),
-    )
-    op.create_table(
-        "keepa_offers",
-        sa.Column("asin", sa.Text(), primary_key=True),
-        sa.Column("buybox_price", sa.Numeric(10, 2)),
-    )
+    bind = op.get_bind()
+    tables = inspect(bind).get_table_names()
+    if "vendors" not in tables:
+        op.create_table(
+            "vendors",
+            sa.Column("id", sa.Integer(), primary_key=True),
+            sa.Column("name", sa.Text(), unique=True, nullable=False),
+            sa.Column("locale", sa.Text(), server_default="en"),
+            sa.Column("email", sa.Text()),
+        )
+    if "vendor_prices" not in tables:
+        op.create_table(
+            "vendor_prices",
+            sa.Column("id", sa.Integer(), primary_key=True),
+            sa.Column("vendor_id", sa.Integer(), sa.ForeignKey("vendors.id")),
+            sa.Column("sku", sa.Text(), nullable=False),
+            sa.Column("cost", sa.Numeric(10, 2), nullable=False),
+            sa.Column("moq", sa.Integer(), server_default="0"),
+            sa.Column("lead_time_days", sa.Integer(), server_default="0"),
+            sa.Column("currency", sa.String(3), server_default="EUR"),
+            sa.Column(
+                "updated_at",
+                sa.TIMESTAMP(timezone=True),
+                server_default=sa.text("CURRENT_TIMESTAMP"),
+            ),
+            sa.UniqueConstraint("vendor_id", "sku", name="u_vendor_sku"),
+        )
+    if "keepa_offers" not in tables:
+        op.create_table(
+            "keepa_offers",
+            sa.Column("asin", sa.Text(), primary_key=True),
+            sa.Column("buybox_price", sa.Numeric(10, 2)),
+        )
+    op.execute("DROP VIEW IF EXISTS v_roi_full")
     op.execute(
         dedent(
             """
-            CREATE OR REPLACE VIEW v_roi_full AS
+            CREATE VIEW v_roi_full AS
             SELECT
               p.asin,
               (
