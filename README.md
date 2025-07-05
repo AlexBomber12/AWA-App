@@ -30,3 +30,9 @@ docker compose --env-file .env.postgres -f docker-compose.yml -f docker-compose.
 
 Then visit `http://localhost:8000/health` which should return `{"db": "ok"}`.
 
+### Continuous Integration
+
+The GitHub Actions test workflow uses a Postgres service container. It waits
+for the database to become healthy, runs Alembic migrations and executes the
+tests. No `docker compose` commands are required in CI.
+
