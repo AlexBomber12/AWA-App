@@ -1,4 +1,6 @@
 import os
+import tempfile
+import pathlib
 import subprocess
 import pytest
 import site
@@ -10,8 +12,9 @@ from pathlib import Path
 os.environ.setdefault("ENABLE_LIVE", "0")
 from services.common.db_url import build_url
 
-DATA_DIR = Path(os.getenv("DATA_DIR", Path.cwd() / "data"))
+DATA_DIR = pathlib.Path(os.getenv("DATA_DIR", tempfile.gettempdir())) / "awa-data"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
+os.environ["DATA_DIR"] = str(DATA_DIR)
 
 # ensure real fastapi package is used
 site_pkg = site.getsitepackages()[0]

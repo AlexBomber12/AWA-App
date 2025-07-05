@@ -10,7 +10,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      DATA_DIR: /tmp/awa-data
+      DATA_DIR: ${{ runner.temp }}/awa-data
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v4
@@ -41,11 +41,14 @@ jobs:
     env:
       ENABLE_LIVE: "1"
       PGPASSWORD: pass
-      PG_USER: postgres
-      PG_PASSWORD: pass
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: pass
+      POSTGRES_DB: awa
+      PG_USER: ${{ env.POSTGRES_USER }}
+      PG_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
+      PG_DATABASE: ${{ env.POSTGRES_DB }}
       PG_HOST: localhost
-      PG_DATABASE: awa
-      DATA_DIR: /tmp/awa-data
+      DATA_DIR: ${{ runner.temp }}/awa-data
     services:
       postgres:
         image: postgres:15
@@ -70,10 +73,15 @@ jobs:
           pip install -r requirements-dev.txt
           # core dev tools
           pip install pytest ruff black mypy
-      - name: Wait for Postgres
+      - name: Wait for Postgres to accept connections
         run: |
-          until pg_isready -h localhost -p 5432 -U postgres; do sleep 1; done
-          psql -h localhost -U postgres -c 'select 1' || true
+          for i in {1..30}; do
+            if pg_isready -h localhost -p 5432 -U postgres; then
+              echo "Postgres is ready"; exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::Postgres never became ready"; docker compose logs postgres; exit 1
         env:
           PGPASSWORD: pass
       - name: Prepare DB
@@ -89,3 +97,8 @@ jobs:
       - run: mypy services || true
       - name: Run tests
         run: pytest -q
+      - name: Dump compose logs (always)
+        if: always()
+        run: |
+          docker compose ps
+          docker compose logs --no-color --tail=300

@@ -1,7 +1,6 @@
 from __future__ import annotations
 from logging.config import fileConfig
 from sqlalchemy import create_engine
-from sqlalchemy.engine import make_url
 from alembic import context  # type: ignore
 import os
 import sys
@@ -10,7 +9,7 @@ from pathlib import Path
 
 sys.path.append(str(Path(__file__).resolve().parents[3]))
 
-from services.common.db_url import build_url
+from services.common.db_url import make_dsn
 
 
 config = context.config
@@ -23,17 +22,9 @@ if config.config_file_name and os.path.exists(config.config_file_name):
 target_metadata = None
 
 
-url = build_url()
-
-# Migrations run synchronously. If the provided DATABASE_URL uses an async driver
-# like ``asyncpg``, convert it to the equivalent synchronous ``psycopg`` driver
-# so Alembic can connect without greenlets.
-url_obj = make_url(url)
-if "asyncpg" in url_obj.drivername:
-    url_obj = url_obj.set(drivername="postgresql+psycopg")
-elif "aiosqlite" in url_obj.drivername:
-    url_obj = url_obj.set(drivername="sqlite")
-url = str(url_obj)
+url = make_dsn(async_=False)
+print("DSN:", url)
+config.set_main_option("sqlalchemy.url", url)
 
 connectable = create_engine(url, pool_pre_ping=True)
 
