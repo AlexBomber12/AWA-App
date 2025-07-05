@@ -34,7 +34,7 @@ async def _wait_for_db() -> None:
 
 @app.get("/health")
 async def health(session: AsyncSession = Depends(get_session)) -> dict[str, str]:
-    await session.execute(text("SELECT 1"))
+    await session.execute(text("SELECT 1 FROM v_roi_full LIMIT 1"))
     return {"db": "ok"}
 
 

@@ -12,7 +12,7 @@ from alembic import context  # type: ignore
 
 sys.path.append(str(Path(__file__).resolve().parents[3]))
 
-from services.common.db_url import make_dsn
+from services.common.db_url import build_url
 
 config = context.config
 if config.config_file_name and os.path.exists(config.config_file_name):
@@ -24,7 +24,7 @@ if config.config_file_name and os.path.exists(config.config_file_name):
 target_metadata = None
 
 
-url = make_dsn(async_=False)
+url = build_url(async_=False)
 config.set_main_option("sqlalchemy.url", url)
 
 connectable = create_engine(url, pool_pre_ping=True)

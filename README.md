@@ -32,3 +32,10 @@ The GitHub Actions test workflow uses a Postgres service container. It waits
 for the database to become healthy, runs Alembic migrations and executes the
 tests. No `docker compose` commands are required in CI.
 
+
+## Importing supplier prices
+Use the price importer to load vendor spreadsheets into the database:
+```bash
+python -m price_importer.import tests/fixtures/sample_prices.csv --vendor "ACME GmbH"
+```
+This updates `vendor_prices` and recomputes ROI via the `v_roi_full` view.

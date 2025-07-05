@@ -102,3 +102,46 @@ jobs:
         run: |
           docker compose ps
           docker compose logs --no-color --tail=300
+
+  importer-test:
+    needs: postgres
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: pass
+          POSTGRES_DB: awa
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd="pg_isready -U postgres -d awa"
+          --health-interval=5s --health-timeout=5s --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - run: docker build -t price_importer services/price_importer
+      - name: Wait for Postgres
+        run: |
+          for i in {1..20}; do
+            pg_isready -h localhost -p 5432 -U postgres -d awa && exit 0
+            sleep 2
+          done
+          exit 1
+        env:
+          PGPASSWORD: pass
+      - run: alembic upgrade head
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: pass
+          POSTGRES_DB: awa
+          PG_USER: ${{ env.POSTGRES_USER }}
+          PG_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
+          PG_DATABASE: ${{ env.POSTGRES_DB }}
+          PG_HOST: localhost
+      - run: docker run --network host -e PG_USER=postgres -e PG_PASSWORD=pass -e PG_HOST=localhost -e PG_DATABASE=awa price_importer python -m price_importer.import tests/fixtures/sample_prices.csv --vendor "ACME GmbH"
+      - run: psql -h localhost -U postgres -d awa -c "SELECT count(*) FROM vendor_prices;"
+        env:
+          PGPASSWORD: pass
