@@ -56,7 +56,6 @@ def main():
         p = Path("tmp/offline_asins.json")
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(json.dumps(asins))
-    print("OK")
 
 
 if __name__ == "__main__":

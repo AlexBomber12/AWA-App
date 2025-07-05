@@ -15,20 +15,16 @@ Black auto-formats every commit; CI enforces `git diff --exit-code`.
 ### Database configuration
 
 The ETL and API services read Postgres credentials from environment variables.
-Copy `.env.postgres` to `.env` to provide `PG_USER`, `PG_PASSWORD`, `PG_HOST`,
-`PG_PORT` and `PG_DATABASE`:
+Copy `.env.example` to `.env.postgres` and spin up the stack:
 
 ```bash
-cp .env.postgres .env
+cp .env.example .env.postgres
+docker compose up -d --wait
+curl http://localhost:8000/health
 ```
 
-SQLite remains the default for local development. To run with Postgres just run:
-
-```bash
-docker compose --env-file .env.postgres -f docker-compose.yml -f docker-compose.postgres.yml up -d --wait
-```
-
-Then visit `http://localhost:8000/health` which should return `{"db": "ok"}`.
+SQLite remains the default for local development; using the `.env.postgres`
+file enables the Postgres services for API and ETL.
 
 ### Continuous Integration
 
