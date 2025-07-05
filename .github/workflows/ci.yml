@@ -76,10 +76,11 @@ jobs:
         run: echo "PG_HOST=localhost" >> $GITHUB_ENV
       - name: Export DATABASE_URL
         run: |
-          python - <<'PY'
-          from services.common.settings import Settings
-          print(f"DATABASE_URL={Settings().DATABASE_URL}")
-          PY >> $GITHUB_ENV
+          echo "DATABASE_URL=$(python - <<'PY'
+            from services.common.settings import Settings
+            print(Settings().DATABASE_URL)
+PY
+          )" >> "$GITHUB_ENV"
       - name: Compose up
         run: docker compose -f docker-compose.yml -f docker-compose.postgres.yml up -d --wait
       - name: Run migrations
