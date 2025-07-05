@@ -1,0 +1,1 @@
+"""Daily logistics ETL job."""
