@@ -45,6 +45,9 @@ def run_migrations_online() -> None:
     for attempt in range(10):
         try:
             with connectable.connect() as connection:
+                # ⚠️ Do NOT pre-create tables; migrations must own schema creation.
+                #    Removing the previous `target_metadata.create_all(connection)`
+                #    call avoids "table already exists" errors on SQLite.
                 context.configure(
                     connection=connection, target_metadata=target_metadata
                 )
