@@ -2,6 +2,8 @@ import importlib
 import shutil
 
 import pytest
+
+pytest.importorskip("apscheduler")
 from httpx import Response
 from sqlalchemy import create_engine, text
 from sqlalchemy.ext.asyncio import create_async_engine
