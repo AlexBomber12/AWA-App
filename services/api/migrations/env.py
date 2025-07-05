@@ -10,7 +10,7 @@ from pathlib import Path
 
 sys.path.append(str(Path(__file__).resolve().parents[3]))
 
-from services.common.settings import settings
+from services.common.db_url import build_url
 
 
 config = context.config
@@ -23,7 +23,7 @@ if config.config_file_name and os.path.exists(config.config_file_name):
 target_metadata = None
 
 
-url = settings.DATABASE_URL
+url = build_url()
 
 # Migrations run synchronously. If the provided DATABASE_URL uses an async driver
 # like ``asyncpg``, convert it to the equivalent synchronous ``psycopg`` driver

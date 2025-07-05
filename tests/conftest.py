@@ -8,7 +8,7 @@ import time
 from pathlib import Path
 
 os.environ.setdefault("ENABLE_LIVE", "0")
-from services.common.settings import settings
+from services.common.db_url import build_url
 
 DATA_DIR = Path(os.getenv("DATA_DIR", Path.cwd() / "data"))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
@@ -23,7 +23,8 @@ from services.api.main import app  # noqa: E402
 
 
 def _wait_for_db() -> None:
-    if settings.DATABASE_URL.startswith("sqlite"):
+    url = build_url(async_=True)
+    if url.startswith("sqlite"):
         return
     for _ in range(10):
         try:
@@ -31,11 +32,11 @@ def _wait_for_db() -> None:
                 [
                     "pg_isready",
                     "-h",
-                    settings.PG_HOST,
+                    os.getenv("PG_HOST", "postgres"),
                     "-p",
-                    str(settings.PG_PORT),
+                    "5432",
                     "-U",
-                    settings.PG_USER,
+                    os.getenv("PG_USER", "postgres"),
                 ],
                 capture_output=True,
             ).returncode
@@ -49,7 +50,7 @@ def _wait_for_db() -> None:
 
 def pytest_sessionstart(session):
     _wait_for_db()
-    url = settings.DATABASE_URL
+    url = build_url(async_=True)
     if url.startswith("sqlite"):
         path = url.split("///", 1)[1]
         if os.path.exists(path):

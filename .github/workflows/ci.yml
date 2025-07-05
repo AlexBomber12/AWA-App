@@ -70,19 +70,18 @@ jobs:
           pip install -r requirements-dev.txt
           # core dev tools
           pip install pytest ruff black mypy
-      - name: Copy env (Postgres)
-        run: cp .env.postgres .env
-      - name: Override host
-        run: echo "PG_HOST=localhost" >> $GITHUB_ENV
-      - name: Export DATABASE_URL
+      - name: Wait for Postgres
         run: |
-          echo "DATABASE_URL=$(python - <<'PY'
-            from services.common.settings import Settings
-            print(Settings().DATABASE_URL)
-PY
-          )" >> "$GITHUB_ENV"
-      - name: Compose up
-        run: docker compose -f docker-compose.yml -f docker-compose.postgres.yml up -d --wait
+          until pg_isready -h localhost -p 5432 -U postgres; do sleep 1; done
+          psql -h localhost -U postgres -c 'select 1' || true
+        env:
+          PGPASSWORD: pass
+      - name: Prepare DB
+        run: createdb -h localhost -p 5432 -U postgres awa
+        env:
+          PGPASSWORD: pass
+      - name: Export DATABASE_URL
+        run: echo "DATABASE_URL=postgresql+psycopg://postgres:pass@localhost:5432/awa" >> $GITHUB_ENV
       - name: Run migrations
         run: alembic upgrade head
       - run: ruff check .
