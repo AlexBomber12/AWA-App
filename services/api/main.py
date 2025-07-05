@@ -7,6 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from fastapi import Depends, FastAPI  # type: ignore[attr-defined]
 
+from .routes.roi import router as roi_router
+
 from .db import get_session
 
 
@@ -17,6 +19,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+app.include_router(roi_router)
 
 
 async def _wait_for_db() -> None:

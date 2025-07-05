@@ -11,6 +11,7 @@ WORKDIR /app
 ENV PATH="/opt/venv/bin:$PATH"
 COPY --from=builder /opt/venv /opt/venv
 COPY services/api /app/services/api
+COPY templates/ /app/templates/
 COPY services/api/migrations/ /app/migrations/
 COPY config.py /app/config.py
 COPY alembic.ini /app/alembic.ini

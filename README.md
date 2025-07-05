@@ -69,3 +69,11 @@ logistics_etl:
 ```
 
 Run `docker compose up logistics_etl` to insert rates and update ROI.
+
+## ROI Review demo
+
+Browse high-margin SKUs with basic auth:
+
+```bash
+curl -u admin:pass "http://localhost:8000/roi-review?roi_min=15"
+```
