@@ -1,5 +1,5 @@
 import os
-import requests
+import requests  # type: ignore
 import sqlite3
 import psycopg2
 

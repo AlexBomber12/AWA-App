@@ -1,7 +1,7 @@
 import os
 import time
 import socket
-import requests
+import requests  # type: ignore
 import pytest
 
 

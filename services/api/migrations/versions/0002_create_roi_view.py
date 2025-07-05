@@ -1,4 +1,4 @@
-from alembic import op
+from alembic import op  # type: ignore[attr-defined]
 from sqlalchemy import text
 from textwrap import dedent
 

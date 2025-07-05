@@ -1,10 +1,10 @@
 from textwrap import dedent
-from alembic import op
+from alembic import op  # type: ignore[attr-defined]
 import sqlalchemy as sa
 from sqlalchemy import inspect
 
 revision = "0003_vendor_prices"
-down_revision = "0003_rename_fulf_fee_and_fix_roi_view"
+down_revision = "3e9d5c5aff2c"
 branch_labels = None
 depends_on = None
 

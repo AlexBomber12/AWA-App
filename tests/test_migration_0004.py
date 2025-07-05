@@ -1,6 +1,6 @@
 from sqlalchemy import create_engine, text
-from alembic.config import Config
-from alembic import command
+from alembic.config import Config  # type: ignore[attr-defined]
+from alembic import command  # type: ignore[attr-defined]
 from services.common.db_url import build_url
 
 
