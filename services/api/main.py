@@ -1,9 +1,11 @@
-from typing import List
 import asyncio
 from contextlib import asynccontextmanager
-from fastapi import Depends, FastAPI  # type: ignore[attr-defined]
+from typing import List
+
 from sqlalchemy import bindparam, text
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from fastapi import Depends, FastAPI  # type: ignore[attr-defined]
 
 from .db import get_session
 

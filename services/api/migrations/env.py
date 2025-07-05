@@ -1,16 +1,18 @@
 from __future__ import annotations
-from logging.config import fileConfig
-from sqlalchemy import create_engine
-from alembic import context  # type: ignore
+
 import os
 import sys
 import time
+from logging.config import fileConfig
 from pathlib import Path
+
+from sqlalchemy import create_engine
+
+from alembic import context  # type: ignore
 
 sys.path.append(str(Path(__file__).resolve().parents[3]))
 
 from services.common.db_url import make_dsn
-
 
 config = context.config
 if config.config_file_name and os.path.exists(config.config_file_name):
@@ -23,7 +25,6 @@ target_metadata = None
 
 
 url = make_dsn(async_=False)
-print("DSN:", url)
 config.set_main_option("sqlalchemy.url", url)
 
 connectable = create_engine(url, pool_pre_ping=True)
