@@ -54,3 +54,18 @@ fees_h10:
 ```
 
 `docker compose up fees_h10` fetches daily FBA fees into `fees_raw`.
+
+## Logistics costs
+Daily freight rates populate the `freight_rates` table:
+
+```yaml
+logistics_etl:
+  build: services/logistics_etl
+  env_file: .env.postgres
+  command: ["python", "-m", "logistics_etl"]
+  depends_on:
+    postgres:
+      condition: service_healthy
+```
+
+Run `docker compose up logistics_etl` to insert rates and update ROI.

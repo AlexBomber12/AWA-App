@@ -118,6 +118,17 @@ def create_tables():
             )
             conn.exec_driver_sql(
                 """
+                CREATE TABLE IF NOT EXISTS freight_rates (
+                    lane TEXT,
+                    mode TEXT,
+                    eur_per_kg NUMERIC(10,2),
+                    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (lane, mode)
+                );
+                """
+            )
+            conn.exec_driver_sql(
+                """
                 CREATE VIEW IF NOT EXISTS v_roi_full AS
                 SELECT
                   p.asin,
@@ -126,6 +137,9 @@ def create_tables():
                   f.referral_fee,
                   f.storage_fee,
                   k.buybox_price,
+                  (
+                    COALESCE(p.weight_kg, 0) * COALESCE((SELECT eur_per_kg FROM freight_rates LIMIT 1), 0)
+                  ) AS freight_cost,
                   ROUND(
                     100 * (
                       k.buybox_price
@@ -133,6 +147,9 @@ def create_tables():
                       - f.fulfil_fee
                       - f.referral_fee
                       - f.storage_fee
+                      - (
+                            COALESCE(p.weight_kg, 0) * COALESCE((SELECT eur_per_kg FROM freight_rates LIMIT 1), 0)
+                        )
                     ) / k.buybox_price,
                   2) AS roi_pct
                 FROM products p
@@ -144,5 +161,6 @@ def create_tables():
         Base.metadata.drop_all(engine)
         with engine.begin() as conn:
             conn.exec_driver_sql("DROP VIEW IF EXISTS v_roi_full")
+            conn.exec_driver_sql("DROP TABLE IF EXISTS freight_rates")
     else:
         yield
