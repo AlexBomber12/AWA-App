@@ -3,11 +3,11 @@ from pathlib import Path
 import importlib
 
 import pytest
-import respx
 from httpx import Response
 from sqlalchemy import create_engine, text
 
-from services.fees_h10 import client, repository, worker
+respx = pytest.importorskip("respx")
+from services.fees_h10 import client, repository, worker  # noqa: E402
 
 
 @respx.mock
