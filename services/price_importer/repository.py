@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from typing import Iterable
+from typing import Iterable, cast, Any
 
 from sqlalchemy import create_engine, select, update, insert
-from sqlalchemy.engine import Engine
+from sqlalchemy.engine import Engine, CursorResult
 
 from services.common.db_url import build_url
 from services.common.models_vendor import Vendor, VendorPrice
@@ -48,7 +48,7 @@ class Repository:
                     )
                     .values(**values)
                 )
-                if res.rowcount == 0:
+                if cast(CursorResult[Any], res).rowcount == 0:
                     if not dry_run:
                         conn.execute(insert(VendorPrice).values(**values))
                     inserted += 1

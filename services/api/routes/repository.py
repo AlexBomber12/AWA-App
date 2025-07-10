@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from typing import Sequence
+from typing import Sequence, cast, Any
 
 from sqlalchemy import bindparam, text
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.engine import RowMapping
+from sqlalchemy.engine import RowMapping, CursorResult
 
 ROI_QUERY = text(
     """
@@ -51,4 +51,4 @@ async def bulk_approve(session: AsyncSession, asins: Sequence[str]) -> int:
         return 0
     res = await session.execute(BULK_UPDATE, {"asins": tuple(asins)})
     await session.commit()
-    return res.rowcount or 0
+    return cast(CursorResult[Any], res).rowcount or 0
