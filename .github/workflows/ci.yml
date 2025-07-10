@@ -1,4 +1,5 @@
 name: CI
+# yamllint disable rule:line-length
 
 on:
   push:
@@ -10,19 +11,15 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      DATA_DIR: "${{ runner.temp }}/awa-data"
+      DATA_DIR: ${{ runner.temp }}/awa-data
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: pass
+      PG_DATABASE: awa
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v4
         with:
           python-version: '3.11'
-      - name: Detect sandbox
-        run: |
-          if [[ "$GITHUB_ACTIONS" != "true" ]]; then
-            echo "PLAYWRIGHT_OFFLINE=1" >> $GITHUB_ENV
-          fi
-      - if: ${{ env.PLAYWRIGHT_OFFLINE != '1' }}
-        run: npm install -g playwright && playwright install --with-deps chromium
       - run: |
           pip install -r services/etl/requirements.txt
           pip install -r services/api/requirements.txt
@@ -46,11 +43,11 @@ jobs:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: pass
       POSTGRES_DB: awa
+      PG_DATABASE: awa
       PG_USER: ${{ env.POSTGRES_USER }}
       PG_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
-      PG_DATABASE: ${{ env.POSTGRES_DB }}
       PG_HOST: localhost
-      DATA_DIR: "${{ runner.temp }}/awa-data"
+      DATA_DIR: ${{ runner.temp }}/awa-data
     services:
       postgres:
         image: postgres:15
@@ -114,6 +111,7 @@ jobs:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: pass
       PG_DATABASE: awa
+      POSTGRES_DB: awa
     services:
       postgres:
         image: postgres:15
@@ -142,14 +140,17 @@ jobs:
           PGPASSWORD: pass
       - run: alembic upgrade head
         env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: pass
-          POSTGRES_DB: awa
           PG_USER: ${{ env.POSTGRES_USER }}
           PG_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
-          PG_DATABASE: ${{ env.POSTGRES_DB }}
+          PG_DATABASE: ${{ env.PG_DATABASE }}
           PG_HOST: localhost
-      - run: docker run --network host -e PG_USER=postgres -e PG_PASSWORD=pass -e PG_HOST=localhost -e PG_DATABASE=awa price_importer python -m price_importer.import tests/fixtures/sample_prices.csv --vendor "ACME GmbH"
+      - run: |
+          docker run --network host \
+            -e PG_USER=postgres \
+            -e PG_PASSWORD=pass \
+            -e PG_HOST=localhost \
+            -e PG_DATABASE=awa \
+            price_importer python -m price_importer.import tests/fixtures/sample_prices.csv --vendor "ACME GmbH"
       - run: psql -h localhost -U postgres -d awa -c "SELECT count(*) FROM vendor_prices;"
         env:
           PGPASSWORD: pass
