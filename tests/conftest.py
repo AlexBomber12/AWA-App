@@ -92,8 +92,8 @@ def sample_xlsx(tmp_path: Path) -> Path:
 @pytest.fixture(autouse=True, scope="session")
 def create_tables():
     url = build_url(async_=False)
+    engine = create_engine(url)
     if url.startswith("sqlite"):
-        engine = create_engine(url)
         Base.metadata.create_all(engine)
         with engine.begin() as conn:
             conn.exec_driver_sql(
@@ -163,4 +163,6 @@ def create_tables():
             conn.exec_driver_sql("DROP VIEW IF EXISTS v_roi_full")
             conn.exec_driver_sql("DROP TABLE IF EXISTS freight_rates")
     else:
+        Base.metadata.create_all(engine)
         yield
+        Base.metadata.drop_all(engine)
