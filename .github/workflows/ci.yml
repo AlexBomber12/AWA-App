@@ -13,7 +13,7 @@ jobs:
     env:
       DATA_DIR: ${{runner.temp}}/awa-data
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: pass
+      POSTGRES_PASSWORD: pass # pragma: allowlist secret
       PG_DATABASE: awa
     steps:
       - uses: actions/checkout@v4
@@ -44,9 +44,9 @@ jobs:
     runs-on: ubuntu-latest
     env:
       ENABLE_LIVE: "1"
-      PGPASSWORD: pass
+      PGPASSWORD: pass # pragma: allowlist secret
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: pass
+      POSTGRES_PASSWORD: pass # pragma: allowlist secret
       POSTGRES_DB: awa
       PG_DATABASE: awa
       PG_USER: ${{env.POSTGRES_USER}}
@@ -58,7 +58,7 @@ jobs:
         image: postgres:15
         env:
           POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: pass
+          POSTGRES_PASSWORD: pass # pragma: allowlist secret
           POSTGRES_DB: awa
         options: >-
           --health-cmd "pg_isready -U postgres"
@@ -93,13 +93,13 @@ jobs:
           done
           echo "::error::Postgres never became ready"; docker compose logs postgres; exit 1
         env:
-          PGPASSWORD: pass
+          PGPASSWORD: pass # pragma: allowlist secret
       - name: Prepare DB
         run: createdb -h localhost -p 5432 -U postgres awa
         env:
-          PGPASSWORD: pass
+          PGPASSWORD: pass # pragma: allowlist secret
       - name: Export DATABASE_URL
-        run: echo "DATABASE_URL=postgresql+psycopg://postgres:pass@localhost:5432/awa" >> $GITHUB_ENV
+        run: echo "DATABASE_URL=postgresql+psycopg://postgres:pass@localhost:5432/awa" >> $GITHUB_ENV # pragma: allowlist secret
       - name: Run migrations
         run: alembic upgrade head
       - run: ruff check .
@@ -118,7 +118,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: pass
+      POSTGRES_PASSWORD: pass # pragma: allowlist secret
       PG_DATABASE: awa
       POSTGRES_DB: awa
     services:
@@ -126,7 +126,7 @@ jobs:
         image: postgres:15
         env:
           POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: pass
+          POSTGRES_PASSWORD: pass # pragma: allowlist secret
           POSTGRES_DB: awa
         ports: ['5432:5432']
         options: >-
@@ -160,7 +160,7 @@ jobs:
           done
           exit 1
         env:
-          PGPASSWORD: pass
+          PGPASSWORD: pass # pragma: allowlist secret
       - run: alembic upgrade head
         env:
           PG_USER: ${{env.POSTGRES_USER}}
@@ -170,10 +170,10 @@ jobs:
       - run: |
           docker run --network host \
             -e PG_USER=postgres \
-            -e PG_PASSWORD=pass \
+            -e PG_PASSWORD=$POSTGRES_PASSWORD \
             -e PG_HOST=localhost \
             -e PG_DATABASE=awa \
             price_importer python -m price_importer.import tests/fixtures/sample_prices.csv --vendor "ACME GmbH"
       - run: psql -h localhost -U "$POSTGRES_USER" -d awa -c "SELECT count(*) FROM vendor_prices;"
         env:
-          PGPASSWORD: pass
+          PGPASSWORD: pass # pragma: allowlist secret
