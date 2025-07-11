@@ -10,9 +10,9 @@ import time
 from pathlib import Path
 
 os.environ.setdefault("ENABLE_LIVE", "0")
-from services.common.db_url import build_url
-from sqlalchemy import create_engine
-from services.common import Base
+from services.common.db_url import build_url  # noqa: E402
+from sqlalchemy import create_engine  # noqa: E402
+from services.common import Base  # noqa: E402
 
 DATA_DIR = pathlib.Path(os.getenv("DATA_DIR", tempfile.gettempdir())) / "awa-data"
 DATA_DIR.mkdir(parents=True, exist_ok=True)

@@ -2,14 +2,13 @@ import importlib
 import shutil
 
 import pytest
-
-pytest.importorskip("apscheduler")
 from httpx import Response
 from sqlalchemy import create_engine, text
 from sqlalchemy.ext.asyncio import create_async_engine
 from alembic.config import Config
 from alembic import command  # type: ignore[attr-defined]
 
+pytest.importorskip("apscheduler")
 respx = pytest.importorskip("respx")
 
 from services.logistics_etl import cron, client, repository  # noqa: E402

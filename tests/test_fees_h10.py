@@ -1,13 +1,12 @@
 import os
-from pathlib import Path
 import importlib
+from pathlib import Path
 
 import pytest
-
-pytest.importorskip("celery")
 from httpx import Response
 from sqlalchemy import create_engine, text
 
+pytest.importorskip("celery")
 respx = pytest.importorskip("respx")
 from services.fees_h10 import client, repository, worker  # noqa: E402
 
