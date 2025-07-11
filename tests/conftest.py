@@ -80,7 +80,7 @@ def data_dir() -> Path:
 @pytest.fixture()
 def sample_xlsx(tmp_path: Path) -> Path:
     """Return Path to a temporary XLSX converted from existing CSV."""
-    import pandas as pd
+    pd = pytest.importorskip("pandas")
 
     csv_path = Path("tests/fixtures/sample_prices.csv")
     df = pd.read_csv(csv_path)
