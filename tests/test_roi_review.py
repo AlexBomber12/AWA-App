@@ -38,6 +38,16 @@ def _setup_db():
                     """
                 )
             )
+            cols = [
+                row[0]
+                for row in conn.execute(
+                    text(
+                        "SELECT column_name FROM information_schema.columns WHERE table_name='products'"
+                    )
+                )
+            ]
+            if "status" not in cols:
+                conn.execute(text("ALTER TABLE products ADD COLUMN status TEXT"))
             insert_vendor = "INSERT INTO vendor_prices(vendor_id, sku, cost) VALUES (:vid,:sku,:cost) ON CONFLICT DO NOTHING"
             insert_keepa = "INSERT INTO keepa_offers(asin, buybox_price) VALUES (:asin,:price) ON CONFLICT DO NOTHING"
             insert_fee = "INSERT INTO fees_raw(asin, fulfil_fee, referral_fee, storage_fee, currency) VALUES (:asin,1,1,1,'EUR') ON CONFLICT DO NOTHING"
