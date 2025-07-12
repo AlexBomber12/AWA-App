@@ -98,6 +98,17 @@ def create_tables():
         with engine.begin() as conn:
             conn.exec_driver_sql(
                 """
+                CREATE TABLE IF NOT EXISTS products (
+                    asin TEXT PRIMARY KEY,
+                    title TEXT,
+                    brand TEXT,
+                    category TEXT,
+                    weight_kg NUMERIC
+                );
+                """
+            )
+            conn.exec_driver_sql(
+                """
                 CREATE TABLE IF NOT EXISTS keepa_offers (
                     asin TEXT PRIMARY KEY,
                     buybox_price NUMERIC(10,2)
