@@ -36,6 +36,14 @@ def test_roi_view(monkeypatch):
         );
         """
     )
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS keepa_offers (
+            asin TEXT PRIMARY KEY,
+            buybox_price NUMERIC(10,2)
+        );
+        """
+    )
     db.execute("INSERT OR IGNORE INTO products(asin) VALUES ('A1')")
     db.execute("INSERT INTO keepa_offers(asin, buybox_price) VALUES ('A1', 25)")
     db.execute(

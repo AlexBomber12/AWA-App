@@ -42,6 +42,16 @@ def _setup_db():
         )
         conn.execute(
             text(
+                """
+                CREATE TABLE IF NOT EXISTS keepa_offers (
+                    asin TEXT PRIMARY KEY,
+                    buybox_price NUMERIC(10,2)
+                );
+                """
+            )
+        )
+        conn.execute(
+            text(
                 "INSERT OR IGNORE INTO keepa_offers(asin, buybox_price) VALUES ('A1',30)"
             )
         )
