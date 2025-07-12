@@ -25,7 +25,18 @@ def test_roi_view(monkeypatch):
         );
         """
     )
-    db.execute("INSERT INTO products(asin) VALUES ('A1')")
+    db.execute(
+        """
+        CREATE TABLE IF NOT EXISTS products (
+            asin TEXT PRIMARY KEY,
+            title TEXT,
+            brand TEXT,
+            category TEXT,
+            weight_kg NUMERIC
+        );
+        """
+    )
+    db.execute("INSERT OR IGNORE INTO products(asin) VALUES ('A1')")
     db.execute("INSERT INTO keepa_offers(asin, buybox_price) VALUES ('A1', 25)")
     db.execute(
         "INSERT INTO fees_raw(asin, fulfil_fee, referral_fee, storage_fee, currency, updated_at) VALUES ('A1',1,1,1,'EUR','2024-01-01')"

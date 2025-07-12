@@ -5,6 +5,18 @@ from services.common.db_url import build_url
 def _setup_db():
     engine = create_engine(build_url(async_=False))
     with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS products (
+                    asin TEXT PRIMARY KEY,
+                    title TEXT,
+                    category TEXT,
+                    weight_kg NUMERIC
+                );
+                """
+            )
+        )
         cols = [row[1] for row in conn.execute(text("PRAGMA table_info(products)"))]
         if "status" not in cols:
             conn.execute(text("ALTER TABLE products ADD COLUMN status TEXT"))
