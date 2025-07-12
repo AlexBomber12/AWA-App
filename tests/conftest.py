@@ -10,6 +10,7 @@ import time
 from pathlib import Path
 
 os.environ.setdefault("ENABLE_LIVE", "0")
+os.environ.setdefault("TESTING", "1")
 from services.common.db_url import build_url  # noqa: E402
 from sqlalchemy import create_engine  # noqa: E402
 from services.common import Base  # noqa: E402
@@ -80,7 +81,7 @@ def data_dir() -> Path:
 @pytest.fixture()
 def sample_xlsx(tmp_path: Path) -> Path:
     """Return Path to a temporary XLSX converted from existing CSV."""
-    import pandas as pd
+    pd = pytest.importorskip("pandas")
 
     csv_path = Path("tests/fixtures/sample_prices.csv")
     df = pd.read_csv(csv_path)
@@ -92,10 +93,21 @@ def sample_xlsx(tmp_path: Path) -> Path:
 @pytest.fixture(autouse=True, scope="session")
 def create_tables():
     url = build_url(async_=False)
+    engine = create_engine(url)
     if url.startswith("sqlite"):
-        engine = create_engine(url)
         Base.metadata.create_all(engine)
         with engine.begin() as conn:
+            conn.exec_driver_sql(
+                """
+                CREATE TABLE IF NOT EXISTS products (
+                    asin TEXT PRIMARY KEY,
+                    title TEXT,
+                    brand TEXT,
+                    category TEXT,
+                    weight_kg NUMERIC
+                );
+                """
+            )
             conn.exec_driver_sql(
                 """
                 CREATE TABLE IF NOT EXISTS keepa_offers (
@@ -162,5 +174,18 @@ def create_tables():
         with engine.begin() as conn:
             conn.exec_driver_sql("DROP VIEW IF EXISTS v_roi_full")
             conn.exec_driver_sql("DROP TABLE IF EXISTS freight_rates")
+        import asyncio
+        from services.api.db import dispose_engine
+
+        asyncio.run(dispose_engine())
     else:
+        Base.metadata.create_all(engine)
         yield
+        with engine.begin() as conn:
+            conn.exec_driver_sql("DROP VIEW IF EXISTS roi_view")
+            conn.exec_driver_sql("DROP VIEW IF EXISTS v_roi_full")
+        Base.metadata.drop_all(engine)
+        import asyncio
+        from services.api.db import dispose_engine
+
+        asyncio.run(dispose_engine())

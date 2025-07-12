@@ -42,7 +42,7 @@ def _check_basic_auth(credentials: HTTPBasicCredentials = Depends(security)) -> 
 async def roi_review(
     request: Request,
     roi_min: float = 0,
-    vendor: Optional[str] = None,
+    vendor: Optional[int] = None,
     category: Optional[str] = None,
     _: str = Depends(_check_basic_auth),
     session: AsyncSession = Depends(get_session),

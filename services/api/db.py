@@ -1,3 +1,4 @@
+import os
 from typing import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import (
@@ -5,16 +6,22 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
+from sqlalchemy.pool import NullPool
 
 from services.common.db_url import build_url
 
 DATABASE_URL = build_url(async_=True)
+
+pool_kwargs = {}
+if os.getenv("TESTING") == "1":
+    pool_kwargs["poolclass"] = NullPool
 
 engine = create_async_engine(
     DATABASE_URL,
     pool_pre_ping=True,
     future=True,
     echo=False,
+    **pool_kwargs,
 )
 
 async_session = async_sessionmaker(engine, expire_on_commit=False)
@@ -23,3 +30,7 @@ async_session = async_sessionmaker(engine, expire_on_commit=False)
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
     async with async_session() as session:
         yield session
+
+
+async def dispose_engine() -> None:
+    await engine.dispose()
