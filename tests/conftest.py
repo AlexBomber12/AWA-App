@@ -165,4 +165,7 @@ def create_tables():
     else:
         Base.metadata.create_all(engine)
         yield
+        with engine.begin() as conn:
+            conn.exec_driver_sql("DROP VIEW IF EXISTS roi_view")
+            conn.exec_driver_sql("DROP VIEW IF EXISTS v_roi_full")
         Base.metadata.drop_all(engine)
