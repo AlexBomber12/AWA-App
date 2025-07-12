@@ -6,12 +6,15 @@ from sqlalchemy import bindparam, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.engine import RowMapping, CursorResult
 
-ROI_QUERY = text(
-    """
-    SELECT
-      p.asin, p.title, p.category,
-      vp.vendor_id,
-      vp.cost,
+from sqlalchemy import Integer, String
+
+ROI_QUERY = (
+    text(
+        """
+        SELECT
+          p.asin, p.title, p.category,
+          vp.vendor_id,
+          vp.cost,
       (p.weight_kg * fr.eur_per_kg)  AS freight,
       (f.fulfil_fee + f.referral_fee + f.storage_fee) AS fees,
       v_roi_full.roi_pct
@@ -23,8 +26,11 @@ ROI_QUERY = text(
     WHERE v_roi_full.roi_pct >= :roi_min
       AND (:vendor IS NULL OR vp.vendor_id = :vendor)
       AND (:category IS NULL OR p.category = :category)
-    LIMIT 200;
-    """
+        LIMIT 200;
+        """
+    )
+    .bindparams(bindparam("vendor", type_=Integer))
+    .bindparams(bindparam("category", type_=String))
 )
 
 

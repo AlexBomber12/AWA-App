@@ -114,6 +114,10 @@ def _setup_db():
                     "INSERT INTO freight_rates(lane, mode, eur_per_kg) VALUES ('EU→IT','sea',1) ON CONFLICT DO NOTHING"
                 )
             )
+    import asyncio
+    from services.api.db import dispose_engine
+
+    asyncio.run(dispose_engine())
     return engine
 
 
