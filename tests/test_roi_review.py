@@ -37,10 +37,22 @@ def _setup_db():
                     """
                 )
             )
-            try:
-                conn.execute(text("ALTER TABLE products ADD COLUMN status TEXT"))
-            except Exception:
-                pass
+            conn.execute(
+                text(
+                    """
+                    DO $$
+                    BEGIN
+                        IF NOT EXISTS (
+                            SELECT 1 FROM information_schema.columns
+                            WHERE table_name='products' AND column_name='status'
+                        ) THEN
+                            ALTER TABLE products ADD COLUMN status TEXT;
+                        END IF;
+                    END
+                    $$;
+                    """
+                )
+            )
             conn.execute(
                 text(
                     "INSERT INTO vendors(id, name) VALUES (1,'ACME GmbH') ON CONFLICT DO NOTHING"
