@@ -58,7 +58,5 @@ def test_main_offline(monkeypatch):
     sp_fees.main()
 
     assert fake_api.calls == []
-    inserts = [
-        q for q in fake_conn.cur.queries if q[0].startswith("INSERT INTO fees_raw")
-    ]
+    inserts = [q for q in fake_conn.cur.queries if q[0].startswith("INSERT INTO fees_raw")]
     assert len(inserts) == 2

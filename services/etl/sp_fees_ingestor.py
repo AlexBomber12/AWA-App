@@ -12,7 +12,7 @@ def main() -> int:
     region = os.environ["REGION"]
     dsn = os.getenv(
         "DATABASE_URL",
-        "postgresql+psycopg://postgres:pass@postgres:5432/postgres",
+        "postgresql+psycopg://postgres:pass@postgres:5432/postgres",  # pragma: allowlist secret
     )
     skus = ["DUMMY1", "DUMMY2"]
     if live:
@@ -27,9 +27,7 @@ def main() -> int:
         results = []
         for sku in skus:
             r = api.get_my_fees_estimate_for_sku(sku)
-            amt = r["payload"]["FeesEstimateResult"]["FeesEstimate"][
-                "TotalFeesEstimate"
-            ]["Amount"]
+            amt = r["payload"]["FeesEstimateResult"]["FeesEstimate"]["TotalFeesEstimate"]["Amount"]
             results.append((sku, amt))
     else:
         with open("tests/fixtures/spapi_fees_sample.json") as f:
@@ -37,9 +35,7 @@ def main() -> int:
         results = [
             (
                 r["sku"],
-                r["payload"]["FeesEstimateResult"]["FeesEstimate"]["TotalFeesEstimate"][
-                    "Amount"
-                ],
+                r["payload"]["FeesEstimateResult"]["FeesEstimate"]["TotalFeesEstimate"]["Amount"],
             )
             for r in data
         ]

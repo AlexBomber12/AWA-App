@@ -24,9 +24,7 @@ if os.getenv("ENABLE_LIVE") == "1":
         "current_BUY_BOX_SHIPPING_gte": 2000,
         "current_COUNT_NEW_lte": 10,
     }
-    data = json.dumps(
-        api.product_finder(params, domain="IT", n_products=20000)
-    ).encode()
+    data = json.dumps(api.product_finder(params, domain="IT", n_products=20000)).encode()
 else:
     with open("fixtures/keepa_sample.json") as f:
         data = json.dumps(json.load(f)).encode()
@@ -34,9 +32,7 @@ duration = time.time() - start
 date = datetime.date.today()
 path = f"raw/{date:%Y/%m/%d}/asins.json"
 bucket = "keepa"
-mc = Minio(
-    minio_endpoint, access_key=minio_access, secret_key=minio_secret, secure=False
-)
+mc = Minio(minio_endpoint, access_key=minio_access, secret_key=minio_secret, secure=False)
 if not mc.bucket_exists(bucket):
     mc.make_bucket(bucket)
 mc.put_object(bucket, path, io.BytesIO(data), len(data))

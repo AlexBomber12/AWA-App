@@ -37,9 +37,7 @@ def main():
         if not mc.bucket_exists("keepa"):
             mc.make_bucket("keepa")
         data = json.dumps(asins).encode()
-        mc.put_object(
-            "keepa", path, io.BytesIO(data), len(data), content_type="application/json"
-        )
+        mc.put_object("keepa", path, io.BytesIO(data), len(data), content_type="application/json")
         conn = psycopg2.connect(dsn.replace("postgresql+asyncpg://", "postgresql://"))
         conn.autocommit = True
         cur = conn.cursor()
