@@ -1,5 +1,4 @@
 from pathlib import Path
-import pandas as pd
 
 
 def detect_format(path: str | Path) -> str:
@@ -9,7 +8,16 @@ def detect_format(path: str | Path) -> str:
     return "csv"
 
 
-def load_file(path: str | Path) -> pd.DataFrame:
+def load_file(path: str | Path):
+    """Return DataFrame from CSV or Excel file.
+
+    Raises RuntimeError if pandas is unavailable.
+    """
+    try:
+        import pandas as pd  # type: ignore
+    except ModuleNotFoundError as exc:  # pragma: no cover - env without pandas
+        raise RuntimeError("pandas is required to load price files") from exc
+
     fmt = detect_format(path)
     if fmt == "excel":
         return pd.read_excel(path)

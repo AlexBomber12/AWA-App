@@ -10,6 +10,7 @@ from fastapi import Depends, FastAPI  # type: ignore[attr-defined]
 from .routes.roi import router as roi_router
 
 from .db import get_session
+from services.common.db_url import build_url
 
 
 @asynccontextmanager
@@ -24,11 +25,16 @@ app.include_router(roi_router)
 
 async def _wait_for_db() -> None:
     """Block application startup until the database becomes available."""
+    from sqlalchemy import create_engine
+
+    url = build_url(async_=False)
     delay = 0.2
     for _ in range(10):
         try:
-            async for session in get_session():
-                await session.execute(text("SELECT 1"))
+            engine = create_engine(url)
+            with engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
+            engine.dispose()
             return
         except Exception:
             await asyncio.sleep(delay)

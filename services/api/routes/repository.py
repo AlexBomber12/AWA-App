@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Sequence, cast, Any
 
-from sqlalchemy import bindparam, text
+from sqlalchemy import bindparam, text, Integer, String, Float
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.engine import RowMapping, CursorResult
 
@@ -25,13 +25,17 @@ ROI_QUERY = text(
       AND (:category IS NULL OR p.category = :category)
     LIMIT 200;
     """
+).bindparams(
+    bindparam("roi_min", type_=Float),
+    bindparam("vendor", type_=Integer),
+    bindparam("category", type_=String),
 )
 
 
 async def fetch_roi_rows(
     session: AsyncSession,
     roi_min: float,
-    vendor: str | None,
+    vendor: int | None,
     category: str | None,
 ) -> list[RowMapping]:
     result = await session.execute(

@@ -5,54 +5,108 @@ from services.common.db_url import build_url
 def _setup_db():
     engine = create_engine(build_url(async_=False))
     with engine.begin() as conn:
-        cols = [row[1] for row in conn.execute(text("PRAGMA table_info(products)"))]
-        if "status" not in cols:
-            conn.execute(text("ALTER TABLE products ADD COLUMN status TEXT"))
+        if engine.dialect.name == "sqlite":
+            conn.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS products (
+                        asin TEXT PRIMARY KEY,
+                        title TEXT,
+                        category TEXT,
+                        weight_kg NUMERIC
+                    );
+                    """
+                )
+            )
+            cols = [row[1] for row in conn.execute(text("PRAGMA table_info(products)"))]
+            if "status" not in cols:
+                conn.execute(text("ALTER TABLE products ADD COLUMN status TEXT"))
+            insert_vendor = "INSERT OR IGNORE INTO vendor_prices(vendor_id, sku, cost) VALUES (:vid,:sku,:cost)"
+            insert_keepa = "INSERT OR IGNORE INTO keepa_offers(asin, buybox_price) VALUES (:asin,:price)"
+            insert_fee = "INSERT OR IGNORE INTO fees_raw(asin, fulfil_fee, referral_fee, storage_fee, currency) VALUES (:asin,1,1,1,'EUR')"
+        else:
+            conn.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS products (
+                        asin TEXT PRIMARY KEY,
+                        title TEXT,
+                        category TEXT,
+                        weight_kg NUMERIC,
+                        status TEXT
+                    );
+                    """
+                )
+            )
+            conn.execute(
+                text("ALTER TABLE products ADD COLUMN IF NOT EXISTS status TEXT")
+            )
+            insert_vendor = "INSERT INTO vendor_prices(vendor_id, sku, cost) VALUES (:vid,:sku,:cost) ON CONFLICT DO NOTHING"
+            insert_keepa = "INSERT INTO keepa_offers(asin, buybox_price) VALUES (:asin,:price) ON CONFLICT DO NOTHING"
+            insert_fee = "INSERT INTO fees_raw(asin, fulfil_fee, referral_fee, storage_fee, currency) VALUES (:asin,1,1,1,'EUR') ON CONFLICT DO NOTHING"
+        if engine.dialect.name == "sqlite":
+            conn.execute(
+                text(
+                    "INSERT OR IGNORE INTO products(asin, title, category, weight_kg) VALUES ('A1','t1','cat',1)"
+                )
+            )
+            conn.execute(
+                text(
+                    "INSERT OR IGNORE INTO products(asin, title, category, weight_kg) VALUES ('A2','t2','cat',1)"
+                )
+            )
+        else:
+            conn.execute(
+                text(
+                    "INSERT INTO products(asin, title, category, weight_kg) VALUES ('A1','t1','cat',1) ON CONFLICT DO NOTHING"
+                )
+            )
+            conn.execute(
+                text(
+                    "INSERT INTO products(asin, title, category, weight_kg) VALUES ('A2','t2','cat',1) ON CONFLICT DO NOTHING"
+                )
+            )
+        conn.execute(text(insert_vendor), {"vid": 1, "sku": "A1", "cost": 10})
+        conn.execute(text(insert_vendor), {"vid": 1, "sku": "A2", "cost": 25})
         conn.execute(
             text(
-                "INSERT OR IGNORE INTO products(asin, title, category, weight_kg) VALUES ('A1','t1','cat',1)"
+                """
+                CREATE TABLE IF NOT EXISTS freight_rates (
+                    lane TEXT,
+                    mode TEXT,
+                    eur_per_kg NUMERIC(10,2),
+                    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (lane, mode)
+                );
+                """
             )
         )
         conn.execute(
             text(
-                "INSERT OR IGNORE INTO products(asin, title, category, weight_kg) VALUES ('A2','t2','cat',1)"
+                """
+                CREATE TABLE IF NOT EXISTS keepa_offers (
+                    asin TEXT PRIMARY KEY,
+                    buybox_price NUMERIC(10,2)
+                );
+                """
             )
         )
-        conn.execute(
-            text(
-                "INSERT OR IGNORE INTO vendor_prices(vendor_id, sku, cost) VALUES (1,'A1',10)"
+        conn.execute(text(insert_keepa), {"asin": "A1", "price": 30})
+        conn.execute(text(insert_keepa), {"asin": "A2", "price": 30})
+        conn.execute(text(insert_fee), {"asin": "A1"})
+        conn.execute(text(insert_fee), {"asin": "A2"})
+        if engine.dialect.name == "sqlite":
+            conn.execute(
+                text(
+                    "INSERT OR IGNORE INTO freight_rates(lane, mode, eur_per_kg) VALUES ('EU→IT','sea',1)"
+                )
             )
-        )
-        conn.execute(
-            text(
-                "INSERT OR IGNORE INTO vendor_prices(vendor_id, sku, cost) VALUES (1,'A2',25)"
+        else:
+            conn.execute(
+                text(
+                    "INSERT INTO freight_rates(lane, mode, eur_per_kg) VALUES ('EU→IT','sea',1) ON CONFLICT DO NOTHING"
+                )
             )
-        )
-        conn.execute(
-            text(
-                "INSERT OR IGNORE INTO keepa_offers(asin, buybox_price) VALUES ('A1',30)"
-            )
-        )
-        conn.execute(
-            text(
-                "INSERT OR IGNORE INTO keepa_offers(asin, buybox_price) VALUES ('A2',30)"
-            )
-        )
-        conn.execute(
-            text(
-                "INSERT OR IGNORE INTO fees_raw(asin, fulfil_fee, referral_fee, storage_fee, currency) VALUES ('A1',1,1,1,'EUR')"
-            )
-        )
-        conn.execute(
-            text(
-                "INSERT OR IGNORE INTO fees_raw(asin, fulfil_fee, referral_fee, storage_fee, currency) VALUES ('A2',1,1,1,'EUR')"
-            )
-        )
-        conn.execute(
-            text(
-                "INSERT OR IGNORE INTO freight_rates(lane, mode, eur_per_kg) VALUES ('EU→IT','sea',1)"
-            )
-        )
     return engine
 
 

@@ -64,11 +64,12 @@ jobs:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: pass # pragma: allowlist secret
           POSTGRES_DB: awa
+        ports: ['5432:5432']
         options: >-
-          --health-cmd "pg_isready -U postgres"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -91,19 +92,11 @@ jobs:
         run: pip install ruff==0.4.4
       - name: Install black
         run: pip install black==24.4.2
-      - name: Wait for Postgres to accept connections
-        run: |
-          for i in {1..30}; do
-            if pg_isready -h localhost -p 5432 -U postgres; then
-              echo "Postgres is ready"; exit 0
-            fi
-            sleep 2
-          done
-          echo "::error::Postgres never became ready"; docker compose logs postgres; exit 1
-        env:
-          PGPASSWORD: pass # pragma: allowlist secret
       - name: Prepare DB
-        run: createdb -h localhost -p 5432 -U postgres awa
+        run: |
+          if ! psql -h localhost -p 5432 -U postgres -tAc "SELECT 1 FROM pg_database WHERE datname='awa'" | grep -q 1; then
+            createdb -h localhost -p 5432 -U postgres awa
+          fi
         env:
           PGPASSWORD: pass # pragma: allowlist secret
       - name: Export DATABASE_URL
@@ -115,11 +108,12 @@ jobs:
       - run: mypy services || true
       - name: Run tests
         run: pytest -q
-      - name: Dump compose logs (always)
+      - name: Dump Postgres logs
         if: always()
         run: |
-          docker compose ps
-          docker compose logs --no-color --tail=300
+          echo "::group::postgres logs"
+          docker logs postgres --tail 200 || true
+          echo "::endgroup::"
 
   importer-test:
     needs: postgres
@@ -134,7 +128,9 @@ jobs:
         ports: ['5432:5432']
         options: >-
           --health-cmd="pg_isready -U postgres -d awa"
-          --health-interval=5s --health-timeout=5s --health-retries=10
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python 3.11
@@ -155,15 +151,6 @@ jobs:
           find . -name 'requirements*.txt' ! -path './requirements-dev.txt' -print0 \
             | xargs -0 -n1 -I{} pip install -r {}
       - run: docker build -t price_importer services/price_importer
-      - name: Wait for Postgres
-        run: |
-          for i in {1..20}; do
-            pg_isready -h localhost -p 5432 -U postgres -d awa && exit 0
-            sleep 2
-          done
-          exit 1
-        env:
-          PGPASSWORD: pass # pragma: allowlist secret
       - run: alembic upgrade head
         env:
           PG_USER: postgres
