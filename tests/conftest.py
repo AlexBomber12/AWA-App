@@ -10,6 +10,7 @@ import time
 from pathlib import Path
 
 os.environ.setdefault("ENABLE_LIVE", "0")
+os.environ.setdefault("TESTING", "1")
 from services.common.db_url import build_url  # noqa: E402
 from sqlalchemy import create_engine  # noqa: E402
 from services.common import Base  # noqa: E402
@@ -173,6 +174,10 @@ def create_tables():
         with engine.begin() as conn:
             conn.exec_driver_sql("DROP VIEW IF EXISTS v_roi_full")
             conn.exec_driver_sql("DROP TABLE IF EXISTS freight_rates")
+        import asyncio
+        from services.api.db import dispose_engine
+
+        asyncio.run(dispose_engine())
     else:
         Base.metadata.create_all(engine)
         yield
@@ -180,3 +185,7 @@ def create_tables():
             conn.exec_driver_sql("DROP VIEW IF EXISTS roi_view")
             conn.exec_driver_sql("DROP VIEW IF EXISTS v_roi_full")
         Base.metadata.drop_all(engine)
+        import asyncio
+        from services.api.db import dispose_engine
+
+        asyncio.run(dispose_engine())
