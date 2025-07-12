@@ -32,15 +32,15 @@ def _setup_db():
                         asin TEXT PRIMARY KEY,
                         title TEXT,
                         category TEXT,
-                        weight_kg NUMERIC,
-                        status TEXT
+                        weight_kg NUMERIC
                     );
                     """
                 )
             )
-            conn.execute(
-                text("ALTER TABLE products ADD COLUMN IF NOT EXISTS status TEXT")
-            )
+            try:
+                conn.execute(text("ALTER TABLE products ADD COLUMN status TEXT"))
+            except Exception:
+                pass
             conn.execute(
                 text(
                     "INSERT INTO vendors(id, name) VALUES (1,'ACME GmbH') ON CONFLICT DO NOTHING"
