@@ -23,10 +23,14 @@ class Repository:
     def ensure_vendor(self, name: str) -> int:
         with self.engine.begin() as conn:
             try:
-                r = conn.execute(select(Vendor.id).where(Vendor.name == name)).fetchone()
+                r = conn.execute(
+                    select(Vendor.id).where(Vendor.name == name)
+                ).fetchone()
             except Exception:
                 Base.metadata.create_all(self.engine)
-                r = conn.execute(select(Vendor.id).where(Vendor.name == name)).fetchone()
+                r = conn.execute(
+                    select(Vendor.id).where(Vendor.name == name)
+                ).fetchone()
             if r:
                 return int(r[0])
             res = conn.execute(insert(Vendor).values(name=name).returning(Vendor.id))
