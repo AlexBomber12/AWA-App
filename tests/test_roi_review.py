@@ -41,10 +41,18 @@ def _setup_db():
             conn.execute(
                 text("ALTER TABLE products ADD COLUMN IF NOT EXISTS status TEXT")
             )
+            conn.execute(
+                text(
+                    "INSERT INTO vendors(id, name) VALUES (1,'ACME GmbH') ON CONFLICT DO NOTHING"
+                )
+            )
             insert_vendor = "INSERT INTO vendor_prices(vendor_id, sku, cost) VALUES (:vid,:sku,:cost) ON CONFLICT DO NOTHING"
             insert_keepa = "INSERT INTO keepa_offers(asin, buybox_price) VALUES (:asin,:price) ON CONFLICT DO NOTHING"
             insert_fee = "INSERT INTO fees_raw(asin, fulfil_fee, referral_fee, storage_fee, currency) VALUES (:asin,1,1,1,'EUR') ON CONFLICT DO NOTHING"
         if engine.dialect.name == "sqlite":
+            conn.execute(
+                text("INSERT OR IGNORE INTO vendors(id, name) VALUES (1,'ACME GmbH')")
+            )
             conn.execute(
                 text(
                     "INSERT OR IGNORE INTO products(asin, title, category, weight_kg) VALUES ('A1','t1','cat',1)"
