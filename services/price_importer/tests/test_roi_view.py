@@ -32,3 +32,4 @@ def test_roi_view(monkeypatch):
     )
     roi = db.execute("SELECT roi_pct FROM v_roi_full WHERE asin='A1'").fetchone()[0]
     assert roi is not None
+    db.close()
