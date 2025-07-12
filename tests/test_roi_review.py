@@ -43,6 +43,19 @@ def _setup_db():
         conn.execute(
             text(
                 """
+                CREATE TABLE IF NOT EXISTS freight_rates (
+                    lane TEXT,
+                    mode TEXT,
+                    eur_per_kg NUMERIC(10,2),
+                    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (lane, mode)
+                );
+                """
+            )
+        )
+        conn.execute(
+            text(
+                """
                 CREATE TABLE IF NOT EXISTS keepa_offers (
                     asin TEXT PRIMARY KEY,
                     buybox_price NUMERIC(10,2)
