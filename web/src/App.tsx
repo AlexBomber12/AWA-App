@@ -6,8 +6,8 @@ import { AuthProvider, useAuth } from './context/AuthContext'
 import type { ReactElement } from 'react'
 
 function PrivateRoute({ children }: { children: ReactElement }) {
-  const { token } = useAuth()
-  return token ? children : <Navigate to="/login" replace />
+  const { loggedIn } = useAuth()
+  return loggedIn ? children : <Navigate to="/login" replace />
 }
 
 export default function App() {
