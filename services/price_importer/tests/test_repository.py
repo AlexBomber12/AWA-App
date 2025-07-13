@@ -5,7 +5,7 @@ from services.price_importer.repository import Repository
 def test_upsert_and_vendor(tmp_path):
     db = tmp_path / "db.sqlite"
     engine = create_engine(f"sqlite:///{db}")
-    from services.common import Base
+    from services.price_importer.common import Base
 
     Base.metadata.create_all(engine)
     repo = Repository(engine)
