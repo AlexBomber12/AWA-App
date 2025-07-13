@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import {
   flexRender,
   getCoreRowModel,
   useReactTable,
 } from '@tanstack/react-table'
 import type { ColumnDef } from '@tanstack/react-table'
-import { useAuth } from '../context/AuthContext'
+import { api, useRoiTable } from '../lib/api'
 
 interface Row {
   asin: string
@@ -18,27 +18,16 @@ interface Row {
 }
 
 export default function RoiReview() {
-  const { api } = useAuth()
-  const [data, setData] = useState<Row[]>([])
   const [roiMin, setRoiMin] = useState('')
   const [vendor, setVendor] = useState('')
   const [category, setCategory] = useState('')
   const [selected, setSelected] = useState<string[]>([])
-
-  const load = () => {
-    api
-      .get<Row[]>('/roi-review', {
-        params: {
-          roi_min: roiMin || undefined,
-          vendor: vendor || undefined,
-          category: category || undefined,
-        },
-      })
-      .then((r) => setData(r.data))
-      .catch(() => setData([]))
-  }
-
-  useEffect(load, [roiMin, vendor, category, api])
+  const params = new URLSearchParams({
+    roi_min: roiMin,
+    vendor,
+    category,
+  })
+  const { data = [], mutate } = useRoiTable(params.toString())
 
   const columns: ColumnDef<Row>[] = [
     {
@@ -92,7 +81,7 @@ export default function RoiReview() {
         />
         <button
           className="bg-blue-600 text-white px-2 rounded"
-          onClick={load}
+          onClick={() => mutate()}
           type="button"
         >
           Filter
@@ -102,7 +91,7 @@ export default function RoiReview() {
           onClick={async () => {
             await api.post('/roi-review/approve', { asins: selected })
             setSelected([])
-            load()
+            mutate()
           }}
           type="button"
         >

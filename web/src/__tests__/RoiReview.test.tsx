@@ -7,7 +7,7 @@ expect.extend(matchers)
 import RoiReview from '../pages/RoiReview'
 import { AuthProvider } from '../context/AuthContext'
 import { BrowserRouter } from 'react-router-dom'
-import axios from 'axios'
+import { api } from '../lib/api'
 
 const rows = [
   { asin: 'A1', title: 'Item 1', vendor_id: 1, cost: 1, freight: 1, fees: 1, roi_pct: 10 },
@@ -15,24 +15,21 @@ const rows = [
 
 describe('ROI Review page', () => {
   it('renders table rows from API', async () => {
-    const get = vi.fn().mockResolvedValue({ data: rows })
-    const post = vi.fn().mockResolvedValue({})
-    vi.spyOn(axios, 'create').mockReturnValue({
-      get,
-      post,
-      interceptors: { response: { use: vi.fn() } },
-    } as any)
+    const get = vi.spyOn(api, 'get').mockResolvedValue({ data: rows } as any)
+    const post = vi.spyOn(api, 'post').mockResolvedValue({} as any)
 
-    render(
+    const { container } = render(
       <AuthProvider>
         <BrowserRouter>
           <RoiReview />
         </BrowserRouter>
       </AuthProvider>
     )
-
     await waitFor(() => expect(get).toHaveBeenCalled())
     expect(screen.getByText('Item 1')).toBeInTheDocument()
-    expect(screen.getByText('Approve Selected')).toBeInTheDocument()
+    const checkbox = container.querySelector('tbody input[type="checkbox"]') as HTMLInputElement
+    checkbox.click()
+    screen.getByText('Approve Selected').click()
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/roi-review/approve', { asins: ['A1'] }))
   })
 })
