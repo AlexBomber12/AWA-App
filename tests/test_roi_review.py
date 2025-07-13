@@ -5,6 +5,15 @@ from services.common.db_url import build_url
 def _setup_db():
     engine = create_engine(build_url(async_=False))
     with engine.begin() as conn:
+        # Ensure clean state for deterministic tests
+        for tbl in [
+            "vendor_prices",
+            "keepa_offers",
+            "fees_raw",
+            "freight_rates",
+            "products",
+        ]:
+            conn.execute(text(f"DELETE FROM {tbl}"))
         if engine.dialect.name == "sqlite":
             conn.execute(
                 text(
@@ -21,8 +30,9 @@ def _setup_db():
             cols = [row[1] for row in conn.execute(text("PRAGMA table_info(products)"))]
             if "status" not in cols:
                 conn.execute(text("ALTER TABLE products ADD COLUMN status TEXT"))
-            insert_vendor = "INSERT OR IGNORE INTO vendor_prices(vendor_id, sku, cost) VALUES (:vid,:sku,:cost)"
-            insert_keepa = "INSERT OR IGNORE INTO keepa_offers(asin, buybox_price) VALUES (:asin,:price)"
+            insert_keepa = (
+                "INSERT OR IGNORE INTO keepa_offers(asin, buybox_price) VALUES (:asin,:price)"
+            )
             insert_fee = "INSERT OR IGNORE INTO fees_raw(asin, fulfil_fee, referral_fee, storage_fee, currency) VALUES (:asin,1,1,1,'EUR')"
         else:
             conn.execute(
@@ -54,40 +64,48 @@ def _setup_db():
                 )
             )
             conn.execute(
-                text(
-                    "INSERT INTO vendors(id, name) VALUES (1,'ACME GmbH') ON CONFLICT DO NOTHING"
-                )
+                text("INSERT INTO vendors(id, name) VALUES (1,'ACME GmbH') ON CONFLICT DO NOTHING")
             )
-            insert_vendor = "INSERT INTO vendor_prices(vendor_id, sku, cost) VALUES (:vid,:sku,:cost) ON CONFLICT DO NOTHING"
-            insert_keepa = "INSERT INTO keepa_offers(asin, buybox_price) VALUES (:asin,:price) ON CONFLICT DO NOTHING"
-            insert_fee = "INSERT INTO fees_raw(asin, fulfil_fee, referral_fee, storage_fee, currency) VALUES (:asin,1,1,1,'EUR') ON CONFLICT DO NOTHING"
+            insert_keepa = "INSERT INTO keepa_offers(asin, buybox_price) VALUES (:asin,:price) ON CONFLICT (asin) DO UPDATE SET buybox_price=EXCLUDED.buybox_price"
+            insert_fee = "INSERT INTO fees_raw(asin, fulfil_fee, referral_fee, storage_fee, currency) VALUES (:asin,1,1,1,'EUR') ON CONFLICT (asin) DO UPDATE SET updated_at=CURRENT_TIMESTAMP"
         if engine.dialect.name == "sqlite":
-            conn.execute(
-                text("INSERT OR IGNORE INTO vendors(id, name) VALUES (1,'ACME GmbH')")
-            )
+            conn.execute(text("INSERT OR REPLACE INTO vendors(id, name) VALUES (1,'ACME GmbH')"))
             conn.execute(
                 text(
-                    "INSERT OR IGNORE INTO products(asin, title, category, weight_kg) VALUES ('A1','t1','cat',1)"
+                    "INSERT OR REPLACE INTO products(asin, title, category, weight_kg) VALUES ('A1','t1','cat',1)"
                 )
             )
             conn.execute(
                 text(
-                    "INSERT OR IGNORE INTO products(asin, title, category, weight_kg) VALUES ('A2','t2','cat',1)"
+                    "INSERT OR REPLACE INTO products(asin, title, category, weight_kg) VALUES ('A2','t2','cat',1)"
                 )
             )
         else:
             conn.execute(
                 text(
-                    "INSERT INTO products(asin, title, category, weight_kg) VALUES ('A1','t1','cat',1) ON CONFLICT DO NOTHING"
+                    "INSERT INTO products(asin, title, category, weight_kg) VALUES ('A1','t1','cat',1) ON CONFLICT (asin) DO UPDATE SET title=EXCLUDED.title"
                 )
             )
             conn.execute(
                 text(
-                    "INSERT INTO products(asin, title, category, weight_kg) VALUES ('A2','t2','cat',1) ON CONFLICT DO NOTHING"
+                    "INSERT INTO products(asin, title, category, weight_kg) VALUES ('A2','t2','cat',1) ON CONFLICT (asin) DO UPDATE SET title=EXCLUDED.title"
                 )
             )
-        conn.execute(text(insert_vendor), {"vid": 1, "sku": "A1", "cost": 10})
-        conn.execute(text(insert_vendor), {"vid": 1, "sku": "A2", "cost": 25})
+        conn.execute(
+            text(
+                "INSERT INTO vendors(id, name) VALUES (1,'ACME GmbH') ON CONFLICT (id) DO UPDATE SET name=EXCLUDED.name"
+            )
+        )
+        conn.execute(
+            text(
+                "INSERT INTO vendor_prices(vendor_id, sku, cost) VALUES (1,'A1',10) ON CONFLICT (vendor_id, sku) DO UPDATE SET cost=EXCLUDED.cost"
+            )
+        )
+        conn.execute(
+            text(
+                "INSERT INTO vendor_prices(vendor_id, sku, cost) VALUES (1,'A2',25) ON CONFLICT (vendor_id, sku) DO UPDATE SET cost=EXCLUDED.cost"
+            )
+        )
         conn.execute(
             text(
                 """
@@ -153,9 +171,7 @@ def test_bulk_approve(api_client, monkeypatch):
     engine = _setup_db()
     with engine.begin() as conn:
         conn.execute(text("INSERT INTO products(asin, status) VALUES ('B1','pending')"))
-    r = api_client.post(
-        "/roi-review/approve", data={"asins": ["A1", "B1"]}, auth=("admin", "pass")
-    )
+    r = api_client.post("/roi-review/approve", data={"asins": ["A1", "B1"]}, auth=("admin", "pass"))
     assert r.status_code == 200
     assert r.json()["count"] >= 1
     with engine.connect() as conn:

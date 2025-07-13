@@ -15,6 +15,7 @@ def upgrade() -> None:
         sa.Column("brand", sa.Text()),
         sa.Column("category", sa.Text()),
         sa.Column("weight_kg", sa.Numeric()),
+        sa.Column("status", sa.Text()),
     )
     op.create_table(
         "offers",
@@ -34,9 +35,7 @@ def upgrade() -> None:
     op.create_table(
         "etl_log",
         sa.Column("job", sa.Text()),
-        sa.Column(
-            "run_at", sa.TIMESTAMP(timezone=True), server_default=sa.text("now()")
-        ),
+        sa.Column("run_at", sa.TIMESTAMP(timezone=True), server_default=sa.text("now()")),
         sa.Column("row_cnt", sa.Integer()),
     )
     op.execute(

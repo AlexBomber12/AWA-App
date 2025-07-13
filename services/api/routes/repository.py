@@ -45,9 +45,9 @@ async def fetch_roi_rows(
     return list(result.mappings().all())
 
 
-BULK_UPDATE = text(
-    "UPDATE products SET status='approved' WHERE asin IN :asins"
-).bindparams(bindparam("asins", expanding=True))
+BULK_UPDATE = text("UPDATE products SET status='approved' WHERE asin IN :asins").bindparams(
+    bindparam("asins", expanding=True)
+)
 
 
 async def bulk_approve(session: AsyncSession, asins: Sequence[str]) -> int:

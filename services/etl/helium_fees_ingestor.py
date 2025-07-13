@@ -14,15 +14,13 @@ def main() -> int:
     api_key = os.environ["HELIUM_API_KEY"]
     dsn = os.getenv(
         "DATABASE_URL",
-        "postgresql+psycopg://postgres:pass@postgres:5432/postgres",
+        "postgresql+psycopg://postgres:pass@postgres:5432/postgres",  # pragma: allowlist secret
     )
     if live:
         results = []
         for asin in ASINS:
             url = f"https://api.helium10.com/v1/profits/fees?asin={asin}"
-            req = urllib.request.Request(
-                url, headers={"Authorization": f"Bearer {api_key}"}
-            )
+            req = urllib.request.Request(url, headers={"Authorization": f"Bearer {api_key}"})
             with urllib.request.urlopen(req) as resp:
                 data = json.load(resp)
             results.append((asin, data["totalFbaFee"]))

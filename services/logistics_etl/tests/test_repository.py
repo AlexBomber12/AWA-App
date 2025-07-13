@@ -35,9 +35,7 @@ async def test_upsert_many(tmp_path, monkeypatch):
     with engine.connect() as conn:
         cnt = conn.execute(text("SELECT count(*) FROM freight_rates")).scalar()
         val = conn.execute(
-            text(
-                "SELECT eur_per_kg FROM freight_rates WHERE lane='CN->DE' AND mode='sea'"
-            )
+            text("SELECT eur_per_kg FROM freight_rates WHERE lane='CN->DE' AND mode='sea'")
         ).scalar()
     assert cnt == 2
     assert float(val) == 2.0

@@ -24,9 +24,7 @@ async def test_job_inserts_and_affects_roi(postgresql_proc, tmp_path, monkeypatc
         f"@{postgresql_proc.host}:{postgresql_proc.port}/{postgresql_proc.dbname}"
     )
     dsn_sync = dsn_async.replace("asyncpg", "psycopg")
-    monkeypatch.setattr(
-        db_url, "build_url", lambda async_=False: dsn_async if async_ else dsn_sync
-    )
+    monkeypatch.setattr(db_url, "build_url", lambda async_=False: dsn_async if async_ else dsn_sync)
     importlib.reload(repository)
     repository._engine = create_async_engine(dsn_async, future=True)
 
@@ -42,9 +40,7 @@ async def test_job_inserts_and_affects_roi(postgresql_proc, tmp_path, monkeypatc
                 "INSERT INTO vendor_prices(vendor_id, sku, cost, updated_at) VALUES (1,'A1',2,'2024-01-01')"
             )
         )
-        conn.execute(
-            text("INSERT INTO keepa_offers(asin, buybox_price) VALUES ('A1',10)")
-        )
+        conn.execute(text("INSERT INTO keepa_offers(asin, buybox_price) VALUES ('A1',10)"))
         conn.execute(
             text(
                 "INSERT INTO fees_raw(asin, fulfil_fee, referral_fee, storage_fee, currency, updated_at) VALUES ('A1',1,1,1,'EUR','2024-01-01')"
@@ -58,8 +54,6 @@ async def test_job_inserts_and_affects_roi(postgresql_proc, tmp_path, monkeypatc
 
     with engine.connect() as conn:
         cnt = conn.execute(text("SELECT count(*) FROM freight_rates")).scalar()
-        roi = conn.execute(
-            text("SELECT roi_pct FROM v_roi_full WHERE asin='A1'")
-        ).scalar()
+        roi = conn.execute(text("SELECT roi_pct FROM v_roi_full WHERE asin='A1'")).scalar()
     assert cnt == 1
     assert roi == 30.0

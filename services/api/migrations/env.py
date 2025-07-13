@@ -49,9 +49,7 @@ def run_migrations_online() -> None:
                 # ⚠️ Do NOT pre-create tables; migrations must own schema creation.
                 #    Removing the previous `target_metadata.create_all(connection)`
                 #    call avoids "table already exists" errors on SQLite.
-                context.configure(
-                    connection=connection, target_metadata=target_metadata
-                )
+                context.configure(connection=connection, target_metadata=target_metadata)
                 with context.begin_transaction():
                     context.run_migrations()
             break
