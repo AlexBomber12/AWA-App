@@ -1,19 +1,19 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { login } from '../api'
+import { useAuth } from '../context/AuthContext'
 
 export default function Login() {
   const [username, setUser] = useState('')
   const [password, setPass] = useState('')
   const navigate = useNavigate()
+  const { login } = useAuth()
   return (
     <div className="flex items-center justify-center h-screen bg-gray-100">
       <form
         className="p-4 bg-white rounded shadow space-y-2"
         onSubmit={async (e) => {
           e.preventDefault()
-          const token = await login(username, password)
-          localStorage.setItem('token', token)
+          await login(username, password)
           navigate('/dashboard')
         }}
       >

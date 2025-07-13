@@ -5,7 +5,7 @@ import {
   useReactTable,
 } from '@tanstack/react-table'
 import type { ColumnDef } from '@tanstack/react-table'
-import { fetchJSON } from '../api'
+import { useAuth } from '../context/AuthContext'
 
 interface Row {
   asin: string
@@ -18,13 +18,46 @@ interface Row {
 }
 
 export default function RoiReview() {
-  const token = localStorage.getItem('token') || ''
+  const { api } = useAuth()
   const [data, setData] = useState<Row[]>([])
-  useEffect(() => {
-    fetchJSON<Row[]>('/roi-review', token).then(setData).catch(() => setData([]))
-  }, [token])
+  const [roiMin, setRoiMin] = useState('')
+  const [vendor, setVendor] = useState('')
+  const [category, setCategory] = useState('')
+  const [selected, setSelected] = useState<string[]>([])
+
+  const load = () => {
+    api
+      .get<Row[]>('/roi-review', {
+        params: {
+          roi_min: roiMin || undefined,
+          vendor: vendor || undefined,
+          category: category || undefined,
+        },
+      })
+      .then((r) => setData(r.data))
+      .catch(() => setData([]))
+  }
+
+  useEffect(load, [roiMin, vendor, category, api])
 
   const columns: ColumnDef<Row>[] = [
+    {
+      id: 'select',
+      header: '',
+      cell: ({ row }) => (
+        <input
+          type="checkbox"
+          checked={selected.includes(row.original.asin)}
+          onChange={(e) => {
+            setSelected((prev) =>
+              e.target.checked
+                ? [...prev, row.original.asin]
+                : prev.filter((a) => a !== row.original.asin)
+            )
+          }}
+        />
+      ),
+    },
     { accessorKey: 'asin', header: 'ASIN' },
     { accessorKey: 'title', header: 'Title' },
     { accessorKey: 'vendor_id', header: 'Vendor' },
@@ -37,7 +70,46 @@ export default function RoiReview() {
   const table = useReactTable({ data, columns, getCoreRowModel: getCoreRowModel() })
 
   return (
-    <table className="min-w-full border">
+    <div className="space-y-4">
+      <div className="flex space-x-2">
+        <input
+          className="border p-1"
+          placeholder="ROI >="
+          value={roiMin}
+          onChange={(e) => setRoiMin(e.target.value)}
+        />
+        <input
+          className="border p-1"
+          placeholder="Vendor"
+          value={vendor}
+          onChange={(e) => setVendor(e.target.value)}
+        />
+        <input
+          className="border p-1"
+          placeholder="Category"
+          value={category}
+          onChange={(e) => setCategory(e.target.value)}
+        />
+        <button
+          className="bg-blue-600 text-white px-2 rounded"
+          onClick={load}
+          type="button"
+        >
+          Filter
+        </button>
+        <button
+          className="bg-green-600 text-white px-2 rounded"
+          onClick={async () => {
+            await api.post('/roi-review/approve', { asins: selected })
+            setSelected([])
+            load()
+          }}
+          type="button"
+        >
+          Approve Selected
+        </button>
+      </div>
+      <table className="min-w-full border">
       <thead>
         {table.getHeaderGroups().map((hg) => (
           <tr key={hg.id}>
@@ -61,5 +133,6 @@ export default function RoiReview() {
         ))}
       </tbody>
     </table>
+    </div>
   )
 }
