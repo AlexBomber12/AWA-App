@@ -169,6 +169,9 @@ jobs:
           find . -name 'requirements*.txt' ! -path './requirements-dev.txt' -print0 \
             | xargs -0 -n1 -I{} pip install -r {}
       - run: docker build -t price_importer services/price_importer
+      - name: Build llm image
+        if: ${{ runner.os == 'Linux' && (runner.name == 'self-hosted' || env.GPU == 'true') }}
+        run: docker build -t llm_server services/llm_server
       - run: alembic upgrade head
         env:
           PG_USER: postgres
