@@ -104,7 +104,8 @@ def create_tables():
                     title TEXT,
                     brand TEXT,
                     category TEXT,
-                    weight_kg NUMERIC
+                    weight_kg NUMERIC,
+                    status TEXT
                 );
                 """
             )
@@ -180,6 +181,8 @@ def create_tables():
         asyncio.run(dispose_engine())
     else:
         Base.metadata.create_all(engine)
+        with engine.begin() as conn:
+            conn.exec_driver_sql("ALTER TABLE products ADD COLUMN IF NOT EXISTS status TEXT")
         yield
         with engine.begin() as conn:
             conn.exec_driver_sql("DROP VIEW IF EXISTS roi_view")
