@@ -5,9 +5,9 @@ from typing import Iterable, cast, Any
 from sqlalchemy import create_engine, select, update, insert
 from sqlalchemy.engine import Engine, CursorResult
 
-from services.common.db_url import build_url
-from services.common import Base
-from services.common.models_vendor import Vendor, VendorPrice
+from .common.db_url import build_url
+from .common import Base
+from .common.models_vendor import Vendor, VendorPrice
 
 
 class Repository:
