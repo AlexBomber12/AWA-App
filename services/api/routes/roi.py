@@ -97,7 +97,8 @@ async def _extract_asins(request: Request) -> List[str]:
         data = await request.json()
         return data.get("asins", [])
     form = await request.form()
-    return form.getlist("asins")
+    values = form.getlist("asins")
+    return [str(value) for value in values]
 
 
 @router.post("/roi-review/approve")
