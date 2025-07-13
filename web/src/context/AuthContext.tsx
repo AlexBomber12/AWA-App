@@ -1,5 +1,6 @@
-import axios, { type AxiosInstance } from 'axios'
+import type { AxiosInstance } from 'axios'
 import React, { createContext, useContext, useState } from 'react'
+import { api } from '../lib/api'
 
 interface AuthCtx {
   loggedIn: boolean
@@ -13,11 +14,6 @@ const AuthContext = createContext<AuthCtx>(null as unknown as AuthCtx)
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loggedIn, setLoggedIn] = useState(false)
 
-  const api = axios.create({
-    baseURL: import.meta.env.VITE_API_URL || '',
-    withCredentials: true,
-  })
-
   api.interceptors.response.use(
     (r) => r,
     (error) => {
@@ -25,6 +21,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return Promise.reject(error)
     },
   )
+  api.interceptors.request.use((config) => {
+    const m = document.cookie.match(/access_token=([^;]+)/)
+    if (m) config.headers.Authorization = `Bearer ${m[1]}`
+    return config
+  })
 
   const login = async (username: string, password: string) => {
     await api.post('/auth/token', { username, password })

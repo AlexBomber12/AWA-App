@@ -7,7 +7,7 @@ expect.extend(matchers)
 import Dashboard from '../pages/Dashboard'
 import { AuthProvider } from '../context/AuthContext'
 import { BrowserRouter } from 'react-router-dom'
-import axios from 'axios'
+import { api } from '../lib/api'
 
 const kpiData = [
   { name: 'Total SKU', value: 10 },
@@ -20,15 +20,11 @@ const trendData = [{ date: '2024-01-01', roi: 10 }]
 
 describe('Dashboard page', () => {
   it('loads stats and renders charts', async () => {
-    const get = vi.fn()
-    get
-      .mockResolvedValueOnce({ data: kpiData })
-      .mockResolvedValueOnce({ data: vendorData })
-      .mockResolvedValueOnce({ data: trendData })
-    vi.spyOn(axios, 'create').mockReturnValue({
-      get,
-      interceptors: { response: { use: vi.fn() } },
-    } as any)
+    const get = vi
+      .spyOn(api, 'get')
+      .mockResolvedValueOnce({ data: kpiData } as any)
+      .mockResolvedValueOnce({ data: vendorData } as any)
+      .mockResolvedValueOnce({ data: trendData } as any)
 
     const { container } = render(
       <AuthProvider>
