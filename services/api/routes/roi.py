@@ -42,13 +42,13 @@ ROI_SQL = text(
                vp.vendor_id, vp.cost,
                (p.weight_kg * fr.eur_per_kg) AS freight,
                (f.fulfil_fee + f.referral_fee + f.storage_fee) AS fees,
-               rv.roi_pct
-        FROM roi_view rv
-        JOIN products p   ON p.asin = rv.asin
+               vf.roi_pct
+        FROM v_roi_full vf
+        JOIN products p   ON p.asin = vf.asin
         JOIN vendor_prices vp ON vp.sku = p.asin
         JOIN freight_rates fr ON fr.lane='EU→IT' AND fr.mode='sea'
         JOIN fees_raw f  ON f.asin = p.asin
-        WHERE rv.roi_pct >= :roi_min
+        WHERE vf.roi_pct >= :roi_min
           AND COALESCE(p.status, 'pending') = 'pending'
           AND (:vendor IS NULL OR vp.vendor_id = :vendor)
           AND (:category IS NULL OR p.category = :category)
