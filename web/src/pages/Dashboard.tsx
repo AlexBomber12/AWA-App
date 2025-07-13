@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { fetchJSON } from '../api'
+import { useAuth } from '../context/AuthContext'
 import { BarChart, Bar, XAxis, YAxis, LineChart, Line } from 'recharts'
 
 interface KPI {
@@ -10,19 +10,24 @@ interface VendorROI { vendor: string; roi: number }
 interface TrendPoint { date: string; roi: number }
 
 export default function Dashboard() {
-  const token = localStorage.getItem('token') || ''
+  const { api } = useAuth()
   const [kpis, setKpis] = useState<KPI[]>([])
   const [vendors, setVendors] = useState<VendorROI[]>([])
   const [trend, setTrend] = useState<TrendPoint[]>([])
   useEffect(() => {
-    fetchJSON<KPI[]>('/stats/kpi', token).then(setKpis).catch(() => setKpis([]))
-    fetchJSON<VendorROI[]>('/stats/roi_by_vendor', token)
-      .then(setVendors)
+    api
+      .get<KPI[]>('/stats/kpi')
+      .then((r) => setKpis(r.data))
+      .catch(() => setKpis([]))
+    api
+      .get<VendorROI[]>('/stats/roi_by_vendor')
+      .then((r) => setVendors(r.data))
       .catch(() => setVendors([]))
-    fetchJSON<TrendPoint[]>('/stats/roi_trend', token)
-      .then(setTrend)
+    api
+      .get<TrendPoint[]>('/stats/roi_trend')
+      .then((r) => setTrend(r.data))
       .catch(() => setTrend([]))
-  }, [token])
+  }, [api])
   return (
     <div className="p-4 space-y-4">
       <div className="grid grid-cols-3 gap-4">
