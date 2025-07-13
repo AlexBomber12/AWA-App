@@ -15,6 +15,7 @@ def upgrade() -> None:
         sa.Column("brand", sa.Text()),
         sa.Column("category", sa.Text()),
         sa.Column("weight_kg", sa.Numeric()),
+        sa.Column("status", sa.Text()),
     )
     op.create_table(
         "offers",
