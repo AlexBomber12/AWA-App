@@ -77,3 +77,9 @@ Browse high-margin SKUs with basic auth:
 ```bash
 curl -u admin:pass "http://localhost:8000/roi-review?roi_min=15"
 ```
+
+## LLM provider
+
+The emailer and future services call a configurable language model.
+Set `LLM_PROVIDER` to `local` (default) or `openai`. When using
+`openai`, provide `OPENAI_API_KEY` and optionally `OPENAI_MODEL`.
