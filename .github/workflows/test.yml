@@ -14,7 +14,7 @@ jobs:
         image: postgres:15
         env:
           POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: pass
+          POSTGRES_PASSWORD: pass # pragma: allowlist secret
           POSTGRES_DB: awa
         ports: ['5432:5432']
         options: >-
@@ -35,6 +35,12 @@ jobs:
           pip install -r services/fees_h10/requirements.txt
           pip install -r requirements-dev.txt
           pip install pytest
+      - uses: actions/setup-node@v4
+        with: { node-version: '20' }
+      - run: npm ci
+        working-directory: web
+      - run: npm run build --if-present
+        working-directory: web
 
       - name: Wait for Postgres
         run: |
@@ -45,15 +51,15 @@ jobs:
           echo "::error::Postgres never became ready"
           exit 1
         env:
-          PGPASSWORD: pass
+          PGPASSWORD: pass # pragma: allowlist secret
         shell: bash
 
       - name: Run Alembic migrations
         run: alembic upgrade head
         env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: pass
-          POSTGRES_DB: awa
+            POSTGRES_USER: postgres
+            POSTGRES_PASSWORD: pass # pragma: allowlist secret
+            POSTGRES_DB: awa
           PG_USER: ${{ env.POSTGRES_USER }}
           PG_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
           PG_DATABASE: ${{ env.POSTGRES_DB }}
@@ -62,10 +68,10 @@ jobs:
 
       - name: pytest -q
         run: pytest -q
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: pass
-          POSTGRES_DB: awa
+          env:
+            POSTGRES_USER: postgres
+            POSTGRES_PASSWORD: pass # pragma: allowlist secret
+            POSTGRES_DB: awa
           PG_USER: ${{ env.POSTGRES_USER }}
           PG_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
           PG_DATABASE: ${{ env.POSTGRES_DB }}
