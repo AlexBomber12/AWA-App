@@ -2,7 +2,7 @@ import axios, { type AxiosInstance } from 'axios'
 import React, { createContext, useContext, useState } from 'react'
 
 interface AuthCtx {
-  token: string | null
+  loggedIn: boolean
   login: (user: string, pass: string) => Promise<void>
   logout: () => void
   api: AxiosInstance
@@ -11,34 +11,31 @@ interface AuthCtx {
 const AuthContext = createContext<AuthCtx>(null as unknown as AuthCtx)
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [token, setToken] = useState<string | null>(() => localStorage.getItem('token'))
+  const [loggedIn, setLoggedIn] = useState(false)
 
   const api = axios.create({
     baseURL: import.meta.env.VITE_API_URL || '',
     withCredentials: true,
   })
 
-  api.interceptors.request.use((config) => {
-    if (token) {
-      config.headers = config.headers || {}
-      config.headers.Authorization = `Bearer ${token}`
-    }
-    return config
-  })
+  api.interceptors.response.use(
+    (r) => r,
+    (error) => {
+      if (error.response?.status === 401) setLoggedIn(false)
+      return Promise.reject(error)
+    },
+  )
 
   const login = async (username: string, password: string) => {
-    const res = await api.post('/auth/token', { username, password })
-    const tok: string = res.data.access_token
-    setToken(tok)
-    localStorage.setItem('token', tok)
+    await api.post('/auth/token', { username, password })
+    setLoggedIn(true)
   }
 
   const logout = () => {
-    setToken(null)
-    localStorage.removeItem('token')
+    setLoggedIn(false)
   }
 
-  return <AuthContext.Provider value={{ token, login, logout, api }}>{children}</AuthContext.Provider>
+  return <AuthContext.Provider value={{ loggedIn, login, logout, api }}>{children}</AuthContext.Provider>
 }
 
 export const useAuth = () => useContext(AuthContext)
