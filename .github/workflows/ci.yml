@@ -163,7 +163,11 @@ jobs:
             -e PG_PASSWORD=$POSTGRES_PASSWORD \
             -e PG_HOST=localhost \
             -e PG_DATABASE=awa \
-            price_importer python -m price_importer.import tests/fixtures/sample_prices.csv --vendor "ACME GmbH"
-      - run: psql -h localhost -U "$POSTGRES_USER" -d awa -c "SELECT count(*) FROM vendor_prices;"
+            -v "$PWD/tests/fixtures:/fixtures:ro" \
+            price_importer python -m price_importer.import /fixtures/sample_prices.csv --vendor "ACME GmbH"
         env:
+          POSTGRES_PASSWORD: pass # pragma: allowlist secret
+      - run: psql -h localhost -U "$PG_USER" -d awa -c "SELECT count(*) FROM vendor_prices;"
+        env:
+          PG_USER: postgres
           PGPASSWORD: pass # pragma: allowlist secret

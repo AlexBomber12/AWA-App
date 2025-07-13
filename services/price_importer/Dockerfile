@@ -10,4 +10,3 @@ WORKDIR /app
 ENV PATH="/opt/venv/bin:$PATH"
 COPY --from=builder /opt/venv /opt/venv
 COPY . /app/price_importer
-ENTRYPOINT ["python", "-m", "price_importer.import"]
