@@ -1,7 +1,10 @@
 from alembic.config import Config  # type: ignore[attr-defined]
 from alembic import command  # type: ignore[attr-defined]
 from sqlalchemy import create_engine, text
-import os
+from services.common.db import build_sqlalchemy_url
+import pytest
+
+pytestmark = pytest.mark.integration
 
 
 def test_run_migrations(tmp_path, monkeypatch, pg_pool):
@@ -13,7 +16,7 @@ def test_run_migrations(tmp_path, monkeypatch, pg_pool):
     cfg = Config("alembic.ini")
     command.upgrade(cfg, "head")
     command.upgrade(cfg, "head")
-    engine = create_engine(os.environ["DATABASE_URL"])
+    engine = create_engine(build_sqlalchemy_url())
     with engine.begin() as conn:
         conn.execute(text("INSERT INTO products(asin) VALUES ('A1')"))
         conn.execute(

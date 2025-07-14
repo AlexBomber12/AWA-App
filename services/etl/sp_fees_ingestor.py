@@ -1,6 +1,7 @@
 import os
 import json
 from pg_utils import connect
+from services.common.dsn import build_dsn
 
 
 def main() -> int:
@@ -9,10 +10,7 @@ def main() -> int:
     client_id = os.environ["SP_CLIENT_ID"]
     client_secret = os.environ["SP_CLIENT_SECRET"]
     region = os.environ["REGION"]
-    dsn = os.getenv(
-        "DATABASE_URL",
-        "postgresql+psycopg://postgres:pass@postgres:5432/postgres",  # pragma: allowlist secret
-    )
+    dsn = build_dsn()
     skus = ["DUMMY1", "DUMMY2"]
     if live:
         from sp_api.api import SellingPartnerAPI
@@ -24,16 +22,16 @@ def main() -> int:
             region=region,
         )
         results = []
-        for sku in skus:
-            r = api.get_my_fees_estimate_for_sku(sku)
+        for asin in skus:
+            r = api.get_my_fees_estimate_for_sku(asin)
             amt = r["payload"]["FeesEstimateResult"]["FeesEstimate"]["TotalFeesEstimate"]["Amount"]
-            results.append((sku, amt))
+            results.append((asin, amt))
     else:
         with open("tests/fixtures/spapi_fees_sample.json") as f:
             data = json.load(f)
         results = [
             (
-                r["sku"],
+                r["asin"],
                 r["payload"]["FeesEstimateResult"]["FeesEstimate"]["TotalFeesEstimate"]["Amount"],
             )
             for r in data
@@ -42,13 +40,13 @@ def main() -> int:
     cur = conn.cursor()
     cur.execute(
         "CREATE TABLE IF NOT EXISTS fees_raw("
-        "sku text primary key, fee numeric, captured_at timestamptz default now())"
+        "asin text primary key, fee numeric, captured_at timestamptz default now())"
     )
-    for sku, fee in results:
+    for asin, fee in results:
         cur.execute(
-            "INSERT INTO fees_raw(sku, fee) VALUES (%s, %s) "
-            "ON CONFLICT (sku) DO UPDATE SET fee = EXCLUDED.fee",
-            (sku, fee),
+            "INSERT INTO fees_raw(asin, fee) VALUES (%s, %s) "
+            "ON CONFLICT (asin) DO UPDATE SET fee = EXCLUDED.fee",
+            (asin, fee),
         )
     conn.commit()
     cur.close()

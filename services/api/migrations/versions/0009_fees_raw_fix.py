@@ -1,7 +1,7 @@
 from alembic import op  # type: ignore[attr-defined]
 
 revision = "0009_fees_raw_fix"
-down_revision = "0006_fix_roi_views"
+down_revision = "0008_load_log"
 branch_labels = depends_on = None
 
 

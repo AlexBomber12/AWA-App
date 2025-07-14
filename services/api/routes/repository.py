@@ -21,8 +21,8 @@ ROI_QUERY = text(
     JOIN freight_rates fr ON fr.lane = 'EU→IT' AND fr.mode = 'sea'
     JOIN fees_raw      f  USING (asin)
     WHERE v_roi_full.roi_pct >= :roi_min
-      AND (:vendor IS NULL OR vp.vendor_id = :vendor)
-      AND (:category IS NULL OR p.category = :category)
+      AND (:vendor::text IS NULL OR vp.vendor_id = :vendor::text)
+      AND (:category::text IS NULL OR p.category = :category::text)
     LIMIT 200;
     """
 ).bindparams(

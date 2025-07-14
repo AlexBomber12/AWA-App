@@ -8,6 +8,7 @@ from pathlib import Path
 import keepa
 from minio import Minio
 from pg_utils import connect
+from services.common.dsn import build_dsn
 
 
 def main():
@@ -16,7 +17,7 @@ def main():
     endpoint = os.environ.get("MINIO_ENDPOINT")
     access = os.environ.get("MINIO_ACCESS_KEY")
     secret = os.environ.get("MINIO_SECRET_KEY")
-    dsn = os.environ["DATABASE_URL"]
+    dsn = build_dsn()
     start = time.time()
     if live:
         api = keepa.Keepa(key)

@@ -7,6 +7,8 @@ import sqlalchemy as sa
 from alembic.config import Config
 from alembic import command
 
+pytestmark = pytest.mark.integration
+
 
 @pytest.fixture(scope="session")
 def pg_engine():

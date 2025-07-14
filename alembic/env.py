@@ -2,7 +2,7 @@ from __future__ import annotations
 from logging.config import fileConfig
 from sqlalchemy import create_engine
 from alembic import context  # type: ignore
-import os
+from services.common.db import build_sqlalchemy_url
 
 
 config = context.config
@@ -12,10 +12,7 @@ if config.config_file_name is not None:
 target_metadata = None
 
 
-url = os.getenv(
-    "DATABASE_URL",
-    "postgresql+psycopg://postgres:pass@postgres:5432/postgres",
-)
+url = build_sqlalchemy_url()
 connectable = create_engine(url, pool_pre_ping=True)
 
 

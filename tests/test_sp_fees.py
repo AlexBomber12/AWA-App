@@ -1,6 +1,7 @@
 import os
 import types
 import sys
+from services.common.db import build_sqlalchemy_url
 
 
 class FakeCursor:
@@ -38,7 +39,7 @@ class FakeSP:
 
 def test_main_offline(monkeypatch):
     os.environ.pop("ENABLE_LIVE", None)
-    os.environ["DATABASE_URL"] = os.getenv("DATABASE_URL", "d")
+    os.environ["DATABASE_URL"] = build_sqlalchemy_url()
     fake_api = FakeSP()
     monkeypatch.setitem(
         sys.modules,

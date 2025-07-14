@@ -3,6 +3,8 @@ import os
 import socket
 import pytest
 
+pytestmark = pytest.mark.integration
+
 API_URL = os.getenv("NEXT_PUBLIC_API_URL", "http://localhost:8000")
 
 

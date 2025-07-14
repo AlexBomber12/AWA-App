@@ -54,8 +54,7 @@ jobs:
       - run: ruff check .
       - run: black --check .
       - run: python -m mypy services
-      - run: pytest -q
-        
+
   postgres:
     needs: build
     runs-on: ubuntu-latest
@@ -117,20 +116,25 @@ jobs:
         working-directory: web
       - run: npm test -- --run
         working-directory: web
+
       - run: npm run build
         working-directory: web
+
+      - name: Export DSN
+        run: echo "DATABASE_URL=postgresql://postgres:pass@localhost:5432/awa" >> $GITHUB_ENV
+
+      - name: Wait for DB
+        run: for i in {1..30}; do pg_isready -h localhost -p 5432 -U postgres && break || sleep 2; done
+
       - name: Prepare DB
+        env:
+          PGPASSWORD: pass      # pragma: allowlist secret
         run: |
           if ! psql -h localhost -p 5432 -U postgres -tAc "SELECT 1 FROM pg_database WHERE datname='awa'" | grep -q 1; then
             createdb -h localhost -p 5432 -U postgres awa
           fi
-        env:
-          PGPASSWORD: pass # pragma: allowlist secret
       - name: Run migrations
         run: alembic upgrade head
-      - run: ruff check .
-      - run: black --check .
-      - run: python -m mypy services
       - run: echo 'PGHOST=localhost' >> $GITHUB_ENV
       - name: Run tests
         run: pytest -q

@@ -2,6 +2,7 @@ import importlib
 import os
 import sys
 import types
+from services.common.db import build_sqlalchemy_url
 
 
 class FakeCursor:
@@ -31,7 +32,7 @@ class FakeConn:
 
 def test_offline(monkeypatch):
     os.environ.pop("ENABLE_LIVE", None)
-    os.environ["DATABASE_URL"] = os.getenv("DATABASE_URL", "d")
+    os.environ["DATABASE_URL"] = build_sqlalchemy_url()
     called = {"n": 0}
 
     def fake_get(url):
