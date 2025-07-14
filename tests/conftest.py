@@ -28,17 +28,14 @@ def event_loop():
 
 @pytest.fixture(autouse=True)
 def _set_db_url(postgres):
-    host = postgres.host
-    port = postgres.port
-    dbname = postgres.dbname
-    user = postgres.user
-    pwd = postgres.password or ""
-    os.environ["DATABASE_URL"] = f"postgresql+asyncpg://{user}:{pwd}@{host}:{port}/{dbname}"
-    os.environ["PG_USER"] = user
-    os.environ["PG_PASSWORD"] = pwd
-    os.environ["PG_HOST"] = host
-    os.environ["PG_PORT"] = str(port)
-    os.environ["PG_DATABASE"] = dbname
+    try:
+        host = postgres.host
+        port = postgres.port
+    except AttributeError:
+        host = postgres.info.host
+        port = postgres.info.port
+    url = f"postgresql+psycopg://postgres:pass@{host}:{port}/tests"
+    os.environ["DATABASE_URL"] = url
 
 
 @pytest.fixture

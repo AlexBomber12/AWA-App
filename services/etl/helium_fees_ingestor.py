@@ -2,7 +2,7 @@ import json
 import os
 import urllib.request
 
-import psycopg2
+from pg_utils import connect
 
 
 ASINS = ["DUMMY1", "DUMMY2"]
@@ -27,7 +27,7 @@ def main() -> int:
         with open("tests/fixtures/helium_fees_sample.json") as f:
             data = json.load(f)
         results = [(r["sku"], r["totalFbaFee"]) for r in data]
-    conn = psycopg2.connect(dsn.replace("postgresql+asyncpg://", "postgresql://"))
+    conn = connect(dsn.replace("postgresql+asyncpg://", "postgresql://"))
     cur = conn.cursor()
     cur.execute(
         "CREATE TABLE IF NOT EXISTS fees_raw("

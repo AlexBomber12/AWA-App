@@ -1,6 +1,6 @@
 import os
 import json
-import psycopg2
+from pg_utils import connect
 
 
 def main() -> int:
@@ -38,7 +38,7 @@ def main() -> int:
             )
             for r in data
         ]
-    conn = psycopg2.connect(dsn.replace("postgresql+asyncpg://", "postgresql://"))
+    conn = connect(dsn.replace("postgresql+asyncpg://", "postgresql://"))
     cur = conn.cursor()
     cur.execute(
         "CREATE TABLE IF NOT EXISTS fees_raw("
