@@ -2,15 +2,16 @@ import importlib
 
 import pytest
 from sqlalchemy import create_engine, text
-from services.common.db_url import build_url
+import os
 
 from services.logistics_etl import repository
 
 
 @pytest.mark.asyncio
-async def test_upsert_many(monkeypatch):
+async def test_upsert_many(monkeypatch, pg_pool):
     importlib.reload(repository)
-    engine = create_engine(build_url(async_=False))
+    dsn = os.environ["DATABASE_URL"].replace("asyncpg", "psycopg")
+    engine = create_engine(dsn)
     with engine.begin() as conn:
         conn.exec_driver_sql(
             """

@@ -1,9 +1,10 @@
 from sqlalchemy import create_engine, text
-from services.common.db_url import build_url
+import os
 
 
 def _setup_db():
-    engine = create_engine(build_url(async_=False))
+    dsn = os.environ["DATABASE_URL"].replace("asyncpg", "psycopg")
+    engine = create_engine(dsn)
     with engine.begin() as conn:
         # Ensure clean state for deterministic tests
         for tbl in [
