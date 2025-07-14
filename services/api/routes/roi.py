@@ -50,8 +50,8 @@ ROI_SQL = text(
         JOIN fees_raw f  ON f.asin = p.asin
         WHERE vf.roi_pct >= :roi_min
           AND COALESCE(p.status, 'pending') = 'pending'
-          AND (:vendor IS NULL OR vp.vendor_id = :vendor)
-          AND (:category IS NULL OR p.category = :category)
+          AND vp.vendor_id = COALESCE(CAST(:vendor AS INTEGER), vp.vendor_id)
+          AND (CAST(:category AS TEXT) IS NULL OR p.category = CAST(:category AS TEXT))
         LIMIT 200
         """
 ).bindparams(
@@ -69,7 +69,7 @@ def roi_review(
     category: Optional[str] = None,
     _: str = Depends(_check_basic_auth),
 ):
-    url = build_url(async_=False).replace("asyncpg", "psycopg")
+    url = build_url(async_=False)
     engine = create_engine(url)
     with engine.connect() as conn:
         res = conn.execute(ROI_SQL, {"roi_min": roi_min, "vendor": vendor, "category": category})
@@ -106,7 +106,7 @@ async def approve(request: Request, _: str = Depends(_check_basic_auth)) -> dict
     asins = await _extract_asins(request)
     if not asins:
         return {"count": 0}
-    url = build_url(async_=False).replace("asyncpg", "psycopg")
+    url = build_url(async_=False)
     engine = create_engine(url)
     with engine.begin() as conn:
         res = conn.execute(UPDATE_SQL, {"asins": asins})

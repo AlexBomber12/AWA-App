@@ -15,7 +15,6 @@ def test_upgrade_storage_fee_column_exists(tmp_path, monkeypatch, pg_pool):
     cfg = Config("alembic.ini")
     command.upgrade(cfg, "head")
     command.upgrade(cfg, "head")
-    dsn = os.environ["DATABASE_URL"].replace("asyncpg", "psycopg")
-    engine = create_engine(dsn)
+    engine = create_engine(os.environ["DATABASE_URL"])
     with engine.connect() as conn:
         conn.execute(text("SELECT storage_fee FROM fees_raw LIMIT 1"))

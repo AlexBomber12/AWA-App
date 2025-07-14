@@ -10,10 +10,9 @@ from services.logistics_etl import repository
 @pytest.mark.asyncio
 async def test_upsert_many(pg_engine):
     importlib.reload(repository)
-    async_engine = create_async_engine(
-        str(pg_engine.url).replace("postgresql://", "postgresql+asyncpg://"),
-        future=True,
-    )
+    dsn = pg_engine.url.render_as_string(hide_password=False)
+    dsn = dsn.replace("postgresql://", "postgresql+asyncpg://")
+    async_engine = create_async_engine(dsn, future=True)
     repository._engine = async_engine
 
     with pg_engine.begin() as conn:

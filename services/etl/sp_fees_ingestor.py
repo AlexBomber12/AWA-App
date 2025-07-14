@@ -38,7 +38,7 @@ def main() -> int:
             )
             for r in data
         ]
-    conn = connect(dsn.replace("postgresql+asyncpg://", "postgresql://"))
+    conn = connect(dsn)
     cur = conn.cursor()
     cur.execute(
         "CREATE TABLE IF NOT EXISTS fees_raw("

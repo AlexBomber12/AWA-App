@@ -34,6 +34,7 @@ def fake_connect(dsn):
 
 
 sys.modules["pg_utils"] = types.SimpleNamespace(connect=fake_connect)
+sp_fees_ingestor.connect = fake_connect
 
 
 def test_offline(monkeypatch, tmp_path):

@@ -13,8 +13,7 @@ def test_run_migrations(tmp_path, monkeypatch, pg_pool):
     cfg = Config("alembic.ini")
     command.upgrade(cfg, "head")
     command.upgrade(cfg, "head")
-    dsn = os.environ["DATABASE_URL"].replace("asyncpg", "psycopg")
-    engine = create_engine(dsn)
+    engine = create_engine(os.environ["DATABASE_URL"])
     with engine.begin() as conn:
         conn.execute(text("INSERT INTO products(asin) VALUES ('A1')"))
         conn.execute(

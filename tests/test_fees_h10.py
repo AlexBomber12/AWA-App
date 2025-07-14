@@ -28,12 +28,11 @@ async def test_fetch_fees():
 @pytest.mark.asyncio
 async def test_repository_upsert(tmp_path, monkeypatch, pg_pool):
     importlib.reload(repository)
-    dsn = os.environ["DATABASE_URL"].replace("asyncpg", "psycopg")
-    engine = create_engine(dsn)
+    engine = create_engine(os.environ["DATABASE_URL"])
     with engine.begin() as conn:
         conn.exec_driver_sql(
             """
-            CREATE TABLE fees_raw (
+            CREATE TABLE IF NOT EXISTS fees_raw (
                 asin TEXT PRIMARY KEY,
                 fulfil_fee NUMERIC(10,2) NOT NULL,
                 referral_fee NUMERIC(10,2) NOT NULL,
@@ -72,12 +71,11 @@ async def test_repository_upsert(tmp_path, monkeypatch, pg_pool):
 def test_refresh_fees(tmp_path, monkeypatch, pg_pool):
     importlib.reload(repository)
     importlib.reload(worker)
-    dsn = os.environ["DATABASE_URL"].replace("asyncpg", "psycopg")
-    engine = create_engine(dsn)
+    engine = create_engine(os.environ["DATABASE_URL"])
     with engine.begin() as conn:
         conn.exec_driver_sql(
             """
-            CREATE TABLE fees_raw (
+            CREATE TABLE IF NOT EXISTS fees_raw (
                 asin TEXT PRIMARY KEY,
                 fulfil_fee NUMERIC(10,2) NOT NULL,
                 referral_fee NUMERIC(10,2) NOT NULL,
