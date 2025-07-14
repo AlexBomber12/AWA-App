@@ -1,11 +1,12 @@
 import os
 import requests  # type: ignore
 from pg_utils import connect
+from services.common.dsn import build_dsn
 
 
 def main():
     live = os.getenv("ENABLE_LIVE") == "1"
-    dsn = os.environ["DATABASE_URL"]
+    dsn = build_dsn()
     conn = connect(dsn)
     cur = conn.cursor()
     skus = ["DUMMY1", "DUMMY2"]

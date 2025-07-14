@@ -8,6 +8,8 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from alembic.config import Config
 from alembic import command  # type: ignore[attr-defined]
 
+pytestmark = pytest.mark.integration
+
 pytest.importorskip("apscheduler")
 respx = pytest.importorskip("respx")
 

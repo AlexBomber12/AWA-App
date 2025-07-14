@@ -8,13 +8,14 @@ import time
 import keepa
 from minio import Minio
 from pg_utils import connect
+from services.common.dsn import build_dsn
 
 
 key = os.environ["KEEPA_KEY"]
 minio_endpoint = os.environ["MINIO_ENDPOINT"]
 minio_access = os.environ["MINIO_ACCESS_KEY"]
 minio_secret = os.environ["MINIO_SECRET_KEY"]
-dsn = os.environ["DATABASE_URL"]
+dsn = build_dsn()
 
 start = time.time()
 if os.getenv("ENABLE_LIVE") == "1":

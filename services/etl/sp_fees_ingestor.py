@@ -1,6 +1,7 @@
 import os
 import json
 from pg_utils import connect
+from services.common.dsn import build_dsn
 
 
 def main() -> int:
@@ -9,10 +10,7 @@ def main() -> int:
     client_id = os.environ["SP_CLIENT_ID"]
     client_secret = os.environ["SP_CLIENT_SECRET"]
     region = os.environ["REGION"]
-    dsn = os.getenv(
-        "DATABASE_URL",
-        "postgresql+psycopg://postgres:pass@postgres:5432/postgres",  # pragma: allowlist secret
-    )
+    dsn = build_dsn()
     skus = ["DUMMY1", "DUMMY2"]
     if live:
         from sp_api.api import SellingPartnerAPI

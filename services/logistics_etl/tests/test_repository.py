@@ -3,8 +3,9 @@ import importlib
 import pytest
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import create_async_engine
-
 from services.logistics_etl import repository
+
+pytestmark = pytest.mark.integration
 
 
 @pytest.mark.asyncio

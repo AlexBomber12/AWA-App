@@ -1,6 +1,6 @@
-import os
+from services.common.dsn import build_dsn
 
 
 def pg_dsn() -> str:
-    """Return DATABASE_URL from the environment."""
-    return os.environ["DATABASE_URL"]
+    """Return Postgres DSN for CLI scripts."""
+    return build_dsn()

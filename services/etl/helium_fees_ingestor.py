@@ -3,6 +3,7 @@ import os
 import urllib.request
 
 from pg_utils import connect
+from services.common.dsn import build_dsn
 
 
 ASINS = ["DUMMY1", "DUMMY2"]
@@ -11,10 +12,7 @@ ASINS = ["DUMMY1", "DUMMY2"]
 def main() -> int:
     live = os.getenv("ENABLE_LIVE") == "1"
     api_key = os.environ["HELIUM_API_KEY"]
-    dsn = os.getenv(
-        "DATABASE_URL",
-        "postgresql+psycopg://postgres:pass@postgres:5432/postgres",  # pragma: allowlist secret
-    )
+    dsn = build_dsn()
     if live:
         results = []
         for asin in ASINS:
