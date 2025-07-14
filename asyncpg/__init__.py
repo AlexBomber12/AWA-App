@@ -14,6 +14,9 @@ class _Pool:
         return None
 
 
+Pool = _Pool
+
+
 async def create_pool(dsn: str) -> _Pool:
     """Return fake asyncpg pool for tests."""
     return _Pool()
