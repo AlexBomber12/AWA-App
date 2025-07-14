@@ -10,41 +10,45 @@ depends_on = None
 
 def upgrade() -> None:
     bind = op.get_bind()
-    if "products" in inspect(bind).get_table_names():
-        return  # already bootstrapped
-    op.create_table(
-        "products",
-        sa.Column("asin", sa.TEXT(), primary_key=True),
-        sa.Column("title", sa.TEXT()),
-        sa.Column("brand", sa.TEXT()),
-        sa.Column("category", sa.TEXT()),
-        sa.Column("weight_kg", sa.Numeric()),
-    )
-    op.create_table(
-        "offers",
-        sa.Column("asin", sa.TEXT(), sa.ForeignKey("products.asin")),
-        sa.Column("seller_sku", sa.TEXT()),
-        sa.Column("price_cents", sa.Integer()),
-        sa.Column("captured_at", sa.TIMESTAMP(timezone=True)),
-    )
-    op.create_table(
-        "fees_raw",
-        sa.Column("asin", sa.TEXT(), primary_key=True),
-        sa.Column("fulf_fee", sa.Numeric()),
-        sa.Column("referral_fee", sa.Numeric()),
-        sa.Column("storage_fee", sa.Numeric()),
-        sa.Column("captured_at", sa.TIMESTAMP(timezone=True)),
-    )
-    op.create_table(
-        "etl_log",
-        sa.Column("job", sa.TEXT()),
-        sa.Column(
-            "run_at",
-            sa.TIMESTAMP(timezone=True),
-            server_default=sa.text("CURRENT_TIMESTAMP"),
-        ),
-        sa.Column("row_cnt", sa.Integer()),
-    )
+    tables = inspect(bind).get_table_names()
+
+    if "products" not in tables:
+        op.create_table(
+            "products",
+            sa.Column("asin", sa.TEXT(), primary_key=True),
+            sa.Column("title", sa.TEXT()),
+            sa.Column("brand", sa.TEXT()),
+            sa.Column("category", sa.TEXT()),
+            sa.Column("weight_kg", sa.Numeric()),
+        )
+    if "offers" not in tables:
+        op.create_table(
+            "offers",
+            sa.Column("asin", sa.TEXT(), sa.ForeignKey("products.asin")),
+            sa.Column("seller_sku", sa.TEXT()),
+            sa.Column("price_cents", sa.Integer()),
+            sa.Column("captured_at", sa.TIMESTAMP(timezone=True)),
+        )
+    if "fees_raw" not in tables:
+        op.create_table(
+            "fees_raw",
+            sa.Column("asin", sa.TEXT(), primary_key=True),
+            sa.Column("fulf_fee", sa.Numeric()),
+            sa.Column("referral_fee", sa.Numeric()),
+            sa.Column("storage_fee", sa.Numeric()),
+            sa.Column("captured_at", sa.TIMESTAMP(timezone=True)),
+        )
+    if "etl_log" not in tables:
+        op.create_table(
+            "etl_log",
+            sa.Column("job", sa.TEXT()),
+            sa.Column(
+                "run_at",
+                sa.TIMESTAMP(timezone=True),
+                server_default=sa.text("CURRENT_TIMESTAMP"),
+            ),
+            sa.Column("row_cnt", sa.Integer()),
+        )
     op.execute(
         """
         CREATE VIEW roi_view AS

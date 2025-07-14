@@ -1,5 +1,5 @@
 from alembic.config import Config
-from alembic import command
+from alembic import command  # type: ignore[attr-defined]
 from pathlib import Path
 
 
