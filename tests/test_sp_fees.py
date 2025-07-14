@@ -47,7 +47,7 @@ def test_main_offline(monkeypatch):
     )
     fake_conn = FakeConn()
     monkeypatch.setitem(
-        sys.modules, "psycopg2", types.SimpleNamespace(connect=lambda dsn: fake_conn)
+        sys.modules, "pg_utils", types.SimpleNamespace(connect=lambda dsn: fake_conn)
     )
 
     import importlib

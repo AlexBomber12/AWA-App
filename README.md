@@ -23,8 +23,8 @@ docker compose up -d --wait
 curl http://localhost:8000/health
 ```
 
-SQLite remains the default for local development; using the `.env.postgres`
-file enables the Postgres services for API and ETL.
+The stack uses Postgres for all services. Copy `.env.example` to `.env.postgres`
+and run docker compose to start the database and API containers.
 
 ### Continuous Integration
 

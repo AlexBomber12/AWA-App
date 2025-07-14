@@ -17,8 +17,6 @@ class Settings(BaseSettings):
 
     @property
     def DATABASE_URL(self) -> str:
-        if self.ENABLE_LIVE == 0:
-            return f"sqlite+aiosqlite:///{self.DATA_DIR / 'awa.db'}"
         return (
             f"postgresql+asyncpg://{self.PG_USER}:{self.PG_PASSWORD}"
             f"@{self.PG_HOST}:{self.PG_PORT}/{self.PG_DATABASE}"

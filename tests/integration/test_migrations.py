@@ -1,10 +1,10 @@
 from alembic.config import Config  # type: ignore[attr-defined]
 from alembic import command  # type: ignore[attr-defined]
 from sqlalchemy import create_engine, text
-from services.common.db_url import build_url
+import os
 
 
-def test_run_migrations(tmp_path, monkeypatch):
+def test_run_migrations(tmp_path, monkeypatch, pg_pool):
     monkeypatch.setenv("DATA_DIR", str(tmp_path))
     monkeypatch.setenv("ENABLE_LIVE", "0")
     db_path = tmp_path / "awa.db"
@@ -13,7 +13,8 @@ def test_run_migrations(tmp_path, monkeypatch):
     cfg = Config("alembic.ini")
     command.upgrade(cfg, "head")
     command.upgrade(cfg, "head")
-    engine = create_engine(build_url(async_=False))
+    dsn = os.environ["DATABASE_URL"].replace("asyncpg", "psycopg")
+    engine = create_engine(dsn)
     with engine.begin() as conn:
         conn.execute(text("INSERT INTO products(asin) VALUES ('A1')"))
         conn.execute(
