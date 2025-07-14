@@ -17,15 +17,6 @@ jobs:
       PG_DATABASE: awa
     steps:
       - uses: actions/checkout@v4
-      - name: Wait for Postgres to accept connections
-        env:
-          PGPASSWORD: pass                     # pragma: allowlist secret
-        run: |
-          for i in {1..40}; do
-            pg_isready -h localhost -p 5432 -U postgres && exit 0
-            sleep 2
-          done
-          echo "Postgres service never became ready" && exit 1
       - name: System deps
         run: |
           sudo apt-get update && sudo apt-get install -y postgresql postgresql-client
@@ -94,6 +85,15 @@ jobs:
           --health-retries=10
     steps:
       - uses: actions/checkout@v4
+      - name: Wait for Postgres to accept connections
+        env:
+          PGPASSWORD: pass                     # pragma: allowlist secret
+        run: |
+          for i in {1..40}; do
+            pg_isready -h localhost -p 5432 -U postgres && exit 0
+            sleep 2
+          done
+          echo "Postgres service never became ready" && exit 1
       - name: System deps
         run: |
           sudo apt-get update && sudo apt-get install -y postgresql postgresql-client
