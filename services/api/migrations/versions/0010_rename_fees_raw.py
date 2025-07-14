@@ -1,6 +1,7 @@
 from alembic import op
 
-revision, down_revision = "0009_fees_raw_fix", "0009_fees_raw_fix"
+revision = "0010_rename_fees_raw"
+down_revision = "0009_fees_raw_fix"
 
 
 def upgrade():
