@@ -1,6 +1,6 @@
 import os
 import importlib
-from pathlib import Path
+from services.common.db_url import build_url
 
 import pytest
 from httpx import Response
@@ -28,11 +28,8 @@ async def test_fetch_fees():
 
 @pytest.mark.asyncio
 async def test_repository_upsert(tmp_path, monkeypatch):
-    monkeypatch.setenv("DATA_DIR", str(tmp_path))
-    monkeypatch.setenv("ENABLE_LIVE", "0")
     importlib.reload(repository)
-    db_path = Path(tmp_path) / "awa.db"
-    engine = create_engine(f"sqlite:///{db_path}")
+    engine = create_engine(build_url(async_=False))
     with engine.begin() as conn:
         conn.exec_driver_sql(
             """
@@ -73,12 +70,9 @@ async def test_repository_upsert(tmp_path, monkeypatch):
 
 @respx.mock
 def test_refresh_fees(tmp_path, monkeypatch):
-    monkeypatch.setenv("DATA_DIR", str(tmp_path))
-    monkeypatch.setenv("ENABLE_LIVE", "0")
     importlib.reload(repository)
     importlib.reload(worker)
-    db_path = Path(tmp_path) / "awa.db"
-    engine = create_engine(f"sqlite:///{db_path}")
+    engine = create_engine(build_url(async_=False))
     with engine.begin() as conn:
         conn.exec_driver_sql(
             """

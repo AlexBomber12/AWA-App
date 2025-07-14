@@ -14,83 +14,54 @@ def _setup_db():
             "products",
         ]:
             conn.execute(text(f"DELETE FROM {tbl}"))
-        if engine.dialect.name == "sqlite":
-            conn.execute(
-                text(
-                    """
-                    CREATE TABLE IF NOT EXISTS products (
-                        asin TEXT PRIMARY KEY,
-                        title TEXT,
-                        category TEXT,
-                        weight_kg NUMERIC
-                    );
-                    """
-                )
+        conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS products (
+                    asin TEXT PRIMARY KEY,
+                    title TEXT,
+                    category TEXT,
+                    weight_kg NUMERIC
+                );
+                """
             )
-            cols = [row[1] for row in conn.execute(text("PRAGMA table_info(products)"))]
-            if "status" not in cols:
-                conn.execute(text("ALTER TABLE products ADD COLUMN status TEXT"))
-            insert_keepa = (
-                "INSERT OR IGNORE INTO keepa_offers(asin, buybox_price) VALUES (:asin,:price)"
+        )
+        conn.execute(
+            text(
+                """
+                DO $$
+                BEGIN
+                    IF NOT EXISTS (
+                        SELECT 1 FROM information_schema.columns
+                        WHERE table_name='products' AND column_name='status'
+                    ) THEN
+                        ALTER TABLE products ADD COLUMN status TEXT;
+                    END IF;
+                END
+                $$;
+                """
             )
-            insert_fee = "INSERT OR IGNORE INTO fees_raw(asin, fulfil_fee, referral_fee, storage_fee, currency) VALUES (:asin,1,1,1,'EUR')"
-        else:
-            conn.execute(
-                text(
-                    """
-                    CREATE TABLE IF NOT EXISTS products (
-                        asin TEXT PRIMARY KEY,
-                        title TEXT,
-                        category TEXT,
-                        weight_kg NUMERIC
-                    );
-                    """
-                )
+        )
+        conn.execute(
+            text("INSERT INTO vendors(id, name) VALUES (1,'ACME GmbH') ON CONFLICT DO NOTHING")
+        )
+        insert_keepa = "INSERT INTO keepa_offers(asin, buybox_price) VALUES (:asin,:price) ON CONFLICT (asin) DO UPDATE SET buybox_price=EXCLUDED.buybox_price"
+        insert_fee = "INSERT INTO fees_raw(asin, fulfil_fee, referral_fee, storage_fee, currency) VALUES (:asin,1,1,1,'EUR') ON CONFLICT (asin) DO UPDATE SET updated_at=CURRENT_TIMESTAMP"
+        conn.execute(
+            text(
+                "INSERT INTO vendors(id, name) VALUES (1,'ACME GmbH') ON CONFLICT (id) DO UPDATE SET name=EXCLUDED.name"
             )
-            conn.execute(
-                text(
-                    """
-                    DO $$
-                    BEGIN
-                        IF NOT EXISTS (
-                            SELECT 1 FROM information_schema.columns
-                            WHERE table_name='products' AND column_name='status'
-                        ) THEN
-                            ALTER TABLE products ADD COLUMN status TEXT;
-                        END IF;
-                    END
-                    $$;
-                    """
-                )
+        )
+        conn.execute(
+            text(
+                "INSERT INTO products(asin, title, category, weight_kg) VALUES ('A1','t1','cat',1) ON CONFLICT (asin) DO UPDATE SET title=EXCLUDED.title"
             )
-            conn.execute(
-                text("INSERT INTO vendors(id, name) VALUES (1,'ACME GmbH') ON CONFLICT DO NOTHING")
+        )
+        conn.execute(
+            text(
+                "INSERT INTO products(asin, title, category, weight_kg) VALUES ('A2','t2','cat',1) ON CONFLICT (asin) DO UPDATE SET title=EXCLUDED.title"
             )
-            insert_keepa = "INSERT INTO keepa_offers(asin, buybox_price) VALUES (:asin,:price) ON CONFLICT (asin) DO UPDATE SET buybox_price=EXCLUDED.buybox_price"
-            insert_fee = "INSERT INTO fees_raw(asin, fulfil_fee, referral_fee, storage_fee, currency) VALUES (:asin,1,1,1,'EUR') ON CONFLICT (asin) DO UPDATE SET updated_at=CURRENT_TIMESTAMP"
-        if engine.dialect.name == "sqlite":
-            conn.execute(text("INSERT OR REPLACE INTO vendors(id, name) VALUES (1,'ACME GmbH')"))
-            conn.execute(
-                text(
-                    "INSERT OR REPLACE INTO products(asin, title, category, weight_kg) VALUES ('A1','t1','cat',1)"
-                )
-            )
-            conn.execute(
-                text(
-                    "INSERT OR REPLACE INTO products(asin, title, category, weight_kg) VALUES ('A2','t2','cat',1)"
-                )
-            )
-        else:
-            conn.execute(
-                text(
-                    "INSERT INTO products(asin, title, category, weight_kg) VALUES ('A1','t1','cat',1) ON CONFLICT (asin) DO UPDATE SET title=EXCLUDED.title"
-                )
-            )
-            conn.execute(
-                text(
-                    "INSERT INTO products(asin, title, category, weight_kg) VALUES ('A2','t2','cat',1) ON CONFLICT (asin) DO UPDATE SET title=EXCLUDED.title"
-                )
-            )
+        )
         conn.execute(
             text(
                 "INSERT INTO vendors(id, name) VALUES (1,'ACME GmbH') ON CONFLICT (id) DO UPDATE SET name=EXCLUDED.name"
@@ -133,18 +104,11 @@ def _setup_db():
         conn.execute(text(insert_keepa), {"asin": "A2", "price": 30})
         conn.execute(text(insert_fee), {"asin": "A1"})
         conn.execute(text(insert_fee), {"asin": "A2"})
-        if engine.dialect.name == "sqlite":
-            conn.execute(
-                text(
-                    "INSERT OR IGNORE INTO freight_rates(lane, mode, eur_per_kg) VALUES ('EU→IT','sea',1)"
-                )
+        conn.execute(
+            text(
+                "INSERT INTO freight_rates(lane, mode, eur_per_kg) VALUES ('EU→IT','sea',1) ON CONFLICT DO NOTHING"
             )
-        else:
-            conn.execute(
-                text(
-                    "INSERT INTO freight_rates(lane, mode, eur_per_kg) VALUES ('EU→IT','sea',1) ON CONFLICT DO NOTHING"
-                )
-            )
+        )
     return engine
 
 

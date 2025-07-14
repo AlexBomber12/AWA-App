@@ -1,75 +1,34 @@
 import os
-import tempfile
-import pathlib
+from pathlib import Path
 import subprocess
 import pytest
-import site
-import sys
-
-import time
-from pathlib import Path
+from pytest_postgresql import factories
 
 os.environ.setdefault("ENABLE_LIVE", "0")
 os.environ.setdefault("TESTING", "1")
-from services.common.db_url import build_url  # noqa: E402
-from sqlalchemy import create_engine  # noqa: E402
-from services.common import Base  # noqa: E402
 
-DATA_DIR = pathlib.Path(os.getenv("DATA_DIR", tempfile.gettempdir())) / "awa-data"
+DATA_DIR = Path(os.getenv("DATA_DIR", "/tmp")) / "awa-data"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 os.environ["DATA_DIR"] = str(DATA_DIR)
 
-# ensure real fastapi package is used
-site_pkg = site.getsitepackages()[0]
-if sys.path[0] != site_pkg:
-    sys.path.insert(0, site_pkg)
-sys.modules.pop("fastapi", None)
-from fastapi.testclient import TestClient  # noqa: E402
-from services.api.main import app  # noqa: E402
+postgresql_proc = factories.postgresql_proc()
+postgresql = factories.postgresql("postgresql_proc")
 
 
-def _wait_for_db() -> None:
-    url = build_url(async_=True)
-    if url.startswith("sqlite"):
-        return
-    for _ in range(10):
-        try:
-            rc = subprocess.run(
-                [
-                    "pg_isready",
-                    "-h",
-                    os.getenv("PG_HOST", "postgres"),
-                    "-p",
-                    "5432",
-                    "-U",
-                    os.getenv("PG_USER", "postgres"),
-                ],
-                capture_output=True,
-            ).returncode
-        except FileNotFoundError:
-            return
-        if rc == 0:
-            return
-        time.sleep(1)
-    raise RuntimeError("postgres not ready")
-
-
-def pytest_sessionstart(session):
-    _wait_for_db()
-    url = build_url(async_=True)
-    if url.startswith("sqlite"):
-        path = url.split("///", 1)[1]
-        if os.path.exists(path):
-            os.remove(path)
-    subprocess.run(
-        ["alembic", "upgrade", "head"],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-    )
+@pytest.fixture(autouse=True)
+def _setup_db(postgresql):
+    dsn = f"postgresql+asyncpg://postgres:@{postgresql.host}:{postgresql.port}/postgres"
+    os.environ["DATABASE_URL"] = dsn
+    subprocess.run(["alembic", "upgrade", "head"], check=True)
+    yield
+    subprocess.run(["alembic", "downgrade", "base"], check=True)
 
 
 @pytest.fixture
-def api_client() -> TestClient:
+def api_client():
+    from fastapi.testclient import TestClient
+    from services.api.main import app
+
     return TestClient(app)  # type: ignore[arg-type]
 
 
@@ -82,113 +41,8 @@ def data_dir() -> Path:
 def sample_xlsx(tmp_path: Path) -> Path:
     """Return Path to a temporary XLSX converted from existing CSV."""
     pd = pytest.importorskip("pandas")
-
     csv_path = Path("tests/fixtures/sample_prices.csv")
     df = pd.read_csv(csv_path)
     xls_path = tmp_path / "sample_prices.xlsx"
     df.to_excel(xls_path, index=False)
     return xls_path
-
-
-@pytest.fixture(autouse=True, scope="session")
-def create_tables():
-    url = build_url(async_=False)
-    engine = create_engine(url)
-    if url.startswith("sqlite"):
-        Base.metadata.create_all(engine)
-        with engine.begin() as conn:
-            conn.exec_driver_sql(
-                """
-                CREATE TABLE IF NOT EXISTS products (
-                    asin TEXT PRIMARY KEY,
-                    title TEXT,
-                    brand TEXT,
-                    category TEXT,
-                    weight_kg NUMERIC,
-                    status TEXT
-                );
-                """
-            )
-            conn.exec_driver_sql(
-                """
-                CREATE TABLE IF NOT EXISTS keepa_offers (
-                    asin TEXT PRIMARY KEY,
-                    buybox_price NUMERIC(10,2)
-                );
-                """
-            )
-            conn.exec_driver_sql(
-                """
-                CREATE TABLE IF NOT EXISTS fees_raw (
-                    asin TEXT PRIMARY KEY,
-                    fulfil_fee NUMERIC(10,2) NOT NULL,
-                    referral_fee NUMERIC(10,2) NOT NULL,
-                    storage_fee NUMERIC(10,2) NOT NULL DEFAULT 0,
-                    currency CHAR(3) NOT NULL DEFAULT '€',
-                    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-                );
-                """
-            )
-            conn.exec_driver_sql(
-                """
-                CREATE TABLE IF NOT EXISTS freight_rates (
-                    lane TEXT,
-                    mode TEXT,
-                    eur_per_kg NUMERIC(10,2),
-                    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-                    PRIMARY KEY (lane, mode)
-                );
-                """
-            )
-            conn.exec_driver_sql(
-                """
-                CREATE VIEW IF NOT EXISTS v_roi_full AS
-                SELECT
-                  p.asin,
-                  (SELECT cost FROM vendor_prices vp WHERE vp.sku = p.asin ORDER BY vp.updated_at DESC LIMIT 1) AS cost,
-                  f.fulfil_fee,
-                  f.referral_fee,
-                  f.storage_fee,
-                  k.buybox_price,
-                  (
-                    COALESCE(p.weight_kg, 0) * COALESCE((SELECT eur_per_kg FROM freight_rates LIMIT 1), 0)
-                  ) AS freight_cost,
-                  ROUND(
-                    100 * (
-                      k.buybox_price
-                      - (SELECT cost FROM vendor_prices vp WHERE vp.sku = p.asin ORDER BY vp.updated_at DESC LIMIT 1)
-                      - f.fulfil_fee
-                      - f.referral_fee
-                      - f.storage_fee
-                      - (
-                            COALESCE(p.weight_kg, 0) * COALESCE((SELECT eur_per_kg FROM freight_rates LIMIT 1), 0)
-                        )
-                    ) / k.buybox_price,
-                  2) AS roi_pct
-                FROM products p
-                JOIN keepa_offers k  ON k.asin = p.asin
-                JOIN fees_raw    f  ON f.asin = p.asin;
-                """
-            )
-        yield
-        Base.metadata.drop_all(engine)
-        with engine.begin() as conn:
-            conn.exec_driver_sql("DROP VIEW IF EXISTS v_roi_full")
-            conn.exec_driver_sql("DROP TABLE IF EXISTS freight_rates")
-        import asyncio
-        from services.api.db import dispose_engine
-
-        asyncio.run(dispose_engine())
-    else:
-        Base.metadata.create_all(engine)
-        with engine.begin() as conn:
-            conn.exec_driver_sql("ALTER TABLE products ADD COLUMN IF NOT EXISTS status TEXT")
-        yield
-        with engine.begin() as conn:
-            conn.exec_driver_sql("DROP VIEW IF EXISTS roi_view")
-            conn.exec_driver_sql("DROP VIEW IF EXISTS v_roi_full")
-        Base.metadata.drop_all(engine)
-        import asyncio
-        from services.api.db import dispose_engine
-
-        asyncio.run(dispose_engine())

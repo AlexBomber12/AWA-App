@@ -1,19 +1,16 @@
 import importlib
-from pathlib import Path
 
 import pytest
 from sqlalchemy import create_engine, text
+from services.common.db_url import build_url
 
 from services.logistics_etl import repository
 
 
 @pytest.mark.asyncio
-async def test_upsert_many(tmp_path, monkeypatch):
-    monkeypatch.setenv("DATA_DIR", str(tmp_path))
-    monkeypatch.setenv("ENABLE_LIVE", "0")
+async def test_upsert_many(monkeypatch):
     importlib.reload(repository)
-    db_path = Path(tmp_path) / "awa.db"
-    engine = create_engine(f"sqlite:///{db_path}")
+    engine = create_engine(build_url(async_=False))
     with engine.begin() as conn:
         conn.exec_driver_sql(
             """

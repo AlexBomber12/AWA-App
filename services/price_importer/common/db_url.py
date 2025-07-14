@@ -12,11 +12,5 @@ def make_dsn(async_: bool = False) -> str:
 
 
 def build_url(async_: bool = False) -> str:
-    """Return Postgres or SQLite DSN depending on settings."""
-    if os.getenv("ENABLE_LIVE", "1") == "0":
-        base = os.getenv("DATA_DIR", str(os.getcwd() + "/data"))
-        if async_:
-            return f"sqlite+aiosqlite:///{base}/awa.db"
-        return f"sqlite:///{base}/awa.db"
-
+    """Return Postgres DSN built from environment variables."""
     return make_dsn(async_)

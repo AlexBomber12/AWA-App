@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
+from typing import Dict
 import subprocess
 
 MODEL = "/models/llama3-q4_K_M.gguf"
@@ -16,7 +19,7 @@ app = FastAPI()
 
 
 @app.post("/llm")
-def gen(r: Req):
+def gen(r: Req) -> Dict[str, str]:
     try:
         out = subprocess.check_output(
             [

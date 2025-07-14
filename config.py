@@ -22,12 +22,10 @@ class Settings(BaseSettings):
     def dsn(self) -> str:
         if self.database_url:
             return self.database_url
-        if self.enable_live:
-            return (
-                f"postgresql+asyncpg://{self.postgres_user}:{self.postgres_password}"
-                f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
-            )
-        return f"sqlite+aiosqlite:///{self.data_dir / 'awa.db'}"
+        return (
+            f"postgresql+asyncpg://{self.postgres_user}:{self.postgres_password}"
+            f"@{self.postgres_host}:{self.postgres_port}/{self.postgres_db}"
+        )
 
 
 @lru_cache

@@ -50,7 +50,9 @@ async def health(session: AsyncSession = Depends(get_session)) -> dict[str, str]
 
 
 @app.post("/score")
-async def score(asins: List[str], session: AsyncSession = Depends(get_session)):
+async def score(
+    asins: List[str], session: AsyncSession = Depends(get_session)
+) -> list[dict[str, float | str]]:
     query = text(
         """
         SELECT p.asin, (p.price - o.cost) / o.cost AS roi
