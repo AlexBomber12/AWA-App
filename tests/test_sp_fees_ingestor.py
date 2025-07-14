@@ -1,7 +1,7 @@
 import os
 import sys
 import types
-from services.common.dsn import build_dsn
+from services.common.db import build_sqlalchemy_url
 from services.etl import sp_fees_ingestor
 
 
@@ -45,6 +45,6 @@ def test_offline(monkeypatch, tmp_path):
     os.environ["SP_CLIENT_SECRET"] = "s"
     os.environ["SELLER_ID"] = "seller"
     os.environ["REGION"] = "EU"
-    os.environ["DATABASE_URL"] = build_dsn()
+    os.environ["DATABASE_URL"] = build_sqlalchemy_url()
     res = sp_fees_ingestor.main()
     assert res == 0

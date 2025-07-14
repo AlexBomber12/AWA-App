@@ -1,7 +1,7 @@
 import os
 import sys
 import types
-from services.common.dsn import build_dsn
+from services.common.db import build_sqlalchemy_url
 from services.etl import helium_fees_ingestor
 
 
@@ -41,7 +41,7 @@ helium_fees_ingestor.connect = fake_connect
 def test_offline(monkeypatch):
     os.environ["ENABLE_LIVE"] = "0"
     os.environ["HELIUM_API_KEY"] = "k"
-    os.environ["DATABASE_URL"] = build_dsn()
+    os.environ["DATABASE_URL"] = build_sqlalchemy_url()
     res = helium_fees_ingestor.main()
     assert res == 0
 
@@ -49,7 +49,7 @@ def test_offline(monkeypatch):
 def test_run_twice(monkeypatch):
     os.environ["ENABLE_LIVE"] = "0"
     os.environ["HELIUM_API_KEY"] = "k"
-    os.environ["DATABASE_URL"] = build_dsn()
+    os.environ["DATABASE_URL"] = build_sqlalchemy_url()
 
     helium_fees_ingestor.main()
     helium_fees_ingestor.main()

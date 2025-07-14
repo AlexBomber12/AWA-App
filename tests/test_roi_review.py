@@ -1,9 +1,12 @@
 from sqlalchemy import create_engine, text
-from services.common.dsn import build_dsn
+from services.common.db import build_sqlalchemy_url
+import pytest
+
+pytestmark = pytest.mark.integration
 
 
 def _setup_db():
-    engine = create_engine(build_dsn())
+    engine = create_engine(build_sqlalchemy_url())
     with engine.begin() as conn:
         # Ensure clean state for deterministic tests
         for tbl in [
