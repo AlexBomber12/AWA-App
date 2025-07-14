@@ -17,6 +17,15 @@ jobs:
       PG_DATABASE: awa
     steps:
       - uses: actions/checkout@v4
+      - name: Wait for Postgres to accept connections
+        env:
+          PGPASSWORD: pass                     # pragma: allowlist secret
+        run: |
+          for i in {1..40}; do
+            pg_isready -h localhost -p 5432 -U postgres && exit 0
+            sleep 2
+          done
+          echo "Postgres service never became ready" && exit 1
       - name: System deps
         run: |
           sudo apt-get update && sudo apt-get install -y postgresql postgresql-client
@@ -125,9 +134,6 @@ jobs:
           echo "DATABASE_URL=postgresql+psycopg://$PG_USER:$PG_PASSWORD@$PG_HOST:5432/$PG_DATABASE" >> $GITHUB_ENV
           echo "PG_ASYNC_DSN=postgresql://$PG_USER:$PG_PASSWORD@$PG_HOST:5432/$PG_DATABASE"       >> $GITHUB_ENV
 
-      - name: Wait for DB
-        run: for i in {1..30}; do pg_isready -h localhost -p 5432 -U postgres && break || sleep 2; done
-
       - name: Prepare DB
         env:
           PGPASSWORD: pass      # pragma: allowlist secret
@@ -135,9 +141,10 @@ jobs:
           if ! psql -h localhost -p 5432 -U postgres -tAc "SELECT 1 FROM pg_database WHERE datname='awa'" | grep -q 1; then
             createdb -h localhost -p 5432 -U postgres awa
           fi
+      - name: Export PGHOST
+        run: echo "PGHOST=localhost" >> $GITHUB_ENV
       - name: Run migrations
         run: alembic upgrade head
-      - run: echo 'PGHOST=localhost' >> $GITHUB_ENV
       - name: Run tests
         run: pytest -q
       - name: Dump Postgres logs
