@@ -15,7 +15,7 @@ from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import create_engine, text, bindparam
 
-from services.common.db_url import build_url
+from services.common.dsn import build_dsn
 
 router = APIRouter()
 security = HTTPBasic()
@@ -69,7 +69,7 @@ def roi_review(
     category: Optional[str] = None,
     _: str = Depends(_check_basic_auth),
 ):
-    url = build_url(async_=False)
+    url = build_dsn(sync=True)
     engine = create_engine(url)
     with engine.connect() as conn:
         res = conn.execute(ROI_SQL, {"roi_min": roi_min, "vendor": vendor, "category": category})
@@ -106,7 +106,7 @@ async def approve(request: Request, _: str = Depends(_check_basic_auth)) -> dict
     asins = await _extract_asins(request)
     if not asins:
         return {"count": 0}
-    url = build_url(async_=False)
+    url = build_dsn(sync=True)
     engine = create_engine(url)
     with engine.begin() as conn:
         res = conn.execute(UPDATE_SQL, {"asins": asins})

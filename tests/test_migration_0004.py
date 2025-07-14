@@ -1,7 +1,7 @@
 from sqlalchemy import create_engine, text
 from alembic.config import Config  # type: ignore[attr-defined]
 from alembic import command  # type: ignore[attr-defined]
-from services.common.db import build_sqlalchemy_url
+from services.common.dsn import build_dsn
 import pytest
 
 pytestmark = pytest.mark.integration
@@ -18,6 +18,6 @@ def test_upgrade_storage_fee_column_exists(tmp_path, monkeypatch, pg_pool):
     cfg = Config("alembic.ini")
     command.upgrade(cfg, "head")
     command.upgrade(cfg, "head")
-    engine = create_engine(build_sqlalchemy_url())
+    engine = create_engine(build_dsn(sync=True))
     with engine.connect() as conn:
         conn.execute(text("SELECT storage_fee FROM fees_raw LIMIT 1"))

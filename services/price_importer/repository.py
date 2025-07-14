@@ -5,7 +5,7 @@ from typing import Iterable, cast, Any
 from sqlalchemy import create_engine, select, update, insert
 from sqlalchemy.engine import Engine, CursorResult
 
-from .common.db_url import build_url
+from services.common.dsn import build_dsn
 from .common import Base
 from .common.models_vendor import Vendor, VendorPrice
 
@@ -13,7 +13,7 @@ from .common.models_vendor import Vendor, VendorPrice
 class Repository:
     def __init__(self, engine: Engine | None = None):
         if engine is None:
-            url = build_url(async_=False)
+            url = build_dsn(sync=True)
             engine = create_engine(url, future=True)
         self.engine = engine
         # ensure required tables exist, especially when using SQLite during tests

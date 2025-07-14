@@ -1,7 +1,7 @@
 import os
 import sys
 import types
-from services.common.db import build_sqlalchemy_url
+from services.common.dsn import build_dsn
 from services.etl import sp_fees_ingestor
 
 
@@ -34,7 +34,7 @@ def fake_connect(dsn):
     return FakeConn()
 
 
-sys.modules["pg_utils"] = types.SimpleNamespace(connect=fake_connect)
+sys.modules["pg_utils"] = types.SimpleNamespace(connect=fake_connect)  # type: ignore[assignment]
 sp_fees_ingestor.connect = fake_connect
 
 
@@ -45,6 +45,6 @@ def test_offline(monkeypatch, tmp_path):
     os.environ["SP_CLIENT_SECRET"] = "s"
     os.environ["SELLER_ID"] = "seller"
     os.environ["REGION"] = "EU"
-    os.environ["DATABASE_URL"] = build_sqlalchemy_url()
+    os.environ["DATABASE_URL"] = build_dsn(sync=True)
     res = sp_fees_ingestor.main()
     assert res == 0

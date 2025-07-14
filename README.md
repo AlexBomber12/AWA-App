@@ -26,6 +26,17 @@ curl http://localhost:8000/health
 The stack uses Postgres for all services. Copy `.env.example` to `.env.postgres`
 and run docker compose to start the database and API containers.
 
+### Database config – env matrix
+
+`build_dsn(sync=True|False)` derives a DSN from `DATABASE_URL` or the `PG_*`
+variables.  CI exports both a synchronous URL and an async-friendly variant:
+
+```
+DATABASE_URL=postgresql+psycopg://postgres:pass@localhost:5432/awa  # pragma: allowlist secret
+PG_ASYNC_DSN=postgresql://postgres:pass@localhost:5432/awa  # pragma: allowlist secret
+```
+Services and tests read these values automatically.
+
 ### Continuous Integration
 
 The GitHub Actions test workflow uses a Postgres service container. It waits

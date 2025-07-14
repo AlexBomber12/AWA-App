@@ -3,7 +3,7 @@ import importlib
 import pytest
 from httpx import Response
 from sqlalchemy import create_engine, text
-from services.common.db import build_sqlalchemy_url
+from services.common.dsn import build_dsn
 
 pytestmark = pytest.mark.integration
 
@@ -30,7 +30,7 @@ async def test_fetch_fees():
 @pytest.mark.asyncio
 async def test_repository_upsert(tmp_path, monkeypatch, pg_pool):
     importlib.reload(repository)
-    engine = create_engine(build_sqlalchemy_url())
+    engine = create_engine(build_dsn(sync=True))
     with engine.begin() as conn:
         conn.exec_driver_sql(
             """
@@ -73,7 +73,7 @@ async def test_repository_upsert(tmp_path, monkeypatch, pg_pool):
 def test_refresh_fees(tmp_path, monkeypatch, pg_pool):
     importlib.reload(repository)
     importlib.reload(worker)
-    engine = create_engine(build_sqlalchemy_url())
+    engine = create_engine(build_dsn(sync=True))
     with engine.begin() as conn:
         conn.exec_driver_sql(
             """

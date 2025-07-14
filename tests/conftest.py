@@ -5,7 +5,7 @@ import pytest
 from asyncpg import create_pool
 
 from tests.utils import run_migrations
-from services.common.db import build_sqlalchemy_url, build_asyncpg_dsn
+from services.common.dsn import build_dsn
 
 os.environ.setdefault("ENABLE_LIVE", "0")
 os.environ.setdefault("TESTING", "1")
@@ -24,12 +24,13 @@ PG_DATABASE = os.getenv("PG_DATABASE", "awa")
 
 @pytest.fixture(autouse=True)
 def _set_db_url():
-    os.environ["DATABASE_URL"] = build_sqlalchemy_url()
+    os.environ["DATABASE_URL"] = build_dsn(sync=True)
 
 
 @pytest.fixture
 async def pg_pool(_set_db_url):
-    pool = await create_pool(dsn=build_asyncpg_dsn())
+    async_dsn = os.getenv("PG_ASYNC_DSN") or build_dsn(sync=False)
+    pool = await create_pool(dsn=async_dsn)
     await run_migrations()
     yield pool
     await pool.close()

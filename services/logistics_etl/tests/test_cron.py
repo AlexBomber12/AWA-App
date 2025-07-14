@@ -14,7 +14,7 @@ pytest.importorskip("apscheduler")
 respx = pytest.importorskip("respx")
 
 from services.logistics_etl import cron, client, repository  # noqa: E402
-from services.common import db_url  # noqa: E402
+from services.common import db_url, dsn  # noqa: E402
 
 
 @respx.mock
@@ -30,6 +30,7 @@ async def test_job_inserts_and_affects_roi(postgresql_proc, tmp_path, monkeypatc
         f"@{postgresql_proc.host}:{postgresql_proc.port}/{postgresql_proc.dbname}"
     )
     monkeypatch.setattr(db_url, "build_url", lambda async_=False: dsn_async if async_ else dsn_sync)
+    monkeypatch.setattr(dsn, "build_dsn", lambda sync=True: dsn_sync if sync else dsn_async)
     importlib.reload(repository)
     repository._engine = create_async_engine(dsn_async, future=True)
 
