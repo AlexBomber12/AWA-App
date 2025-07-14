@@ -3,8 +3,7 @@ import os
 
 
 def _setup_db():
-    dsn = os.environ["DATABASE_URL"].replace("asyncpg", "psycopg")
-    engine = create_engine(dsn)
+    engine = create_engine(os.environ["DATABASE_URL"])
     with engine.begin() as conn:
         # Ensure clean state for deterministic tests
         for tbl in [
@@ -12,6 +11,7 @@ def _setup_db():
             "keepa_offers",
             "fees_raw",
             "freight_rates",
+            "offers",
             "products",
         ]:
             conn.execute(text(f"DELETE FROM {tbl}"))

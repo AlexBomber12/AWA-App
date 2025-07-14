@@ -14,7 +14,6 @@ class Repository:
     def __init__(self, engine: Engine | None = None):
         if engine is None:
             url = build_url(async_=False)
-            url = url.replace("asyncpg", "psycopg")
             engine = create_engine(url, future=True)
         self.engine = engine
         # ensure required tables exist, especially when using SQLite during tests

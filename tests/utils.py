@@ -1,6 +1,7 @@
-from alembic.config import CommandLine, Config
+from alembic.config import Config
+from alembic import command
 
 
 async def run_migrations() -> None:
     cfg = Config("alembic.ini")
-    CommandLine().run_cmd(cfg, ["upgrade", "head"])
+    command.upgrade(cfg, "head")

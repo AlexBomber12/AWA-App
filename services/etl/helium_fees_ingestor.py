@@ -27,7 +27,7 @@ def main() -> int:
         with open("tests/fixtures/helium_fees_sample.json") as f:
             data = json.load(f)
         results = [(r["sku"], r["totalFbaFee"]) for r in data]
-    conn = connect(dsn.replace("postgresql+asyncpg://", "postgresql://"))
+    conn = connect(dsn)
     cur = conn.cursor()
     cur.execute(
         "CREATE TABLE IF NOT EXISTS fees_raw("

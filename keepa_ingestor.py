@@ -38,7 +38,7 @@ def main():
             mc.make_bucket("keepa")
         data = json.dumps(asins).encode()
         mc.put_object("keepa", path, io.BytesIO(data), len(data), content_type="application/json")
-        conn = connect(dsn.replace("postgresql+asyncpg://", "postgresql://"))
+        conn = connect(dsn)
         conn.autocommit = True
         cur = conn.cursor()
         cur.execute(

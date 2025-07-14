@@ -22,7 +22,7 @@ def event_loop():
     loop.close()
 
 
-PG_HOST = os.getenv("PG_HOST", "postgres")
+PG_HOST = os.getenv("PG_HOST", "localhost")
 PG_PORT = os.getenv("PG_PORT", "5432")
 PG_USER = os.getenv("PG_USER", "postgres")
 PG_PASSWORD = os.getenv("PG_PASSWORD", "pass")
@@ -31,13 +31,14 @@ PG_DATABASE = os.getenv("PG_DATABASE", "awa")
 
 @pytest.fixture(autouse=True)
 def _set_db_url():
-    url = f"postgresql+asyncpg://{PG_USER}:{PG_PASSWORD}@{PG_HOST}:{PG_PORT}/{PG_DATABASE}"
+    url = f"postgresql+psycopg://{PG_USER}:{PG_PASSWORD}@{PG_HOST}:{PG_PORT}/{PG_DATABASE}"
     os.environ["DATABASE_URL"] = url
 
 
 @pytest.fixture
 async def pg_pool(_set_db_url):
-    pool = await create_pool(dsn=os.environ["DATABASE_URL"])
+    dsn = os.environ["DATABASE_URL"].replace("postgresql+psycopg://", "postgresql://")
+    pool = await create_pool(dsn=dsn)
     await run_migrations()
     yield pool
     await pool.close()

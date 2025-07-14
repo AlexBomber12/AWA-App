@@ -36,7 +36,7 @@ mc = Minio(minio_endpoint, access_key=minio_access, secret_key=minio_secret, sec
 if not mc.bucket_exists(bucket):
     mc.make_bucket(bucket)
 mc.put_object(bucket, path, io.BytesIO(data), len(data))
-conn = connect(dsn.replace("postgresql+asyncpg://", "postgresql://"))
+conn = connect(dsn)
 cur = conn.cursor()
 cur.execute(
     "INSERT INTO etl_log(date,asin_count,duration_sec) VALUES (%s,%s,%s)",

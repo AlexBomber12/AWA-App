@@ -5,7 +5,7 @@ from pg_utils import connect
 
 def main():
     live = os.getenv("ENABLE_LIVE") == "1"
-    dsn = os.environ["DATABASE_URL"].replace("postgresql+asyncpg://", "postgresql://")
+    dsn = os.environ["DATABASE_URL"]
     conn = connect(dsn)
     cur = conn.cursor()
     skus = ["SKU1", "SKU2"]
