@@ -15,11 +15,7 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 os.environ["DATA_DIR"] = str(DATA_DIR)
 
 
-@pytest.fixture(scope="session")
-def event_loop():
-    loop = asyncio.new_event_loop()
-    yield loop
-    loop.close()
+
 
 
 PG_HOST = os.getenv("PG_HOST", "localhost")
