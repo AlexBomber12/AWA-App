@@ -1,4 +1,3 @@
-import asyncio
 import os
 from pathlib import Path
 
@@ -13,9 +12,6 @@ os.environ.setdefault("TESTING", "1")
 DATA_DIR = Path(os.getenv("DATA_DIR", "/tmp")) / "awa-data"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 os.environ["DATA_DIR"] = str(DATA_DIR)
-
-
-
 
 
 PG_HOST = os.getenv("PG_HOST", "localhost")
