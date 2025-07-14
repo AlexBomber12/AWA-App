@@ -33,15 +33,28 @@ def fake_connect(dsn):
     return FakeConn()
 
 
-sys.modules["pg_utils"] = types.SimpleNamespace(connect=fake_connect)
+sys.modules["pg_utils"] = types.SimpleNamespace(connect=fake_connect)  # type: ignore[assignment]
 helium_fees_ingestor.connect = fake_connect
 
 
 def test_offline(monkeypatch):
     os.environ["ENABLE_LIVE"] = "0"
     os.environ["HELIUM_API_KEY"] = "k"
-    os.environ["DATABASE_URL"] = os.getenv("DATABASE_URL", "").replace(
-        "postgresql+psycopg://", "postgresql://"
-    ) or "postgresql://postgres:pass@localhost:5432/awa"
+    os.environ["DATABASE_URL"] = (
+        os.getenv("DATABASE_URL", "").replace("postgresql+psycopg://", "postgresql://")
+        or "postgresql://postgres:pass@localhost:5432/awa"  # pragma: allowlist secret
+    )
     res = helium_fees_ingestor.main()
     assert res == 0
+
+
+def test_run_twice(monkeypatch):
+    os.environ["ENABLE_LIVE"] = "0"
+    os.environ["HELIUM_API_KEY"] = "k"
+    os.environ["DATABASE_URL"] = (
+        os.getenv("DATABASE_URL", "").replace("postgresql+psycopg://", "postgresql://")
+        or "postgresql://postgres:pass@localhost:5432/awa"  # pragma: allowlist secret
+    )
+
+    helium_fees_ingestor.main()
+    helium_fees_ingestor.main()

@@ -29,7 +29,7 @@ def main() -> int:
         results = [(r["sku"], r["totalFbaFee"]) for r in data]
     conn = connect(dsn)
     cur = conn.cursor()
-    cur.execute("DROP TABLE IF EXISTS fees_raw")
+    cur.execute("DROP TABLE IF EXISTS fees_raw CASCADE")
     cur.execute(
         "CREATE TABLE fees_raw("
         "sku text primary key, fee numeric, captured_at timestamptz default now())"
