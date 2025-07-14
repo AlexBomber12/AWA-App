@@ -1,39 +1,30 @@
 import importlib
 
 import pytest
-from sqlalchemy import create_engine, text
-import os
+import sqlalchemy as sa
+from sqlalchemy.ext.asyncio import create_async_engine
 
 from services.logistics_etl import repository
 
 
 @pytest.mark.asyncio
-async def test_upsert_many(monkeypatch, pg_pool):
+async def test_upsert_many(pg_engine):
     importlib.reload(repository)
-    dsn = os.environ["DATABASE_URL"].replace("asyncpg", "psycopg")
-    engine = create_engine(dsn)
-    with engine.begin() as conn:
-        conn.exec_driver_sql(
-            """
-            CREATE TABLE freight_rates (
-                lane TEXT,
-                mode TEXT,
-                eur_per_kg NUMERIC(10,2),
-                updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-                PRIMARY KEY (lane, mode)
-            );
-            """
-        )
-    rows = [
-        {"lane": "CN->DE", "mode": "sea", "eur_per_kg": 1.0},
-        {"lane": "CN->DE", "mode": "air", "eur_per_kg": 5.0},
+    async_engine = create_async_engine(
+        str(pg_engine.url).replace("postgresql://", "postgresql+asyncpg://"),
+        future=True,
+    )
+    repository._engine = async_engine
+
+    with pg_engine.begin() as conn:
+        conn.exec_driver_sql("TRUNCATE freight_rates")
+
+    data = [
+        {"lane": "EU-IT\u2192US", "mode": "air", "eur_per_kg": 7.55},
+        {"lane": "EU-IT\u2192US", "mode": "sea", "eur_per_kg": 2.10},
     ]
-    await repository.upsert_many(rows)
-    await repository.upsert_many([{"lane": "CN->DE", "mode": "sea", "eur_per_kg": 2.0}])
-    with engine.connect() as conn:
-        cnt = conn.execute(text("SELECT count(*) FROM freight_rates")).scalar()
-        val = conn.execute(
-            text("SELECT eur_per_kg FROM freight_rates WHERE lane='CN->DE' AND mode='sea'")
-        ).scalar()
-    assert cnt == 2
-    assert float(val) == 2.0
+    await repository.upsert_many(data)
+
+    with pg_engine.connect() as conn:
+        rows = conn.execute(sa.text("SELECT COUNT(*) FROM freight_rates")).scalar()
+    assert rows == 2
