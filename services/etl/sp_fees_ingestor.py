@@ -1,7 +1,6 @@
 import os
 import json
-import sqlite3
-import psycopg2
+from pg_utils import connect
 
 
 def main() -> int:
@@ -39,32 +38,18 @@ def main() -> int:
             )
             for r in data
         ]
-    if dsn.startswith("sqlite"):
-        conn = sqlite3.connect(dsn.replace("sqlite:///", ""))
-        cur = conn.cursor()
+    conn = connect(dsn.replace("postgresql+asyncpg://", "postgresql://"))
+    cur = conn.cursor()
+    cur.execute(
+        "CREATE TABLE IF NOT EXISTS fees_raw("
+        "sku text primary key, fee numeric, captured_at timestamptz default now())"
+    )
+    for sku, fee in results:
         cur.execute(
-            "CREATE TABLE IF NOT EXISTS fees_raw("
-            "sku text primary key, fee numeric, captured_at timestamptz default current_timestamp)"
+            "INSERT INTO fees_raw(sku, fee) VALUES (%s, %s) "
+            "ON CONFLICT (sku) DO UPDATE SET fee = EXCLUDED.fee",
+            (sku, fee),
         )
-        for sku, fee in results:
-            cur.execute(
-                "INSERT INTO fees_raw(sku, fee) VALUES (?, ?) "
-                "ON CONFLICT(sku) DO UPDATE SET fee = excluded.fee",
-                (sku, fee),
-            )
-    else:
-        conn = psycopg2.connect(dsn.replace("postgresql+asyncpg://", "postgresql://"))
-        cur = conn.cursor()
-        cur.execute(
-            "CREATE TABLE IF NOT EXISTS fees_raw("
-            "sku text primary key, fee numeric, captured_at timestamptz default now())"
-        )
-        for sku, fee in results:
-            cur.execute(
-                "INSERT INTO fees_raw(sku, fee) VALUES (%s, %s) "
-                "ON CONFLICT (sku) DO UPDATE SET fee = EXCLUDED.fee",
-                (sku, fee),
-            )
     conn.commit()
     cur.close()
     conn.close()

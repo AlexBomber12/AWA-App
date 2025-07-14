@@ -7,7 +7,7 @@ from pathlib import Path
 
 import keepa
 from minio import Minio
-import psycopg2
+from pg_utils import connect
 
 
 def main():
@@ -38,7 +38,7 @@ def main():
             mc.make_bucket("keepa")
         data = json.dumps(asins).encode()
         mc.put_object("keepa", path, io.BytesIO(data), len(data), content_type="application/json")
-        conn = psycopg2.connect(dsn.replace("postgresql+asyncpg://", "postgresql://"))
+        conn = connect(dsn.replace("postgresql+asyncpg://", "postgresql://"))
         conn.autocommit = True
         cur = conn.cursor()
         cur.execute(

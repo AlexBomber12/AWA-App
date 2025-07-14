@@ -42,17 +42,6 @@ jobs:
       - run: npm run build --if-present
         working-directory: web
 
-      - name: Wait for Postgres
-        run: |
-          for i in {1..20}; do
-            pg_isready -h localhost -p 5432 -U postgres -d awa && exit 0
-            sleep 2
-          done
-          echo "::error::Postgres never became ready"
-          exit 1
-        env:
-          PGPASSWORD: pass # pragma: allowlist secret
-        shell: bash
 
       - name: Run Alembic migrations
         run: alembic upgrade head
@@ -66,6 +55,8 @@ jobs:
           PG_HOST: localhost
           PG_PORT: '5432'
 
+      - run: echo 'PGHOST=localhost' >> $GITHUB_ENV
+
       - name: pytest -q
         run: pytest -q
         env:
@@ -75,7 +66,6 @@ jobs:
           PG_USER: postgres
           PG_PASSWORD: pass # pragma: allowlist secret
           PG_DATABASE: awa
-          PG_HOST: localhost
           PG_PORT: '5432'
           DATA_DIR: ${{ runner.temp }}/awa-data
 

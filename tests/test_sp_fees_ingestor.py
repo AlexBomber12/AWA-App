@@ -1,5 +1,6 @@
 import os
 import sys
+import types
 from services.etl import sp_fees_ingestor
 
 
@@ -32,7 +33,7 @@ def fake_connect(dsn):
     return FakeConn()
 
 
-sys.modules["psycopg2"].connect = fake_connect  # type: ignore[attr-defined]
+sys.modules["pg_utils"] = types.SimpleNamespace(connect=fake_connect)
 
 
 def test_offline(monkeypatch, tmp_path):

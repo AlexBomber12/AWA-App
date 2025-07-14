@@ -17,6 +17,9 @@ jobs:
       PG_DATABASE: awa
     steps:
       - uses: actions/checkout@v4
+      - name: System deps
+        run: |
+          sudo apt-get update && sudo apt-get install -y postgresql postgresql-client
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -31,13 +34,11 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements-dev.txt
-          find . -name 'requirements*.txt' ! -path './requirements-dev.txt' -print0 \
-            | xargs -0 -n1 -I{} pip install -r {}
-      - name: Install ruff
-        run: pip install ruff==0.4.4
-      - name: Install black
-        run: pip install black==24.4.2
+          python -m pip install -r requirements-dev.txt
+          for req in services/*/requirements.txt; do
+            python -m pip install -r "$req"
+          done
+          python -m pip install pytest ruff black mypy pytest-postgresql==5.1.1
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -51,9 +52,9 @@ jobs:
         working-directory: web
       - run: ruff check .
       - run: black --check .
-      - run: mypy services || true
+      - run: python -m mypy services
       - run: pytest -q
-
+        
   postgres:
     needs: build
     runs-on: ubuntu-latest
@@ -67,6 +68,7 @@ jobs:
       PG_USER: postgres
       PG_PASSWORD: pass # pragma: allowlist secret
       PG_HOST: localhost
+      DATABASE_URL: postgresql+asyncpg://postgres:pass@localhost:5432/awa
       DATA_DIR: $RUNNER_TEMP/awa-data
     services:
       postgres:
@@ -83,6 +85,9 @@ jobs:
           --health-retries=10
     steps:
       - uses: actions/checkout@v4
+      - name: System deps
+        run: |
+          sudo apt-get update && sudo apt-get install -y postgresql postgresql-client
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -96,13 +101,11 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements-dev.txt
-          find . -name 'requirements*.txt' ! -path './requirements-dev.txt' -print0 \
-            | xargs -0 -n1 -I{} pip install -r {}
-      - name: Install ruff
-        run: pip install ruff==0.4.4
-      - name: Install black
-        run: pip install black==24.4.2
+          python -m pip install -r requirements-dev.txt
+          for req in services/*/requirements.txt; do
+            python -m pip install -r "$req"
+          done
+          python -m pip install pytest ruff black mypy pytest-postgresql==5.1.1
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -121,13 +124,12 @@ jobs:
           fi
         env:
           PGPASSWORD: pass # pragma: allowlist secret
-      - name: Export DATABASE_URL
-        run: echo "DATABASE_URL=postgresql+psycopg://postgres:pass@localhost:5432/awa" >> $GITHUB_ENV # pragma: allowlist secret
       - name: Run migrations
         run: alembic upgrade head
       - run: ruff check .
       - run: black --check .
-      - run: mypy services || true
+      - run: python -m mypy services
+      - run: echo 'PGHOST=localhost' >> $GITHUB_ENV
       - name: Run tests
         run: pytest -q
       - name: Dump Postgres logs
@@ -169,9 +171,11 @@ jobs:
       - name: Install all Python requirements
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements-dev.txt
-          find . -name 'requirements*.txt' ! -path './requirements-dev.txt' -print0 \
-            | xargs -0 -n1 -I{} pip install -r {}
+          python -m pip install -r requirements-dev.txt
+          for req in services/*/requirements.txt; do
+            python -m pip install -r "$req"
+          done
+          python -m pip install pytest ruff black mypy pytest-postgresql==5.1.1
       - run: docker build -t price_importer services/price_importer
       - name: Build llm image
         if: ${{ runner.os == 'Linux' && (runner.name == 'self-hosted' || env.GPU == 'true') }}
