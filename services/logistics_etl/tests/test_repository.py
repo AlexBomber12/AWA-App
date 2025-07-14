@@ -17,7 +17,18 @@ async def test_upsert_many(pg_engine):
     repository._engine = async_engine
 
     with pg_engine.begin() as conn:
-        conn.exec_driver_sql("TRUNCATE freight_rates")
+        conn.exec_driver_sql(
+            """
+            DROP TABLE IF EXISTS freight_rates CASCADE;
+            CREATE TABLE IF NOT EXISTS freight_rates (
+                lane TEXT,
+                mode TEXT,
+                eur_per_kg NUMERIC(10,2),
+                updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (lane, mode)
+            );
+            """
+        )
 
     data = [
         {"lane": "EU-IT\u2192US", "mode": "air", "eur_per_kg": 7.55},

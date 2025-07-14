@@ -15,7 +15,8 @@ DATA_DIR = Path(os.getenv("DATA_DIR", "/tmp")) / "awa-data"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 os.environ["DATA_DIR"] = str(DATA_DIR)
 
-postgres_proc = factories.postgresql_proc(user="postgres")
+# pass load=[] so the plugin does not iterate over None
+postgres_proc = factories.postgresql_proc(user="postgres", load=[])
 postgres = factories.postgresql("postgres_proc")
 
 

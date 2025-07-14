@@ -5,7 +5,7 @@ import sqlalchemy as sa
 from alembic.config import CommandLine, Config
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def pg_engine(postgresql_proc):
     url = (
         f"postgresql://{postgresql_proc.user}:{postgresql_proc.password or ''}"
