@@ -4,7 +4,6 @@ from pathlib import Path
 
 import pytest
 from asyncpg import create_pool
-from pytest_postgresql import factories
 
 from tests.utils import run_migrations
 
@@ -15,10 +14,6 @@ DATA_DIR = Path(os.getenv("DATA_DIR", "/tmp")) / "awa-data"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 os.environ["DATA_DIR"] = str(DATA_DIR)
 
-# pass load=[] so the plugin does not iterate over None
-postgres_proc = factories.postgresql_proc(user="postgres", load=[])
-postgres = factories.postgresql("postgres_proc")
-
 
 @pytest.fixture(scope="session")
 def event_loop():
@@ -27,15 +22,16 @@ def event_loop():
     loop.close()
 
 
+PG_HOST = os.getenv("PG_HOST", "postgres")
+PG_PORT = os.getenv("PG_PORT", "5432")
+PG_USER = os.getenv("PG_USER", "postgres")
+PG_PASSWORD = os.getenv("PG_PASSWORD", "pass")
+PG_DATABASE = os.getenv("PG_DATABASE", "awa")
+
+
 @pytest.fixture(autouse=True)
-def _set_db_url(postgres):
-    try:
-        host = postgres.host
-        port = postgres.port
-    except AttributeError:
-        host = postgres.info.host
-        port = postgres.info.port
-    url = f"postgresql+psycopg://postgres:pass@{host}:{port}/tests"
+def _set_db_url():
+    url = f"postgresql+asyncpg://{PG_USER}:{PG_PASSWORD}@{PG_HOST}:{PG_PORT}/{PG_DATABASE}"
     os.environ["DATABASE_URL"] = url
 
 
