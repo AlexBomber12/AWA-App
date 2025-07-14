@@ -1,5 +1,6 @@
 import os
 import importlib
+from services.common.dsn import build_dsn
 
 import pytest
 from httpx import Response
@@ -28,7 +29,7 @@ async def test_fetch_fees():
 @pytest.mark.asyncio
 async def test_repository_upsert(tmp_path, monkeypatch, pg_pool):
     importlib.reload(repository)
-    engine = create_engine(os.environ["DATABASE_URL"])
+    engine = create_engine(build_dsn())
     with engine.begin() as conn:
         conn.exec_driver_sql(
             """
@@ -71,7 +72,7 @@ async def test_repository_upsert(tmp_path, monkeypatch, pg_pool):
 def test_refresh_fees(tmp_path, monkeypatch, pg_pool):
     importlib.reload(repository)
     importlib.reload(worker)
-    engine = create_engine(os.environ["DATABASE_URL"])
+    engine = create_engine(build_dsn())
     with engine.begin() as conn:
         conn.exec_driver_sql(
             """

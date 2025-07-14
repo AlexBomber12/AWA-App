@@ -5,6 +5,7 @@ import pytest
 from asyncpg import create_pool
 
 from tests.utils import run_migrations
+from services.common.dsn import build_dsn
 
 os.environ.setdefault("ENABLE_LIVE", "0")
 os.environ.setdefault("TESTING", "1")
@@ -23,14 +24,12 @@ PG_DATABASE = os.getenv("PG_DATABASE", "awa")
 
 @pytest.fixture(autouse=True)
 def _set_db_url():
-    url = f"postgresql+psycopg://{PG_USER}:{PG_PASSWORD}@{PG_HOST}:{PG_PORT}/{PG_DATABASE}"
-    os.environ["DATABASE_URL"] = url
+    os.environ["DATABASE_URL"] = build_dsn()
 
 
 @pytest.fixture
 async def pg_pool(_set_db_url):
-    dsn = os.environ["DATABASE_URL"].replace("postgresql+psycopg://", "postgresql://")
-    pool = await create_pool(dsn=dsn)
+    pool = await create_pool(dsn=build_dsn())
     await run_migrations()
     yield pool
     await pool.close()

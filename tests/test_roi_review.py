@@ -1,9 +1,9 @@
 from sqlalchemy import create_engine, text
-import os
+from services.common.dsn import build_dsn
 
 
 def _setup_db():
-    engine = create_engine(os.environ["DATABASE_URL"])
+    engine = create_engine(build_dsn())
     with engine.begin() as conn:
         # Ensure clean state for deterministic tests
         for tbl in [

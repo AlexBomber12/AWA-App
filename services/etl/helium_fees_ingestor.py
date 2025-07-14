@@ -26,19 +26,19 @@ def main() -> int:
     else:
         with open("tests/fixtures/helium_fees_sample.json") as f:
             data = json.load(f)
-        results = [(r["sku"], r["totalFbaFee"]) for r in data]
+        results = [(r["asin"], r["totalFbaFee"]) for r in data]
     conn = connect(dsn)
     cur = conn.cursor()
     cur.execute("DROP TABLE IF EXISTS fees_raw CASCADE")
     cur.execute(
         "CREATE TABLE fees_raw("
-        "sku text primary key, fee numeric, captured_at timestamptz default now())"
+        "asin text primary key, fee numeric, captured_at timestamptz default now())"
     )
-    for sku, fee in results:
+    for asin, fee in results:
         cur.execute(
-            "INSERT INTO fees_raw(sku, fee) VALUES (%s, %s) "
-            "ON CONFLICT (sku) DO UPDATE SET fee = EXCLUDED.fee",
-            (sku, fee),
+            "INSERT INTO fees_raw(asin, fee) VALUES (%s,%s) "
+            "ON CONFLICT (asin) DO UPDATE SET fee = EXCLUDED.fee",
+            (asin, fee),
         )
     conn.commit()
     cur.close()

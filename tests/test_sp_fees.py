@@ -1,6 +1,7 @@
 import os
 import types
 import sys
+from services.common.dsn import build_dsn
 
 
 class FakeCursor:
@@ -38,7 +39,7 @@ class FakeSP:
 
 def test_main_offline(monkeypatch):
     os.environ.pop("ENABLE_LIVE", None)
-    os.environ["DATABASE_URL"] = os.getenv("DATABASE_URL", "d")
+    os.environ["DATABASE_URL"] = build_dsn()
     fake_api = FakeSP()
     monkeypatch.setitem(
         sys.modules,
