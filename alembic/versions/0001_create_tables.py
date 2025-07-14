@@ -27,7 +27,7 @@ def upgrade() -> None:
     op.create_table(
         "fees_raw",
         sa.Column("asin", sa.Text(), primary_key=True),
-        sa.Column("fulf_fee", sa.Numeric()),
+        sa.Column("fulfil_fee", sa.Numeric()),
         sa.Column("referral_fee", sa.Numeric()),
         sa.Column("storage_fee", sa.Numeric()),
         sa.Column("captured_at", sa.TIMESTAMP(timezone=True)),
@@ -41,11 +41,11 @@ def upgrade() -> None:
     op.execute(
         """CREATE VIEW roi_view as\n"
         "   select p.asin,\n"
-        "          max(o.price_cents)/100.0 - f.fulf_fee - f.referral_fee - f.storage_fee as roi_eur\n"
+         "          max(o.price_cents)/100.0 - f.fulfil_fee - f.referral_fee - f.storage_fee as roi_eur\n"
         "   from products p\n"
         "   join offers   o on o.asin = p.asin\n"
         "   join fees_raw f on f.asin = p.asin\n"
-        "   group by p.asin, f.fulf_fee, f.referral_fee, f.storage_fee;\n"
+         "   group by p.asin, f.fulfil_fee, f.referral_fee, f.storage_fee;\n"
         """
     )
 

@@ -50,7 +50,7 @@ ROI_SQL = text(
         JOIN fees_raw f  ON f.asin = p.asin
         WHERE vf.roi_pct >= :roi_min
           AND COALESCE(p.status, 'pending') = 'pending'
-          AND (:vendor IS NULL OR vp.vendor_id = :vendor)
+          AND vp.vendor_id = COALESCE(CAST(:vendor AS TEXT), vp.vendor_id)
           AND (:category IS NULL OR p.category = :category)
         LIMIT 200
         """
