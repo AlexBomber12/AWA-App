@@ -13,7 +13,6 @@ from services.fees_h10 import client, repository, worker  # noqa: E402
 
 
 @respx.mock
-@pytest.mark.asyncio
 async def test_fetch_fees():
     route = respx.get(client.BASE.format("A1")).mock(
         return_value=Response(200, json={"fulfillmentFee": 1, "referralFee": 2, "storageFee": 0.5})
@@ -27,7 +26,6 @@ async def test_fetch_fees():
     assert row["storage_fee"] == 0.5
 
 
-@pytest.mark.asyncio
 async def test_repository_upsert(tmp_path, monkeypatch, pg_pool):
     importlib.reload(repository)
     engine = create_engine(build_dsn(sync=True))
