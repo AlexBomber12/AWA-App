@@ -4,13 +4,18 @@ import argparse
 import os
 import tempfile
 from pathlib import Path
+from datetime import datetime, timezone
 
 import boto3
 import pandas as pd
 from sqlalchemy import create_engine, text
-from datetime import datetime, timezone
 
 from services.common.dsn import build_dsn
+from services.etl.dialects import (
+    amazon_returns,
+    amazon_reimbursements,
+    normalise_headers,
+)
 
 BUCKET = "awa-bucket"
 
@@ -66,15 +71,33 @@ def main(argv: list[str] | None = None) -> int:
     else:
         df = pd.read_csv(file_path)
 
+    cols = normalise_headers(df.columns)
+    dialect = None
+    if amazon_returns.detect(cols):
+        dialect = "returns_report"
+        df = amazon_returns.normalise(df)
+    elif amazon_reimbursements.detect(cols):
+        dialect = "reimbursements_report"
+        df = amazon_reimbursements.normalise(df)
+
+    target_table = args.table
+    if args.table == "auto" and dialect:
+        target_table = {
+            "returns_report": "returns_raw",
+            "reimbursements_report": "reimbursements_raw",
+        }[dialect]
+
     inserted_rows = len(df)
 
     engine = create_engine(build_dsn(sync=True))
     try:
         with engine.begin() as conn:
+            if target_table != "auto":
+                df.to_sql(target_table, conn, if_exists="append", index=False)
             _log_load(
                 conn,
                 source=args.source,
-                table=args.table,
+                table=target_table,
                 rows=inserted_rows,
                 status="success",
             )
@@ -83,7 +106,7 @@ def main(argv: list[str] | None = None) -> int:
             _log_load(
                 conn,
                 source=args.source,
-                table=args.table,
+                table=target_table,
                 rows=0,
                 status="error",
             )
