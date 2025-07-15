@@ -77,7 +77,8 @@ def test_email_watcher(monkeypatch, pg_pool, tmp_path):
     os.environ["IMAP_USER"] = "u"
     os.environ["IMAP_PASS"] = "p"
 
-    email_watcher.main()
+    result = email_watcher.main()
+    assert result == {"status": "success"}
 
     assert any(fake_s3.store)
 
