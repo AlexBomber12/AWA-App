@@ -141,7 +141,7 @@ def test_bulk_approve(api_client, monkeypatch):
         conn.execute(text("INSERT INTO products(asin, status) VALUES ('B1','pending')"))
     r = api_client.post("/roi-review/approve", data={"asins": ["A1", "B1"]}, auth=("admin", "pass"))
     assert r.status_code == 200
-    assert r.json()["count"] >= 1
+    assert r.json()["updated"] >= 1
     with engine.connect() as conn:
         rows = conn.execute(
             text("SELECT status FROM products WHERE asin IN ('A1','B1') ORDER BY asin")

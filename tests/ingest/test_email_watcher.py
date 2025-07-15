@@ -3,11 +3,14 @@ import os
 import types
 
 import boto3
+import pytest
 import requests
 from sqlalchemy import create_engine, text
 from services.common.dsn import build_dsn
 
 from services.ingest import email_watcher
+
+pytestmark = pytest.mark.integration
 
 
 class FakeS3:
@@ -74,7 +77,8 @@ def test_email_watcher(monkeypatch, pg_pool, tmp_path):
     os.environ["IMAP_USER"] = "u"
     os.environ["IMAP_PASS"] = "p"
 
-    email_watcher.main()
+    result = email_watcher.main()
+    assert result == {"status": "success"}
 
     assert any(fake_s3.store)
 
