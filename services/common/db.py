@@ -1,4 +1,5 @@
 import asyncio
+import os
 from urllib.parse import urlparse, urlunparse
 from asyncpg import create_pool, Pool
 from sqlalchemy import text
@@ -48,9 +49,16 @@ def refresh_mvs(conn: Engine | Connection) -> None:
             refresh_mvs(connection)
         return
 
-    idx_exists = conn.execute(
-        text("SELECT 1 FROM pg_indexes WHERE indexname = 'idx_v_refund_totals_pk'")
-    ).scalar()
-    option = " CONCURRENTLY" if idx_exists else ""
+    live = os.getenv("ENABLE_LIVE", "1") != "0"
+    idx_exists = bool(
+        conn.execute(
+            text("SELECT 1 FROM pg_indexes WHERE indexname = 'ix_v_refund_totals_pk'")
+        ).scalar()
+    ) and bool(
+        conn.execute(
+            text("SELECT 1 FROM pg_indexes WHERE indexname = 'ix_v_reimb_totals_pk'")
+        ).scalar()
+    )
+    option = " CONCURRENTLY" if live and idx_exists else ""
     conn.execute(text(f"REFRESH MATERIALIZED VIEW{option} v_refund_totals"))
     conn.execute(text(f"REFRESH MATERIALIZED VIEW{option} v_reimb_totals"))

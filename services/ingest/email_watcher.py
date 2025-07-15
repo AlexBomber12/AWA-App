@@ -11,7 +11,11 @@ from imapclient import IMAPClient
 BUCKET = "awa-bucket"
 
 
-def main() -> None:
+def main() -> dict[str, str]:
+    """Upload CSV/XLSX attachments to MinIO and trigger ingestion.
+
+    Returns {"status": "success"} when processing completes.
+    """
     host = os.environ["IMAP_HOST"]
     user = os.environ["IMAP_USER"]
     password = os.environ["IMAP_PASS"]
@@ -52,6 +56,7 @@ def main() -> None:
                 requests.post(f"{api_url}/api/ingest", params={"path": dst})
                 os.remove(tmp_path)
             client.add_flags(uid, ["\\Seen"])
+    return {"status": "success"}
 
 
 if __name__ == "__main__":
