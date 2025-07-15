@@ -85,15 +85,6 @@ jobs:
           --health-retries=10
     steps:
       - uses: actions/checkout@v4
-      - name: Wait for Postgres to accept connections
-        env:
-          PGPASSWORD: pass                     # pragma: allowlist secret
-        run: |
-          for i in {1..40}; do
-            pg_isready -h localhost -p 5432 -U postgres && exit 0
-            sleep 2
-          done
-          echo "Postgres service never became ready" && exit 1
       - name: System deps
         run: |
           sudo apt-get update && sudo apt-get install -y postgresql postgresql-client
@@ -143,8 +134,21 @@ jobs:
           fi
       - name: Export PGHOST
         run: echo "PGHOST=localhost" >> $GITHUB_ENV
+      - name: Wait for Postgres to accept connections
+        env:
+          PGPASSWORD: pass           # pragma: allowlist secret
+        run: |
+          for i in {1..45}; do
+            pg_isready -h localhost -p 5432 -U postgres -d awa && exit 0
+            sleep 2
+          done
+          echo "Postgres never became ready"; exit 1
+
       - name: Run migrations
         run: alembic upgrade head
+        env:
+          DATABASE_URL: ${{ env.DATABASE_URL }}   # already exported earlier
+          PGHOST: localhost
       - name: Run tests
         run: pytest -q
       - name: Dump Postgres logs
