@@ -49,18 +49,18 @@ def main(argv: list[str] | None = None) -> int:
 
     dsn = build_dsn()
     conn = connect(dsn)
-    cur = conn.cursor()
     try:
-        cur.execute(
-            "INSERT INTO load_log(file_path, inserted_rows, status) VALUES (%s,%s,%s)",
-            (args.source, len(df), "success"),
-        )
+        cur = conn.cursor()
+        try:
+            cur.execute(
+                "INSERT INTO load_log(file_path, inserted_rows, status) VALUES (%s,%s,%s)",
+                (args.source, len(df), "success"),
+            )
+        finally:
+            cur.close()
         conn.commit()
     finally:
-        try:
-            cur.close()
-        finally:
-            conn.close()
+        conn.close()
     return len(df)
 
 
