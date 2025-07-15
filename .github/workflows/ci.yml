@@ -68,7 +68,7 @@ jobs:
       PG_USER: postgres
       PG_PASSWORD: pass # pragma: allowlist secret
       PG_HOST: localhost
-      DATABASE_URL: postgresql+psycopg://postgres:pass@localhost:5432/awa
+      DATABASE_URL: postgresql+psycopg://postgres:pass@localhost:5432/awa # pragma: allowlist secret
       DATA_DIR: $RUNNER_TEMP/awa-data
     services:
       postgres:
@@ -85,6 +85,15 @@ jobs:
           --health-retries=10
     steps:
       - uses: actions/checkout@v4
+      - name: Wait for Postgres to accept connections
+        env:
+          PGPASSWORD: pass                     # pragma: allowlist secret
+        run: |
+          for i in {1..40}; do
+            pg_isready -h localhost -p 5432 -U postgres && exit 0
+            sleep 2
+          done
+          echo "Postgres service never became ready" && exit 1
       - name: System deps
         run: |
           sudo apt-get update && sudo apt-get install -y postgresql postgresql-client
@@ -121,10 +130,9 @@ jobs:
         working-directory: web
 
       - name: Export DSN
-        run: echo "DATABASE_URL=postgresql://postgres:pass@localhost:5432/awa" >> $GITHUB_ENV
-
-      - name: Wait for DB
-        run: for i in {1..30}; do pg_isready -h localhost -p 5432 -U postgres && break || sleep 2; done
+        run: |
+          echo "DATABASE_URL=postgresql+psycopg://$PG_USER:$PG_PASSWORD@$PG_HOST:5432/$PG_DATABASE" >> $GITHUB_ENV
+          echo "PG_ASYNC_DSN=postgresql://$PG_USER:$PG_PASSWORD@$PG_HOST:5432/$PG_DATABASE"       >> $GITHUB_ENV
 
       - name: Prepare DB
         env:
@@ -133,9 +141,10 @@ jobs:
           if ! psql -h localhost -p 5432 -U postgres -tAc "SELECT 1 FROM pg_database WHERE datname='awa'" | grep -q 1; then
             createdb -h localhost -p 5432 -U postgres awa
           fi
+      - name: Export PGHOST
+        run: echo "PGHOST=localhost" >> $GITHUB_ENV
       - name: Run migrations
         run: alembic upgrade head
-      - run: echo 'PGHOST=localhost' >> $GITHUB_ENV
       - name: Run tests
         run: pytest -q
       - name: Dump Postgres logs
@@ -183,7 +192,7 @@ jobs:
           done
           python -m pip install asyncpg
           python -m pip install pytest ruff black mypy pytest-postgresql==5.1.1
-      - run: docker build -t price_importer services/price_importer
+      - run: docker build -t price_importer -f services/price_importer/Dockerfile .
       - name: Build llm image
         if: ${{ runner.os == 'Linux' && (runner.name == 'self-hosted' || env.GPU == 'true') }}
         run: docker build -t llm_server services/llm_server

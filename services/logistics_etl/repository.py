@@ -5,7 +5,7 @@ from typing import Iterable
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
-from services.common.db_url import build_url
+from services.common.dsn import build_dsn
 
 _engine: AsyncEngine | None = None
 
@@ -13,7 +13,7 @@ _engine: AsyncEngine | None = None
 def _get_engine() -> AsyncEngine:
     global _engine
     if _engine is None:
-        _engine = create_async_engine(build_url(async_=True), future=True)
+        _engine = create_async_engine(build_dsn(sync=False), future=True)
     return _engine
 
 

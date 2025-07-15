@@ -11,7 +11,7 @@ from .routes.roi import router as roi_router
 from .routes.stats import router as stats_router
 
 from .db import get_session
-from services.common.db_url import build_url
+from services.common.dsn import build_dsn
 
 
 @asynccontextmanager
@@ -29,7 +29,7 @@ async def _wait_for_db() -> None:
     """Block application startup until the database becomes available."""
     from sqlalchemy import create_engine
 
-    url = build_url(async_=False)
+    url = build_dsn(sync=True)
     delay = 0.2
     for _ in range(10):
         try:

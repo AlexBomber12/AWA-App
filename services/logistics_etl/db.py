@@ -3,7 +3,7 @@ from __future__ import annotations
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine
 
-from services.common.db_url import build_url
+from services.common.dsn import build_dsn
 
 
 ENGINE: AsyncEngine | None = None
@@ -12,7 +12,7 @@ ENGINE: AsyncEngine | None = None
 async def init_db() -> None:
     global ENGINE
     if ENGINE is None:
-        ENGINE = create_async_engine(build_url(async_=True), future=True)
+        ENGINE = create_async_engine(build_dsn(sync=False), future=True)
     async with ENGINE.begin() as conn:
         await conn.execute(
             text(

@@ -1,19 +1,18 @@
 import asyncio
-import os
 from urllib.parse import urlparse, urlunparse
 from asyncpg import create_pool, Pool
 
-_DEFAULT = "postgresql+psycopg://postgres:pass@localhost:5432/awa"
+from .dsn import build_dsn
 
 
 def build_sqlalchemy_url() -> str:
     """Return Postgres URL for SQLAlchemy engines."""
-    return os.getenv("DATABASE_URL", _DEFAULT)
+    return build_dsn(sync=True)
 
 
 def build_asyncpg_dsn() -> str:
     """Return DSN suitable for asyncpg (without driver suffix)."""
-    url = urlparse(build_sqlalchemy_url())
+    url = urlparse(build_dsn(sync=True))
     return urlunparse(
         (
             "postgresql",

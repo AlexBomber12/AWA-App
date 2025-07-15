@@ -1,3 +1,3 @@
-from services.common.db_url import build_url
+from services.common.dsn import build_dsn
 
-DATABASE_URL = build_url(async_=True)
+DATABASE_URL = build_dsn(sync=False)
