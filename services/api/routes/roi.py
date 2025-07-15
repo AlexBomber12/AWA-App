@@ -13,7 +13,8 @@ from fastapi import (
 from starlette import status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, text, bindparam, Numeric, String
+from sqlalchemy.dialects.postgresql import ARRAY
 
 from services.common.dsn import build_dsn
 
@@ -50,10 +51,14 @@ ROI_SQL = text(
         JOIN fees_raw f  ON f.asin = p.asin
         WHERE vf.roi_pct >= :roi_min
           AND COALESCE(p.status, 'pending') = 'pending'
-          AND (:vendor::text IS NULL OR vp.vendor_id = :vendor::text)
-          AND (:category::text IS NULL OR p.category = :category::text)
+          AND (:vendor IS NULL OR vp.vendor_id = :vendor)
+          AND (:category IS NULL OR p.category = :category)
         LIMIT 200
         """
+).bindparams(
+    bindparam("vendor", type_=String, nullable=True),
+    bindparam("category", type_=String, nullable=True),
+    bindparam("roi_min", type_=Numeric),
 )
 
 
@@ -84,8 +89,9 @@ def roi_review(
 
 UPDATE_SQL = text(
     "UPDATE products SET status='approved'"
-    " WHERE asin IN :asins AND COALESCE(status, 'pending') = 'pending'"
-)
+    " WHERE asin = ANY(:asins)"
+    "   AND COALESCE(status, 'pending') = 'pending'"
+).bindparams(bindparam("asins", ARRAY(String)))
 
 
 async def _extract_asins(request: Request) -> List[str]:

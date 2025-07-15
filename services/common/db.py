@@ -49,7 +49,10 @@ def refresh_mvs(conn: Engine | Connection) -> None:
         return
 
     idx_exists = conn.execute(
-        text("SELECT 1 FROM pg_indexes WHERE indexname = 'idx_v_refund_totals_pk'")
+        text(
+            "SELECT 1 FROM pg_indexes WHERE indexname IN "
+            "('ix_v_refund_totals_pk','idx_v_refund_totals_pk')"
+        )
     ).scalar()
     option = " CONCURRENTLY" if idx_exists else ""
     conn.execute(text(f"REFRESH MATERIALIZED VIEW{option} v_refund_totals"))
