@@ -55,6 +55,7 @@ def upgrade() -> None:
             """
         )
     )
+    op.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_v_refund_totals_pk ON v_refund_totals (asin)")
 
     op.execute(
         dedent(
@@ -68,8 +69,8 @@ def upgrade() -> None:
         )
     )
 
-    op.execute("refresh materialized view concurrently v_refund_totals;")
-    op.execute("refresh materialized view concurrently v_reimb_totals;")
+    op.execute("REFRESH MATERIALIZED VIEW v_refund_totals;")
+    op.execute("REFRESH MATERIALIZED VIEW v_reimb_totals;")
 
     op.execute("DROP VIEW IF EXISTS v_roi_full CASCADE")
     op.execute(
@@ -108,6 +109,7 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.execute("DROP VIEW IF EXISTS v_roi_full")
+    op.execute("DROP INDEX IF EXISTS idx_v_refund_totals_pk")
     op.execute("DROP MATERIALIZED VIEW IF EXISTS v_reimb_totals")
     op.execute("DROP MATERIALIZED VIEW IF EXISTS v_refund_totals")
     op.drop_table("reimbursements_raw")
