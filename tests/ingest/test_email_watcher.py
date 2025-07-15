@@ -3,11 +3,14 @@ import os
 import types
 
 import boto3
+import pytest
 import requests
 from sqlalchemy import create_engine, text
 from services.common.dsn import build_dsn
 
 from services.ingest import email_watcher
+
+pytestmark = pytest.mark.integration
 
 
 class FakeS3:

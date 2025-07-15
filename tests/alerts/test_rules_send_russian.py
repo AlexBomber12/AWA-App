@@ -1,6 +1,5 @@
 import importlib
 import os
-import types
 
 import pytest
 
@@ -9,6 +8,7 @@ os.environ.setdefault("TELEGRAM_TOKEN", "t")
 os.environ.setdefault("TELEGRAM_CHAT_ID", "1")
 
 alert_bot = importlib.import_module("services.alert_bot.alert_bot")
+
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
