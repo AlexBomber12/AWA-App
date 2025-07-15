@@ -17,7 +17,6 @@ def _port_open(host: str, port: int) -> bool:
         return False
 
 
-@pytest.mark.asyncio
 async def test_health_ok():
     if not _port_open("localhost", 8000):
         pytest.skip("API container is not running on localhost:8000")
