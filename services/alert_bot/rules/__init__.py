@@ -1,10 +1,26 @@
 from __future__ import annotations
 
 import os
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 import asyncpg
-from telegram import Bot
+
+if TYPE_CHECKING:  # pragma: no cover - import for type hints only
+    from telegram import Bot as Bot
+else:  # runtime import with fallback
+    try:
+        from telegram import Bot as RuntimeBot
+    except ModuleNotFoundError:  # pragma: no cover - CI fallback
+
+        class RuntimeBot:
+            def __init__(self, token: str) -> None:  # noqa: D401 - simple stub
+                """Stub telegram.Bot when library is absent."""
+
+            async def send_message(self, *a: Any, **k: Any) -> None:
+                return None
+
+    Bot = RuntimeBot
+
 
 DSN = os.getenv("PG_ASYNC_DSN", "")
 TOKEN = os.getenv("TELEGRAM_TOKEN")
