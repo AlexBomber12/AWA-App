@@ -2,7 +2,7 @@ import os
 import sys
 import types
 from services.common.dsn import build_dsn
-from services.etl import helium_fees_ingestor
+from services.etl import fba_fee_ingestor
 
 
 class FakeCursor:
@@ -35,14 +35,14 @@ def fake_connect(dsn):
 
 
 sys.modules["pg_utils"] = types.SimpleNamespace(connect=fake_connect)  # type: ignore[assignment]
-helium_fees_ingestor.connect = fake_connect
+fba_fee_ingestor.connect = fake_connect
 
 
 def test_offline(monkeypatch):
     os.environ["ENABLE_LIVE"] = "0"
     os.environ["HELIUM_API_KEY"] = "k"
     os.environ["DATABASE_URL"] = build_dsn(sync=True)
-    res = helium_fees_ingestor.main()
+    res = fba_fee_ingestor.main()
     assert res == 0
 
 
@@ -51,5 +51,5 @@ def test_run_twice(monkeypatch):
     os.environ["HELIUM_API_KEY"] = "k"
     os.environ["DATABASE_URL"] = build_dsn(sync=True)
 
-    helium_fees_ingestor.main()
-    helium_fees_ingestor.main()
+    fba_fee_ingestor.main()
+    fba_fee_ingestor.main()

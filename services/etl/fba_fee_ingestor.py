@@ -5,7 +5,6 @@ import urllib.request
 from pg_utils import connect
 from services.common.dsn import build_dsn
 
-
 ASINS = ["DUMMY1", "DUMMY2"]
 
 
