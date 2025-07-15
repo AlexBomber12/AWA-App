@@ -10,11 +10,12 @@ def upgrade() -> None:
     op.create_table(
         "load_log",
         sa.Column("id", sa.Integer, primary_key=True),
-        sa.Column("file_path", sa.Text, nullable=False),
+        sa.Column("source", sa.Text, nullable=False),
+        sa.Column("target_table", sa.Text, nullable=False),
         sa.Column("inserted_rows", sa.Integer),
         sa.Column("status", sa.Text, nullable=False, server_default="pending"),
         sa.Column(
-            "loaded_at",
+            "inserted_at",
             sa.DateTime(timezone=True),
             server_default=sa.func.now(),
         ),

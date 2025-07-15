@@ -7,10 +7,29 @@ from pathlib import Path
 
 import boto3
 import pandas as pd
-from pg_utils import connect
+from sqlalchemy import create_engine, text
+from datetime import datetime, timezone
+
 from services.common.dsn import build_dsn
 
 BUCKET = "awa-bucket"
+
+
+def _log_load(conn, *, source: str, table: str, rows: int, status: str) -> None:
+    conn.execute(
+        text(
+            "INSERT INTO load_log "
+            "(source, target_table, inserted_rows, status, inserted_at) "
+            "VALUES (:src, :tbl, :rows, :st, :ts)"
+        ),
+        {
+            "src": source,
+            "tbl": table,
+            "rows": rows,
+            "st": status,
+            "ts": datetime.now(timezone.utc),
+        },
+    )
 
 
 def _download_from_minio(path: str) -> Path:
@@ -47,21 +66,29 @@ def main(argv: list[str] | None = None) -> int:
     else:
         df = pd.read_csv(file_path)
 
-    dsn = build_dsn()
-    conn = connect(dsn)
+    inserted_rows = len(df)
+
+    engine = create_engine(build_dsn(sync=True))
     try:
-        cur = conn.cursor()
-        try:
-            cur.execute(
-                "INSERT INTO load_log(file_path, inserted_rows, status) VALUES (%s,%s,%s)",
-                (args.source, len(df), "success"),
+        with engine.begin() as conn:
+            _log_load(
+                conn,
+                source=args.source,
+                table=args.table,
+                rows=inserted_rows,
+                status="success",
             )
-        finally:
-            cur.close()
-        conn.commit()
-    finally:
-        conn.close()
-    return len(df)
+    except Exception:
+        with engine.begin() as conn:
+            _log_load(
+                conn,
+                source=args.source,
+                table=args.table,
+                rows=0,
+                status="error",
+            )
+        raise
+    return inserted_rows
 
 
 if __name__ == "__main__":

@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import datetime
 import os
-import subprocess
-
 from fastapi import APIRouter, Depends, UploadFile
 import boto3
+from fastapi.responses import JSONResponse
+from etl import load_csv
 
 BUCKET = "awa-bucket"
 
@@ -30,16 +30,15 @@ async def upload(file: UploadFile, minio=Depends(get_minio)):
     today = datetime.date.today().strftime("%Y-%m")
     dst = f"raw/amazon/{today}/{file.filename}"
     minio.put_object(Bucket=BUCKET, Key=dst, Body=file.file)
-    subprocess.run(
+    inserted = load_csv.main(
         [
-            "python",
-            "-m",
-            "etl.load_csv",
             "--source",
             f"minio://{dst}",
             "--table",
             "auto",
-        ],
-        check=True,
+        ]
     )
-    return {"path": dst, "status": "loaded"}
+    return JSONResponse(
+        status_code=201,
+        content={"inserted_rows": inserted, "status": "success"},
+    )
