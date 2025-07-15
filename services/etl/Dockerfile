@@ -13,5 +13,5 @@ COPY services/etl/wait-for-it.sh /app/wait-for-it.sh
 COPY services/etl/entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/wait-for-it.sh /app/entrypoint.sh
 COPY services/etl /app
-COPY keepa_ingestor.py services/etl/helium_fees_ingestor.py /app/
+COPY keepa_ingestor.py services/etl/fba_fee_ingestor.py /app/
 ENTRYPOINT ["/bin/bash", "/app/entrypoint.sh"]

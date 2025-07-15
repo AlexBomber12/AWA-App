@@ -1,6 +1,6 @@
 # Contributing
 
-Install pre-commit hooks to run linting and typing checks automatically:
+Install pre-commit hooks to run linting and typing checks automatically. After cloning run:
 
 ```bash
 pip install pre-commit

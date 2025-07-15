@@ -5,7 +5,7 @@ The agents layer automates scheduled data collection and operational tasks acros
 | Agent | Container / Schedule | Triggers | Outputs |
 | ----- | -------------------- | -------- | ------- |
 | keepa_ingestor | etl container / daily cron | new keepa data | MinIO CSV file, Postgres log |
-| helium_fees_ingestor | etl container / daily cron | new Helium10 fees | Postgres `fees_raw` table |
+| fba_fee_ingestor | etl container / daily cron | new Helium10 fees | Postgres `fees_raw` table |
 | sp_fees_ingestor | etl container / hourly cron | Amazon SP API data | Postgres `fees_raw` table |
 | sku_scoring_engine | scoring container / nightly cron | updated SKU list | Postgres `scores` table |
 | repricer_service | repricer container / 15 min cron | pricing signals | `repricer_log` entries |
@@ -15,7 +15,7 @@ The agents layer automates scheduled data collection and operational tasks acros
 ### keepa_ingestor
 Fetches product metrics from the Keepa API. Results are written to a CSV object in MinIO and a brief summary is logged to Postgres. The agent requires `KEEPA_KEY`, `MINIO_ENDPOINT`, `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY` and `DATABASE_URL`.
 
-### helium_fees_ingestor
+### fba_fee_ingestor
 Downloads FBA fee data from Helium10. It reads `HELIUM_API_KEY` and `DATABASE_URL` to populate the `fees_raw` table. When run with `ENABLE_LIVE=1` it queries the live API, otherwise it loads fixture data for tests.
 
 ### sp_fees_ingestor
