@@ -50,6 +50,7 @@ def main() -> None:
                 dst = f"raw/amazon/{today}/{name}"
                 s3.upload_file(tmp_path, BUCKET, dst)
                 requests.post(f"{api_url}/api/ingest", params={"path": dst})
+                os.remove(tmp_path)
             client.add_flags(uid, ["\\Seen"])
 
 
