@@ -1,0 +1,45 @@
+from __future__ import annotations
+
+import datetime
+import os
+import subprocess
+
+from fastapi import APIRouter, Depends, UploadFile
+import boto3
+
+BUCKET = "awa-bucket"
+
+router = APIRouter()
+
+
+def get_minio():
+    endpoint = os.getenv("MINIO_ENDPOINT", "minio:9000")
+    access = os.getenv("MINIO_ACCESS_KEY", "minio")
+    secret = os.getenv("MINIO_SECRET_KEY", "minio123")
+    return boto3.client(
+        "s3",
+        endpoint_url=f"http://{endpoint}",
+        aws_access_key_id=access,
+        aws_secret_access_key=secret,
+        region_name="us-east-1",
+    )
+
+
+@router.post("/", status_code=201)
+async def upload(file: UploadFile, minio=Depends(get_minio)):
+    today = datetime.date.today().strftime("%Y-%m")
+    dst = f"raw/amazon/{today}/{file.filename}"
+    minio.put_object(Bucket=BUCKET, Key=dst, Body=file.file)
+    subprocess.run(
+        [
+            "python",
+            "-m",
+            "etl.load_csv",
+            "--source",
+            f"minio://{dst}",
+            "--table",
+            "auto",
+        ],
+        check=True,
+    )
+    return {"path": dst, "status": "loaded"}
