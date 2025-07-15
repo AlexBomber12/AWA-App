@@ -1,5 +1,5 @@
 import pytest
-from services.common import llm
+import services.common.llm as llm
 
 
 @pytest.mark.asyncio
