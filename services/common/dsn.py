@@ -10,7 +10,9 @@ def build_dsn(sync: bool = True) -> str:
 
     url = os.getenv("DATABASE_URL")
     if url:
-        return url if sync else url.replace("+psycopg", "")
+        if sync:
+            return url
+        return url.replace("+psycopg", "+asyncpg")
 
     host = os.getenv("PG_HOST", "localhost")
     port = os.getenv("PG_PORT", "5432")
@@ -18,4 +20,6 @@ def build_dsn(sync: bool = True) -> str:
     pwd = _u.quote_plus(os.getenv("PG_PASSWORD", "pass"))
     db = os.getenv("PG_DATABASE", "awa")
     base = f"postgresql://{user}:{pwd}@{host}:{port}/{db}"
-    return base if not sync else base.replace("postgresql://", "postgresql+psycopg://")
+    if sync:
+        return base.replace("postgresql://", "postgresql+psycopg://")
+    return base.replace("postgresql://", "postgresql+asyncpg://")

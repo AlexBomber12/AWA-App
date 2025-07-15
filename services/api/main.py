@@ -9,6 +9,8 @@ from fastapi import Depends, FastAPI  # type: ignore[attr-defined]
 
 from .routes.roi import router as roi_router
 from .routes.stats import router as stats_router
+from services.ingest.upload_router import router as upload_router
+from services.ingest.ingest_router import router as ingest_router
 
 from .db import get_session
 from services.common.dsn import build_dsn
@@ -21,6 +23,8 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+app.include_router(upload_router, prefix="/upload")
+app.include_router(ingest_router)
 app.include_router(roi_router)
 app.include_router(stats_router)
 

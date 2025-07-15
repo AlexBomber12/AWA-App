@@ -13,7 +13,7 @@ from fastapi import (
 from starlette import status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.templating import Jinja2Templates
-from sqlalchemy import create_engine, text, bindparam
+from sqlalchemy import create_engine, text
 
 from services.common.dsn import build_dsn
 
@@ -54,10 +54,6 @@ ROI_SQL = text(
           AND (:category::text IS NULL OR p.category = :category::text)
         LIMIT 200
         """
-).bindparams(
-    bindparam("roi_min"),
-    bindparam("vendor"),
-    bindparam("category"),
 )
 
 
@@ -89,7 +85,7 @@ def roi_review(
 UPDATE_SQL = text(
     "UPDATE products SET status='approved'"
     " WHERE asin IN :asins AND COALESCE(status, 'pending') = 'pending'"
-).bindparams(bindparam("asins", expanding=True))
+)
 
 
 async def _extract_asins(request: Request) -> List[str]:

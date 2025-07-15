@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Sequence, cast, Any
 
-from sqlalchemy import bindparam, text, Integer, String, Float
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.engine import RowMapping, CursorResult
 
@@ -25,10 +25,6 @@ ROI_QUERY = text(
       AND (:category::text IS NULL OR p.category = :category::text)
     LIMIT 200;
     """
-).bindparams(
-    bindparam("roi_min", type_=Float),
-    bindparam("vendor", type_=Integer),
-    bindparam("category", type_=String),
 )
 
 
@@ -45,9 +41,7 @@ async def fetch_roi_rows(
     return list(result.mappings().all())
 
 
-BULK_UPDATE = text("UPDATE products SET status='approved' WHERE asin IN :asins").bindparams(
-    bindparam("asins", expanding=True)
-)
+BULK_UPDATE = text("UPDATE products SET status='approved' WHERE asin IN :asins")
 
 
 async def bulk_approve(session: AsyncSession, asins: Sequence[str]) -> int:

@@ -24,7 +24,9 @@ PG_DATABASE = os.getenv("PG_DATABASE", "awa")
 
 @pytest.fixture(autouse=True)
 def _set_db_url():
-    os.environ["DATABASE_URL"] = build_dsn(sync=True)
+    sync_url = build_dsn(sync=True)
+    os.environ["DATABASE_URL"] = sync_url
+    os.environ["PG_ASYNC_DSN"] = sync_url.replace("+psycopg", "")
 
 
 @pytest.fixture
