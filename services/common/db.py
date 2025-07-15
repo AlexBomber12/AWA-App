@@ -1,6 +1,8 @@
 import asyncio
 from urllib.parse import urlparse, urlunparse
 from asyncpg import create_pool, Pool
+from sqlalchemy import text
+from sqlalchemy.engine import Connection, Engine
 
 from .dsn import build_dsn
 
@@ -37,3 +39,18 @@ async def create_pg_pool() -> Pool:
             await asyncio.sleep(delay)
             delay *= 2
     raise RuntimeError("Could not connect to Postgres")
+
+
+def refresh_mvs(conn: Engine | Connection) -> None:
+    """Refresh materialized views, using CONCURRENTLY when safe."""
+    if isinstance(conn, Engine):
+        with conn.begin() as connection:
+            refresh_mvs(connection)
+        return
+
+    idx_exists = conn.execute(
+        text("SELECT 1 FROM pg_indexes WHERE indexname = 'idx_v_refund_totals_pk'")
+    ).scalar()
+    option = " CONCURRENTLY" if idx_exists else ""
+    conn.execute(text(f"REFRESH MATERIALIZED VIEW{option} v_refund_totals"))
+    conn.execute(text(f"REFRESH MATERIALIZED VIEW{option} v_reimb_totals"))

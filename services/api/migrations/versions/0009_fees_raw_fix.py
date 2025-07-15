@@ -6,11 +6,8 @@ branch_labels = depends_on = None
 
 
 def upgrade() -> None:
-    op.execute("DROP TABLE IF EXISTS fees_raw CASCADE")
-    op.execute(
-        "CREATE TABLE fees_raw("
-        "sku text primary key, fee numeric, captured_at timestamptz default now())"
-    )
+    # Deprecated; no changes required.
+    pass
 
 
 def downgrade() -> None:
