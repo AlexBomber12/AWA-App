@@ -68,8 +68,8 @@ def upgrade() -> None:
         JOIN vendor_prices   vp  ON vp.sku  = p.asin
         JOIN fees_raw        f   ON f.asin  = p.asin
         JOIN keepa_offers    k   ON k.asin  = p.asin
-   LEFT JOIN v_refund_totals rt  USING (asin)
-   LEFT JOIN v_reimb_totals  rbt USING (asin);
+   LEFT JOIN v_refund_totals rt  ON rt.asin  = p.asin
+   LEFT JOIN v_reimb_totals  rbt ON rbt.asin = p.asin;
     """
     )
     op.execute("CREATE OR REPLACE VIEW roi_view AS SELECT asin, roi_pct FROM v_roi_full;")

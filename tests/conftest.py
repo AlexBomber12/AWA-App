@@ -8,6 +8,7 @@ from asyncpg import create_pool
 
 from services.common.dsn import build_dsn
 from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
 
 def pytest_configure(config):
@@ -124,3 +125,13 @@ def sample_xlsx(tmp_path: Path) -> Path:
     xls_path = tmp_path / "sample_prices.xlsx"
     df.to_excel(xls_path, index=False)
     return xls_path
+
+
+@pytest.fixture()
+def migrated_session(db_engine):
+    Session = sessionmaker(bind=db_engine)
+    session = Session()
+    try:
+        yield session
+    finally:
+        session.close()
