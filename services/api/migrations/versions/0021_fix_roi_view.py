@@ -14,11 +14,44 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.execute("DROP VIEW IF EXISTS roi_view CASCADE;")
+    op.execute("DROP VIEW IF EXISTS roi_view;")
     op.execute("DROP VIEW IF EXISTS v_roi_full CASCADE;")
+
     op.execute(
         """
-        CREATE VIEW v_roi_full AS
+        CREATE TABLE IF NOT EXISTS refunds_raw (
+            asin TEXT PRIMARY KEY,
+            amount NUMERIC,
+            created_at TIMESTAMP
+        );
+        """
+    )
+    op.execute(
+        """
+        CREATE TABLE IF NOT EXISTS reimb_raw (
+            asin TEXT PRIMARY KEY,
+            amount NUMERIC,
+            created_at TIMESTAMP
+        );
+        """
+    )
+    op.execute(
+        """
+        CREATE OR REPLACE VIEW v_refund_totals AS
+          SELECT asin, SUM(amount) AS refunds
+            FROM refunds_raw GROUP BY asin;
+        """
+    )
+    op.execute(
+        """
+        CREATE OR REPLACE VIEW v_reimb_totals AS
+          SELECT asin, SUM(amount) AS reimbursements
+            FROM reimb_raw GROUP BY asin;
+        """
+    )
+    op.execute(
+        """
+        CREATE OR REPLACE VIEW v_roi_full AS
         SELECT
             p.asin,
             vp.cost,
@@ -27,8 +60,7 @@ def upgrade() -> None:
             COALESCE(rbt.reimbursements, 0)                      AS reimbursements,
             k.buybox_price,
             ROUND(
-                100 *
-                (
+                100 * (
                     k.buybox_price
                   - vp.cost
                   - (f.fulfil_fee + f.referral_fee + f.storage_fee)
@@ -44,9 +76,18 @@ def upgrade() -> None:
         LEFT JOIN v_reimb_totals   AS rbt ON rbt.asin = p.asin;
         """
     )
-    op.execute("CREATE OR REPLACE VIEW roi_view AS SELECT asin, roi_pct FROM v_roi_full;")
+    op.execute(
+        """
+        CREATE OR REPLACE VIEW roi_view AS
+          SELECT asin, roi_pct FROM v_roi_full;
+        """
+    )
 
 
 def downgrade() -> None:
     op.execute("DROP VIEW IF EXISTS roi_view CASCADE;")
     op.execute("DROP VIEW IF EXISTS v_roi_full CASCADE;")
+    op.execute("DROP VIEW IF EXISTS v_reimb_totals CASCADE;")
+    op.execute("DROP VIEW IF EXISTS v_refund_totals CASCADE;")
+    op.execute("DROP TABLE IF EXISTS reimb_raw;")
+    op.execute("DROP TABLE IF EXISTS refunds_raw;")
