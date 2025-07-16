@@ -50,26 +50,35 @@ def upgrade() -> None:
     # 3/ roi_view & v_roi_full
     op.execute(
         """
-      CREATE OR REPLACE VIEW v_roi_full AS
-      SELECT p.asin,
-             vp.cost,
-             f.fulfil_fee + f.referral_fee + f.storage_fee          AS fees,
-             COALESCE(rt.refunds,0)                                 AS refunds,
-             COALESCE(rbt.reimbursements,0)                         AS reimbursements,
-             k.buybox_price,
-             ROUND( 100 *
-                ( k.buybox_price
-                  - vp.cost
-                  - fees
-                  - COALESCE(rt.refunds,0)
-                  + COALESCE(rbt.reimbursements,0)
-                ) / vp.cost , 1)                                    AS roi_pct
-        FROM products        p
-        JOIN vendor_prices   vp  ON vp.sku  = p.asin
-        JOIN fees_raw        f   ON f.asin  = p.asin
-        JOIN keepa_offers    k   ON k.asin  = p.asin
-   LEFT JOIN v_refund_totals rt  ON rt.asin  = p.asin
-   LEFT JOIN v_reimb_totals  rbt ON rbt.asin = p.asin;
+    DROP VIEW IF EXISTS v_roi_full;
+    CREATE OR REPLACE VIEW v_roi_full AS
+    WITH base AS (
+        SELECT
+            p.asin,
+            vp.cost,
+            (f.fulfil_fee + f.referral_fee + f.storage_fee) AS fees,
+            COALESCE(rt.refunds, 0)         AS refunds,
+            COALESCE(rbt.reimbursements, 0) AS reimbursements,
+            k.buybox_price
+        FROM products       AS p
+        JOIN vendor_prices  AS vp  ON vp.sku  = p.asin
+        JOIN fees_raw       AS f   ON f.asin  = p.asin
+        JOIN keepa_offers   AS k   ON k.asin  = p.asin
+        LEFT JOIN v_refund_totals  AS rt  ON rt.asin  = p.asin
+        LEFT JOIN v_reimb_totals   AS rbt ON rbt.asin = p.asin
+    )
+    SELECT
+        asin,
+        cost,
+        fees,
+        refunds,
+        reimbursements,
+        buybox_price,
+        ROUND(
+            100 * ((buybox_price - cost - fees - refunds + reimbursements) / cost),
+            1
+        ) AS roi_pct
+    FROM base;
     """
     )
     op.execute("CREATE OR REPLACE VIEW roi_view AS SELECT asin, roi_pct FROM v_roi_full;")
