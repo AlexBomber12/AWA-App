@@ -4,7 +4,7 @@ from sqlalchemy import text
 
 from alembic import context, op
 
-revision = "0021_fix_roi_view"
+revision = "0022_fix_roi_view"
 down_revision = "0020_unified_schema"
 branch_labels = None
 depends_on = None
@@ -18,7 +18,6 @@ def upgrade() -> None:
         op.execute(text("DROP VIEW IF EXISTS v_roi_full CASCADE"))
         op.execute(text("DROP VIEW IF EXISTS v_refund_totals CASCADE"))
         op.execute(text("DROP VIEW IF EXISTS v_reimb_totals CASCADE"))
-
         op.execute(
             text(
                 """
@@ -45,7 +44,7 @@ def upgrade() -> None:
             text(
                 """
                 CREATE VIEW v_refund_totals AS
-                  SELECT asin, SUM(amount) AS refunds
+                  SELECT asin, SUM(amount::numeric) AS refunds
                     FROM refunds_raw GROUP BY asin;
                 """
             )

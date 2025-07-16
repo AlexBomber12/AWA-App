@@ -65,6 +65,7 @@ jobs:
         run: echo "DATABASE_URL=postgresql+psycopg://postgres:pass@localhost:5432/awa" >> $GITHUB_ENV  # pragma: allowlist secret
 
       - name: pytest -q
+        continue-on-error: false
         run: pytest -q
         env:
           POSTGRES_USER: postgres
@@ -109,6 +110,7 @@ jobs:
       - name: Install deps
         run: pip install -r requirements-dev.txt
       - name: Run migration regression test
+        continue-on-error: false
         env:
           DATABASE_URL: postgresql+psycopg://postgres:pass@localhost:5432/awa
         run: pytest services/db/tests/test_migrations.py -q
@@ -117,7 +119,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: cp .env.postgres .env
+      - run: if [ ! -f .env ]; then cp .env.postgres .env; fi
       - run: docker compose up -d --wait
       - run: docker compose ps --filter "status=running" --format '{{.Name}} OK'
       - run: docker compose down -v

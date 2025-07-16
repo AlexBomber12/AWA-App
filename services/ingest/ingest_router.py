@@ -7,8 +7,8 @@ from fastapi import APIRouter, Query
 router = APIRouter()
 
 
-@router.post("/ingest")
-def ingest(path: str = Query(..., alias="path")) -> dict:
+@router.post("/ingest")  # type: ignore[misc]
+def ingest(path: str = Query(..., alias="path")) -> dict[str, str]:
     subprocess.run(
         ["python", "-m", "etl.load_csv", "--source", f"minio://{path}", "--table", "auto"],
         check=True,
