@@ -7,6 +7,8 @@ Create Date: 2025-07-16
 
 from alembic import op, context
 
+from services.db.utils.views import replace_view
+
 revision: str = "0021_fix_roi_view"
 down_revision: str = "0020_unified_schema"
 branch_labels = None
@@ -19,6 +21,8 @@ def upgrade() -> None:
 
     op.execute("DROP VIEW IF EXISTS roi_view;")
     op.execute("DROP VIEW IF EXISTS v_roi_full CASCADE;")
+    op.execute("DROP VIEW IF EXISTS v_refund_totals CASCADE;")
+    op.execute("DROP VIEW IF EXISTS v_reimb_totals CASCADE;")
 
     op.execute(
         """
@@ -38,23 +42,26 @@ def upgrade() -> None:
         );
         """
     )
-    op.execute(
+    replace_view(
+        "v_refund_totals",
         """
-        CREATE OR REPLACE VIEW v_refund_totals AS
-          SELECT asin, SUM(amount) AS refunds
+        CREATE VIEW v_refund_totals AS
+          SELECT asin, SUM(amount::numeric) AS refunds
             FROM refunds_raw GROUP BY asin;
-        """
+        """,
     )
-    op.execute(
+    replace_view(
+        "v_reimb_totals",
         """
-        CREATE OR REPLACE VIEW v_reimb_totals AS
-          SELECT asin, SUM(amount) AS reimbursements
+        CREATE VIEW v_reimb_totals AS
+          SELECT asin, SUM(amount::numeric) AS reimbursements
             FROM reimb_raw GROUP BY asin;
-        """
+        """,
     )
-    op.execute(
+    replace_view(
+        "v_roi_full",
         """
-        CREATE OR REPLACE VIEW v_roi_full AS
+        CREATE VIEW v_roi_full AS
         SELECT
             p.asin,
             vp.cost,
@@ -77,13 +84,14 @@ def upgrade() -> None:
         JOIN keepa_offers    AS k   ON k.asin  = p.asin
         LEFT JOIN v_refund_totals  AS rt  ON rt.asin  = p.asin
         LEFT JOIN v_reimb_totals   AS rbt ON rbt.asin = p.asin;
-        """
+        """,
     )
-    op.execute(
+    replace_view(
+        "roi_view",
         """
-        CREATE OR REPLACE VIEW roi_view AS
+        CREATE VIEW roi_view AS
           SELECT asin, roi_pct FROM v_roi_full;
-        """
+        """,
     )
 
 
@@ -98,23 +106,26 @@ def downgrade() -> None:
     op.execute("DROP TABLE IF EXISTS reimb_raw;")
     op.execute("DROP TABLE IF EXISTS refunds_raw;")
 
-    op.execute(
+    replace_view(
+        "v_refund_totals",
         """
-        CREATE OR REPLACE VIEW v_refund_totals AS
+        CREATE VIEW v_refund_totals AS
           SELECT asin, SUM(qty) AS refunds
             FROM returns_raw GROUP BY asin;
-        """
+        """,
     )
-    op.execute(
+    replace_view(
+        "v_reimb_totals",
         """
-        CREATE OR REPLACE VIEW v_reimb_totals AS
+        CREATE VIEW v_reimb_totals AS
           SELECT asin, SUM(amount) AS reimbursements
             FROM reimbursements_raw GROUP BY asin;
-        """
+        """,
     )
-    op.execute(
+    replace_view(
+        "v_roi_full",
         """
-        CREATE OR REPLACE VIEW v_roi_full AS
+        CREATE VIEW v_roi_full AS
         WITH base AS (
             SELECT
                 p.asin,
@@ -142,13 +153,14 @@ def downgrade() -> None:
                 1
             ) AS roi_pct
         FROM base;
-        """
+        """,
     )
-    op.execute(
+    replace_view(
+        "roi_view",
         """
-        CREATE OR REPLACE VIEW roi_view AS
+        CREATE VIEW roi_view AS
           SELECT asin, roi_pct
             FROM v_roi_full
            WHERE roi_pct < 5;
-        """
+        """,
     )
