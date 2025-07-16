@@ -43,7 +43,12 @@ def upgrade() -> None:
             sa.Column("asin", sa.Text(), primary_key=True),
             sa.Column("buybox_price", sa.Numeric(10, 2)),
         )
-    op.execute("DROP VIEW IF EXISTS v_roi_full")
+    op.execute(
+        """
+        DROP VIEW IF EXISTS roi_view CASCADE;
+        DROP VIEW IF EXISTS v_roi_full CASCADE;
+        """
+    )
     op.execute(
         dedent(
             """
@@ -80,10 +85,12 @@ def upgrade() -> None:
             """
         )
     )
+    op.execute("CREATE OR REPLACE VIEW roi_view AS SELECT asin, roi_pct FROM v_roi_full;")
 
 
 def downgrade() -> None:
-    op.execute("DROP VIEW IF EXISTS v_roi_full")
+    op.execute("DROP VIEW IF EXISTS roi_view CASCADE;")
+    op.execute("DROP VIEW IF EXISTS v_roi_full CASCADE;")
     op.drop_table("keepa_offers")
     op.drop_table("vendor_prices")
     op.drop_table("vendors")

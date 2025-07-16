@@ -33,5 +33,5 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.execute("DROP VIEW IF EXISTS roi_view")
-    op.execute("DROP VIEW IF EXISTS v_roi_full")
+    op.execute("DROP VIEW IF EXISTS roi_view CASCADE;")
+    op.execute("DROP VIEW IF EXISTS v_roi_full CASCADE;")

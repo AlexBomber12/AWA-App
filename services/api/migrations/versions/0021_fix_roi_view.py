@@ -44,6 +44,7 @@ def upgrade() -> None:
         LEFT JOIN v_reimb_totals   AS rbt ON rbt.asin = p.asin;
         """
     )
+    op.execute("CREATE OR REPLACE VIEW roi_view AS SELECT asin, roi_pct FROM v_roi_full;")
 
 
 def downgrade() -> None:
