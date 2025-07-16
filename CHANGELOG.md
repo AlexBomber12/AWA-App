@@ -1,3 +1,6 @@
+## Unreleased
+- Verified CI pipeline steps (ruff, black, mypy, pytest, web build) run without errors on Python 3.11 and Node 20
+
 # Changelog
 
 ## v0.3
