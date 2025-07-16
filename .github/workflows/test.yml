@@ -25,7 +25,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v4
-        with: { python-version: '3.12' }
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+          cache-dependency-path: |
+            requirements-dev.txt
+            services/etl/requirements.txt
+            services/api/requirements.txt
+            services/repricer/requirements.txt
+            services/fees_h10/requirements.txt
+            services/alert_bot/requirements.txt
 
       - name: Install dependencies
         run: |  # pragma: allowlist secret
@@ -107,19 +116,34 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: |
+            requirements-dev.txt
       - name: Install deps
         run: pip install -r requirements-dev.txt
+      - name: Ensure test file exists
+        run: |
+          if [ ! -f tests/db/test_migrations.py ]; then
+            echo "::error ::migration test missing" && exit 1
+          fi
       - name: Run migration regression test
         continue-on-error: false
         env:
           DATABASE_URL: postgresql+psycopg://postgres:pass@localhost:5432/awa
-        run: pytest services/db/tests/test_migrations.py -q
+        run: pytest tests/db/test_migrations.py -q
 
   health-checks:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - run: if [ ! -f .env ]; then cp .env.postgres .env; fi
+      - run: docker compose build --parallel
       - run: docker compose up -d --wait
-      - run: docker compose ps --filter "status=running" --format '{{.Name}} OK'
+      - name: Ensure services healthy
+        run: |
+          docker compose ps --format '{{.Name}} {{.State.Health.Status}}' | tee ps.log
+          if grep -E '\b(unhealthy|starting|exited)\b' ps.log; then
+            cat ps.log
+            exit 1
+          fi
       - run: docker compose down -v
