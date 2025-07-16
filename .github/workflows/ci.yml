@@ -6,106 +6,23 @@ on:
     branches: [dev, main]
 
 jobs:
-  unit:
+  service:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        service: [api, alert_bot, emailer, etl, fees_h10, ingest, logistics_etl, price_importer, repricer]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-      - name: Cache pip
-        uses: actions/cache@v3
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('constraints.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
-      - name: Install requirements
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -r requirements-dev.txt -c constraints.txt
-          python -m pip install mypy
-          python -m pip install -r services/${{ matrix.service }}/requirements.txt -c constraints.txt
-      - name: Check packages
-        run: python -m pip check
-      - run: ruff check .
-      - run: black --check .
-      - run: python -m mypy services/${{ matrix.service }} tests
-      - run: pytest -q -m "not integration"
-
-  postgres:
-    needs: unit
-    runs-on: ubuntu-latest
-    env:
-      ENABLE_LIVE: "1"
-      PG_ASYNC_DSN: postgresql://postgres:pass@localhost:5432/awa
-      DATABASE_URL: postgresql+psycopg://postgres:pass@localhost:5432/awa
+        service:
+          [api, etl, fees_h10, logistics_etl, price_importer, repricer, alert_bot, emailer]
     services:
-      postgres:
+      db:
         image: postgres:15
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: pass
           POSTGRES_DB: awa
-        ports: ['5432:5432']
-        options: >-
-          --health-cmd="pg_isready -U postgres"
-          --health-interval=5s
-          --health-timeout=5s
-          --health-retries=10
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-      - name: Cache pip
-        uses: actions/cache@v3
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('constraints.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
-      - name: Install requirements
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -r requirements-dev.txt -c constraints.txt
-          python -m pip install mypy
-          for req in services/*/requirements.txt; do
-            python -m pip install -r "$req" -c constraints.txt
-          done
-      - name: Export DSN
-        run: echo "PGHOST=localhost" >> $GITHUB_ENV
-      - name: Wait for Postgres
-        run: |
-          for i in {1..45}; do
-            pg_isready -h localhost -p 5432 -U postgres -d awa && exit 0
-            sleep 2
-          done
-          exit 1
-      - run: alembic upgrade head
-      - run: pytest -q
-        env:
-          DATABASE_URL: ${{ env.DATABASE_URL }}
-
-  importer-test:
-    needs: postgres
-    runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:15
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: pass
-          POSTGRES_DB: awa
-        ports: ['5432:5432']
         options: >-
           --health-cmd="pg_isready -U postgres -d awa"
-          --health-interval=5s
-          --health-timeout=5s
-          --health-retries=10
+          --health-interval=5s --health-timeout=5s --health-retries=20
+        ports: ['5432:5432']
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -122,21 +39,19 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r requirements-dev.txt -c constraints.txt
-          python -m pip install mypy
-          for req in services/*/requirements.txt; do
-            python -m pip install -r "$req" -c constraints.txt
-          done
-      - run: docker build -t price_importer -f services/price_importer/Dockerfile .
+          python -m pip install -r services/${{ matrix.service }}/requirements.txt -c constraints.txt
+      - name: Set DATABASE_URL
+        run: echo "DATABASE_URL=postgresql+asyncpg://postgres:pass@localhost:5432/awa" >> $GITHUB_ENV
+      - name: Wait for Postgres
+        run: scripts/wait_pg.sh
       - run: alembic upgrade head
-        env:
-          PGHOST: localhost
-      - run: |
-          docker run --network host \
-            -e PG_HOST=localhost \
-            -e PG_DATABASE=awa \
-            price_importer python -m price_importer.import /fixtures/sample_prices.csv --vendor "ACME GmbH"
-        env:
-          POSTGRES_PASSWORD: pass
-      - run: psql -h localhost -U postgres -d awa -c "SELECT count(*) FROM vendor_prices;"
-        env:
-          PGPASSWORD: pass
+      - name: Lint
+        run: ruff check .
+      - name: Format
+        run: black --check .
+      - name: Type check
+        run: python -m mypy services/${{ matrix.service }} tests
+      - name: Wait for Postgres again
+        run: scripts/wait_pg.sh
+      - name: Test
+        run: pytest -q

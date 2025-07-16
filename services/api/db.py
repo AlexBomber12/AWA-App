@@ -8,9 +8,10 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.pool import NullPool
 
-from services.common.dsn import build_dsn
-
-DATABASE_URL = build_dsn(sync=False)
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    "postgresql+asyncpg://postgres:pass@localhost:5432/awa",
+)
 
 pool_kwargs = {}
 if os.getenv("TESTING") == "1":

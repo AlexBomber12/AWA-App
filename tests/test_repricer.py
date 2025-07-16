@@ -1,6 +1,10 @@
 from decimal import Decimal
 import site
 import sys
+import pytest
+
+respx = pytest.importorskip("respx")
+pytestmark = pytest.mark.usefixtures("respx_mock")
 
 # ensure real fastapi package is used
 site_pkg = site.getsitepackages()[0]
