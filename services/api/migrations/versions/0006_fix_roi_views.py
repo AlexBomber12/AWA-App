@@ -2,7 +2,7 @@ from alembic import op  # type: ignore[attr-defined]
 from textwrap import dedent
 
 revision = "0006_fix_roi_views"
-down_revision = "0005_freight_rates"
+down_revision = "0004_fee_cron"
 branch_labels = depends_on = None
 
 

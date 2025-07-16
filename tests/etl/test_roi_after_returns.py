@@ -1,12 +1,11 @@
 from sqlalchemy import create_engine, text
 from services.common.dsn import build_dsn
-from services.common.db import refresh_mvs
 import pytest
 
 pytestmark = pytest.mark.integration
 
 
-def test_roi_after_returns(pg_pool):
+def test_roi_after_returns(pg_pool, refresh_mvs):
     engine = create_engine(build_dsn(sync=True))
     with engine.begin() as conn:
         conn.execute(text("INSERT INTO vendors(id, name) VALUES (1,'ACME') ON CONFLICT DO NOTHING"))
@@ -28,7 +27,6 @@ def test_roi_after_returns(pg_pool):
                 "INSERT INTO reimbursements_raw(asin, reimb_id, reimb_date, qty, amount, currency, reason_code) VALUES ('A1','R1','2024-06-02',1,3,'EUR','goodwill')"
             )
         )
-        refresh_mvs(conn)
 
     with engine.connect() as conn:
         roi = conn.execute(text("SELECT roi_pct FROM v_roi_full WHERE asin='A1'"))

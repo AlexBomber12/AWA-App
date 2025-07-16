@@ -20,12 +20,12 @@ from services.etl.dialects import (
 BUCKET = "awa-bucket"
 
 
-def _log_load(conn, *, source: str, table: str, rows: int, status: str) -> None:
-    conn.execute(
+def _log_load(conn, *, source: str, table: str, rows: int, status: str) -> int:
+    result = conn.execute(
         text(
             "INSERT INTO load_log "
             "(source, target_table, inserted_rows, status, inserted_at) "
-            "VALUES (:src, :tbl, :rows, :st, :ts)"
+            "VALUES (:src, :tbl, :rows, :st, :ts) RETURNING id"
         ),
         {
             "src": source,
@@ -35,6 +35,7 @@ def _log_load(conn, *, source: str, table: str, rows: int, status: str) -> None:
             "ts": datetime.now(timezone.utc),
         },
     )
+    return int(result.scalar_one())
 
 
 def _download_from_minio(path: str) -> Path:
@@ -55,7 +56,7 @@ def _download_from_minio(path: str) -> Path:
     return Path(tmp.name)
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(argv: list[str] | None = None) -> tuple[int, int]:
     parser = argparse.ArgumentParser()
     parser.add_argument("--source", required=True)
     parser.add_argument("--table", default="auto")
@@ -94,7 +95,7 @@ def main(argv: list[str] | None = None) -> int:
         with engine.begin() as conn:
             if target_table != "auto":
                 df.to_sql(target_table, conn, if_exists="append", index=False)
-            _log_load(
+            load_id = _log_load(
                 conn,
                 source=args.source,
                 table=target_table,
@@ -103,7 +104,7 @@ def main(argv: list[str] | None = None) -> int:
             )
     except Exception:
         with engine.begin() as conn:
-            _log_load(
+            load_id = _log_load(
                 conn,
                 source=args.source,
                 table=target_table,
@@ -111,7 +112,7 @@ def main(argv: list[str] | None = None) -> int:
                 status="error",
             )
         raise
-    return inserted_rows
+    return load_id, inserted_rows
 
 
 if __name__ == "__main__":

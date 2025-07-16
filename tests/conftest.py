@@ -8,6 +8,7 @@ from asyncpg import create_pool
 
 from tests.utils import run_migrations
 from services.common.dsn import build_dsn
+from sqlalchemy import create_engine
 
 
 def pytest_configure(config):
@@ -66,6 +67,23 @@ async def pg_pool(_set_db_url):
     await run_migrations()
     yield pool
     await pool.close()
+
+
+@pytest.fixture()
+def db_engine(_set_db_url):
+    engine = create_engine(build_dsn(sync=True))
+    try:
+        yield engine
+    finally:
+        engine.dispose()
+
+
+@pytest.fixture()
+def refresh_mvs(db_engine):
+    with db_engine.begin() as conn:
+        conn.execute("REFRESH MATERIALIZED VIEW v_refund_totals")
+        conn.execute("REFRESH MATERIALIZED VIEW v_reimb_totals")
+    yield
 
 
 @pytest.fixture

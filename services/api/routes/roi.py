@@ -94,9 +94,14 @@ def roi_review(
     return templates.TemplateResponse("roi_review.html", context)
 
 
-UPDATE_SQL = text(
-    "UPDATE products SET status='approved' "
-    "WHERE asin = ANY(:asins) AND COALESCE(status, 'pending') = 'pending'"
+APPROVE_SQL = text(
+    """
+    UPDATE products
+       SET status = 'approved'
+     WHERE asin = ANY(:asins)
+       AND COALESCE(status,'pending') = 'pending'
+     RETURNING asin
+    """
 ).bindparams(bindparam("asins", expanding=True))
 
 
@@ -117,7 +122,7 @@ async def approve(request: Request, _: str = Depends(_check_basic_auth)) -> dict
     url = build_dsn(sync=True)
     engine = create_engine(url)
     with engine.begin() as conn:
-        res = conn.execute(UPDATE_SQL, {"asins": asins})
-        count = res.rowcount or 0
+        rows = conn.execute(APPROVE_SQL, {"asins": asins}).scalars().all()
+        count = len(rows)
     engine.dispose()
     return {"updated": count}

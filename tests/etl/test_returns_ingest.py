@@ -6,7 +6,7 @@ import pytest
 pytestmark = pytest.mark.integration
 
 
-def test_returns_ingest(tmp_path):
+def test_returns_ingest(tmp_path, refresh_mvs):
     csv_path = tmp_path / "returns.csv"
     csv_path.write_text(
         "ASIN,Order ID,Return Reason,Return Date,Qty,Refund Amount,Currency\n"

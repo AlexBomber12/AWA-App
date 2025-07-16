@@ -30,7 +30,7 @@ async def upload(file: UploadFile, minio=Depends(get_minio)):
     today = datetime.date.today().strftime("%Y-%m")
     dst = f"raw/amazon/{today}/{file.filename}"
     minio.put_object(Bucket=BUCKET, Key=dst, Body=file.file)
-    inserted = load_csv.main(
+    _, inserted = load_csv.main(
         [
             "--source",
             f"minio://{dst}",

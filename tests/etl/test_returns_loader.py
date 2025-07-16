@@ -8,7 +8,7 @@ import pytest
 pytestmark = pytest.mark.integration
 
 
-def test_returns_loader(tmp_path):
+def test_returns_loader(tmp_path, refresh_mvs):
     csv = Path("tests/fixtures/sample_returns.csv")
     loader.main([str(csv)])
 
