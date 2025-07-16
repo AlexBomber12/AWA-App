@@ -1,5 +1,8 @@
 # Changelog
 
+## Unreleased
+- fix(ci): pipeline passes with updated env defaults
+
 ## v0.3
 - First release with fully passing CI
 

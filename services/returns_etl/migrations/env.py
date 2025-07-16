@@ -21,7 +21,10 @@ target_metadata = Base.metadata
 
 
 def run_migrations_online() -> None:
-    url = os.environ["DATABASE_URL"].replace("asyncpg", "psycopg")
+    url = os.getenv(
+        "DATABASE_URL",
+        "postgresql+psycopg://postgres:pass@localhost:5432/awa",
+    ).replace("asyncpg", "psycopg")
     connectable = engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
