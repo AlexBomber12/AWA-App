@@ -1,21 +1,32 @@
 import os
+import sys
+from pathlib import Path
 from logging.config import fileConfig
 from sqlalchemy import engine_from_config, pool
 from alembic import context
-from services.common.base import Base
+
+ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(ROOT))
+
+from services.common.base import Base  # noqa: E402
 
 config = context.config
-fileConfig(config.config_file_name)
+if config.config_file_name and os.path.exists(config.config_file_name):
+    try:
+        fileConfig(config.config_file_name)
+    except KeyError:
+        pass
 
 target_metadata = Base.metadata
 
 
 def run_migrations_online() -> None:
+    url = os.environ["DATABASE_URL"].replace("asyncpg", "psycopg")
     connectable = engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
-        url=os.environ["DATABASE_URL"],
+        url=url,
     )
     with connectable.connect() as connection:
         context.configure(
