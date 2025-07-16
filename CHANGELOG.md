@@ -2,6 +2,7 @@
 
 ## Unreleased
 - fix(ci): pipeline passes with updated env defaults
+- drop and recreate refund views to prevent InvalidTableDefinition errors
 
 ## v0.3
 - First release with fully passing CI
