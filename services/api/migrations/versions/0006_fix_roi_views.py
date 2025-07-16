@@ -2,7 +2,7 @@ from alembic import op  # type: ignore[attr-defined]
 from textwrap import dedent
 
 revision = "0006_fix_roi_views"
-down_revision = "0005_freight_rates"
+down_revision = "0004_fee_cron"
 branch_labels = depends_on = None
 
 
@@ -33,5 +33,5 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.execute("DROP VIEW IF EXISTS roi_view")
-    op.execute("DROP VIEW IF EXISTS v_roi_full")
+    op.execute("DROP VIEW IF EXISTS roi_view CASCADE;")
+    op.execute("DROP VIEW IF EXISTS v_roi_full CASCADE;")

@@ -4,6 +4,9 @@ import os
 
 import pytest
 
+respx = pytest.importorskip("respx")
+pytestmark = pytest.mark.usefixtures("respx_mock")
+
 # ensure env vars for bot
 os.environ.setdefault("TELEGRAM_TOKEN", "t")  # noqa: E402
 os.environ.setdefault("TELEGRAM_CHAT_ID", "1")  # noqa: E402

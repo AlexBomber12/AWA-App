@@ -13,8 +13,12 @@ def upgrade() -> None:
     cols = {c["name"] for c in inspect(bind).get_columns("fees_raw")}
 
     # 0 – drop outdated views so column rename succeeds
-    op.execute("DROP VIEW IF EXISTS roi_view")
-    op.execute("DROP VIEW IF EXISTS v_roi_full")
+    op.execute(
+        """
+        DROP VIEW IF EXISTS roi_view CASCADE;
+        DROP VIEW IF EXISTS v_roi_full CASCADE;
+        """
+    )
 
     # 1 – rename fulf_fee ➜ fulfil_fee so view will work
     if "fulf_fee" in cols and "fulfil_fee" not in cols:
@@ -49,9 +53,10 @@ def upgrade() -> None:
         )
 
     # 3 – re-create roi_view with correct column name
-    op.execute("DROP VIEW IF EXISTS roi_view")
     op.execute(
         """
+        DROP VIEW IF EXISTS roi_view CASCADE;
+        DROP VIEW IF EXISTS v_roi_full CASCADE;
         CREATE VIEW roi_view AS
         SELECT
           p.asin,
@@ -122,8 +127,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.execute("DROP VIEW IF EXISTS roi_view")
-    op.execute("DROP VIEW IF EXISTS v_roi_full")
+    op.execute("DROP VIEW IF EXISTS roi_view CASCADE;")
+    op.execute("DROP VIEW IF EXISTS v_roi_full CASCADE;")
     bind = op.get_bind()
     cols = {c["name"] for c in inspect(bind).get_columns("fees_raw")}
     if "fulfil_fee" in cols and "fulf_fee" not in cols:

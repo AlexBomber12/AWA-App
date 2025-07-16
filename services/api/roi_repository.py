@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from typing import Sequence, Any, cast
+from typing import Sequence
 
 from sqlalchemy import ARRAY, String, Numeric, bindparam, text
-from sqlalchemy.engine import CursorResult, RowMapping
+from sqlalchemy.engine import RowMapping
 from sqlalchemy.ext.asyncio import AsyncSession
 
 ROI_SQL = text(
@@ -45,10 +45,10 @@ async def fetch_roi_rows(
 APPROVE_SQL = text(
     """
     UPDATE products
-       SET status='approved'
+       SET status = 'approved'
      WHERE asin = ANY(:asins)
-       AND COALESCE(status,'pending')='pending'
-    RETURNING asin
+       AND COALESCE(status,'pending') = 'pending'
+     RETURNING asin
     """
 ).bindparams(bindparam("asins", ARRAY(String)))
 
@@ -57,5 +57,6 @@ async def bulk_approve(session: AsyncSession, asins: Sequence[str]) -> int:
     if not asins:
         return 0
     res = await session.execute(APPROVE_SQL, {"asins": asins})
+    rows = res.scalars().all()
     await session.commit()
-    return cast(CursorResult[Any], res).rowcount or 0
+    return len(rows)

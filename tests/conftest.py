@@ -6,8 +6,9 @@ import pytest
 import asyncpg
 from asyncpg import create_pool
 
-from tests.utils import run_migrations
 from services.common.dsn import build_dsn
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
 
 def pytest_configure(config):
@@ -52,20 +53,54 @@ PG_PASSWORD = os.getenv("PG_PASSWORD", "pass")
 PG_DATABASE = os.getenv("PG_DATABASE", "awa")
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture(scope="session", autouse=True)
 def _set_db_url():
     sync_url = build_dsn(sync=True)
     os.environ["DATABASE_URL"] = sync_url
     os.environ["PG_ASYNC_DSN"] = sync_url.replace("+psycopg", "")
 
 
+@pytest.fixture(scope="session", autouse=True)
+async def _migrate(_set_db_url):
+    dsn = os.environ["DATABASE_URL"]
+    for _ in range(30):
+        try:
+            conn = await asyncpg.connect(dsn)
+            await conn.close()
+            break
+        except Exception:
+            await asyncio.sleep(2)
+    else:
+        pytest.skip("Postgres not running – integration tests skipped", allow_module_level=True)
+    from alembic.config import Config
+    from alembic import command
+
+    command.upgrade(Config("alembic.ini"), "head")
+
+
 @pytest.fixture
 async def pg_pool(_set_db_url):
     async_dsn = os.getenv("PG_ASYNC_DSN") or build_dsn(sync=False)
     pool = await create_pool(dsn=async_dsn)
-    await run_migrations()
     yield pool
     await pool.close()
+
+
+@pytest.fixture()
+def db_engine(_set_db_url):
+    engine = create_engine(build_dsn(sync=True))
+    try:
+        yield engine
+    finally:
+        engine.dispose()
+
+
+@pytest.fixture()
+def refresh_mvs(db_engine):
+    with db_engine.begin() as conn:
+        conn.execute("REFRESH MATERIALIZED VIEW v_refund_totals")
+        conn.execute("REFRESH MATERIALIZED VIEW v_reimb_totals")
+    yield
 
 
 @pytest.fixture
@@ -90,3 +125,13 @@ def sample_xlsx(tmp_path: Path) -> Path:
     xls_path = tmp_path / "sample_prices.xlsx"
     df.to_excel(xls_path, index=False)
     return xls_path
+
+
+@pytest.fixture()
+def migrated_session(db_engine):
+    Session = sessionmaker(bind=db_engine)
+    session = Session()
+    try:
+        yield session
+    finally:
+        session.close()

@@ -5,8 +5,10 @@ import tempfile
 from typing import Any
 
 import boto3
-import requests
+from sqlalchemy import create_engine, text
+from services.common.dsn import build_dsn
 from imapclient import IMAPClient
+from etl import load_csv
 
 BUCKET = "awa-bucket"
 
@@ -22,7 +24,6 @@ def main() -> dict[str, str]:
     endpoint = os.getenv("MINIO_ENDPOINT", "minio:9000")
     access = os.getenv("MINIO_ACCESS_KEY", "minio")
     secret = os.getenv("MINIO_SECRET_KEY", "minio123")
-    api_url = os.getenv("API_URL", "http://api:8000")
 
     s3 = boto3.client(
         "s3",
@@ -53,7 +54,23 @@ def main() -> dict[str, str]:
                 today = datetime.date.today().strftime("%Y-%m")
                 dst = f"raw/amazon/{today}/{name}"
                 s3.upload_file(tmp_path, BUCKET, dst)
-                requests.post(f"{api_url}/api/ingest", params={"path": dst})
+                load_id, inserted = load_csv.main(
+                    [
+                        "--source",
+                        f"minio://{dst}",
+                        "--table",
+                        "auto",
+                    ]
+                )
+                engine = create_engine(build_dsn(sync=True))
+                with engine.begin() as db:
+                    db.execute(
+                        text(
+                            "UPDATE load_log SET status='success', " "inserted_rows=:n WHERE id=:id"
+                        ),
+                        {"n": inserted, "id": load_id},
+                    )
+                engine.dispose()
                 os.remove(tmp_path)
             client.add_flags(uid, ["\\Seen"])
     return {"status": "success"}
