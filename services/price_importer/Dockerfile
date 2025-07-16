@@ -13,3 +13,4 @@ COPY --from=builder /opt/venv /opt/venv
 # copy only the modules the importer relies on
 COPY services/common /app/services/common
 COPY services/price_importer /app/price_importer
+HEALTHCHECK CMD curl -fs http://localhost:8000/health || exit 1

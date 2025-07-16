@@ -11,3 +11,4 @@ ENV PATH="/opt/venv/bin:$PATH"
 COPY --from=builder /opt/venv /opt/venv
 COPY services/fees_h10 /app/services/fees_h10
 CMD ["celery", "-A", "services.fees_h10.worker", "beat", "-l", "info"]
+HEALTHCHECK CMD curl -fs http://localhost:8000/health || exit 1

@@ -15,3 +15,4 @@ RUN chmod +x /app/wait-for-it.sh /app/entrypoint.sh
 COPY services/etl /app
 COPY keepa_ingestor.py services/etl/fba_fee_ingestor.py /app/
 ENTRYPOINT ["/bin/bash", "/app/entrypoint.sh"]
+HEALTHCHECK CMD curl -fs http://localhost:8000/health || exit 1

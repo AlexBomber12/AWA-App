@@ -11,3 +11,4 @@ ENV PATH="/opt/venv/bin:$PATH"
 COPY --from=builder /opt/venv /opt/venv
 COPY services/logistics_etl /app/services/logistics_etl
 CMD ["python", "-m", "logistics_etl"]
+HEALTHCHECK CMD curl -fs http://localhost:8000/health || exit 1

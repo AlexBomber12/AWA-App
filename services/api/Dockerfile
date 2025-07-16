@@ -18,3 +18,4 @@ COPY alembic.ini /app/alembic.ini
 COPY services/api/entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh
 ENTRYPOINT ["/bin/bash", "/app/entrypoint.sh"]
+HEALTHCHECK CMD curl -fs http://localhost:8000/health || exit 1

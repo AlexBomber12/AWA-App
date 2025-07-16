@@ -76,9 +76,48 @@ jobs:
           PG_PORT: '5432'
           DATA_DIR: ${{ runner.temp }}/awa-data
 
+      - name: Upload coverage
+        uses: codecov/codecov-action@v3
+        with:
+          files: coverage.xml
+
       - name: Dump Postgres logs
         if: always()
         run: |
           echo "::group::postgres container logs"
           docker logs ${{ job.services.postgres.id }} --tail 200
           echo "::endgroup::"
+
+  integration-db:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: pass
+          POSTGRES_DB: awa
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd="pg_isready -U postgres -d awa"
+          --health-interval=5s --health-timeout=5s --health-retries=10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install deps
+        run: pip install -r requirements-dev.txt
+      - name: Run migration regression test
+        env:
+          DATABASE_URL: postgresql+psycopg://postgres:pass@localhost:5432/awa
+        run: pytest services/db/tests/test_migrations.py -q
+
+  health-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: cp .env.postgres .env
+      - run: docker compose up -d --wait
+      - run: docker compose ps --filter "status=running" --format '{{.Name}} OK'
+      - run: docker compose down -v
