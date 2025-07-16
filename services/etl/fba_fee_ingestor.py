@@ -27,14 +27,10 @@ def main() -> int:
     conn = connect(dsn)
     cur = conn.cursor()
     cur.execute("DROP TABLE IF EXISTS fees_raw CASCADE")
-    cur.execute(
-        "CREATE TABLE fees_raw("
-        "asin text primary key, fee numeric, captured_at timestamptz default now())"
-    )
+    cur.execute("CREATE TABLE fees_raw(asin text primary key, fee numeric, captured_at timestamptz default now())")
     for asin, fee in results:
         cur.execute(
-            "INSERT INTO fees_raw(asin, fee) VALUES (%s,%s) "
-            "ON CONFLICT (asin) DO UPDATE SET fee = EXCLUDED.fee",
+            "INSERT INTO fees_raw(asin, fee) VALUES (%s,%s) ON CONFLICT (asin) DO UPDATE SET fee = EXCLUDED.fee",
             (asin, fee),
         )
     conn.commit()

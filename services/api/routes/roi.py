@@ -10,11 +10,11 @@ from fastapi import (
     HTTPException,
     Request,
 )
-from starlette import status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import String, bindparam, create_engine, text
 from sqlalchemy.types import Numeric
+from starlette import status
 
 from services.common.dsn import build_dsn
 
@@ -26,9 +26,7 @@ templates = Jinja2Templates(directory="templates")
 def _check_basic_auth(credentials: HTTPBasicCredentials = Depends(security)) -> str:
     user = os.getenv("BASIC_USER", "admin")
     pwd = os.getenv("BASIC_PASS", "pass")
-    ok = secrets.compare_digest(credentials.username, user) and secrets.compare_digest(
-        credentials.password, pwd
-    )
+    ok = secrets.compare_digest(credentials.username, user) and secrets.compare_digest(credentials.password, pwd)
     if not ok:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

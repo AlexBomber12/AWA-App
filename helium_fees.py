@@ -1,5 +1,7 @@
 import os
+
 import requests  # type: ignore
+
 from pg_utils import connect
 from services.common.dsn import build_dsn
 

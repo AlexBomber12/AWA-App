@@ -5,10 +5,11 @@ import tempfile
 from typing import Any
 
 import boto3
-from sqlalchemy import create_engine, text
-from services.common.dsn import build_dsn
 from imapclient import IMAPClient
+from sqlalchemy import create_engine, text
+
 from etl import load_csv
+from services.common.dsn import build_dsn
 
 BUCKET = "awa-bucket"
 
@@ -65,9 +66,7 @@ def main() -> dict[str, str]:
                 engine = create_engine(build_dsn(sync=True))
                 with engine.begin() as db:
                     db.execute(
-                        text(
-                            "UPDATE load_log SET status='success', " "inserted_rows=:n WHERE id=:id"
-                        ),
+                        text("UPDATE load_log SET status='success', inserted_rows=:n WHERE id=:id"),
                         {"n": inserted, "id": load_id},
                     )
                 engine.dispose()

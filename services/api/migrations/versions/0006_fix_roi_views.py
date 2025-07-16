@@ -1,5 +1,6 @@
-from alembic import op  # type: ignore[attr-defined]
 from textwrap import dedent
+
+from alembic import op  # type: ignore[attr-defined]
 
 revision = "0006_fix_roi_views"
 down_revision = "0004_fee_cron"

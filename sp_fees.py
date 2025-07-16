@@ -1,7 +1,8 @@
 import os
-from sp_api.api import SellingPartnerAPI
+
 from pg_utils import connect
 from services.common.dsn import build_dsn
+from sp_api.api import SellingPartnerAPI
 
 
 def main():

@@ -5,16 +5,17 @@ import pytest
 from httpx import Response
 from sqlalchemy import create_engine, text
 from sqlalchemy.ext.asyncio import create_async_engine
-from alembic.config import Config
+
 from alembic import command  # type: ignore[attr-defined]
+from alembic.config import Config
 
 pytestmark = pytest.mark.integration
 
 pytest.importorskip("apscheduler")
 respx = pytest.importorskip("respx")
 
-from services.logistics_etl import cron, client, repository  # noqa: E402
 from services.common import db_url, dsn  # noqa: E402
+from services.logistics_etl import client, cron, repository  # noqa: E402
 
 
 @respx.mock
@@ -41,11 +42,7 @@ async def test_job_inserts_and_affects_roi(postgresql_proc, tmp_path, monkeypatc
     with engine.begin() as conn:
         conn.execute(text("INSERT INTO products(asin, weight_kg) VALUES ('A1',1)"))
         conn.execute(text("INSERT INTO vendors(id, name) VALUES (1,'test')"))
-        conn.execute(
-            text(
-                "INSERT INTO vendor_prices(vendor_id, sku, cost, updated_at) VALUES (1,'A1',2,'2024-01-01')"
-            )
-        )
+        conn.execute(text("INSERT INTO vendor_prices(vendor_id, sku, cost, updated_at) VALUES (1,'A1',2,'2024-01-01')"))
         conn.execute(text("INSERT INTO keepa_offers(asin, buybox_price) VALUES ('A1',10)"))
         conn.execute(
             text(

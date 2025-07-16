@@ -1,6 +1,7 @@
 from fastapi import FastAPI
-from .schemas import PriceRequest, PriceResponse
+
 from .logic import compute_price
+from .schemas import PriceRequest, PriceResponse
 
 app = FastAPI(title="AWA Repricer")
 

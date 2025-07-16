@@ -1,8 +1,9 @@
 import shutil
 import subprocess
 import time
-import requests  # type: ignore
+
 import pytest
+import requests  # type: ignore
 
 if shutil.which("docker") is None or shutil.which("docker-compose") is None:
     pytest.skip("Docker is not installed on this runner", allow_module_level=True)

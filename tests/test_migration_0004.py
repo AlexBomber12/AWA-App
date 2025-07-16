@@ -1,8 +1,9 @@
-from sqlalchemy import create_engine, text
-from alembic.config import Config  # type: ignore[attr-defined]
-from alembic import command  # type: ignore[attr-defined]
-from services.common.dsn import build_dsn
 import pytest
+from sqlalchemy import create_engine, text
+
+from alembic import command  # type: ignore[attr-defined]
+from alembic.config import Config  # type: ignore[attr-defined]
+from services.common.dsn import build_dsn
 
 pytestmark = pytest.mark.integration
 

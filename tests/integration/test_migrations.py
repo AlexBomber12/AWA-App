@@ -1,8 +1,9 @@
-from alembic.config import Config  # type: ignore[attr-defined]
-from alembic import command  # type: ignore[attr-defined]
-from sqlalchemy import create_engine, text
-from services.common.dsn import build_dsn
 import pytest
+from sqlalchemy import create_engine, text
+
+from alembic import command  # type: ignore[attr-defined]
+from alembic.config import Config  # type: ignore[attr-defined]
+from services.common.dsn import build_dsn
 
 pytestmark = pytest.mark.integration
 
@@ -20,16 +21,10 @@ def test_run_migrations(tmp_path, monkeypatch, pg_pool):
     with engine.begin() as conn:
         conn.execute(text("INSERT INTO products(asin) VALUES ('A1')"))
         conn.execute(
-            text(
-                "INSERT INTO offers(asin, seller_sku, price_cents, captured_at) VALUES ('A1','S1',1000,'2024-01-01')"
-            )
+            text("INSERT INTO offers(asin, seller_sku, price_cents, captured_at) VALUES ('A1','S1',1000,'2024-01-01')")
         )
         conn.execute(text("INSERT INTO vendors(id, name) VALUES (1, 'test')"))
-        conn.execute(
-            text(
-                "INSERT INTO vendor_prices(vendor_id, sku, cost, updated_at) VALUES (1,'A1',5,'2024-01-01')"
-            )
-        )
+        conn.execute(text("INSERT INTO vendor_prices(vendor_id, sku, cost, updated_at) VALUES (1,'A1',5,'2024-01-01')"))
         conn.execute(text("INSERT INTO keepa_offers(asin, buybox_price) VALUES ('A1', 25)"))
         conn.execute(
             text(

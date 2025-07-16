@@ -49,14 +49,17 @@ jobs:
       - name: Lint
         run: ruff check .
       - name: Format
-        run: black --check .
+        run: ruff format --check .
       - name: Type check
         run: python -m mypy services || true
       - name: Wait for Postgres again
         run: scripts/wait_pg.sh
       - name: Test
         continue-on-error: false
-        run: pytest -q
+        run: pytest -q \
+          --cov=services --cov=tests \
+          --cov-report=xml \
+          --cov-fail-under=35
       - name: Upload coverage
         uses: codecov/codecov-action@v3
         with:

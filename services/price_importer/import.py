@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import argparse
 
-from .reader import load_file
 from .normaliser import normalise
+from .reader import load_file
 from .repository import Repository
 
 

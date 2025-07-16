@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncEngine
+from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from services.common.dsn import build_dsn
-
 
 ENGINE: AsyncEngine | None = None
 

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Sequence
 
-from sqlalchemy import ARRAY, String, Numeric, bindparam, text
+from sqlalchemy import ARRAY, Numeric, String, bindparam, text
 from sqlalchemy.engine import RowMapping
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -36,9 +36,7 @@ async def fetch_roi_rows(
     vendor: int | None,
     category: str | None,
 ) -> list[RowMapping]:
-    result = await session.execute(
-        ROI_SQL, {"roi_min": roi_min, "vendor": vendor, "category": category}
-    )
+    result = await session.execute(ROI_SQL, {"roi_min": roi_min, "vendor": vendor, "category": category})
     return list(result.mappings().all())
 
 

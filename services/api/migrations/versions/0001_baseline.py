@@ -1,6 +1,7 @@
-from alembic import op  # type: ignore[attr-defined]
 import sqlalchemy as sa
 from sqlalchemy import inspect
+
+from alembic import op  # type: ignore[attr-defined]
 
 revision = "0001_baseline"
 down_revision = None

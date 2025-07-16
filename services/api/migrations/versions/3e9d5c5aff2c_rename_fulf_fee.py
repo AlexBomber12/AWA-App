@@ -1,5 +1,6 @@
-from alembic import op  # type: ignore[attr-defined]
 from sqlalchemy import inspect
+
+from alembic import op  # type: ignore[attr-defined]
 
 """rename fulf_fee -> fulfil_fee and recreate roi_view (fixed id)"""
 

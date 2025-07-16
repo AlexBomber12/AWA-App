@@ -1,8 +1,10 @@
 import asyncio
 import os
+
 from celery import Celery, shared_task
 
 from services.common.keepa import list_active_asins
+
 from .client import fetch_fees
 from .repository import upsert
 

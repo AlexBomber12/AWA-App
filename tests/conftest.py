@@ -1,14 +1,14 @@
-import os
 import asyncio
+import os
 from pathlib import Path
 
-import pytest
 import asyncpg
+import pytest
 from asyncpg import create_pool
-
-from services.common.dsn import build_dsn
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+
+from services.common.dsn import build_dsn
 
 
 def pytest_configure(config):
@@ -17,9 +17,7 @@ def pytest_configure(config):
 
 def _db_available() -> bool:
     async def _check() -> None:
-        conn = await asyncpg.connect(
-            dsn=os.getenv("PG_ASYNC_DSN", build_dsn(sync=False)), timeout=1
-        )
+        conn = await asyncpg.connect(dsn=os.getenv("PG_ASYNC_DSN", build_dsn(sync=False)), timeout=1)
         await conn.close()
 
     try:
@@ -72,8 +70,8 @@ async def _migrate(_set_db_url):
             await asyncio.sleep(2)
     else:
         pytest.skip("Postgres not running – integration tests skipped", allow_module_level=True)
-    from alembic.config import Config
     from alembic import command
+    from alembic.config import Config
 
     command.upgrade(Config("alembic.ini"), "head")
 
@@ -106,6 +104,7 @@ def refresh_mvs(db_engine):
 @pytest.fixture
 def api_client(pg_pool):
     from fastapi.testclient import TestClient
+
     from services.api.main import app
 
     return TestClient(app)  # type: ignore[arg-type]

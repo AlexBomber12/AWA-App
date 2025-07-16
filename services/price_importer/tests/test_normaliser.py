@@ -1,4 +1,5 @@
 import pandas as pd
+
 from services.price_importer.normaliser import guess_columns, normalise
 
 

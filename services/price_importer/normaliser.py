@@ -5,7 +5,6 @@ from typing import Mapping
 
 import pandas as pd
 
-
 _FIELD_MAP = {
     "sku": ["sku", "asin", "code"],
     "cost": ["cost", "unit cost", "price eur", "price", "fob"],
