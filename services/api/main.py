@@ -2,7 +2,7 @@ import asyncio
 from contextlib import asynccontextmanager
 from typing import List
 
-from fastapi import Depends, FastAPI  # type: ignore[attr-defined]
+from fastapi import Depends, FastAPI
 from sqlalchemy import bindparam, text
 from sqlalchemy.ext.asyncio import AsyncSession
 

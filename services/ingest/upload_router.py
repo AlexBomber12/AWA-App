@@ -33,15 +33,5 @@ async def upload(file: UploadFile, minio: Any = Depends(get_minio)) -> JSONRespo
     today = datetime.date.today().strftime("%Y-%m")
     dst = f"raw/amazon/{today}/{file.filename}"
     minio.put_object(Bucket=BUCKET, Key=dst, Body=file.file)
-    _, inserted = load_csv.main(
-        [
-            "--source",
-            f"minio://{dst}",
-            "--table",
-            "auto",
-        ]
-    )
-    return JSONResponse(
-        status_code=201,
-        content={"inserted_rows": inserted, "status": "success"},
-    )
+    _, inserted = load_csv.main(["--source", f"minio://{dst}", "--table", "auto"])
+    return JSONResponse(status_code=201, content={"inserted_rows": inserted, "status": "success"})

@@ -44,9 +44,7 @@ def upgrade() -> None:
             "etl_log",
             sa.Column("job", sa.TEXT()),
             sa.Column(
-                "run_at",
-                sa.TIMESTAMP(timezone=True),
-                server_default=sa.text("CURRENT_TIMESTAMP"),
+                "run_at", sa.TIMESTAMP(timezone=True), server_default=sa.text("CURRENT_TIMESTAMP")
             ),
             sa.Column("row_cnt", sa.Integer()),
         )

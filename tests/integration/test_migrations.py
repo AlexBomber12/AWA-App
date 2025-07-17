@@ -5,7 +5,7 @@ from alembic import command  # type: ignore[attr-defined]
 from alembic.config import Config  # type: ignore[attr-defined]
 from services.common.dsn import build_dsn
 
-pytestmark = pytest.mark.integration
+pytestmark = [pytest.mark.integration, pytest.mark.anyio]
 
 
 def test_run_migrations(tmp_path, monkeypatch, pg_pool):

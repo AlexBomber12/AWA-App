@@ -8,17 +8,9 @@ from services.common.keepa import list_active_asins
 from .client import fetch_fees
 from .repository import upsert
 
-app = Celery(
-    "fees_h10",
-    broker=os.getenv("CELERY_BROKER_URL", "memory://"),
-)
+app = Celery("fees_h10", broker=os.getenv("CELERY_BROKER_URL", "memory://"))
 
-app.conf.beat_schedule = {
-    "refresh-daily": {
-        "task": "fees.refresh",
-        "schedule": 86400.0,
-    }
-}
+app.conf.beat_schedule = {"refresh-daily": {"task": "fees.refresh", "schedule": 86400.0}}
 
 
 @shared_task(name="fees.refresh")  # type: ignore[misc]

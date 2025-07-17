@@ -107,8 +107,7 @@ async def check_a3() -> None:
 
 async def check_a4() -> None:
     rows = await fetch_rows(
-        "SELECT asin, returns_ratio FROM returns_view WHERE returns_ratio > $1",
-        RETURNS_PCT,
+        "SELECT asin, returns_ratio FROM returns_view WHERE returns_ratio > $1", RETURNS_PCT
     )
     if rows:
         lst = "\n".join(f"{r['asin']} {r['returns_ratio']}%" for r in rows)

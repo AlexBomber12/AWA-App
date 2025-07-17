@@ -1,4 +1,15 @@
-FROM python:3.12-slim
-RUN pip install imapclient boto3 python-dotenv requests
-COPY email_watcher.py /app/
-CMD ["python", "/app/email_watcher.py"]
+FROM python:3.11-slim AS builder
+ENV PYTHONUNBUFFERED=1
+WORKDIR /app
+COPY requirements*.txt ./
+RUN PIP_CONSTRAINTS=""; [ -f constraints.txt ] && PIP_CONSTRAINTS="-c constraints.txt"; \
+    pip install --no-cache-dir -r requirements.txt $PIP_CONSTRAINTS && \
+    if [ -f requirements-dev.txt ]; then pip install --no-cache-dir -r requirements-dev.txt $PIP_CONSTRAINTS; fi
+COPY . .
+
+FROM python:3.11-slim
+ENV PYTHONUNBUFFERED=1
+WORKDIR /app
+COPY --from=builder /usr/local /usr/local
+COPY --from=builder /app /app
+CMD ["python", "email_watcher.py"]

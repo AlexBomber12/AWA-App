@@ -1,23 +1,18 @@
-# syntax=docker/dockerfile:1
-FROM python:3.11-slim AS builder
+# syntax=docker/dockerfile:1.6
+FROM python:3.11-slim AS base
+ENV PYTHONUNBUFFERED=1
 WORKDIR /app
-RUN python -m venv /opt/venv
-ENV PATH="/opt/venv/bin:$PATH"
-COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+COPY requirements*.txt ./
+RUN PIP_CONSTRAINTS=""; [ -f constraints.txt ] && PIP_CONSTRAINTS="-c constraints.txt"; \
+    pip install --no-cache-dir -r requirements.txt $PIP_CONSTRAINTS && \
+    if [ -f requirements-dev.txt ]; then pip install --no-cache-dir -r requirements-dev.txt $PIP_CONSTRAINTS; fi
+COPY . .
 
 FROM python:3.11-slim
+ENV PYTHONUNBUFFERED=1
 WORKDIR /app
-ENV PATH="/opt/venv/bin:$PATH"
-COPY --from=builder /opt/venv /opt/venv
-COPY . /tmp/api
-RUN mkdir -p /app/services/api \
-    && mv /tmp/api/*.py /app/services/api/ \
-    && mv /tmp/api/migrations /app/migrations \
-    && mv /tmp/api/templates /app/templates \
-    && mv /tmp/api/config.py /app/config.py \
-    && mv /tmp/api/alembic.ini /app/alembic.ini \
-    && mv /tmp/api/entrypoint.sh /app/entrypoint.sh
+COPY --from=base /usr/local /usr/local
+COPY --from=base /app /app
 RUN chmod +x /app/entrypoint.sh
-ENTRYPOINT ["/bin/bash", "/app/entrypoint.sh"]
+ENTRYPOINT ["bash", "/app/entrypoint.sh"]
 HEALTHCHECK CMD curl -fs http://localhost:8000/health || exit 1

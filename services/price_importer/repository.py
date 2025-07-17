@@ -49,10 +49,7 @@ class Repository:
                 }
                 res = conn.execute(
                     update(VendorPrice)
-                    .where(
-                        VendorPrice.vendor_id == vendor_id,
-                        VendorPrice.sku == values["sku"],
-                    )
+                    .where(VendorPrice.vendor_id == vendor_id, VendorPrice.sku == values["sku"])
                     .values(**values)
                 )
                 if cast(CursorResult[Any], res).rowcount == 0:

@@ -39,8 +39,7 @@ def upgrade() -> None:
         )
     if "currency" not in cols:
         op.add_column(
-            "fees_raw",
-            sa.Column("currency", sa.String(3), nullable=False, server_default="€"),
+            "fees_raw", sa.Column("currency", sa.String(3), nullable=False, server_default="€")
         )
     if "updated_at" not in cols:
         op.add_column(

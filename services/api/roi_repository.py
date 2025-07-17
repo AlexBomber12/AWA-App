@@ -31,10 +31,7 @@ ROI_SQL = text(
 
 
 async def fetch_roi_rows(
-    session: AsyncSession,
-    roi_min: float,
-    vendor: int | None,
-    category: str | None,
+    session: AsyncSession, roi_min: float, vendor: int | None, category: str | None
 ) -> list[RowMapping]:
     result = await session.execute(
         ROI_SQL, {"roi_min": roi_min, "vendor": vendor, "category": category}

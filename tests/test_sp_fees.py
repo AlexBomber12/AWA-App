@@ -43,9 +43,7 @@ def test_main_offline(monkeypatch):
     os.environ["DATABASE_URL"] = build_dsn(sync=True)
     fake_api = FakeSP()
     monkeypatch.setitem(
-        sys.modules,
-        "sp_api.api",
-        types.SimpleNamespace(SellingPartnerAPI=lambda: fake_api),
+        sys.modules, "sp_api.api", types.SimpleNamespace(SellingPartnerAPI=lambda: fake_api)
     )
     fake_conn = FakeConn()
     monkeypatch.setitem(

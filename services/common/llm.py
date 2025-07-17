@@ -1,6 +1,6 @@
 import importlib
 import os
-from typing import Any
+from typing import Any, cast
 
 import httpx
 
@@ -13,11 +13,10 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 async def _local_llm(prompt: str, temp: float, max_toks: int) -> str:
     async with httpx.AsyncClient(timeout=60) as cli:
         r = await cli.post(
-            LOCAL_URL,
-            json={"prompt": prompt, "temperature": temp, "max_tokens": max_toks},
+            LOCAL_URL, json={"prompt": prompt, "temperature": temp, "max_tokens": max_toks}
         )
         r.raise_for_status()
-        return r.json()["completion"]
+        return cast(str, r.json()["completion"])
 
 
 async def _openai_llm(prompt: str, temp: float, max_toks: int) -> str:
@@ -29,14 +28,11 @@ async def _openai_llm(prompt: str, temp: float, max_toks: int) -> str:
         temperature=temp,
         max_tokens=max_toks,
     )
-    return rsp.choices[0].message.content.strip()
+    return cast(str, rsp.choices[0].message.content).strip()
 
 
 async def generate(
-    prompt: str,
-    temperature: float = 0.7,
-    max_tokens: int = 256,
-    provider: str | None = None,
+    prompt: str, temperature: float = 0.7, max_tokens: int = 256, provider: str | None = None
 ) -> str:
     prov = (provider or LLM_PROVIDER).lower()
     if prov == "openai":

@@ -29,14 +29,10 @@ ROI_QUERY = text(
 
 
 async def fetch_roi_rows(
-    session: AsyncSession,
-    roi_min: float,
-    vendor: int | None,
-    category: str | None,
+    session: AsyncSession, roi_min: float, vendor: int | None, category: str | None
 ) -> list[RowMapping]:
     result = await session.execute(
-        ROI_QUERY,
-        {"roi_min": roi_min, "vendor": vendor, "category": category},
+        ROI_QUERY, {"roi_min": roi_min, "vendor": vendor, "category": category}
     )
     return list(result.mappings().all())
 

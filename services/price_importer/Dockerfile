@@ -1,16 +1,17 @@
-FROM python:3.11-slim AS builder
+# syntax=docker/dockerfile:1.6
+FROM python:3.11-slim AS base
+ENV PYTHONUNBUFFERED=1
 WORKDIR /app
-RUN python -m venv /opt/venv
-ENV PATH="/opt/venv/bin:$PATH"
-# install python deps for the importer
-COPY requirements.txt ./requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
+COPY requirements*.txt ./
+RUN PIP_CONSTRAINTS=""; [ -f constraints.txt ] && PIP_CONSTRAINTS="-c constraints.txt"; \
+    pip install --no-cache-dir -r requirements.txt $PIP_CONSTRAINTS && \
+    if [ -f requirements-dev.txt ]; then pip install --no-cache-dir -r requirements-dev.txt $PIP_CONSTRAINTS; fi
+COPY . .
 
 FROM python:3.11-slim
+ENV PYTHONUNBUFFERED=1
 WORKDIR /app
-ENV PATH="/opt/venv/bin:$PATH"
-COPY --from=builder /opt/venv /opt/venv
-# copy only the modules the importer relies on
-COPY services_common /app/services/common
-COPY . /app/price_importer
+COPY --from=base /usr/local /usr/local
+COPY --from=base /app /app
+CMD ["python", "-m", "price_importer.import"]
 HEALTHCHECK CMD curl -fs http://localhost:8000/health || exit 1

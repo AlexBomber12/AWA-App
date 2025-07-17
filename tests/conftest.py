@@ -77,7 +77,7 @@ def _set_db_url():
     os.environ["PG_ASYNC_DSN"] = sync_url.replace("+psycopg", "")
 
 
-@pytest.fixture(scope="session", autouse=True)
+@pytest.fixture(scope="session")
 async def _migrate(_set_db_url):
     dsn = os.environ["DATABASE_URL"]
     for _ in range(30):
@@ -96,7 +96,7 @@ async def _migrate(_set_db_url):
 
 
 @pytest.fixture
-async def pg_pool(_set_db_url):
+async def pg_pool(_set_db_url, _migrate):
     async_dsn = os.getenv("PG_ASYNC_DSN") or build_dsn(sync=False)
     pool = await create_pool(dsn=async_dsn)
     yield pool
@@ -104,7 +104,7 @@ async def pg_pool(_set_db_url):
 
 
 @pytest.fixture()
-def db_engine(_set_db_url):
+def db_engine(_set_db_url, _migrate):
     engine = create_engine(build_dsn(sync=True))
     try:
         yield engine

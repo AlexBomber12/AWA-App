@@ -3,7 +3,7 @@ from sqlalchemy import create_engine, text
 
 from services.common.dsn import build_dsn
 
-pytestmark = pytest.mark.integration
+pytestmark = [pytest.mark.integration, pytest.mark.anyio]
 
 
 def test_roi_after_returns(pg_pool, refresh_mvs):

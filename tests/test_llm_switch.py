@@ -1,6 +1,9 @@
+import pytest
+
 import services.common.llm as llm
 
 
+@pytest.mark.asyncio
 async def test_switch_to_local(monkeypatch):
     async def fake_local(*a, **k):
         return "LOCAL"
@@ -10,6 +13,7 @@ async def test_switch_to_local(monkeypatch):
     assert out == "LOCAL"
 
 
+@pytest.mark.asyncio
 async def test_switch_to_openai(monkeypatch):
     async def fake_openai(*a, **k):
         return "GPT4o"

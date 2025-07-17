@@ -4,12 +4,7 @@ import os
 import secrets
 from typing import List, Optional
 
-from fastapi import (
-    APIRouter,
-    Depends,
-    HTTPException,
-    Request,
-)
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import String, bindparam, create_engine, text
@@ -31,8 +26,7 @@ def _check_basic_auth(credentials: HTTPBasicCredentials = Depends(security)) -> 
     )
     if not ok:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            headers={"WWW-Authenticate": "Basic"},
+            status_code=status.HTTP_401_UNAUTHORIZED, headers={"WWW-Authenticate": "Basic"}
         )
     return credentials.username
 
