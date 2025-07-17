@@ -34,7 +34,9 @@ def pytest_configure(config):
 
 def _db_available() -> bool:
     async def _check() -> None:
-        conn = await asyncpg.connect(dsn=os.getenv("PG_ASYNC_DSN", build_dsn(sync=False)), timeout=1)
+        conn = await asyncpg.connect(
+            dsn=os.getenv("PG_ASYNC_DSN", build_dsn(sync=False)), timeout=1
+        )
         await conn.close()
 
     try:

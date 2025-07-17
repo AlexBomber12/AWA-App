@@ -33,14 +33,22 @@ def upgrade() -> None:
 
     # 2 – add new columns idempotently
     if "storage_fee" not in cols:
-        op.add_column("fees_raw", sa.Column("storage_fee", sa.Numeric(10, 2), nullable=False, server_default="0"))
+        op.add_column(
+            "fees_raw",
+            sa.Column("storage_fee", sa.Numeric(10, 2), nullable=False, server_default="0"),
+        )
     if "currency" not in cols:
-        op.add_column("fees_raw", sa.Column("currency", sa.String(3), nullable=False, server_default="€"))
+        op.add_column(
+            "fees_raw", sa.Column("currency", sa.String(3), nullable=False, server_default="€")
+        )
     if "updated_at" not in cols:
         op.add_column(
             "fees_raw",
             sa.Column(
-                "updated_at", sa.TIMESTAMP(timezone=True), nullable=False, server_default=sa.text("CURRENT_TIMESTAMP")
+                "updated_at",
+                sa.TIMESTAMP(timezone=True),
+                nullable=False,
+                server_default=sa.text("CURRENT_TIMESTAMP"),
             ),
         )
 

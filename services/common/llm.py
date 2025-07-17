@@ -31,7 +31,9 @@ async def _openai_llm(prompt: str, temp: float, max_toks: int) -> str:
     return cast(str, rsp.choices[0].message.content).strip()
 
 
-async def generate(prompt: str, temperature: float = 0.7, max_tokens: int = 256, provider: str | None = None) -> str:
+async def generate(
+    prompt: str, temperature: float = 0.7, max_tokens: int = 256, provider: str | None = None
+) -> str:
     prov = (provider or LLM_PROVIDER).lower()
     if prov == "openai":
         return await _openai_llm(prompt, temperature, max_tokens)

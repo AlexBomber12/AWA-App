@@ -11,7 +11,7 @@ jobs:
     strategy:
       matrix:
         service:
-          [api, etl, fees_h10, logistics_etl, price_importer, repricer, alert_bot, emailer]
+          [api, etl, fees_h10, logistics_etl, price_importer, repricer, alert_bot, emailer, web, llm_server]
     services:
       db:
         image: postgres:15
@@ -32,17 +32,20 @@ jobs:
           cache-dependency-path: |
             constraints.txt
             services/${{ matrix.service }}/requirements.txt
+            services/${{ matrix.service }}/requirements-dev.txt
             requirements-dev.txt
       - name: Install requirements
         run: |
           python -m pip install --upgrade pip
           python -m pip install -r services/${{ matrix.service }}/requirements.txt -c constraints.txt
       - name: Install dev requirements
-        run: python -m pip install -r requirements-dev.txt -c constraints.txt
+        run: |
+          find services -name requirements-dev.txt -print0 | xargs -0 -I {} python -m pip install -r {} -c constraints.txt
       - name: Fix imports
         run: ruff check . --select I001 --fix
-      - name: Build Docker images
-        run: docker compose build --parallel
+      - name: Build service Dockerfile
+        if: hashFiles('services/${{ matrix.service }}/Dockerfile') != ''
+        run: docker build services/${{ matrix.service }} -t tmp-${{ matrix.service }}
       - name: Set PYTHONPATH
         run: echo "PYTHONPATH=$GITHUB_WORKSPACE" >> $GITHUB_ENV
       - name: Set DATABASE_URL

@@ -21,7 +21,10 @@ def main() -> int:
         api = cast(
             Any,
             cast(Any, SellingPartnerAPI)(
-                refresh_token=refresh_token, client_id=client_id, client_secret=client_secret, region=region
+                refresh_token=refresh_token,
+                client_id=client_id,
+                client_secret=client_secret,
+                region=region,
             ),
         )
         results = []
@@ -33,7 +36,11 @@ def main() -> int:
         with open("tests/fixtures/spapi_fees_sample.json") as f:
             data = json.load(f)
         results = [
-            (r["asin"], r["payload"]["FeesEstimateResult"]["FeesEstimate"]["TotalFeesEstimate"]["Amount"]) for r in data
+            (
+                r["asin"],
+                r["payload"]["FeesEstimateResult"]["FeesEstimate"]["TotalFeesEstimate"]["Amount"],
+            )
+            for r in data
         ]
     conn = connect(dsn)
     cur = conn.cursor()

@@ -45,10 +45,22 @@ async def test_repository_upsert(tmp_path, monkeypatch, pg_pool):
             """
         )
     await repository.upsert(
-        {"asin": "A1", "fulfil_fee": 1.0, "referral_fee": 1.0, "storage_fee": 1.0, "currency": "EUR"}
+        {
+            "asin": "A1",
+            "fulfil_fee": 1.0,
+            "referral_fee": 1.0,
+            "storage_fee": 1.0,
+            "currency": "EUR",
+        }
     )
     await repository.upsert(
-        {"asin": "A1", "fulfil_fee": 2.0, "referral_fee": 3.0, "storage_fee": 4.0, "currency": "EUR"}
+        {
+            "asin": "A1",
+            "fulfil_fee": 2.0,
+            "referral_fee": 3.0,
+            "storage_fee": 4.0,
+            "currency": "EUR",
+        }
     )
     with engine.connect() as conn:
         row = conn.execute(
@@ -78,7 +90,9 @@ def test_refresh_fees(tmp_path, monkeypatch, pg_pool):
     monkeypatch.setattr(worker, "list_active_asins", lambda: ["A1", "A2", "A3"])
     for asin in ["A1", "A2", "A3"]:
         respx.get(client.BASE.format(asin)).mock(
-            return_value=Response(200, json={"fulfillmentFee": 1, "referralFee": 1, "storageFee": 1})
+            return_value=Response(
+                200, json={"fulfillmentFee": 1, "referralFee": 1, "storageFee": 1}
+            )
         )
     worker.refresh_fees()
     with engine.connect() as conn:
