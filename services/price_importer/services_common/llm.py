@@ -1,6 +1,6 @@
 import importlib
 import os
-from typing import Any
+from typing import Any, cast
 
 import httpx
 
@@ -17,7 +17,7 @@ async def _local_llm(prompt: str, temp: float, max_toks: int) -> str:
             json={"prompt": prompt, "temperature": temp, "max_tokens": max_toks},
         )
         r.raise_for_status()
-        return r.json()["completion"]
+        return cast(str, r.json()["completion"])
 
 
 async def _openai_llm(prompt: str, temp: float, max_toks: int) -> str:
@@ -29,7 +29,7 @@ async def _openai_llm(prompt: str, temp: float, max_toks: int) -> str:
         temperature=temp,
         max_tokens=max_toks,
     )
-    return rsp.choices[0].message.content.strip()
+    return cast(str, rsp.choices[0].message.content).strip()
 
 
 async def generate(

@@ -1,4 +1,4 @@
-from alembic import op  # type: ignore[attr-defined]
+from alembic import op
 
 
 def replace_view(name: str, new_sql: str) -> None:

@@ -48,7 +48,9 @@ def test_main_offline(monkeypatch):
         types.SimpleNamespace(SellingPartnerAPI=lambda: fake_api),
     )
     fake_conn = FakeConn()
-    monkeypatch.setitem(sys.modules, "pg_utils", types.SimpleNamespace(connect=lambda dsn: fake_conn))
+    monkeypatch.setitem(
+        sys.modules, "pg_utils", types.SimpleNamespace(connect=lambda dsn: fake_conn)
+    )
 
     import importlib
 

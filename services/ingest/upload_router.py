@@ -28,7 +28,7 @@ def get_minio() -> Any:
     )
 
 
-@router.post("/", status_code=201)  # type: ignore[misc]
+@router.post("/", status_code=201)
 async def upload(file: UploadFile, minio: Any = Depends(get_minio)) -> JSONResponse:
     today = datetime.date.today().strftime("%Y-%m")
     dst = f"raw/amazon/{today}/{file.filename}"

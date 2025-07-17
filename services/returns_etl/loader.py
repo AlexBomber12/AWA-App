@@ -32,9 +32,8 @@ def main(argv: list[str] | None = None) -> int:
 
     dsn = build_dsn(sync=True)
     with psycopg.connect(dsn) as conn:
-        with conn.cursor() as cur:
-            cur.execute("TRUNCATE TABLE returns_raw")
-            cur.copy_expert(COPY_SQL, buf)
+        conn.execute("TRUNCATE TABLE returns_raw")
+        conn.copy_expert(COPY_SQL, buf)
     return len(df)
 
 

@@ -7,7 +7,7 @@ from fastapi import APIRouter, Query
 router = APIRouter()
 
 
-@router.post("/ingest")  # type: ignore[misc]
+@router.post("/ingest")
 def ingest(path: str = Query(..., alias="path")) -> dict[str, str]:
     subprocess.run(
         [
