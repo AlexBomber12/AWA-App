@@ -3,9 +3,8 @@ FROM python:3.11-slim AS base
 ENV PYTHONUNBUFFERED=1
 WORKDIR /app
 COPY requirements*.txt ./
-RUN PIP_CONSTRAINTS=""; [ -f constraints.txt ] && PIP_CONSTRAINTS="-c constraints.txt"; \
-    pip install --no-cache-dir -r requirements.txt $PIP_CONSTRAINTS \
-    && if [ -f requirements-dev.txt ]; then pip install --no-cache-dir -r requirements-dev.txt $PIP_CONSTRAINTS; fi
+RUN pip install --no-cache-dir -r requirements.txt \
+    && if [ -f requirements-dev.txt ]; then pip install --no-cache-dir -r requirements-dev.txt; fi
 COPY . .
 
 FROM python:3.11-slim

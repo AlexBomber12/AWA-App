@@ -3,9 +3,8 @@ ENV PYTHONUNBUFFERED=1
 WORKDIR /app
 COPY requirements*.txt ./
 RUN apt-get update && apt-get install -y git build-essential cmake curl python3 python3-pip \
-    && PIP_CONSTRAINTS=""; [ -f constraints.txt ] && PIP_CONSTRAINTS="-c constraints.txt"; \
-    pip install --no-cache-dir -r requirements.txt $PIP_CONSTRAINTS \
-    && if [ -f requirements-dev.txt ]; then pip install --no-cache-dir -r requirements-dev.txt $PIP_CONSTRAINTS; fi
+    && pip install --no-cache-dir -r requirements.txt \
+    && if [ -f requirements-dev.txt ]; then pip install --no-cache-dir -r requirements-dev.txt; fi
 RUN git clone https://github.com/ggerganov/llama.cpp.git /llama && cd /llama && make LLAMA_CUBLAS=1
 COPY download_and_quantize.sh /setup.sh
 RUN bash /setup.sh
