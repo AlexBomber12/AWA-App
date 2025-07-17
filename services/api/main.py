@@ -2,7 +2,7 @@ import asyncio
 from contextlib import asynccontextmanager
 from typing import List
 
-from fastapi import Depends, FastAPI  # type: ignore[attr-defined]
+from fastapi import Depends, FastAPI
 from sqlalchemy import bindparam, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -53,9 +53,7 @@ async def health(session: AsyncSession = Depends(get_session)) -> dict[str, str]
 
 
 @app.post("/score")
-async def score(
-    asins: List[str], session: AsyncSession = Depends(get_session)
-) -> list[dict[str, float | str]]:
+async def score(asins: List[str], session: AsyncSession = Depends(get_session)) -> list[dict[str, float | str]]:
     query = text(
         """
         SELECT p.asin, (p.price - o.cost) / o.cost AS roi

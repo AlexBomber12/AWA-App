@@ -42,15 +42,9 @@ def test_main_offline(monkeypatch):
     os.environ.pop("ENABLE_LIVE", None)
     os.environ["DATABASE_URL"] = build_dsn(sync=True)
     fake_api = FakeSP()
-    monkeypatch.setitem(
-        sys.modules,
-        "sp_api.api",
-        types.SimpleNamespace(SellingPartnerAPI=lambda: fake_api),
-    )
+    monkeypatch.setitem(sys.modules, "sp_api.api", types.SimpleNamespace(SellingPartnerAPI=lambda: fake_api))
     fake_conn = FakeConn()
-    monkeypatch.setitem(
-        sys.modules, "pg_utils", types.SimpleNamespace(connect=lambda dsn: fake_conn)
-    )
+    monkeypatch.setitem(sys.modules, "pg_utils", types.SimpleNamespace(connect=lambda dsn: fake_conn))
 
     import importlib
 

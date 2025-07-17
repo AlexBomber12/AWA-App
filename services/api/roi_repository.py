@@ -24,21 +24,14 @@ ROI_SQL = text(
     LIMIT 200
     """
 ).bindparams(
-    bindparam("vendor", type_=String),
-    bindparam("category", type_=String),
-    bindparam("roi_min", type_=Numeric),
+    bindparam("vendor", type_=String), bindparam("category", type_=String), bindparam("roi_min", type_=Numeric)
 )
 
 
 async def fetch_roi_rows(
-    session: AsyncSession,
-    roi_min: float,
-    vendor: int | None,
-    category: str | None,
+    session: AsyncSession, roi_min: float, vendor: int | None, category: str | None
 ) -> list[RowMapping]:
-    result = await session.execute(
-        ROI_SQL, {"roi_min": roi_min, "vendor": vendor, "category": category}
-    )
+    result = await session.execute(ROI_SQL, {"roi_min": roi_min, "vendor": vendor, "category": category})
     return list(result.mappings().all())
 
 

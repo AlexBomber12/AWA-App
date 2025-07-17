@@ -14,13 +14,15 @@ def main() -> int:
     dsn = build_dsn()
     skus = ["DUMMY1", "DUMMY2"]
     if live:
+        from typing import Any, cast
+
         from sp_api.api import SellingPartnerAPI
 
-        api = SellingPartnerAPI(  # type: ignore[call-arg]
-            refresh_token=refresh_token,
-            client_id=client_id,
-            client_secret=client_secret,
-            region=region,
+        api = cast(
+            Any,
+            cast(Any, SellingPartnerAPI)(
+                refresh_token=refresh_token, client_id=client_id, client_secret=client_secret, region=region
+            ),
         )
         results = []
         for asin in skus:
@@ -31,11 +33,7 @@ def main() -> int:
         with open("tests/fixtures/spapi_fees_sample.json") as f:
             data = json.load(f)
         results = [
-            (
-                r["asin"],
-                r["payload"]["FeesEstimateResult"]["FeesEstimate"]["TotalFeesEstimate"]["Amount"],
-            )
-            for r in data
+            (r["asin"], r["payload"]["FeesEstimateResult"]["FeesEstimate"]["TotalFeesEstimate"]["Amount"]) for r in data
         ]
     conn = connect(dsn)
     cur = conn.cursor()

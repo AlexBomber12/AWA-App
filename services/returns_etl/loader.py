@@ -18,23 +18,16 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     df = pd.read_csv(args.csv)
-    df = df.rename(
-        columns={
-            "ASIN": "asin",
-            "Qty": "qty",
-            "Refund Amount": "fee_eur",
-            "Return Date": "processed_at",
-        }
-    )
+    df = df.rename(columns={"ASIN": "asin", "Qty": "qty", "Refund Amount": "fee_eur", "Return Date": "processed_at"})
     buf = io.StringIO()
     df[["asin", "qty", "fee_eur", "processed_at"]].to_csv(buf, index=False)
     buf.seek(0)
 
     dsn = build_dsn(sync=True)
     with psycopg2.connect(dsn) as conn:
-        conn.execute("TRUNCATE TABLE returns_raw")
         with conn.cursor() as cur:
-            cur.copy_expert(COPY_SQL, buf)
+            cur.execute("TRUNCATE TABLE returns_raw")
+        conn.execute(COPY_SQL, buf)
     return len(df)
 
 

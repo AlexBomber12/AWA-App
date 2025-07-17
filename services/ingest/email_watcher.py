@@ -55,14 +55,7 @@ def main() -> dict[str, str]:
                 today = datetime.date.today().strftime("%Y-%m")
                 dst = f"raw/amazon/{today}/{name}"
                 s3.upload_file(tmp_path, BUCKET, dst)
-                load_id, inserted = load_csv.main(
-                    [
-                        "--source",
-                        f"minio://{dst}",
-                        "--table",
-                        "auto",
-                    ]
-                )
+                load_id, inserted = load_csv.main(["--source", f"minio://{dst}", "--table", "auto"])
                 engine = create_engine(build_dsn(sync=True))
                 with engine.begin() as db:
                     db.execute(
