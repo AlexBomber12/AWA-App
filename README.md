@@ -109,4 +109,4 @@ dedicated tables.
 | `reimbursements_report` | `reimbursements_raw` |
 
 ### Dependency pinning
-Run `./scripts/pin_constraints.sh` whenever you update service requirements to refresh `constraints.txt` for reproducible installs.
+Run `./scripts/pin_constraints.sh` whenever you update service requirements to refresh an optional `constraints.txt` for reproducible installs.
