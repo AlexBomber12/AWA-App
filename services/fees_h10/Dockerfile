@@ -1,15 +1,16 @@
-FROM python:3.11-slim AS builder
+# syntax=docker/dockerfile:1.6
+FROM python:3.11-slim AS base
 ENV PYTHONUNBUFFERED=1
 WORKDIR /app
-COPY requirements*.txt constraints.txt ./
-RUN pip install --no-cache-dir -r requirements.txt -c constraints.txt
-RUN if [ -f requirements-dev.txt ]; then pip install --no-cache-dir -r requirements-dev.txt -c constraints.txt; fi
+COPY requirements*.txt ./
+RUN pip install --no-cache-dir -r requirements.txt 
+RUN if [ -f requirements-dev.txt ]; then pip install --no-cache-dir -r requirements-dev.txt ; fi
 COPY . .
 
 FROM python:3.11-slim
 ENV PYTHONUNBUFFERED=1
 WORKDIR /app
-COPY --from=builder /usr/local /usr/local
-COPY --from=builder /app /app
+COPY --from=base /usr/local /usr/local
+COPY --from=base /app /app
 CMD ["celery", "-A", "services.fees_h10.worker", "beat", "-l", "info"]
 HEALTHCHECK CMD curl -fs http://localhost:8000/health || exit 1
