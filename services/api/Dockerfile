@@ -1,16 +1,14 @@
 # syntax=docker/dockerfile:1
-FROM python:3.11-slim AS builder
+FROM --platform=$BUILDPLATFORM python:3.11-slim AS builder
 WORKDIR /app
-RUN python -m venv /opt/venv
-ENV PATH="/opt/venv/bin:$PATH"
-COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+COPY requirements.txt constraints.txt ./
+RUN pip install --no-cache-dir -r requirements.txt -c constraints.txt
+COPY . /tmp/api
 
 FROM python:3.11-slim
 WORKDIR /app
-ENV PATH="/opt/venv/bin:$PATH"
-COPY --from=builder /opt/venv /opt/venv
-COPY . /tmp/api
+COPY --from=builder /usr/local /usr/local
+COPY --from=builder /tmp/api /tmp/api
 RUN mkdir -p /app/services/api \
     && mv /tmp/api/*.py /app/services/api/ \
     && mv /tmp/api/migrations /app/migrations \
