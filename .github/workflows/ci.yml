@@ -6,7 +6,17 @@ on:
     branches: [dev, main]
 
 jobs:
+  dependabot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npx @dependabot/cli validate --file .github/dependabot.yml
+
   service:
+    needs: dependabot
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -52,7 +62,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /tmp/.buildx-cache
-          key: ${{ runner.os }}-docker-${{ hashFiles('services/${{ matrix.service }}/Dockerfile') }}
+          key: ${{ runner.os }}-docker-${{ hashFiles('services/**/Dockerfile') }}
       - name: Build service Dockerfile
         if: hashFiles('services/${{ matrix.service }}/Dockerfile') != ''
         run: docker build -f services/${{ matrix.service }}/Dockerfile . -t tmp-${{ matrix.service }}
@@ -90,6 +100,7 @@ jobs:
           files: coverage.xml
 
   web:
+    needs: dependabot
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
