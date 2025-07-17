@@ -2,9 +2,10 @@ FROM ubuntu:22.04
 ENV PYTHONUNBUFFERED=1
 WORKDIR /app
 COPY requirements*.txt ./
+COPY ../../constraints.txt ./
 RUN apt-get update && apt-get install -y git build-essential cmake curl python3 python3-pip \
-    && pip install --no-cache-dir -r requirements.txt \
-    && if [ -f requirements-dev.txt ]; then pip install --no-cache-dir -r requirements-dev.txt; fi
+    && pip install --no-cache-dir -r requirements.txt -c constraints.txt \
+    && if [ -f requirements-dev.txt ]; then pip install --no-cache-dir -r requirements-dev.txt -c constraints.txt; fi
 RUN git clone https://github.com/ggerganov/llama.cpp.git /llama && cd /llama && make LLAMA_CUBLAS=1
 COPY download_and_quantize.sh /setup.sh
 RUN bash /setup.sh

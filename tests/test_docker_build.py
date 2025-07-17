@@ -13,4 +13,14 @@ DOCKERFILES = list(Path("services").glob("*/Dockerfile"))
 def test_build_service_images(dockerfile: Path) -> None:
     if dockerfile.parent.name == "llm_server" and not os.getenv("CUDA_VISIBLE_DEVICES"):
         pytest.skip("GPU image skipped")
-    subprocess.run(["docker", "build", dockerfile.parent.as_posix(), "-t", "tmp"], check=True)
+    subprocess.check_call(
+        [
+            "docker",
+            "build",
+            "-f",
+            dockerfile.as_posix(),
+            ".",
+            "-t",
+            "tmp",
+        ]
+    )

@@ -21,6 +21,8 @@ def main() -> None:
     dsn = build_dsn()
     start = time.time()
     if live:
+        if key is None:
+            raise RuntimeError("KEEPA_KEY not set")
         api = keepa.Keepa(key)
         params = {"sales_rank_lte": 80000, "buybox_price_gte": 2000, "num_offers_lte": 10}
         asins = api.product_finder(params, domain="IT", n_products=20000)

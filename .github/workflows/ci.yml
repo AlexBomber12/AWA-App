@@ -25,6 +25,9 @@ jobs:
         ports: ['5432:5432']
     steps:
       - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+        with:
+          install: true
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -48,7 +51,7 @@ jobs:
         run: ruff check . --select I001 --fix
       - name: Build service Dockerfile
         if: hashFiles('services/${{ matrix.service }}/Dockerfile') != ''
-        run: docker build services/${{ matrix.service }} -t tmp-${{ matrix.service }}
+        run: docker build -f services/${{ matrix.service }}/Dockerfile . -t tmp-${{ matrix.service }}
       - name: Cache docker layers
         uses: actions/cache@v4
         with:

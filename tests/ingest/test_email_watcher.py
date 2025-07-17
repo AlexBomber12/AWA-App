@@ -8,7 +8,7 @@ from sqlalchemy import create_engine, text
 from services.common.dsn import build_dsn
 from services.ingest import email_watcher
 
-pytestmark = pytest.mark.integration
+pytestmark = [pytest.mark.integration, pytest.mark.anyio]
 
 
 class FakeS3:
