@@ -4,7 +4,7 @@ from logging.config import fileConfig
 
 from sqlalchemy import create_engine
 
-from alembic import context  # type: ignore
+from alembic import context
 from services.common.dsn import build_dsn
 
 config = context.config

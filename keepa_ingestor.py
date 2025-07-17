@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import datetime
 import io
 import json
@@ -12,7 +14,7 @@ from pg_utils import connect
 from services.common.dsn import build_dsn
 
 
-def main():
+def main() -> None:
     live = os.getenv("ENABLE_LIVE") == "1"
     key = os.environ.get("KEEPA_KEY")
     endpoint = os.environ.get("MINIO_ENDPOINT")

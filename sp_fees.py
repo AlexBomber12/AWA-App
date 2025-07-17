@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 
 from pg_utils import connect
@@ -5,7 +7,7 @@ from services.common.dsn import build_dsn
 from sp_api.api import SellingPartnerAPI
 
 
-def main():
+def main() -> None:
     live = os.getenv("ENABLE_LIVE") == "1"
     dsn = build_dsn()
     conn = connect(dsn)
