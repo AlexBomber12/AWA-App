@@ -2,16 +2,16 @@ FROM ubuntu:22.04
 ENV PYTHONUNBUFFERED=1
 WORKDIR /app
 COPY requirements*.txt ./
-ARG USE_CONSTRAINTS=false
+ARG CONSTRAINTS=""
 RUN apt-get update && apt-get install -y git build-essential cmake curl python3 python3-pip \
-    && if [ "$USE_CONSTRAINTS" = "true" ] && [ -f constraints.txt ]; then \
-        pip install -r requirements.txt -c constraints.txt; \
+    && if [ -n "$CONSTRAINTS" ] && [ -f "$CONSTRAINTS" ]; then \
+        pip install -r requirements.txt -c "$CONSTRAINTS"; \
     else \
         pip install -r requirements.txt; \
     fi \
     && if [ -f requirements-dev.txt ]; then \
-        if [ "$USE_CONSTRAINTS" = "true" ] && [ -f constraints.txt ]; then \
-            pip install -r requirements-dev.txt -c constraints.txt; \
+        if [ -n "$CONSTRAINTS" ] && [ -f "$CONSTRAINTS" ]; then \
+            pip install -r requirements-dev.txt -c "$CONSTRAINTS"; \
         else \
             pip install -r requirements-dev.txt; \
         fi; \
