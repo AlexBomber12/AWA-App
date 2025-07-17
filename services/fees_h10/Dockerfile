@@ -1,10 +1,13 @@
 FROM python:3.11-slim AS builder
+ENV PYTHONUNBUFFERED=1
 WORKDIR /app
-COPY requirements.txt constraints.txt ./
+COPY requirements*.txt constraints.txt ./
 RUN pip install --no-cache-dir -r requirements.txt -c constraints.txt
+RUN if [ -f requirements-dev.txt ]; then pip install --no-cache-dir -r requirements-dev.txt -c constraints.txt; fi
 COPY . .
 
 FROM python:3.11-slim
+ENV PYTHONUNBUFFERED=1
 WORKDIR /app
 COPY --from=builder /usr/local /usr/local
 COPY --from=builder /app /app

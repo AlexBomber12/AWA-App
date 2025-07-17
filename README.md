@@ -1,5 +1,7 @@
 # AWA App
-[![codecov](https://codecov.io/gh/your-org/AWA-App/branch/main/graph/badge.svg)](https://codecov.io/gh/your-org/AWA-App)
+[![CI](https://github.com/your-org/AWA-App/actions/workflows/ci.yml/badge.svg)](https://github.com/your-org/AWA-App/actions/workflows/ci.yml)
+[![coverage](https://codecov.io/gh/your-org/AWA-App/branch/main/graph/badge.svg)](https://codecov.io/gh/your-org/AWA-App)
+[![docker](https://img.shields.io/badge/docker-build-blue)](https://hub.docker.com/r/your-org/awa-app)
 
 ## Quick Start
 Repricer API → http://localhost:8100/health
