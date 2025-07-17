@@ -1,8 +1,10 @@
 import os
 import sys
-from pathlib import Path
 from logging.config import fileConfig
+from pathlib import Path
+
 from sqlalchemy import engine_from_config, pool
+
 from alembic import context
 
 ROOT = Path(__file__).resolve().parents[3]

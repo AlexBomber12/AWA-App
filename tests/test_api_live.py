@@ -1,8 +1,9 @@
 import os
-import time
 import socket
-import requests  # type: ignore
+import time
+
 import pytest
+import requests  # type: ignore
 
 
 def _port_open(host: str, port: int) -> bool:

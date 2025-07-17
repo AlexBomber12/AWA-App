@@ -1,6 +1,7 @@
 import os
 import sys
 import types
+
 from services.common.dsn import build_dsn
 from services.etl import sp_fees_ingestor
 

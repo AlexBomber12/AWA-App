@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import subprocess
+from typing import Dict
+
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from typing import Dict
-import subprocess
 
 MODEL = "/models/llama3-q4_K_M.gguf"
 BIN = "/llama/main"

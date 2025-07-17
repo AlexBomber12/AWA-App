@@ -1,6 +1,7 @@
-from alembic.config import Config
-from alembic import command  # type: ignore[attr-defined]
 from pathlib import Path
+
+from alembic import command  # type: ignore[attr-defined]
+from alembic.config import Config
 
 
 async def run_migrations() -> None:

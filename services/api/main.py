@@ -2,18 +2,17 @@ import asyncio
 from contextlib import asynccontextmanager
 from typing import List
 
+from fastapi import Depends, FastAPI  # type: ignore[attr-defined]
 from sqlalchemy import bindparam, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from fastapi import Depends, FastAPI  # type: ignore[attr-defined]
-
-from .routes.roi import router as roi_router
-from .routes.stats import router as stats_router
-from services.ingest.upload_router import router as upload_router
+from services.common.dsn import build_dsn
 from services.ingest.ingest_router import router as ingest_router
+from services.ingest.upload_router import router as upload_router
 
 from .db import get_session
-from services.common.dsn import build_dsn
+from .routes.roi import router as roi_router
+from .routes.stats import router as stats_router
 
 
 @asynccontextmanager

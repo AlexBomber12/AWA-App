@@ -1,9 +1,10 @@
 import asyncio
 import logging
 import os
+
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-from .rules import check_a1, check_a2, check_a3, check_a4, check_a5, bot
+from .rules import bot, check_a1, check_a2, check_a3, check_a4, check_a5
 
 logging.basicConfig(level=logging.INFO)
 

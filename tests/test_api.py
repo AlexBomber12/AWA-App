@@ -1,6 +1,7 @@
-import httpx
 import os
 import socket
+
+import httpx
 import pytest
 
 pytestmark = pytest.mark.integration

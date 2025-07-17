@@ -1,4 +1,5 @@
 # AWA App
+[![codecov](https://codecov.io/gh/your-org/AWA-App/branch/main/graph/badge.svg)](https://codecov.io/gh/your-org/AWA-App)
 
 ## Quick Start
 Repricer API → http://localhost:8100/health

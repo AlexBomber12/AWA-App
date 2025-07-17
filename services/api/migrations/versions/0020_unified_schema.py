@@ -1,5 +1,6 @@
-from alembic import op
 import sqlalchemy as sa
+
+from alembic import op
 
 revision = "0020_unified_schema"
 down_revision = "0006_fix_roi_views"

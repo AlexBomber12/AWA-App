@@ -1,14 +1,31 @@
-import os
+from __future__ import annotations
+
 import asyncio
+import os
 from pathlib import Path
 
-import pytest
 import asyncpg
-from asyncpg import create_pool
+import pytest
 
-from services.common.dsn import build_dsn
+__all__ = [
+    "pytest_configure",
+    "_db_available",
+    "pytest_collection_modifyitems",
+    "_set_db_url",
+    "_migrate",
+    "pg_pool",
+    "db_engine",
+    "refresh_mvs",
+    "api_client",
+    "data_dir",
+    "sample_xlsx",
+    "migrated_session",
+]
+from asyncpg import create_pool
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+
+from services.common.dsn import build_dsn
 
 
 def pytest_configure(config):
@@ -72,8 +89,8 @@ async def _migrate(_set_db_url):
             await asyncio.sleep(2)
     else:
         pytest.skip("Postgres not running – integration tests skipped", allow_module_level=True)
-    from alembic.config import Config
     from alembic import command
+    from alembic.config import Config
 
     command.upgrade(Config("alembic.ini"), "head")
 
@@ -106,6 +123,7 @@ def refresh_mvs(db_engine):
 @pytest.fixture
 def api_client(pg_pool):
     from fastapi.testclient import TestClient
+
     from services.api.main import app
 
     return TestClient(app)  # type: ignore[arg-type]

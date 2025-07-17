@@ -5,7 +5,7 @@ import io
 from pathlib import Path
 
 import pandas as pd
-import psycopg
+import psycopg2
 
 from services.common.dsn import build_dsn
 
@@ -31,10 +31,10 @@ def main(argv: list[str] | None = None) -> int:
     buf.seek(0)
 
     dsn = build_dsn(sync=True)
-    with psycopg.connect(dsn) as conn:
+    with psycopg2.connect(dsn) as conn:
+        conn.execute("TRUNCATE TABLE returns_raw")
         with conn.cursor() as cur:
-            cur.execute("TRUNCATE TABLE returns_raw")
-            cur.copy_expert(COPY_SQL, buf)  # type: ignore[attr-defined]
+            cur.copy_expert(COPY_SQL, buf)
     return len(df)
 
 

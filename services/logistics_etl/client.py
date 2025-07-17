@@ -1,6 +1,7 @@
-import os
 import csv
 import io
+import os
+
 import httpx
 
 URL = os.getenv("FREIGHT_API_URL", "https://example.com/freight.csv")

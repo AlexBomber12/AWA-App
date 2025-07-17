@@ -1,7 +1,11 @@
+from __future__ import annotations
+
 import json
+from pathlib import Path
+from typing import Any
 
 
-def run_etl(api_key, minio_client, etl_log, tmp_path):
+def run_etl(api_key: str, minio_client: Any, etl_log: Any, tmp_path: Path) -> Path:
     import keepa
 
     k = keepa.Keepa(api_key)

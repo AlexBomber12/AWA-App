@@ -1,5 +1,7 @@
-from fastapi.testclient import TestClient
 import subprocess
+
+from fastapi.testclient import TestClient
+
 from services.llm_server import app as llm_app
 
 client = TestClient(llm_app.app)

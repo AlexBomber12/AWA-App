@@ -1,6 +1,7 @@
-from decimal import Decimal
 import site
 import sys
+from decimal import Decimal
+
 import pytest
 
 respx = pytest.importorskip("respx")
@@ -13,8 +14,9 @@ if sys.path[0] != site_pkg:
 sys.modules.pop("fastapi", None)
 
 from fastapi.testclient import TestClient  # noqa: E402
-from services.repricer.app.main import app  # noqa: E402
+
 from services.repricer.app.logic import compute_price  # noqa: E402
+from services.repricer.app.main import app  # noqa: E402
 
 client = TestClient(app)  # type: ignore[arg-type]
 

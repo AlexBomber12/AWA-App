@@ -1,5 +1,6 @@
-import types
 import sys
+import types
+
 from etl import run_etl
 
 

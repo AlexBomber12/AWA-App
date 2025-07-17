@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from typing import Iterable, cast, Any
+from typing import Any, Iterable, cast
 
-from sqlalchemy import create_engine, select, update, insert
-from sqlalchemy.engine import Engine, CursorResult
+from sqlalchemy import create_engine, insert, select, update
+from sqlalchemy.engine import CursorResult, Engine
 
 from services.common.dsn import build_dsn
+
 from .common import Base
 from .common.models_vendor import Vendor, VendorPrice
 

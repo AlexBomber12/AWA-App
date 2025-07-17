@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Sequence
 
-from sqlalchemy import ARRAY, String, Numeric, bindparam, text
+from sqlalchemy import ARRAY, Numeric, String, bindparam, text
 from sqlalchemy.engine import RowMapping
 from sqlalchemy.ext.asyncio import AsyncSession
 

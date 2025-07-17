@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 import asyncpg
 
@@ -13,7 +13,7 @@ else:  # runtime import with fallback
     except ModuleNotFoundError:  # pragma: no cover - CI fallback
 
         class RuntimeBot:
-            def __init__(self, token: str) -> None:  # noqa: D401 - simple stub
+            def __init__(self, _: str) -> None:  # noqa: D401 - simple stub
                 """Stub telegram.Bot when library is absent."""
 
             async def send_message(self, *a: Any, **k: Any) -> None:
@@ -44,7 +44,7 @@ async def fetch_rows(query: str, *args: Any) -> list[asyncpg.Record]:
         rows = await conn.fetch(query, *args)
     finally:
         await conn.close()
-    return rows
+    return cast(list[asyncpg.Record], rows)
 
 
 async def send(title: str, body: str) -> None:

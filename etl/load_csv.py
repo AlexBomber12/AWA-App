@@ -3,24 +3,25 @@ from __future__ import annotations
 import argparse
 import os
 import tempfile
-from pathlib import Path
 from datetime import datetime, timezone
+from pathlib import Path
 
 import boto3
 import pandas as pd
 from sqlalchemy import create_engine, text
+from sqlalchemy.engine import Connection
 
 from services.common.dsn import build_dsn
 from services.etl.dialects import (
-    amazon_returns,
     amazon_reimbursements,
+    amazon_returns,
     normalise_headers,
 )
 
 BUCKET = "awa-bucket"
 
 
-def _log_load(conn, *, source: str, table: str, rows: int, status: str) -> int:
+def _log_load(conn: Connection, *, source: str, table: str, rows: int, status: str) -> int:
     result = conn.execute(
         text(
             "INSERT INTO load_log "

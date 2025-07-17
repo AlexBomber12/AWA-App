@@ -1,7 +1,6 @@
 import os
 
 # ruff: noqa: E402
-
 import pytest
 
 respx = pytest.importorskip("respx")

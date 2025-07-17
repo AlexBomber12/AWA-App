@@ -10,11 +10,11 @@ from fastapi import (
     HTTPException,
     Request,
 )
-from starlette import status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import String, bindparam, create_engine, text
 from sqlalchemy.types import Numeric
+from starlette import status
 
 from services.common.dsn import build_dsn
 

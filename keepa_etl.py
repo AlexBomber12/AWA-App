@@ -7,9 +7,9 @@ import time
 
 import keepa
 from minio import Minio
+
 from pg_utils import connect
 from services.common.dsn import build_dsn
-
 
 key = os.environ["KEEPA_KEY"]
 minio_endpoint = os.environ["MINIO_ENDPOINT"]
