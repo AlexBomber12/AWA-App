@@ -25,11 +25,7 @@ def test_refund_view_type_and_values():
 
         engine = sa.create_engine(os.environ["DATABASE_URL"])
         with engine.begin() as conn:
-            conn.execute(
-                sa.text(
-                    "INSERT INTO refunds_raw (asin, amount, created_at) VALUES ('SKU1', 1.23, now())"
-                )
-            )
+            conn.execute(sa.text("INSERT INTO refunds_raw (asin, amount, created_at) VALUES ('SKU1', 1.23, now())"))
             refunds = conn.execute(sa.text("SELECT refunds FROM v_refund_totals WHERE asin='SKU1'"))
             val = refunds.scalar()
             dtype = conn.execute(

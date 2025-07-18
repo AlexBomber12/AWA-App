@@ -45,6 +45,8 @@ Services and tests read these values automatically.
 The GitHub Actions test workflow uses a Postgres service container. It waits
 for the database to become healthy, runs Alembic migrations and executes the
 tests. No `docker compose` commands are required in CI.
+The workflow also validates the Dependabot configuration using
+`marocchino/validate-dependabot` to avoid broken update PRs.
 
 
 ## Importing supplier prices

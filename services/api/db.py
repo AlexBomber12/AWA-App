@@ -10,9 +10,7 @@ pool_kwargs = {}
 if os.getenv("TESTING") == "1":
     pool_kwargs["poolclass"] = NullPool
 
-engine = create_async_engine(
-    DATABASE_URL, pool_pre_ping=True, future=True, echo=False, **pool_kwargs
-)
+engine = create_async_engine(DATABASE_URL, pool_pre_ping=True, future=True, echo=False, **pool_kwargs)
 
 async_session = async_sessionmaker(engine, expire_on_commit=False)
 
