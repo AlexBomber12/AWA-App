@@ -7,10 +7,10 @@ from services.common.dsn import build_dsn
 
 def main() -> int:
     live = os.getenv("ENABLE_LIVE") == "1"
-    refresh_token = os.environ["SP_REFRESH_TOKEN"]
-    client_id = os.environ["SP_CLIENT_ID"]
-    client_secret = os.environ["SP_CLIENT_SECRET"]
-    region = os.environ["REGION"]
+    refresh_token = os.getenv("SP_REFRESH_TOKEN", "")
+    client_id = os.getenv("SP_CLIENT_ID", "")
+    client_secret = os.getenv("SP_CLIENT_SECRET", "")
+    region = os.getenv("REGION", "")
     dsn = build_dsn()
     skus = ["DUMMY1", "DUMMY2"]
     if live:

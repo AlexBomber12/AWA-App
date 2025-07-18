@@ -10,9 +10,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: marocchino/validate-dependabot@v3
-        with:
-          path: .github/dependabot.yml
+      - name: Validate config
+        run: |
+          docker run --rm -v "$PWD":/workdir -w /workdir ghcr.io/dependabot/cli:latest validate .github/dependabot.yml
 
   list_services:
     runs-on: ubuntu-latest
@@ -76,9 +76,20 @@ jobs:
         with:
           path: /tmp/.buildx-cache
           key: ${{ runner.os }}-docker-${{ hashFiles('services/**/Dockerfile') }}
+      - name: Pre-pull base images
+        if: hashFiles('services/${{ matrix.service }}/Dockerfile') != ''
+        run: |
+          awk '/^FROM /{print $2}' services/${{ matrix.service }}/Dockerfile | while read img; do
+            for i in 0 1 2 4 8; do
+              docker pull "$img" && break || sleep $i
+            done
+          done
       - name: Build service Dockerfile
         if: hashFiles('services/${{ matrix.service }}/Dockerfile') != ''
-        run: docker build services/${{ matrix.service }} -t tmp-${{ matrix.service }}
+        run: |
+          for i in 0 1 2 4 8; do
+            docker build services/${{ matrix.service }} -t tmp-${{ matrix.service }} && break || sleep $i
+          done
       - name: Docker compose build
         run: docker compose build --parallel
       - name: Set PYTHONPATH

@@ -14,10 +14,10 @@ from services.common.dsn import build_dsn
 
 def main() -> None:
     live = os.getenv("ENABLE_LIVE") == "1"
-    key = os.environ.get("KEEPA_KEY")
-    endpoint = os.environ.get("MINIO_ENDPOINT")
-    access = os.environ.get("MINIO_ACCESS_KEY")
-    secret = os.environ.get("MINIO_SECRET_KEY")
+    key = os.getenv("KEEPA_KEY")
+    endpoint = os.getenv("MINIO_ENDPOINT", "minio:9000")
+    access = os.getenv("MINIO_ACCESS_KEY", "minio")
+    secret = os.getenv("MINIO_SECRET_KEY", "minio123")
     dsn = build_dsn()
     start = time.time()
     if live:

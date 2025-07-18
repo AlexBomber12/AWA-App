@@ -10,7 +10,7 @@ ASINS = ["DUMMY1", "DUMMY2"]
 
 def main() -> int:
     live = os.getenv("ENABLE_LIVE") == "1"
-    api_key = os.environ["HELIUM_API_KEY"]
+    api_key = os.getenv("HELIUM_API_KEY", "")
     dsn = build_dsn()
     if live:
         results = []
