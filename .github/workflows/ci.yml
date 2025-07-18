@@ -11,9 +11,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Validate dependabot.yml
-        uses: dependabot/cli-action@v2
-        with:
-          command: validate .github/dependabot.yml
+        uses: marocchino/validate-dependabot@v3
 
   list_services:
     runs-on: ubuntu-latest
@@ -112,10 +110,11 @@ jobs:
       - name: Wait for Postgres again
         run: scripts/wait_pg.sh
 
-      - name: Install PostgreSQL client
+      - name: Install Postgres client & expose initdb
         run: |
           sudo apt-get update
-          sudo apt-get install -y postgresql
+          sudo apt-get install -y postgresql-client
+          echo "/usr/lib/postgresql/$(pg_config --version | cut -d' ' -f2 | cut -d'.' -f1,2)/bin" >> $GITHUB_PATH
       - name: Dockerfile build sanity
         run: pytest -q tests/test_docker_build.py
       - name: Test
