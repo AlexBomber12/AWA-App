@@ -1,12 +1,15 @@
+"""Tests for keepa_ingestor offline mode."""
+# ruff: noqa: E402
+
 import os
+import shutil
 import sys
 import types
-import shutil
 from pathlib import Path
 
 # Stub external modules
-sys.modules['keepa'] = types.SimpleNamespace(Keepa=lambda key: None)
-sys.modules['minio'] = types.SimpleNamespace(Minio=lambda *a, **k: None)
+sys.modules["keepa"] = types.SimpleNamespace(Keepa=lambda key: None)
+sys.modules["minio"] = types.SimpleNamespace(Minio=lambda *a, **k: None)
 
 from services.etl import keepa_ingestor
 
