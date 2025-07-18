@@ -9,8 +9,9 @@ import pytest
 
 
 def _run_with_retries(cmd: list[str]) -> subprocess.CompletedProcess[str]:
+    """Run a command with exponential backoff retries."""
     result: subprocess.CompletedProcess[str] = subprocess.CompletedProcess(cmd, 1)
-    for attempt in range(3):
+    for attempt in range(5):
         result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
         if result.returncode == 0:
             break
