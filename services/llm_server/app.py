@@ -19,6 +19,11 @@ class Req(BaseModel):
 app = FastAPI()
 
 
+@app.get("/health")
+def health() -> dict[str, str]:
+    return {"status": "ok"}
+
+
 @app.post("/llm")
 def gen(r: Req) -> Dict[str, str]:
     try:

@@ -1,19 +1,12 @@
 FROM python:3.11-slim AS builder
 ENV PYTHONUNBUFFERED=1
 WORKDIR /app
-COPY requirements*.txt ./
+COPY requirements*.txt constraints.txt ./
 ARG CONSTRAINTS=""
 RUN if [ -n "$CONSTRAINTS" ] && [ -f "$CONSTRAINTS" ]; then \
         pip install -r requirements.txt -c "$CONSTRAINTS"; \
     else \
         pip install -r requirements.txt; \
-    fi && \
-    if [ -f requirements-dev.txt ]; then \
-        if [ -n "$CONSTRAINTS" ] && [ -f "$CONSTRAINTS" ]; then \
-            pip install -r requirements-dev.txt -c "$CONSTRAINTS"; \
-        else \
-            pip install -r requirements-dev.txt; \
-        fi; \
     fi
 COPY . .
 
@@ -23,3 +16,4 @@ WORKDIR /app
 COPY --from=builder /usr/local /usr/local
 COPY --from=builder /app /app
 CMD ["python", "email_watcher.py"]
+HEALTHCHECK CMD ["true"]

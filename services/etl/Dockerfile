@@ -2,19 +2,12 @@
 FROM python:3.11-slim AS base
 ENV PYTHONUNBUFFERED=1
 WORKDIR /app
-COPY requirements*.txt ./
+COPY requirements*.txt constraints.txt ./
 ARG CONSTRAINTS=""
 RUN if [ -n "$CONSTRAINTS" ] && [ -f "$CONSTRAINTS" ]; then \
         pip install -r requirements.txt -c "$CONSTRAINTS"; \
     else \
         pip install -r requirements.txt; \
-    fi && \
-    if [ -f requirements-dev.txt ]; then \
-        if [ -n "$CONSTRAINTS" ] && [ -f "$CONSTRAINTS" ]; then \
-            pip install -r requirements-dev.txt -c "$CONSTRAINTS"; \
-        else \
-            pip install -r requirements-dev.txt; \
-        fi; \
     fi
 COPY . .
 
@@ -27,4 +20,4 @@ COPY wait-for-it.sh /app/wait-for-it.sh
 COPY entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/wait-for-it.sh /app/entrypoint.sh
 ENTRYPOINT ["/bin/bash", "/app/entrypoint.sh"]
-HEALTHCHECK CMD curl -fs http://localhost:8000/health || exit 1
+HEALTHCHECK CMD ["true"]

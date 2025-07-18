@@ -2,19 +2,12 @@
 FROM python:3.11-slim AS base
 ENV PYTHONUNBUFFERED=1
 WORKDIR /app
-COPY requirements*.txt ./
+COPY requirements*.txt constraints.txt ./
 ARG CONSTRAINTS=""
 RUN if [ -n "$CONSTRAINTS" ] && [ -f "$CONSTRAINTS" ]; then \
         pip install -r requirements.txt -c "$CONSTRAINTS"; \
     else \
         pip install -r requirements.txt; \
-    fi && \
-    if [ -f requirements-dev.txt ]; then \
-        if [ -n "$CONSTRAINTS" ] && [ -f "$CONSTRAINTS" ]; then \
-            pip install -r requirements-dev.txt -c "$CONSTRAINTS"; \
-        else \
-            pip install -r requirements-dev.txt; \
-        fi; \
     fi
 COPY . .
 
@@ -24,4 +17,4 @@ WORKDIR /app
 COPY --from=base /usr/local /usr/local
 COPY --from=base /app /app
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8100"]
-HEALTHCHECK CMD curl -fs http://localhost:8000/health || exit 1
+HEALTHCHECK CMD curl -fs http://localhost:8100/health || exit 1

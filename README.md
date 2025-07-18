@@ -110,3 +110,6 @@ dedicated tables.
 
 ### Dependency pinning
 Run `./scripts/pin_constraints.sh` whenever you update service requirements to refresh an optional `constraints.txt` for reproducible installs.
+
+### Health checks
+Services with an HTTP API expose `/health` and use `curl -f` in their Dockerfiles. Worker containers without an API use `HEALTHCHECK CMD ["true"]` so Compose marks them as healthy as soon as the process starts.
