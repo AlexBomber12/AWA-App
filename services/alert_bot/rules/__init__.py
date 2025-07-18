@@ -48,7 +48,7 @@ async def fetch_rows(query: str, *args: Any) -> list[asyncpg.Record]:
 
 
 async def send(title: str, body: str) -> None:
-    if not bot:
+    if not bot or CHAT_ID is None:
         return
     await bot.send_message(chat_id=CHAT_ID, text=f"{title}\n{body}")
 
