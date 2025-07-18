@@ -42,11 +42,7 @@ async def test_job_inserts_and_affects_roi(postgresql_proc, tmp_path, monkeypatc
     with engine.begin() as conn:
         conn.execute(text("INSERT INTO products(asin, weight_kg) VALUES ('A1',1)"))
         conn.execute(text("INSERT INTO vendors(id, name) VALUES (1,'test')"))
-        conn.execute(
-            text(
-                "INSERT INTO vendor_prices(vendor_id, sku, cost, updated_at) VALUES (1,'A1',2,'2024-01-01')"
-            )
-        )
+        conn.execute(text("INSERT INTO vendor_prices(vendor_id, sku, cost, updated_at) VALUES (1,'A1',2,'2024-01-01')"))
         conn.execute(text("INSERT INTO keepa_offers(asin, buybox_price) VALUES ('A1',10)"))
         conn.execute(
             text(

@@ -74,10 +74,7 @@ def main(argv: list[str] | None = None) -> tuple[int, int]:
 
     target_table = args.table
     if args.table == "auto" and dialect:
-        target_table = {
-            "returns_report": "returns_raw",
-            "reimbursements_report": "reimbursements_raw",
-        }[dialect]
+        target_table = {"returns_report": "returns_raw", "reimbursements_report": "reimbursements_raw"}[dialect]
 
     inserted_rows = len(df)
 
@@ -86,14 +83,10 @@ def main(argv: list[str] | None = None) -> tuple[int, int]:
         with engine.begin() as conn:
             if target_table != "auto":
                 df.to_sql(target_table, conn, if_exists="append", index=False)
-            load_id = _log_load(
-                conn, source=args.source, table=target_table, rows=inserted_rows, status="success"
-            )
+            load_id = _log_load(conn, source=args.source, table=target_table, rows=inserted_rows, status="success")
     except Exception:
         with engine.begin() as conn:
-            load_id = _log_load(
-                conn, source=args.source, table=target_table, rows=0, status="error"
-            )
+            load_id = _log_load(conn, source=args.source, table=target_table, rows=0, status="error")
         raise
     return load_id, inserted_rows
 

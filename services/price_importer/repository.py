@@ -32,9 +32,7 @@ class Repository:
             res = conn.execute(insert(Vendor).values(name=name).returning(Vendor.id))
             return int(res.scalar())
 
-    def upsert_prices(
-        self, vendor_id: int, rows: Iterable[dict], dry_run: bool = False
-    ) -> tuple[int, int]:
+    def upsert_prices(self, vendor_id: int, rows: Iterable[dict], dry_run: bool = False) -> tuple[int, int]:
         inserted = 0
         updated = 0
         with self.engine.begin() as conn:

@@ -17,16 +17,7 @@ def build_sqlalchemy_url() -> str:
 def build_asyncpg_dsn() -> str:
     """Return DSN suitable for asyncpg (without driver suffix)."""
     url = urlparse(build_dsn(sync=True))
-    return urlunparse(
-        (
-            "postgresql",
-            f"{url.username}:{url.password}@{url.hostname}:{url.port}",
-            url.path,
-            "",
-            "",
-            "",
-        )
-    )
+    return urlunparse(("postgresql", f"{url.username}:{url.password}@{url.hostname}:{url.port}", url.path, "", "", ""))
 
 
 async def create_pg_pool() -> Pool:
@@ -52,14 +43,8 @@ def refresh_mvs(conn: Engine | Connection) -> None:
 
     live = os.getenv("ENABLE_LIVE", "1") != "0"
     idx_exists = bool(
-        conn.execute(
-            text("SELECT 1 FROM pg_indexes WHERE indexname = 'ix_v_refund_totals_pk'")
-        ).scalar()
-    ) and bool(
-        conn.execute(
-            text("SELECT 1 FROM pg_indexes WHERE indexname = 'ix_v_reimb_totals_pk'")
-        ).scalar()
-    )
+        conn.execute(text("SELECT 1 FROM pg_indexes WHERE indexname = 'ix_v_refund_totals_pk'")).scalar()
+    ) and bool(conn.execute(text("SELECT 1 FROM pg_indexes WHERE indexname = 'ix_v_reimb_totals_pk'")).scalar())
     option = " CONCURRENTLY" if live and idx_exists else ""
     conn.execute(text(f"REFRESH MATERIALIZED VIEW{option} v_refund_totals"))
     conn.execute(text(f"REFRESH MATERIALIZED VIEW{option} v_reimb_totals"))
