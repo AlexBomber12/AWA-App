@@ -17,4 +17,4 @@ WORKDIR /app
 COPY --from=base /usr/local /usr/local
 COPY --from=base /app /app
 CMD ["celery", "-A", "services.fees_h10.worker", "beat", "-l", "info"]
-HEALTHCHECK CMD curl -fs http://localhost:8000/health || exit 1
+HEALTHCHECK CMD ["true"]

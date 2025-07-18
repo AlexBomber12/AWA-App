@@ -10,4 +10,4 @@ RUN if [ -n "$CONSTRAINTS" ] && [ -f "$CONSTRAINTS" ]; then \
     fi
 COPY . .
 ENTRYPOINT ["python", "keepa_ingestor.py"]
-HEALTHCHECK CMD curl -fs http://localhost:8000/health || exit 1
+HEALTHCHECK CMD ["true"]

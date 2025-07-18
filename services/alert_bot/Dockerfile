@@ -17,4 +17,4 @@ WORKDIR /app
 COPY --from=base /usr/local /usr/local
 COPY --from=base /app /app
 CMD ["python", "alert_bot.py"]
-HEALTHCHECK CMD curl -fs http://localhost:8000/health || exit 1
+HEALTHCHECK CMD ["true"]

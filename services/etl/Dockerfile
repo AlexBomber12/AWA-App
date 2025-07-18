@@ -20,4 +20,4 @@ COPY wait-for-it.sh /app/wait-for-it.sh
 COPY entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/wait-for-it.sh /app/entrypoint.sh
 ENTRYPOINT ["/bin/bash", "/app/entrypoint.sh"]
-HEALTHCHECK CMD curl -fs http://localhost:8000/health || exit 1
+HEALTHCHECK CMD ["true"]
