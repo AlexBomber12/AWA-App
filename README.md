@@ -29,6 +29,12 @@ curl http://localhost:8000/health
 The stack uses Postgres for all services. Copy `.env.example` to `.env.postgres`
 and run docker compose to start the database and API containers.
 
+### Default credentials
+
+The docker-compose files provide fallback values for MinIO and IMAP credentials
+so the stack starts without extra configuration. Adjust `.env.postgres` if you
+need different accounts.
+
 ### Database config – env matrix
 
 `build_dsn(sync=True|False)` derives a DSN from `DATABASE_URL` or the `PG_*`
@@ -47,6 +53,7 @@ for the database to become healthy, runs Alembic migrations and executes the
 tests. No `docker compose` commands are required in CI.
 The workflow also validates the Dependabot configuration using
 `marocchino/validate-dependabot` to avoid broken update PRs.
+Pytest enforces a minimum of 45% total coverage.
 
 
 ## Importing supplier prices
