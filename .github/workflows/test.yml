@@ -52,8 +52,14 @@ jobs:
         with: { node-version: '20' }
       - run: npm ci
         working-directory: web
+
       - run: npm run build --if-present
         working-directory: web
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql
 
 
       - name: Run Alembic migrations
@@ -90,6 +96,7 @@ jobs:
         uses: codecov/codecov-action@v3
         with:
           files: coverage.xml
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Dump Postgres logs
         if: always()
@@ -126,6 +133,11 @@ jobs:
           if [ ! -f tests/db/test_migrations.py ]; then
             echo "::error ::migration test missing" && exit 1
           fi
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql
+
       - name: Run migration regression test
         continue-on-error: false
         env:

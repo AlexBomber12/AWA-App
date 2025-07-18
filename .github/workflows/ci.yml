@@ -10,9 +10,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Validate config
-        run: |
-          docker run --rm -v "$PWD":/workdir -w /workdir ghcr.io/dependabot/cli:latest validate .github/dependabot.yml
+      - name: Validate dependabot.yml
+        uses: dependabot/cli-action@v2
+        with:
+          command: validate .github/dependabot.yml
 
   list_services:
     runs-on: ubuntu-latest
@@ -110,6 +111,11 @@ jobs:
         run: python -m mypy services || true
       - name: Wait for Postgres again
         run: scripts/wait_pg.sh
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql
       - name: Dockerfile build sanity
         run: pytest -q tests/test_docker_build.py
       - name: Test
@@ -122,6 +128,7 @@ jobs:
         uses: codecov/codecov-action@v3
         with:
           files: coverage.xml
+          token: ${{ secrets.GITHUB_TOKEN }}
 
   web:
     needs: dependabot
