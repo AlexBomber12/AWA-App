@@ -1,20 +1,13 @@
 FROM ubuntu:22.04
 ENV PYTHONUNBUFFERED=1
 WORKDIR /app
-COPY requirements*.txt ./
+COPY requirements*.txt constraints.txt ./
 ARG CONSTRAINTS=""
 RUN apt-get update && apt-get install -y git build-essential cmake curl python3 python3-pip \
     && if [ -n "$CONSTRAINTS" ] && [ -f "$CONSTRAINTS" ]; then \
         pip install -r requirements.txt -c "$CONSTRAINTS"; \
     else \
         pip install -r requirements.txt; \
-    fi \
-    && if [ -f requirements-dev.txt ]; then \
-        if [ -n "$CONSTRAINTS" ] && [ -f "$CONSTRAINTS" ]; then \
-            pip install -r requirements-dev.txt -c "$CONSTRAINTS"; \
-        else \
-            pip install -r requirements-dev.txt; \
-        fi; \
     fi
 RUN git clone https://github.com/ggerganov/llama.cpp.git /llama && cd /llama && make LLAMA_CUBLAS=1
 COPY download_and_quantize.sh /setup.sh
