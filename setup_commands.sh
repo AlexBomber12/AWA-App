@@ -1,8 +1,10 @@
 #!/bin/bash
 set -euo pipefail
 
-apt-get update -y
-apt-get install -y git docker-compose-plugin
+apt update -y
+for pkg in git docker-compose-plugin; do
+    dpkg -s "$pkg" >/dev/null 2>&1 || apt install -y --no-install-recommends "$pkg"
+done
 
 REPO_URL="https://github.com/AlexBomber12/AWA-App.git"
 APP_DIR="/opt/awa-app"
