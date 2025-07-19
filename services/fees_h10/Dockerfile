@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.6
-FROM python:3.11-slim AS base
+FROM python:3.12-slim AS base
 ENV PYTHONUNBUFFERED=1
 WORKDIR /app
 COPY requirements*.txt constraints.txt ./
@@ -11,10 +11,12 @@ RUN if [ -n "$CONSTRAINTS" ] && [ -f "$CONSTRAINTS" ]; then \
     fi
 COPY . .
 
-FROM python:3.11-slim
+FROM python:3.12-slim
 ENV PYTHONUNBUFFERED=1
 WORKDIR /app
 COPY --from=base /usr/local /usr/local
 COPY --from=base /app /app
-CMD ["celery", "-A", "services.fees_h10.worker", "beat", "-l", "info"]
-HEALTHCHECK CMD ["true"]
+COPY start.sh ./start.sh
+RUN chmod +x ./start.sh
+ENTRYPOINT ["./start.sh"]
+HEALTHCHECK CMD ["celery", "--help"]

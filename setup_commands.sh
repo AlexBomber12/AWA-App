@@ -1,6 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 
+apt update -y
+apt install -y git docker-compose-plugin
+
 REPO_URL="https://github.com/AlexBomber12/AWA-App.git"
 APP_DIR="/opt/awa-app"
 SERVICE_FILE="/etc/systemd/system/awa-app.service"
@@ -31,7 +34,9 @@ PG_HOST=postgres
 PG_PORT=5432
 DATABASE_URL=postgresql+asyncpg://postgres:pass@postgres:5432/awa # pragma: allowlist secret
 NEXT_PUBLIC_API_URL=https://awapricer.lan/api
-LLM_PROVIDER=local
+LLM_PROVIDER=lan
+LLM_BASE_URL=http://192.168.0.4:8000
+LLM_API_KEY=
 MINIO_ROOT_USER=minio
 MINIO_SECRET_KEY=minio123 # pragma: allowlist secret
 ENV

@@ -1,4 +1,3 @@
-import os
 import pathlib
 import re
 import shutil
@@ -23,8 +22,6 @@ def _run_with_retries(cmd: list[str]) -> subprocess.CompletedProcess[str]:
 def test_build_all_service_images(tmp_path: pathlib.Path) -> None:
     for df in pathlib.Path("services").glob("*/Dockerfile"):
         service_dir = df.parent
-        if service_dir.name == "llm_server" and not os.getenv("CUDA_VISIBLE_DEVICES"):
-            continue
         log_file = tmp_path / f"{service_dir.name}.log"
 
         # pre-pull all base images with retries
