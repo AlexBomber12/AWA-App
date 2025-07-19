@@ -1,35 +1,34 @@
-"""Smoke-test DB migrations and raise coverage."""
-
 import importlib
 import os
 import pkgutil
-import subprocess
-import tempfile
-from pathlib import Path
 
 import pytest
 
+from alembic import command
+from alembic.config import Config
 
-def test_run_migrations_head():
-    # Use an in-memory SQLite DB so CI needs no Postgres
-    os.environ["DATABASE_URL"] = "sqlite+pysqlite:///:memory:"
-    # Initialise an Alembic env in a tmp dir
-    with tempfile.TemporaryDirectory() as tmp:
-        Path(tmp, "alembic.ini").write_text(
-            "[alembic]\nscript_location = services/api/migrations"
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    "dsn",
+    [
+        os.getenv(
+            "DATABASE_URL", "postgresql+psycopg://postgres:pass@localhost:5432/awa"
         )
-        with pytest.raises(subprocess.CalledProcessError):
-            subprocess.check_call(
-                ["alembic", "-c", f"{tmp}/alembic.ini", "upgrade", "head"]
-            )
+    ],
+)
+def test_run_migrations_head(tmp_path, monkeypatch, dsn):
+    monkeypatch.setenv("DATABASE_URL", dsn)
+    cfg = Config("alembic.ini")
+    command.upgrade(cfg, "head")
+    command.upgrade(cfg, "head")
 
 
 def test_import_all_services():
-    """Import every module under services/* to bump coverage ≥50 %."""
     import services
 
-    for module in pkgutil.walk_packages(services.__path__, prefix="services."):
+    for mod in pkgutil.walk_packages(services.__path__, prefix="services."):
         try:
-            importlib.import_module(module.name)
+            importlib.import_module(mod.name)
         except Exception:
             pass

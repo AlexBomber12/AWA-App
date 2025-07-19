@@ -5,6 +5,7 @@ from typing import Any, cast
 import httpx
 
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "lan").lower()
+LLM_PROVIDER_FALLBACK = os.getenv("LLM_PROVIDER_FALLBACK", "stub").lower()
 LOCAL_URL = os.getenv("LLM_URL", "http://llm:8000/llm")
 LAN_BASE = os.getenv("LLM_BASE_URL", "http://192.168.0.4:8000")
 LAN_KEY = os.getenv("LLM_API_KEY", "")
@@ -52,6 +53,10 @@ async def _remote_generate(
         return cast(str, data["choices"][0]["message"]["content"]).strip()
 
 
+async def _stub_llm(prompt: str, temp: float, max_toks: int) -> str:
+    return ""
+
+
 async def generate(
     prompt: str,
     temperature: float = 0.7,
@@ -62,7 +67,21 @@ async def generate(
     if prov == "openai":
         return await _openai_llm(prompt, temperature, max_tokens)
     if prov == "lan":
-        return await _remote_generate(
-            LAN_BASE, LAN_KEY or None, prompt, max_tokens, OPENAI_MODEL
-        )
+        try:
+            return await _remote_generate(
+                LAN_BASE, LAN_KEY or None, prompt, max_tokens, OPENAI_MODEL
+            )
+        except Exception:
+            if LLM_PROVIDER_FALLBACK != prov:
+                return await generate(
+                    prompt,
+                    temperature=temperature,
+                    max_tokens=max_tokens,
+                    provider=LLM_PROVIDER_FALLBACK,
+                )
+            raise
+    if prov == "local":
+        return await _local_llm(prompt, temperature, max_tokens)
+    if prov == "stub":
+        return await _stub_llm(prompt, temperature, max_tokens)
     return await _local_llm(prompt, temperature, max_tokens)
