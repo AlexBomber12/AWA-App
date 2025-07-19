@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.6
-FROM python:3.11-slim AS base
+FROM python:3.12-slim AS base
 ENV PYTHONUNBUFFERED=1
 WORKDIR /app
 COPY requirements*.txt constraints.txt ./
@@ -11,7 +11,7 @@ RUN if [ -n "$CONSTRAINTS" ] && [ -f "$CONSTRAINTS" ]; then \
     fi
 COPY . .
 
-FROM python:3.11-slim
+FROM python:3.12-slim
 ENV PYTHONUNBUFFERED=1
 WORKDIR /app
 COPY --from=base /usr/local /usr/local

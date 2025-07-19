@@ -90,7 +90,7 @@ jobs:
             docker build services/${{ matrix.service }} -t tmp-${{ matrix.service }} && break || sleep $i
           done
       - name: Docker compose build
-        run: docker compose build --parallel
+        run: docker compose --profile "" build --parallel
       - name: Set PYTHONPATH
         run: echo "PYTHONPATH=$GITHUB_WORKSPACE" >> $GITHUB_ENV
       - name: Set DATABASE_URL
@@ -144,3 +144,9 @@ jobs:
       - name: Biome
         run: npx biome lint .
         working-directory: web
+
+  gpu-build-test:
+    runs-on: [self-hosted, gpu]
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose --profile llm build llm --build-arg WITH_CUDA=1
