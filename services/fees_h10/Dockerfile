@@ -16,5 +16,7 @@ ENV PYTHONUNBUFFERED=1
 WORKDIR /app
 COPY --from=base /usr/local /usr/local
 COPY --from=base /app /app
-CMD ["celery", "-A", "services.fees_h10.worker", "beat", "-l", "info"]
-HEALTHCHECK CMD ["true"]
+COPY start.sh ./start.sh
+RUN chmod +x ./start.sh
+ENTRYPOINT ["./start.sh"]
+HEALTHCHECK CMD ["celery", "--help"]

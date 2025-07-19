@@ -118,13 +118,16 @@ services:
   fees_h10:
     build:
       context: ./services/fees_h10
-    command: ["celery", "-A", "services.fees_h10.worker", "beat", "-l", "info"]
     env_file:
       - .env.example
       - .env.postgres
     depends_on:
       postgres:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "celery", "--help"]
+      interval: 30s
+      retries: 3
     networks:
       - awa-net
   logistics_etl:
