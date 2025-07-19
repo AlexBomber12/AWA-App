@@ -47,7 +47,7 @@ jobs:
           pip install asyncpg
           pip install pytest
         env:
-          DATABASE_URL: postgresql+psycopg://postgres:pass@localhost:5432/awa  # pragma: allowlist secret
+          DATABASE_URL: ${{ env.DATABASE_URL }}
       - uses: actions/setup-node@v4
         with: { node-version: '20' }
       - run: npm ci
@@ -72,13 +72,13 @@ jobs:
           PG_USER: postgres
           PG_PASSWORD: pass # pragma: allowlist secret
           PG_DATABASE: awa
-          PG_HOST: localhost
+          PG_HOST: postgres
           PG_PORT: '5432'
 
-      - run: echo 'PGHOST=localhost' >> $GITHUB_ENV
+      - run: echo 'PG_HOST=postgres' >> $GITHUB_ENV
 
       - name: Export DATABASE_URL
-        run: echo "DATABASE_URL=postgresql+psycopg://postgres:pass@localhost:5432/awa" >> $GITHUB_ENV  # pragma: allowlist secret
+        run: echo "DATABASE_URL=${{ env.DATABASE_URL }}" >> $GITHUB_ENV
 
       - name: pytest -q
         continue-on-error: false
@@ -145,7 +145,7 @@ jobs:
       - name: Run migration regression test
         continue-on-error: false
         env:
-          DATABASE_URL: postgresql+psycopg://postgres:pass@localhost:5432/awa
+          DATABASE_URL: ${{ env.DATABASE_URL }}
         run: pytest tests/db/test_migrations.py -q
 
   health-checks:

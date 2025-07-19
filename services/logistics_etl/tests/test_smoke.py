@@ -1,3 +1,10 @@
+import importlib
+import pathlib  # noqa: F401
+import sys  # noqa: F401
+
+import pkg_resources  # noqa: F401
+import pytest  # noqa: F401
+
+
 def test_smoke():
-    """Placeholder test so pytest exit code is 0 even when real tests are absent."""
-    assert True
+    importlib.import_module("src")
