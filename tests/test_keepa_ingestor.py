@@ -1,4 +1,5 @@
 """Tests for keepa_ingestor offline mode."""
+
 # ruff: noqa: E402
 
 import os

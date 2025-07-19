@@ -32,12 +32,18 @@ def upgrade() -> None:
             sa.Column("moq", sa.Integer(), server_default="0"),
             sa.Column("lead_time_days", sa.Integer(), server_default="0"),
             sa.Column("currency", sa.String(3), server_default="EUR"),
-            sa.Column("updated_at", sa.TIMESTAMP(timezone=True), server_default=sa.text("CURRENT_TIMESTAMP")),
+            sa.Column(
+                "updated_at",
+                sa.TIMESTAMP(timezone=True),
+                server_default=sa.text("CURRENT_TIMESTAMP"),
+            ),
             sa.UniqueConstraint("vendor_id", "sku", name="u_vendor_sku"),
         )
     if "keepa_offers" not in tables:
         op.create_table(
-            "keepa_offers", sa.Column("asin", sa.Text(), primary_key=True), sa.Column("buybox_price", sa.Numeric(10, 2))
+            "keepa_offers",
+            sa.Column("asin", sa.Text(), primary_key=True),
+            sa.Column("buybox_price", sa.Numeric(10, 2)),
         )
     op.execute(
         """
@@ -81,7 +87,9 @@ def upgrade() -> None:
             """
         )
     )
-    op.execute("CREATE OR REPLACE VIEW roi_view AS SELECT asin, roi_pct FROM v_roi_full;")
+    op.execute(
+        "CREATE OR REPLACE VIEW roi_view AS SELECT asin, roi_pct FROM v_roi_full;"
+    )
 
 
 def downgrade() -> None:

@@ -18,7 +18,14 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     df = pd.read_csv(args.csv)
-    df = df.rename(columns={"ASIN": "asin", "Qty": "qty", "Refund Amount": "fee_eur", "Return Date": "processed_at"})
+    df = df.rename(
+        columns={
+            "ASIN": "asin",
+            "Qty": "qty",
+            "Refund Amount": "fee_eur",
+            "Return Date": "processed_at",
+        }
+    )
     buf = io.StringIO()
     df[["asin", "qty", "fee_eur", "processed_at"]].to_csv(buf, index=False)
     buf.seek(0)

@@ -15,9 +15,13 @@ def test_run_migrations_head():
     os.environ["DATABASE_URL"] = "sqlite+pysqlite:///:memory:"
     # Initialise an Alembic env in a tmp dir
     with tempfile.TemporaryDirectory() as tmp:
-        Path(tmp, "alembic.ini").write_text("[alembic]\nscript_location = services/api/migrations")
+        Path(tmp, "alembic.ini").write_text(
+            "[alembic]\nscript_location = services/api/migrations"
+        )
         with pytest.raises(subprocess.CalledProcessError):
-            subprocess.check_call(["alembic", "-c", f"{tmp}/alembic.ini", "upgrade", "head"])
+            subprocess.check_call(
+                ["alembic", "-c", f"{tmp}/alembic.ini", "upgrade", "head"]
+            )
 
 
 def test_import_all_services():

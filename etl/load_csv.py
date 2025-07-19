@@ -12,19 +12,31 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Connection
 
 from services.common.dsn import build_dsn
-from services.etl.dialects import amazon_reimbursements, amazon_returns, normalise_headers
+from services.etl.dialects import (
+    amazon_reimbursements,
+    amazon_returns,
+    normalise_headers,
+)
 
 BUCKET = "awa-bucket"
 
 
-def _log_load(conn: Connection, *, source: str, table: str, rows: int, status: str) -> int:
+def _log_load(
+    conn: Connection, *, source: str, table: str, rows: int, status: str
+) -> int:
     result = conn.execute(
         text(
             "INSERT INTO load_log "
             "(source, target_table, inserted_rows, status, inserted_at) "
             "VALUES (:src, :tbl, :rows, :st, :ts) RETURNING id"
         ),
-        {"src": source, "tbl": table, "rows": rows, "st": status, "ts": datetime.now(timezone.utc)},
+        {
+            "src": source,
+            "tbl": table,
+            "rows": rows,
+            "st": status,
+            "ts": datetime.now(timezone.utc),
+        },
     )
     return int(result.scalar_one())
 
@@ -74,7 +86,10 @@ def main(argv: list[str] | None = None) -> tuple[int, int]:
 
     target_table = args.table
     if args.table == "auto" and dialect:
-        target_table = {"returns_report": "returns_raw", "reimbursements_report": "reimbursements_raw"}[dialect]
+        target_table = {
+            "returns_report": "returns_raw",
+            "reimbursements_report": "reimbursements_raw",
+        }[dialect]
 
     inserted_rows = len(df)
 
@@ -83,10 +98,18 @@ def main(argv: list[str] | None = None) -> tuple[int, int]:
         with engine.begin() as conn:
             if target_table != "auto":
                 df.to_sql(target_table, conn, if_exists="append", index=False)
-            load_id = _log_load(conn, source=args.source, table=target_table, rows=inserted_rows, status="success")
+            load_id = _log_load(
+                conn,
+                source=args.source,
+                table=target_table,
+                rows=inserted_rows,
+                status="success",
+            )
     except Exception:
         with engine.begin() as conn:
-            load_id = _log_load(conn, source=args.source, table=target_table, rows=0, status="error")
+            load_id = _log_load(
+                conn, source=args.source, table=target_table, rows=0, status="error"
+            )
         raise
     return load_id, inserted_rows
 

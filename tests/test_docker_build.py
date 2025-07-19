@@ -11,7 +11,9 @@ def _run_with_retries(cmd: list[str]) -> subprocess.CompletedProcess[str]:
     """Run a command with exponential backoff retries."""
     result: subprocess.CompletedProcess[str] = subprocess.CompletedProcess(cmd, 1)
     for attempt in range(5):
-        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        result = subprocess.run(
+            cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
+        )
         if result.returncode == 0:
             break
         time.sleep(2**attempt)
@@ -30,7 +32,9 @@ def test_build_all_service_images(tmp_path: pathlib.Path) -> None:
             if match:
                 _run_with_retries(["docker", "pull", match.group(1)])
 
-        result = _run_with_retries(["docker", "build", str(service_dir), "-t", "awa-tmp"])
+        result = _run_with_retries(
+            ["docker", "build", str(service_dir), "-t", "awa-tmp"]
+        )
         log_file.write_text(result.stdout)
         if result.returncode != 0:
             pytest.fail(f"docker build failed for {service_dir}\n{result.stdout}")
