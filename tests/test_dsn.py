@@ -12,6 +12,7 @@ def test_build_dsn_sync_suffix():
 def test_build_dsn_default_host_postgres(monkeypatch):
     for key in [
         "DATABASE_URL",
+        "POSTGRES_HOST",
         "PG_HOST",
         "PG_PORT",
         "PG_USER",

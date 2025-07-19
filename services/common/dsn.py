@@ -14,7 +14,7 @@ def build_dsn(sync: bool = True) -> str:
             return url
         return url.replace("+psycopg", "+asyncpg")
 
-    host = os.getenv("PG_HOST", "postgres")
+    host = os.getenv("POSTGRES_HOST") or os.getenv("PG_HOST") or "postgres"
     port = os.getenv("PG_PORT", "5432")
     user = _u.quote_plus(os.getenv("PG_USER", "postgres"))
     pwd = _u.quote_plus(os.getenv("PG_PASSWORD", "pass"))

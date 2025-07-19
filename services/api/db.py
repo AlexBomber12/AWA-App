@@ -4,9 +4,11 @@ from typing import AsyncGenerator
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
-DATABASE_URL = (
-    os.getenv("DATABASE_URL") or "postgresql+asyncpg://postgres:pass@postgres:5432/awa"
-)
+from services.common.dsn import build_dsn
+
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    DATABASE_URL = build_dsn(sync=False)
 
 pool_kwargs = {}
 if os.getenv("TESTING") == "1":
