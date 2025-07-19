@@ -1,7 +1,9 @@
 import asyncio
+import os
 from contextlib import asynccontextmanager
 from typing import List
 
+import httpx
 from fastapi import Depends, FastAPI
 from sqlalchemy import bindparam, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,6 +20,7 @@ from .routes.stats import router as stats_router
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await _wait_for_db()
+    await _check_llm()
     yield
 
 
@@ -46,14 +49,27 @@ async def _wait_for_db() -> None:
     raise RuntimeError("Database not available")
 
 
+async def _check_llm() -> None:
+    from services.common.llm import LAN_BASE, LLM_PROVIDER, LLM_PROVIDER_FALLBACK
+
+    if LLM_PROVIDER != "lan":
+        return
+    try:
+        async with httpx.AsyncClient(timeout=5) as cli:
+            await cli.get(f"{LAN_BASE}/health")
+    except Exception:
+        os.environ["LLM_PROVIDER"] = LLM_PROVIDER_FALLBACK
+
+
 @app.get("/health")
-async def health(session: AsyncSession = Depends(get_session)) -> dict[str, str]:
-    await session.execute(text("SELECT 1 FROM v_roi_full LIMIT 1"))
-    return {"db": "ok"}
+async def health() -> dict[str, str]:
+    return {"status": "ok"}
 
 
 @app.post("/score")
-async def score(asins: List[str], session: AsyncSession = Depends(get_session)) -> list[dict[str, float | str]]:
+async def score(
+    asins: List[str], session: AsyncSession = Depends(get_session)
+) -> list[dict[str, float | str]]:
     query = text(
         """
         SELECT p.asin, (p.price - o.cost) / o.cost AS roi

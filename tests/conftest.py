@@ -29,12 +29,16 @@ from services.common.dsn import build_dsn
 
 
 def pytest_configure(config):
-    config.addinivalue_line("markers", "integration: mark test that requires live Postgres")
+    config.addinivalue_line(
+        "markers", "integration: mark test that requires live Postgres"
+    )
 
 
 def _db_available() -> bool:
     async def _check() -> None:
-        conn = await asyncpg.connect(dsn=os.getenv("PG_ASYNC_DSN", build_dsn(sync=False)), timeout=1)
+        conn = await asyncpg.connect(
+            dsn=os.getenv("PG_ASYNC_DSN", build_dsn(sync=False)), timeout=1
+        )
         await conn.close()
 
     try:
@@ -47,7 +51,9 @@ def _db_available() -> bool:
 def pytest_collection_modifyitems(config, items):
     if _db_available():
         return
-    skip_integration = pytest.mark.skip(reason="Postgres not running – integration tests skipped")
+    skip_integration = pytest.mark.skip(
+        reason="Postgres not running – integration tests skipped"
+    )
     for item in items:
         if "integration" in item.keywords:
             item.add_marker(skip_integration)
@@ -86,7 +92,9 @@ async def _migrate(_set_db_url):
         except Exception:
             await asyncio.sleep(2)
     else:
-        pytest.skip("Postgres not running – integration tests skipped", allow_module_level=True)
+        pytest.skip(
+            "Postgres not running – integration tests skipped", allow_module_level=True
+        )
     from alembic import command
     from alembic.config import Config
 

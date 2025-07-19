@@ -21,9 +21,14 @@ templates = Jinja2Templates(directory="templates")
 def _check_basic_auth(credentials: HTTPBasicCredentials = Depends(security)) -> str:
     user = os.getenv("BASIC_USER", "admin")
     pwd = os.getenv("BASIC_PASS", "pass")
-    ok = secrets.compare_digest(credentials.username, user) and secrets.compare_digest(credentials.password, pwd)
+    ok = secrets.compare_digest(credentials.username, user) and secrets.compare_digest(
+        credentials.password, pwd
+    )
     if not ok:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, headers={"WWW-Authenticate": "Basic"})
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            headers={"WWW-Authenticate": "Basic"},
+        )
     return credentials.username
 
 
@@ -105,7 +110,9 @@ async def _extract_asins(request: Request) -> List[str]:
 
 
 @router.post("/roi-review/approve")
-async def approve(request: Request, _: str = Depends(_check_basic_auth)) -> dict[str, int]:
+async def approve(
+    request: Request, _: str = Depends(_check_basic_auth)
+) -> dict[str, int]:
     asins = await _extract_asins(request)
     if not asins:
         return {"updated": 0}

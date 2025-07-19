@@ -56,10 +56,10 @@ jobs:
       - run: npm run build --if-present
         working-directory: web
 
-      - name: Install Postgres client & expose initdb
+      - name: Install PostgreSQL server (initdb)
         run: |
           sudo apt-get update
-          sudo apt-get install -y postgresql-client
+          sudo apt-get install -y postgresql
           echo "/usr/lib/postgresql/$(pg_config --version | cut -d' ' -f2 | cut -d'.' -f1,2)/bin" >> $GITHUB_PATH
 
 
@@ -96,10 +96,10 @@ jobs:
           LLM_BASE_URL: http://192.168.0.4:8000
 
       - name: Upload coverage
-        uses: codecov/codecov-action@v3
-        with:
-          files: coverage.xml
-          token: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          curl -Os https://uploader.codecov.io/latest/linux/codecov
+          chmod +x codecov
+          ./codecov -f coverage.xml -Z
 
       - name: Dump Postgres logs
         if: always()
@@ -136,10 +136,10 @@ jobs:
           if [ ! -f tests/db/test_migrations.py ]; then
             echo "::error ::migration test missing" && exit 1
           fi
-      - name: Install Postgres client & expose initdb
+      - name: Install PostgreSQL server (initdb)
         run: |
           sudo apt-get update
-          sudo apt-get install -y postgresql-client
+          sudo apt-get install -y postgresql
           echo "/usr/lib/postgresql/$(pg_config --version | cut -d' ' -f2 | cut -d'.' -f1,2)/bin" >> $GITHUB_PATH
 
       - name: Run migration regression test

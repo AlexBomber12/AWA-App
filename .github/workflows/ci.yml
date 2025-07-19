@@ -100,20 +100,18 @@ jobs:
       - run: alembic upgrade head
         if: matrix.service == 'api'
       - name: Lint
-        run: ruff check .
+        run: ruff check . --output-format=github
       - name: Format
         run: ruff format --check .
-      - name: Ruff Style
-        run: ruff check . --format=github --output-format=text
       - name: Type check
         run: python -m mypy services || true
       - name: Wait for Postgres again
         run: scripts/wait_pg.sh
 
-      - name: Install Postgres client & expose initdb
+      - name: Install PostgreSQL server (initdb)
         run: |
           sudo apt-get update
-          sudo apt-get install -y postgresql-client
+          sudo apt-get install -y postgresql
           echo "/usr/lib/postgresql/$(pg_config --version | cut -d' ' -f2 | cut -d'.' -f1,2)/bin" >> $GITHUB_PATH
       - name: Dockerfile build sanity
         run: pytest -q tests/test_docker_build.py
@@ -127,10 +125,10 @@ jobs:
           LLM_PROVIDER: lan
           LLM_BASE_URL: http://192.168.0.4:8000
       - name: Upload coverage
-        uses: codecov/codecov-action@v3
-        with:
-          files: coverage.xml
-          token: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          curl -Os https://uploader.codecov.io/latest/linux/codecov
+          chmod +x codecov
+          ./codecov -f coverage.xml -Z
 
   web:
     needs: dependabot
@@ -140,7 +138,6 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'npm'
       - name: Install
         run: npm ci
         working-directory: web

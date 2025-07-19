@@ -35,7 +35,9 @@ STALE_DAYS = int(os.getenv("STALE_DAYS", "30"))
 
 bot = Bot(TOKEN) if TOKEN and CHAT_ID else None
 
-MSG_ROI_DROP = "⚠️ Маржа по товару упала ниже 5 %. Проверьте цену и закупочную стоимость."
+MSG_ROI_DROP = (
+    "⚠️ Маржа по товару упала ниже 5 %. Проверьте цену и закупочную стоимость."
+)
 
 
 async def fetch_rows(query: str, *args: Any) -> list[asyncpg.Record]:
@@ -106,7 +108,10 @@ async def check_a3() -> None:
 
 
 async def check_a4() -> None:
-    rows = await fetch_rows("SELECT asin, returns_ratio FROM returns_view WHERE returns_ratio > $1", RETURNS_PCT)
+    rows = await fetch_rows(
+        "SELECT asin, returns_ratio FROM returns_view WHERE returns_ratio > $1",
+        RETURNS_PCT,
+    )
     if rows:
         lst = "\n".join(f"{r['asin']} {r['returns_ratio']}%" for r in rows)
         await send(
@@ -122,7 +127,10 @@ async def check_a5() -> None:
     )
     if rows:
         lst = "\n".join(f"vendor {r['vendor_id']}" for r in rows)
-        await send(f"📜 Прайс-лист устарел > {STALE_DAYS} дней", f"{lst}\n👉 Запросите свежий прайс у поставщика.")
+        await send(
+            f"📜 Прайс-лист устарел > {STALE_DAYS} дней",
+            f"{lst}\n👉 Запросите свежий прайс у поставщика.",
+        )
 
 
 send_rules = [check_a1, check_a2, check_a3, check_a4, check_a5]

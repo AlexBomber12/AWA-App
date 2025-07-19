@@ -29,5 +29,9 @@ def guess_columns(df: pd.DataFrame) -> Mapping[str, str]:
 def normalise(df: pd.DataFrame) -> pd.DataFrame:
     cols = guess_columns(df)
     df = df.rename(columns={v: k for k, v in cols.items()})
-    keep = [c for c in ["sku", "cost", "moq", "lead_time_days", "currency"] if c in df.columns]
+    keep = [
+        c
+        for c in ["sku", "cost", "moq", "lead_time_days", "currency"]
+        if c in df.columns
+    ]
     return df[keep]

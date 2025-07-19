@@ -23,16 +23,22 @@ class Repository:
     def ensure_vendor(self, name: str) -> int:
         with self.engine.begin() as conn:
             try:
-                r = conn.execute(select(Vendor.id).where(Vendor.name == name)).fetchone()
+                r = conn.execute(
+                    select(Vendor.id).where(Vendor.name == name)
+                ).fetchone()
             except Exception:
                 Base.metadata.create_all(self.engine)
-                r = conn.execute(select(Vendor.id).where(Vendor.name == name)).fetchone()
+                r = conn.execute(
+                    select(Vendor.id).where(Vendor.name == name)
+                ).fetchone()
             if r:
                 return int(r[0])
             res = conn.execute(insert(Vendor).values(name=name).returning(Vendor.id))
             return int(res.scalar())
 
-    def upsert_prices(self, vendor_id: int, rows: Iterable[dict], dry_run: bool = False) -> tuple[int, int]:
+    def upsert_prices(
+        self, vendor_id: int, rows: Iterable[dict], dry_run: bool = False
+    ) -> tuple[int, int]:
         inserted = 0
         updated = 0
         with self.engine.begin() as conn:
@@ -47,7 +53,10 @@ class Repository:
                 }
                 res = conn.execute(
                     update(VendorPrice)
-                    .where(VendorPrice.vendor_id == vendor_id, VendorPrice.sku == values["sku"])
+                    .where(
+                        VendorPrice.vendor_id == vendor_id,
+                        VendorPrice.sku == values["sku"],
+                    )
                     .values(**values)
                 )
                 if cast(CursorResult[Any], res).rowcount == 0:

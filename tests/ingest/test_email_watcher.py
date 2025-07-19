@@ -59,9 +59,13 @@ def test_email_watcher(monkeypatch, pg_pool, tmp_path):
     msg["To"] = "y@example.com"
     msg["Subject"] = "Report"
     with open("tests/fixtures/sample_prices.csv", "rb") as f:
-        msg.add_attachment(f.read(), filename="report.csv", maintype="text", subtype="csv")
+        msg.add_attachment(
+            f.read(), filename="report.csv", maintype="text", subtype="csv"
+        )
 
-    monkeypatch.setattr(email_watcher, "IMAPClient", lambda host: FakeIMAP(msg.as_bytes()))
+    monkeypatch.setattr(
+        email_watcher, "IMAPClient", lambda host: FakeIMAP(msg.as_bytes())
+    )
 
     os.environ["IMAP_HOST"] = "x"
     os.environ["IMAP_USER"] = "u"
