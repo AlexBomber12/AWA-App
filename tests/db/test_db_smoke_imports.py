@@ -1,6 +1,6 @@
 """
-Lightweight import smoke test to raise coverage in the integration-db matrix.
-Runs in <0.1 s, no network, no DB I/O.
+Import-smoke test to lift coverage for the integration-db job.
+No DB I/O, no network, runtime ≈ 0.1 s.
 """
 
 import importlib
@@ -10,7 +10,6 @@ import pkgutil
 import pytest
 
 ROOT = pathlib.Path(__file__).parents[2] / "services"
-
 
 modules = []
 for _, name, _ in pkgutil.walk_packages([str(ROOT)]):

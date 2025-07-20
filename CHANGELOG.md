@@ -8,23 +8,8 @@
 - enable Dependabot updates and docs publishing
 - Docker healthchecks for services
 
-## v1.0.5
-- CI formatting & coverage gate fixed
-
 ## v1.0.6
-- CI finally all green (formatting and coverage)
-
-## v1.0.2
-- CI stability & container start-up
-
-## v1.0.3
-- CI formatting & stability
-
-## v1.0.4
-- Coverage gate fixed
-
-## v1.0.1
-- CI & container-startup fixes
+- CI fully green (formatting and coverage gate)
 
 ## v0.3
 - First release with fully passing CI

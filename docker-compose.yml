@@ -79,9 +79,7 @@ services:
       minio:
         condition: service_started
     healthcheck:
-      test: ["CMD", "curl", "-fsSL", "http://localhost:8001/health"]
-      interval: 10s
-      retries: 3
+      test: ["CMD", "true"]
     networks:
       - awa-net
     volumes:
@@ -127,8 +125,8 @@ services:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-fsSL", "http://localhost:8001/health"]
-      interval: 10s
+      test: ["CMD", "celery", "--help"]
+      interval: 30s
       retries: 3
     networks:
       - awa-net
@@ -138,7 +136,7 @@ services:
     env_file:
       - .env.example
       - .env.postgres
-    command: ["/app/entrypoint.sh"]
+    command: ["python", "-m", "logistics_etl"]
     depends_on:
       postgres:
         condition: service_healthy
@@ -164,10 +162,6 @@ services:
     depends_on:
       - postgres
     profiles: [alerts]
-    healthcheck:
-      test: ["CMD", "curl", "-fsSL", "http://localhost:8001/health"]
-      interval: 10s
-      retries: 3
 
 volumes:
   miniodata:

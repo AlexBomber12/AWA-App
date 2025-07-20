@@ -9,7 +9,6 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
     services:
       postgres:
         image: postgres:15
@@ -36,14 +35,15 @@ jobs:
             services/repricer/requirements.txt
             services/fees_h10/requirements.txt
             services/alert_bot/requirements.txt
-      - name: Cache pip and pytest
+      - name: Cache tools
         uses: actions/cache@v4
         with:
           path: |
             ~/.cache/pip
-            ~/.pytest_cache
+            .pytest_cache
             ~/.ruff_cache
-          key: ${{ runner.os }}-pytest-${{ hashFiles('requirements-dev.txt') }}
+          key: ${{ runner.os }}-test-${{ hashFiles('requirements-dev.txt') }}
+          restore-keys: ${{ runner.os }}-test-
 
       - name: Install dependencies
         run: |  # pragma: allowlist secret
@@ -114,9 +114,6 @@ jobs:
           echo "::group::postgres container logs"
           docker logs ${{ job.services.postgres.id }} --tail 200
           echo "::endgroup::"
-      - name: Tear down
-        if: always()
-        run: docker compose down -v --remove-orphans
 
   integration-db:
     runs-on: ubuntu-latest
@@ -139,14 +136,15 @@ jobs:
           cache: 'pip'
           cache-dependency-path: |
             requirements-dev.txt
-      - name: Cache pip and pytest
+      - name: Cache tools
         uses: actions/cache@v4
         with:
           path: |
             ~/.cache/pip
-            ~/.pytest_cache
+            .pytest_cache
             ~/.ruff_cache
-          key: ${{ runner.os }}-pytest-${{ hashFiles('requirements-dev.txt') }}
+          key: ${{ runner.os }}-int-${{ hashFiles('requirements-dev.txt') }}
+          restore-keys: ${{ runner.os }}-int-
       - name: Install deps
         run: pip install -r requirements-dev.txt
       - name: Ensure test file exists
@@ -165,9 +163,6 @@ jobs:
         env:
           DATABASE_URL: ${{ env.DATABASE_URL }}
         run: pytest tests/db/test_migrations.py -q
-      - name: Tear down
-        if: always()
-        run: docker compose down -v --remove-orphans
 
   health-checks:
     runs-on: ubuntu-latest
@@ -176,8 +171,6 @@ jobs:
       - run: if [ ! -f .env ]; then cp .env.postgres .env; fi
       - run: docker compose --profile "" build --parallel
       - run: docker compose up -d --wait
-      - run: docker compose ps
-      - run: docker compose logs api
       - name: Ensure services healthy
         run: |
           docker compose ps --format '{{.Name}} {{.State.Health.Status}}' | tee ps.log
@@ -185,14 +178,6 @@ jobs:
             cat ps.log
             exit 1
           fi
-      - name: Archive logs
-        if: always()
-        run: docker compose logs > docker-compose.log
-      - uses: actions/upload-artifact@v3
-        if: always()
-        with:
-          name: docker-compose-logs
-          path: docker-compose.log
-      - name: Shut down services
+      - name: Tear down
         if: always()
         run: docker compose down -v --remove-orphans

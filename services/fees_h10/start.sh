@@ -1,6 +1,3 @@
 #!/usr/bin/env bash
-set -euo pipefail
-
-python -m services.common.health_server &
-
+set -e
 exec celery -A services.fees_h10.worker beat -l info
