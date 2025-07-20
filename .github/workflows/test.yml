@@ -153,6 +153,8 @@ jobs:
       - run: if [ ! -f .env ]; then cp .env.postgres .env; fi
       - run: docker compose --profile "" build --parallel
       - run: docker compose up -d --wait
+      - run: docker compose ps
+      - run: docker compose logs api
       - name: Ensure services healthy
         run: |
           docker compose ps --format '{{.Name}} {{.State.Health.Status}}' | tee ps.log
@@ -160,4 +162,12 @@ jobs:
             cat ps.log
             exit 1
           fi
+      - name: Archive logs
+        if: always()
+        run: docker compose logs > docker-compose.log
+      - uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: docker-compose-logs
+          path: docker-compose.log
       - run: docker compose down -v

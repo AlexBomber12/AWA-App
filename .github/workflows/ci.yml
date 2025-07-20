@@ -31,7 +31,9 @@ jobs:
   service:
     needs: [dependabot, list_services]
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     strategy:
+      fail-fast: false
       matrix:
         service: ${{ fromJson(needs.list_services.outputs.services) }}
     services:
@@ -78,23 +80,24 @@ jobs:
       - name: Pre-pull base images
         if: hashFiles('services/${{ matrix.service }}/Dockerfile') != ''
         run: |
-          awk '/^FROM /{print $2}' services/${{ matrix.service }}/Dockerfile | while read img; do
-            for i in 0 1 2 4 8; do
-              docker pull "$img" && break || sleep $i
+          df=services/${{ matrix.service }}/Dockerfile
+          awk '/^FROM /{print $2}' "$df" \
+            | grep -E '[:/]' | sort -u | while read img; do
+                for i in 0 1 2 4 8; do
+                    docker pull "$img" && break || sleep $i
+                done
             done
-          done
       - name: Build service Dockerfile
         if: hashFiles('services/${{ matrix.service }}/Dockerfile') != ''
         run: |
-          for i in 0 1 2 4 8; do
-            docker build services/${{ matrix.service }} -t tmp-${{ matrix.service }} && break || sleep $i
-          done
+          docker buildx build services/${{ matrix.service }} \
+            --cache-from type=gha,scope=${{ matrix.service }} \
+            --cache-to type=gha,mode=max,scope=${{ matrix.service }} \
+            -t tmp-${{ matrix.service }} --load
       - name: Docker compose build
         run: docker compose --profile "" build --parallel
       - name: Set PYTHONPATH
         run: echo "PYTHONPATH=$GITHUB_WORKSPACE" >> $GITHUB_ENV
-      - name: Wait for Postgres
-        run: scripts/wait_pg.sh
       - run: alembic upgrade head
         if: matrix.service == 'api'
       - name: Lint
@@ -102,9 +105,7 @@ jobs:
       - name: Format
         run: ruff format --check .
       - name: Type check
-        run: python -m mypy services || true
-      - name: Wait for Postgres again
-        run: scripts/wait_pg.sh
+        run: python -m mypy --strict services
 
       - name: Install PostgreSQL server (initdb)
         run: |
