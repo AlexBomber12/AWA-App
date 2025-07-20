@@ -20,3 +20,4 @@ Before pushing changes, run:
 ```bash
 pre-commit run --all-files && pytest -q --cov
 ```
+This ensures formatting, linting, and coverage remain consistent with CI.
