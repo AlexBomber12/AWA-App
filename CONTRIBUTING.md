@@ -7,11 +7,10 @@ pip install pre-commit
 pre-commit install
 ```
 
-Before pushing changes, run both pre-commit and the test suite:
+Before pushing changes, run all checks:
 
 ```bash
-pre-commit run --all-files
-pytest -q --cov
+pre-commit run --all-files && pytest -q --cov
 ```
 
 Run the full test suite with Postgres:

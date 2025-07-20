@@ -11,6 +11,9 @@
 ## v1.0.5
 - CI formatting & coverage gate fixed
 
+## v1.0.6
+- CI finally all green (formatting and coverage)
+
 ## v1.0.2
 - CI stability & container start-up
 
