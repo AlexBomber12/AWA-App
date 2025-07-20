@@ -11,15 +11,18 @@ import pytest
 
 ROOT = pathlib.Path(__file__).parents[2] / "services"
 
-modules = []
-for _, name, _ in pkgutil.walk_packages([str(ROOT)]):
-    if name.endswith(("settings", "migrations", "alembic")):
-        continue
-    mod_path = ROOT / name.replace(".", "/")
-    if mod_path.with_suffix(".py").exists() or mod_path.is_dir():
-        modules.append(name)
 
-
-@pytest.mark.parametrize("mod", modules)
+@pytest.mark.parametrize(
+    "mod",
+    [
+        name
+        for _, name, _ in pkgutil.walk_packages([str(ROOT)])
+        if not name.endswith(("settings", "migrations", "alembic"))
+        and (
+            (ROOT / name.replace(".", "/")).with_suffix(".py").exists()
+            or (ROOT / name.replace(".", "/")).is_dir()
+        )
+    ],
+)
 def test_imports(mod):  # noqa: D103
     importlib.import_module(f"services.{mod}")
