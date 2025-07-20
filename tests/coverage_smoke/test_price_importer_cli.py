@@ -4,14 +4,14 @@ from sqlalchemy import create_engine
 
 from services.price_importer.repository import Repository
 
-importer = importlib.import_module('services.price_importer.import')
+importer = importlib.import_module("services.price_importer.import")
 
 
 def test_import_cli(tmp_path, monkeypatch):
     csv = tmp_path / "price.csv"
     csv.write_text("sku,cost\nA1,1.0\n")
 
-    engine = create_engine(f"sqlite:///{tmp_path/'db.sqlite'}", future=True)
+    engine = create_engine(f"sqlite:///{tmp_path / 'db.sqlite'}", future=True)
     monkeypatch.setattr(
         Repository,
         "__init__",
