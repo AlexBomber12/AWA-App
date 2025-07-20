@@ -11,8 +11,12 @@ services:
     build: services/price_importer
     volumes:
       - ./sample_prices:/data
-    command: ["python", "-m", "price_importer.import", "/data/acme.xlsx", "--vendor", "ACME GmbH"]
+    command: ["/app/entrypoint.sh", "/data/acme.xlsx", "--vendor", "ACME GmbH"]
     env_file: .env.postgres
     depends_on:
       postgres:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsSL", "http://localhost:8001/health"]
+      interval: 10s
+      retries: 3

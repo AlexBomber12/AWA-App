@@ -8,6 +8,9 @@
 - enable Dependabot updates and docs publishing
 - Docker healthchecks for services
 
+## v1.0.1
+- CI & container-startup fixes
+
 ## v0.3
 - First release with fully passing CI
 

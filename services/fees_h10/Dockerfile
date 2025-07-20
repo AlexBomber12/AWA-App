@@ -2,21 +2,21 @@
 FROM python:3.12-slim AS base
 ENV PYTHONUNBUFFERED=1
 WORKDIR /app
+
+FROM base AS deps
 COPY requirements*.txt constraints.txt ./
 ARG CONSTRAINTS=""
-RUN if [ -n "$CONSTRAINTS" ] && [ -f "$CONSTRAINTS" ]; then \
+RUN --mount=type=cache,target=/root/.cache/pip \
+    if [ -n "$CONSTRAINTS" ] && [ -f "$CONSTRAINTS" ]; then \
         pip install -r requirements.txt -c "$CONSTRAINTS"; \
     else \
         pip install -r requirements.txt; \
     fi
-COPY . .
 
-FROM python:3.12-slim
-ENV PYTHONUNBUFFERED=1
-WORKDIR /app
-COPY --from=base /usr/local /usr/local
-COPY --from=base /app /app
+FROM base AS runtime
+COPY --from=deps /usr/local /usr/local
+COPY . .
 COPY start.sh ./start.sh
 RUN chmod +x ./start.sh
 ENTRYPOINT ["./start.sh"]
-HEALTHCHECK CMD ["celery", "--help"]
+HEALTHCHECK CMD curl -fsSL http://localhost:8001/health || exit 1

@@ -9,3 +9,12 @@ The application can talk to a language model via different providers.
   optionally `OPENAI_MODEL`.
 * `LLM_PROVIDER=local` runs against a locally hosted Llama.cpp server specified
   by `LLM_URL`.
+
+## Quick Start
+
+```bash
+cp .env.example .env.postgres
+docker compose build --parallel
+docker compose up -d --wait
+curl -f http://localhost:8000/health
+```

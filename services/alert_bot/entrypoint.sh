@@ -3,4 +3,4 @@ set -euo pipefail
 
 python -m services.common.health_server &
 
-exec celery -A services.fees_h10.worker beat -l info
+exec python alert_bot.py "$@"
