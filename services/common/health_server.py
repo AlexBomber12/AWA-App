@@ -14,9 +14,7 @@ async def _run() -> None:
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(
-        runner,
-        host="0.0.0.0",
-        port=int(os.getenv("HEALTH_PORT", "8001")),
+        runner, host="0.0.0.0", port=int(os.getenv("HEALTH_PORT", "8001"))
     )
     await site.start()
     while True:

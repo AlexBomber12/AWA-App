@@ -126,3 +126,6 @@ Run `./scripts/pin_constraints.sh` whenever you update service requirements to r
 
 ### Health checks
 Services with an HTTP API expose `/health` and use `curl -f` in their Dockerfiles. Worker containers without an API use `HEALTHCHECK CMD ["true"]` so Compose marks them as healthy as soon as the process starts.
+
+## Contributing
+Run `pre-commit run --all-files` before pushing to format code and run linters.
