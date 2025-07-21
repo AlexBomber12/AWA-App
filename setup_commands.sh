@@ -62,7 +62,7 @@ fi
 
 docker compose pull && docker compose build && docker compose up -d --wait || exit 1
 
-curl -fs https://awapricer.lan/api/health >/dev/null || { echo "Health check failed" >&2; exit 1; }
+curl -fs http://localhost:8000/health >/dev/null || { echo "Health check failed" >&2; exit 1; }
 
 if [ ! -f "$SERVICE_FILE" ]; then
     read -r -p "Create systemd service? [y/N] " ans
