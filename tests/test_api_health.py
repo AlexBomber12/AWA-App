@@ -1,13 +1,14 @@
 import shutil
 import subprocess
 import time
+from collections.abc import Generator
 
 import pytest
 import requests
 
 
 @pytest.fixture(scope="session", autouse=True)
-def _api_container():
+def _api_container() -> Generator[None, None, None]:
     if not shutil.which("docker"):
         pytest.skip("docker not available")
     proc = subprocess.Popen(["docker", "compose", "up", "-d", "--wait", "api"])
@@ -16,12 +17,12 @@ def _api_container():
     subprocess.run(["docker", "compose", "down", "-v"], check=False)
 
 
-def test_health() -> None:
+def test_health() -> None:  # noqa: D103
+    url = "http://localhost:8000/health"
     for _ in range(15):
         try:
-            r = requests.get("http://localhost:8000/health", timeout=1)
-            if r.status_code == 200:
-                return
+            assert requests.get(url, timeout=1).status_code == 200
+            return
         except Exception:
             time.sleep(1)
-    pytest.fail("health endpoint not ready in 15 s")
+    pytest.fail(f"{url} not reachable within 15 s")

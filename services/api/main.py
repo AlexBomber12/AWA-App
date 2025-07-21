@@ -63,7 +63,7 @@ async def _check_llm() -> None:
 
 @app.get("/health", status_code=status.HTTP_200_OK)
 def health() -> dict[str, str]:  # noqa: D401
-    """Lightweight readiness probe."""
+    """Readiness probe for Docker health-check."""
     return {"status": "ok"}
 
 
