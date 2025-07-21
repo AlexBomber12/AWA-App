@@ -8,7 +8,7 @@ import httpx
 
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "lan").lower()
 LOCAL_URL = os.getenv("LLM_URL", "http://llm:8000/llm")
-LAN_BASE = os.getenv("LLM_BASE_URL", "http://192.168.0.4:8000")
+LAN_BASE = os.getenv("LLM_BASE_URL", "http://localhost:8000")
 LAN_KEY = os.getenv("LLM_API_KEY", "")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
