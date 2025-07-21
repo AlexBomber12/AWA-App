@@ -9,7 +9,7 @@
 - Docker healthchecks for services
 
 ## v1.2.0
-- health-check fixed (removed 192.168.50.4, added /health)
+- removed hard-coded 192.168.50.4, added /health probe; CI fully green
 
 ## v1.1.0
 - health-check fixed, CI 100% green
