@@ -1,12 +1,10 @@
 import shutil
 import subprocess
 import time
+from collections.abc import Generator
 
 import pytest
 import requests
-
-
-from collections.abc import Generator
 
 
 @pytest.fixture(scope="session", autouse=True)

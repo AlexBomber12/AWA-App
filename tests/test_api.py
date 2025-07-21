@@ -3,6 +3,7 @@ import socket
 
 import httpx
 import pytest
+from fastapi.testclient import TestClient
 
 pytestmark = pytest.mark.integration
 
@@ -25,9 +26,6 @@ async def test_health_ok() -> None:
         r = await client.get("/health")
         assert r.status_code == 200
         assert r.json() == {"status": "ok"}
-
-
-from fastapi.testclient import TestClient
 
 
 def test_health(api_client: TestClient) -> None:
