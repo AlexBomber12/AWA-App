@@ -14,6 +14,9 @@
 ## v1.0.8
 - API start-up fixed and all coverage gates are green
 
+## v1.0.9
+- API start-up more robust; integration-db coverage gate satisfied
+
 ## v1.0.6
 - CI fully green (formatting and coverage gate)
 
