@@ -28,8 +28,7 @@ app = FastAPI(lifespan=lifespan)
 
 
 @app.get("/health", status_code=status.HTTP_200_OK, include_in_schema=False)
-def health() -> dict[str, str]:  # noqa: D401
-    """Readiness probe for Docker health-check."""
+def health():  # noqa: D401
     return {"status": "ok"}
 
 
