@@ -11,6 +11,9 @@
 ## v1.3.0
 - fixed Docker health-check (now probes /health), CI all green.
 
+## v1.3.1
+- aligned Docker health-check timing; CI all green
+
 ## v1.2.0
 - removed hard-coded 192.168.50.4, added /health probe; CI fully green
 
