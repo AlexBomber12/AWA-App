@@ -24,7 +24,7 @@ Copy `.env.example` to `.env.postgres` and spin up the stack:
 ```bash
 cp .env.example .env.postgres
 docker compose up -d --wait
-curl http://localhost:8000/health
+curl -f http://localhost:8000/health
 ```
 
 The stack uses Postgres for all services. Copy `.env.example` to `.env.postgres`
