@@ -8,6 +8,9 @@
 - enable Dependabot updates and docs publishing
 - Docker healthchecks for services
 
+## v1.1.0
+- API health probe fixed so docker-compose wait succeeds
+
 ## v1.0.7
 - coverage gates satisfied for all CI jobs
 
