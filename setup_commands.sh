@@ -37,7 +37,7 @@ PG_PORT=5432
 DATABASE_URL=postgresql+asyncpg://postgres:pass@postgres:5432/awa # pragma: allowlist secret
 NEXT_PUBLIC_API_URL=https://awapricer.lan/api
 LLM_PROVIDER=lan
-LLM_BASE_URL=http://192.168.0.4:8000
+LLM_BASE_URL=http://localhost:8000
 LLM_API_KEY=
 MINIO_ROOT_USER=minio
 MINIO_SECRET_KEY=minio123 # pragma: allowlist secret
@@ -62,7 +62,7 @@ fi
 
 docker compose pull && docker compose build && docker compose up -d --wait || exit 1
 
-curl -fs https://awapricer.lan/api/health >/dev/null || { echo "Health check failed" >&2; exit 1; }
+curl -f http://localhost:8000/health >/dev/null || { echo "Health check failed" >&2; exit 1; }
 
 if [ ! -f "$SERVICE_FILE" ]; then
     read -r -p "Create systemd service? [y/N] " ans
