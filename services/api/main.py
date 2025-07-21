@@ -25,6 +25,14 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+
+
+@app.get("/health", status_code=status.HTTP_200_OK, include_in_schema=False)
+def health() -> dict[str, str]:  # noqa: D401
+    """Readiness probe for Docker health-check."""
+    return {"status": "ok"}
+
+
 app.include_router(upload_router, prefix="/upload")
 app.include_router(ingest_router)
 app.include_router(roi_router)
@@ -59,12 +67,6 @@ async def _check_llm() -> None:
             await cli.get(f"{LAN_BASE}/health")
     except Exception:
         os.environ["LLM_PROVIDER"] = LLM_PROVIDER_FALLBACK
-
-
-@app.get("/health", status_code=status.HTTP_200_OK)
-def health() -> dict[str, str]:  # noqa: D401
-    """Readiness probe for Docker health-check."""
-    return {"status": "ok"}
 
 
 @app.post("/score")
