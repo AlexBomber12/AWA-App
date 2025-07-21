@@ -3,7 +3,7 @@ import socket
 import time
 
 import pytest
-import requests  # type: ignore
+import requests
 
 
 def _port_open(host: str, port: int) -> bool:
@@ -20,7 +20,7 @@ def test_api_live_health() -> None:
     for _ in range(10):
         try:
             r = requests.get(url, timeout=0.5)
-            if r.status_code == 200 and r.json() == {"db": "ok"}:
+            if r.status_code == 200 and r.json() == {"status": "ok"}:
                 return
         except Exception:
             pass

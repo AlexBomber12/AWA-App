@@ -18,16 +18,19 @@ def _port_open(host: str, port: int) -> bool:
         return False
 
 
-async def test_health_ok():
+async def test_health_ok() -> None:
     if not _port_open("localhost", 8000):
         pytest.skip("API container is not running on localhost:8000")
     async with httpx.AsyncClient(base_url=API_URL) as client:
         r = await client.get("/health")
         assert r.status_code == 200
-        assert r.json() == {"db": "ok"}
+        assert r.json() == {"status": "ok"}
 
 
-def test_health(api_client):
+from fastapi.testclient import TestClient
+
+
+def test_health(api_client: TestClient) -> None:
     r = api_client.get("/health")
     assert r.status_code == 200
-    assert r.json() == {"db": "ok"}
+    assert r.json() == {"status": "ok"}
