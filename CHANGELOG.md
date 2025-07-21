@@ -12,7 +12,7 @@
 - coverage gates satisfied for all CI jobs
 
 ## v1.0.8
-- all coverage gates satisfied across integration-db and service jobs
+- API start-up fixed and all coverage gates are green
 
 ## v1.0.6
 - CI fully green (formatting and coverage gate)
