@@ -2,8 +2,11 @@
 set -euo pipefail
 
 # Wait for Postgres to accept connections
-until pg_isready -h "$PG_HOST" -p "$PG_PORT" -U "$POSTGRES_USER"; do
-  echo "⏳ Waiting for Postgres..."
+until pg_isready \
+  -h "${PG_HOST:-postgres}" \
+  -p "${PG_PORT:-5432}" \
+  -U "${POSTGRES_USER:-postgres}"; do
+  echo "⏳  Waiting for Postgres..."
   sleep 1
 done
 
