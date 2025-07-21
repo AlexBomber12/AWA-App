@@ -9,7 +9,7 @@
 - Docker healthchecks for services
 
 ## v1.1.0
-- API health probe fixed so docker-compose wait succeeds
+- health-check fixed, CI 100% green
 
 ## v1.0.7
 - coverage gates satisfied for all CI jobs
