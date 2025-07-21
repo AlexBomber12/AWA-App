@@ -5,6 +5,7 @@
 
 ## Quick Start
 Repricer API → http://localhost:8100/health
+The API exposes `/health` for readiness checks.
 
 ## Development setup
 
