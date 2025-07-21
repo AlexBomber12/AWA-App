@@ -1,18 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# wait for Postgres to become ready
+# Wait for Postgres to accept connections
 until pg_isready -h "$PG_HOST" -p "$PG_PORT" -U "$POSTGRES_USER"; do
-  echo "\u23F3 Waiting for Postgres..."
+  echo "⏳ Waiting for Postgres..."
   sleep 1
 done
 
-# apply migrations with retries
+# Retry Alembic in case the DB isn’t ready yet
 for i in {1..5}; do
-  if alembic upgrade head; then
-    break
-  fi
-  echo "Alembic failed, retry $i/5"
+  alembic upgrade head && break
+  echo "❌ Alembic failed – retry $i/5"
   sleep 2
 done
 
