@@ -67,6 +67,7 @@ def _import_all_from(path: pathlib.Path) -> None:
             pass
 
 
-for sub in SRC_ROOT.iterdir():
-    if (sub / "__init__.py").exists():
-        _import_all_from(sub)
+def test_smoke_import_all_modules() -> None:  # noqa: D103
+    for sub in SRC_ROOT.iterdir():
+        if (sub / "__init__.py").exists():
+            _import_all_from(sub)

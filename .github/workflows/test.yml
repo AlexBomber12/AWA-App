@@ -35,6 +35,15 @@ jobs:
             services/repricer/requirements.txt
             services/fees_h10/requirements.txt
             services/alert_bot/requirements.txt
+      - name: Cache tools
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pip
+            .pytest_cache
+            ~/.ruff_cache
+          key: ${{ runner.os }}-test-${{ hashFiles('requirements-dev.txt') }}
+          restore-keys: ${{ runner.os }}-test-
 
       - name: Install dependencies
         run: |  # pragma: allowlist secret
@@ -127,6 +136,15 @@ jobs:
           cache: 'pip'
           cache-dependency-path: |
             requirements-dev.txt
+      - name: Cache tools
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pip
+            .pytest_cache
+            ~/.ruff_cache
+          key: ${{ runner.os }}-int-${{ hashFiles('requirements-dev.txt') }}
+          restore-keys: ${{ runner.os }}-int-
       - name: Install deps
         run: pip install -r requirements-dev.txt
       - name: Ensure test file exists
@@ -144,7 +162,7 @@ jobs:
         continue-on-error: false
         env:
           DATABASE_URL: ${{ env.DATABASE_URL }}
-        run: pytest tests/db/test_migrations.py -q
+        run: pytest tests/db -q
 
   health-checks:
     runs-on: ubuntu-latest
@@ -160,4 +178,6 @@ jobs:
             cat ps.log
             exit 1
           fi
-      - run: docker compose down -v
+      - name: Tear down
+        if: always()
+        run: docker compose down -v --remove-orphans

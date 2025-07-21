@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from typing import List
 
 import httpx
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, status
 from sqlalchemy import bindparam, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -61,8 +61,9 @@ async def _check_llm() -> None:
         os.environ["LLM_PROVIDER"] = LLM_PROVIDER_FALLBACK
 
 
-@app.get("/health")
-async def health() -> dict[str, str]:
+@app.get("/health", status_code=status.HTTP_200_OK)
+def health() -> dict[str, str]:  # noqa: D401
+    """Lightweight readiness probe."""
     return {"status": "ok"}
 
 

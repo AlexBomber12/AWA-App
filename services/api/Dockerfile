@@ -18,4 +18,5 @@ COPY --from=base /usr/local /usr/local
 COPY --from=base /app /app
 RUN chmod +x /app/entrypoint.sh
 ENTRYPOINT ["bash", "/app/entrypoint.sh"]
-HEALTHCHECK CMD curl -fs http://localhost:8000/health || exit 1
+HEALTHCHECK --interval=10s --timeout=3s --retries=5 \
+  CMD curl -fsSL http://localhost:8000/health || exit 1
