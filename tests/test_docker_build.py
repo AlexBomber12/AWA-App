@@ -36,9 +36,7 @@ def test_build_all_service_images(tmp_path: pathlib.Path) -> None:
             ["docker", "build", str(service_dir), "-t", "awa-tmp"]
         )
         log_file.write_text(result.stdout)
-        if result.returncode != 0:
-            pytest.fail(f"docker build failed for {service_dir}\n{result.stdout}")
-        assert "Successfully tagged" in result.stdout
+        assert result.returncode == 0 and "Successfully tagged" in result.stdout
 
 
 # --- bump coverage --------------------------------------------------------
