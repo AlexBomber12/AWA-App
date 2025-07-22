@@ -9,6 +9,7 @@ RUN if [ -n "$CONSTRAINTS" ] && [ -f "$CONSTRAINTS" ]; then \
     else \
         pip install -r requirements.txt; \
     fi
+RUN alembic upgrade head && touch /.migrated
 COPY . .
 
 FROM python:3.12-slim

@@ -4,10 +4,12 @@ from contextlib import asynccontextmanager
 from typing import List
 
 import httpx
-from fastapi import Depends, FastAPI, status
+from fastapi import Depends, FastAPI, HTTPException, status
 from sqlalchemy import bindparam, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from alembic.config import Config
+from alembic.script import ScriptDirectory
 from services.common.dsn import build_dsn
 from services.ingest.ingest_router import router as ingest_router
 from services.ingest.upload_router import router as upload_router
@@ -30,6 +32,18 @@ app = FastAPI(lifespan=lifespan)
 @app.get("/health", status_code=status.HTTP_200_OK, include_in_schema=False)
 def health():  # noqa: D401
     return {"status": "ok"}
+
+
+@app.get("/ready", status_code=status.HTTP_200_OK, include_in_schema=False)
+async def ready(session: AsyncSession = Depends(get_session)) -> dict[str, str]:
+    """Return 200 only when migrations are at head."""
+    cfg = Config("alembic.ini")
+    head = ScriptDirectory.from_config(cfg).get_current_head()
+    result = await session.execute(text("SELECT version_num FROM alembic_version"))
+    current = result.scalar()
+    if current == head:
+        return {"status": "ready"}
+    raise HTTPException(status_code=503, detail="migrations pending")
 
 
 app.include_router(upload_router, prefix="/upload")

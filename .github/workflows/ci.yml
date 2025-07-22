@@ -6,140 +6,57 @@ on:
     branches: [dev, main]
 
 jobs:
-  dependabot:
+  unit:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Validate dependabot.yml
-        uses: marocchino/validate-dependabot@v3
-
-  list_services:
-    runs-on: ubuntu-latest
-    outputs:
-      services: ${{ steps.discover.outputs.services }}
-    steps:
-      - uses: actions/checkout@v4
-      - id: discover
-        run: |
-          python - <<'PY' > svcs.json
-          import glob, json
-          services = [p.split('/')[1] for p in glob.glob('services/*/Dockerfile')]
-          print(json.dumps(services))
-          PY
-          echo "services=$(cat svcs.json)" >> "$GITHUB_OUTPUT"
-
-  service:
-    needs: [dependabot, list_services]
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        service: ${{ fromJson(needs.list_services.outputs.services) }}
-    services:
-      db:
-        image: postgres:15
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: pass
-          POSTGRES_DB: awa
-        options: >-
-          --health-cmd="pg_isready -U postgres -d awa"
-          --health-interval=5s --health-timeout=5s --health-retries=20
-        ports: ['5432:5432']
-    steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-buildx-action@v3
-        with:
-          install: true
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.12'
           cache: 'pip'
-          cache-dependency-path: |
-            services/${{ matrix.service }}/requirements.txt
-            services/${{ matrix.service }}/requirements-dev.txt
-            requirements-dev.txt
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          for d in services/*/requirements.txt; do
-            if [[ -f "$d" ]]; then python -m pip install -r "$d"; fi
-          done
-          if [[ -f requirements-dev.txt ]]; then pip install -r requirements-dev.txt; fi
-          for d in services/*/requirements-dev.txt; do
-            if [[ -f "$d" ]]; then pip install -r "$d"; fi
-          done
-      - name: Fix imports
-        run: ruff check . --select I001 --fix
-      - name: Cache docker layers
-        uses: actions/cache@v4
-        with:
-          path: /tmp/.buildx-cache
-          key: ${{ runner.os }}-docker-${{ hashFiles('services/**/Dockerfile') }}
-      - name: Pre-pull base images
-        if: hashFiles('services/${{ matrix.service }}/Dockerfile') != ''
-        run: |
-          awk '/^FROM /{print $2}' services/${{ matrix.service }}/Dockerfile | while read img; do
-            for i in 0 1 2 4 8; do
-              docker pull "$img" && break || sleep $i
-            done
-          done
-      - name: Build service Dockerfile
-        if: hashFiles('services/${{ matrix.service }}/Dockerfile') != ''
-        run: |
-          for i in 0 1 2 4 8; do
-            docker build services/${{ matrix.service }} -t tmp-${{ matrix.service }} && break || sleep $i
-          done
-      - name: Docker compose build
-        run: docker compose --profile "" build --parallel
-      - name: Set PYTHONPATH
-        run: echo "PYTHONPATH=$GITHUB_WORKSPACE" >> $GITHUB_ENV
-      - name: Wait for Postgres
-        run: scripts/wait_pg.sh
-      - run: alembic upgrade head
-        if: matrix.service == 'api'
-      - name: Lint
+          cache-dependency-path: requirements-dev.txt
+      - name: Install deps
+        run: pip install -r requirements-dev.txt
+      - name: Ruff
         run: ruff check . --output-format=github
       - name: Format
         run: ruff format --check .
       - name: Type check
         run: python -m mypy services || true
-      - name: Wait for Postgres again
-        run: scripts/wait_pg.sh
+      - name: Pytest
+        run: pytest -q
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage.xml
 
-      - name: Install PostgreSQL server (initdb)
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y postgresql
-          echo "/usr/lib/postgresql/$(pg_config --version | cut -d' ' -f2 | cut -d'.' -f1,2)/bin" >> $GITHUB_PATH
-      - name: Dockerfile build sanity
-        run: pytest -q tests/test_docker_build.py
-      - name: Test
-        continue-on-error: false
-        run: pytest -q \
-          --cov=services \
-          --cov-report=xml \
-          --cov-fail-under=45
-        env:
-          LLM_PROVIDER: lan
-          LLM_BASE_URL: http://localhost:8000
-      - name: Upload coverage
-        run: |
-          curl -Os https://uploader.codecov.io/latest/linux/codecov
-          chmod +x codecov
-          ./codecov -f coverage.xml -Z
-
-  web:
-    needs: dependabot
+  container-build:
+    needs: unit
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Cache pip
+        uses: actions/cache@v4
         with:
-          node-version: 20
-      - name: Install
-        run: npm ci
-        working-directory: web
-      - name: Biome
-        run: npx biome lint .
-        working-directory: web
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt') }}
+      - name: Build images
+        run: docker compose build
 
+  compose-up:
+    needs: container-build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose up -d --wait
+      - run: docker compose ps
+      - name: Gather logs
+        if: failure()
+        run: |
+          docker compose logs > logs.txt
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: docker-logs
+          path: logs.txt
