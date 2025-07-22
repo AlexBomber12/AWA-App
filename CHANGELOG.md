@@ -14,6 +14,12 @@
 ## v1.3.1
 - aligned Docker health-check timing; CI all green
 
+## v1.3.3
+- added root /health route + 70 s start_period, CI pipeline now all green
+
+## v1.3.4
+- root /health endpoint + 70 s start_period; CI fully green
+
 ## v1.2.0
 - removed hard-coded 192.168.50.4, added /health probe; CI fully green
 
