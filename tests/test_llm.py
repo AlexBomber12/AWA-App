@@ -31,9 +31,12 @@ async def test_generate(monkeypatch, provider):
     monkeypatch.setattr(llm.httpx.AsyncClient, "post", fake_post)
 
     if provider == "openai":
+
         async def acreate(**_):
             return types.SimpleNamespace(
-                choices=[types.SimpleNamespace(message=types.SimpleNamespace(content="hi"))]
+                choices=[
+                    types.SimpleNamespace(message=types.SimpleNamespace(content="hi"))
+                ]
             )
 
         openai = types.SimpleNamespace(

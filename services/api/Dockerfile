@@ -3,12 +3,15 @@ FROM python:3.12-slim AS base
 ENV PYTHONUNBUFFERED=1
 WORKDIR /app
 COPY requirements*.txt constraints.txt ./
+COPY ./alembic.ini ./
+COPY ./alembic ./alembic
 ARG CONSTRAINTS=""
 RUN if [ -n "$CONSTRAINTS" ] && [ -f "$CONSTRAINTS" ]; then \
         pip install -r requirements.txt -c "$CONSTRAINTS"; \
     else \
         pip install -r requirements.txt; \
     fi
+ENV ALEMBIC_CONFIG=/app/alembic.ini
 RUN alembic upgrade head && touch /.migrated
 COPY . .
 
