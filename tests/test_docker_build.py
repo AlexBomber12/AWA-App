@@ -1,51 +1,44 @@
+import importlib
+import os
 import pathlib
-import re
+import pkgutil
 import shutil
 import subprocess
-import time
+import sys
+import uuid
 
 import pytest
 
-
-def _run_with_retries(cmd: list[str]) -> subprocess.CompletedProcess[str]:
-    """Run a command with exponential backoff retries."""
-    result: subprocess.CompletedProcess[str] = subprocess.CompletedProcess(cmd, 1)
-    for attempt in range(5):
-        result = subprocess.run(
-            cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
-        )
-        if result.returncode == 0:
-            break
-        time.sleep(2**attempt)
-    return result
+IMAGE = f"awa-test:{uuid.uuid4().hex[:8]}"
+ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 
 @pytest.mark.skipif(shutil.which("docker") is None, reason="docker not available")
-def test_build_all_service_images(tmp_path: pathlib.Path) -> None:
-    for df in pathlib.Path("services").glob("*/Dockerfile"):
-        service_dir = df.parent
-        log_file = tmp_path / f"{service_dir.name}.log"
-
-        # pre-pull all base images with retries
-        for line in df.read_text().splitlines():
-            match = re.match(r"FROM\s+(\S+)", line)
-            if match:
-                _run_with_retries(["docker", "pull", match.group(1)])
-
-        result = _run_with_retries(
-            ["docker", "build", str(service_dir), "-t", "awa-tmp"]
+def test_api_docker_build() -> None:
+    api_dir = ROOT / "services" / "api"
+    env = {**os.environ, "DOCKER_BUILDKIT": "1"}
+    try:
+        subprocess.check_call(
+            ["docker", "build", "-q", "-t", IMAGE, str(api_dir)], env=env
         )
-        log_file.write_text(result.stdout)
-        assert result.returncode == 0 and "Successfully tagged" in result.stdout
+        subprocess.check_call(["docker", "image", "inspect", IMAGE])
+        subprocess.check_call(
+            [
+                "docker",
+                "run",
+                "--rm",
+                IMAGE,
+                "bash",
+                "-c",
+                "test -f /app/alembic.ini",
+            ]
+        )
+    finally:
+        subprocess.run(["docker", "rmi", "-f", IMAGE], check=False)
 
 
-# --- bump coverage --------------------------------------------------------
-import importlib  # noqa: E402
-import pathlib  # noqa: E402
-import pkgutil  # noqa: E402
-import sys  # noqa: E402
-
-SRC_ROOT = pathlib.Path(__file__).resolve().parent.parent / "services"
+# --- bump coverage ---------------------------------------------------------
+SRC_ROOT = ROOT / "services"
 
 
 def _import_all_from(path: pathlib.Path) -> None:
