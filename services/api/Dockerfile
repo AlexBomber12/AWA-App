@@ -8,6 +8,7 @@ COPY requirements-dev.txt constraints.txt ./
 # copy root-level alembic files; build context is repo root
 COPY ./alembic.ini ./
 COPY ./alembic ./alembic
+RUN alembic upgrade head && touch /.migrated
 ARG CONSTRAINTS=""
 RUN if [ -n "$CONSTRAINTS" ] && [ -f "$CONSTRAINTS" ]; then \
         pip install -r requirements.txt -c "$CONSTRAINTS"; \
