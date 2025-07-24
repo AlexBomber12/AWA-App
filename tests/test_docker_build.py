@@ -42,6 +42,17 @@ def test_api_docker_build() -> None:
                 "test -f /app/alembic.ini",
             ]
         )
+        subprocess.check_call(
+            [
+                "docker",
+                "run",
+                "--rm",
+                IMAGE,
+                "bash",
+                "-c",
+                "test -f /app/requirements.txt",
+            ]
+        )
     finally:
         subprocess.run(["docker", "rmi", "-f", IMAGE], check=False)
 

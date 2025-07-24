@@ -2,10 +2,12 @@
 FROM python:3.12-slim AS base
 ENV PYTHONUNBUFFERED=1
 WORKDIR /app
-COPY requirements*.txt constraints.txt ./
-# copy root-level alembic files; build context is services/api
-COPY ../../alembic.ini ./
-COPY ../../alembic ./alembic
+# make service requirements visible when build context is repo root
+COPY services/api/requirements.txt ./requirements.txt
+COPY requirements-dev.txt constraints.txt ./
+# copy root-level alembic files; build context is repo root
+COPY ./alembic.ini ./
+COPY ./alembic ./alembic
 ARG CONSTRAINTS=""
 RUN if [ -n "$CONSTRAINTS" ] && [ -f "$CONSTRAINTS" ]; then \
         pip install -r requirements.txt -c "$CONSTRAINTS"; \
