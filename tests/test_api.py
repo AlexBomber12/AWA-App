@@ -32,3 +32,18 @@ def test_health(api_client: TestClient) -> None:
     r = api_client.get("/health")
     assert r.status_code == 200
     assert r.json() == {"status": "ok"}
+
+
+def test_docs(api_client: TestClient) -> None:
+    r = api_client.get("/docs")
+    assert r.status_code == 200
+
+
+def test_ready(api_client: TestClient, migrated_session) -> None:
+    r = api_client.get("/ready")
+    assert r.status_code == 200
+
+
+def test_404(api_client: TestClient) -> None:
+    r = api_client.get("/does-not-exist")
+    assert r.status_code == 404

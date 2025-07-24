@@ -126,3 +126,8 @@ Run `./scripts/pin_constraints.sh` whenever you update service requirements to r
 
 ### Health checks
 Services with an HTTP API expose `/health` and use `curl -f` in their Dockerfiles. Worker containers without an API use `HEALTHCHECK CMD ["true"]` so Compose marks them as healthy as soon as the process starts.
+
+## Local QA checklist
+
+* Run `make test-cov` and ensure coverage badge shows **≥55 %**.
+* Start the stack with `make compose-dev` and verify `curl -f localhost:8000/ready` returns `200`.
