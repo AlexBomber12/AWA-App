@@ -16,3 +16,6 @@ def test_alembic_upgrade_head() -> None:
     eng = sa.create_engine(url)
     insp = sa.inspect(eng)
     assert "products" in insp.get_table_names()
+    ver = insp.bind.execute(sa.text("SELECT count(*) FROM alembic_version")).scalar()
+    assert ver and ver > 0
+    eng.dispose()

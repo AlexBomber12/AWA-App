@@ -15,11 +15,20 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 @pytest.mark.skipif(shutil.which("docker") is None, reason="docker not available")
 def test_api_docker_build() -> None:
-    api_dir = ROOT / "services" / "api"
     env = {**os.environ, "DOCKER_BUILDKIT": "1"}
     try:
         subprocess.check_call(
-            ["docker", "build", "-q", "-t", IMAGE, str(api_dir)], env=env
+            [
+                "docker",
+                "build",
+                "-q",
+                "-t",
+                IMAGE,
+                "-f",
+                "services/api/Dockerfile",
+                ".",
+            ],
+            env=env,
         )
         subprocess.check_call(["docker", "image", "inspect", IMAGE])
         subprocess.check_call(
