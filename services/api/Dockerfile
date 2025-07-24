@@ -15,7 +15,6 @@ RUN if [ -n "$CONSTRAINTS" ] && [ -f "$CONSTRAINTS" ]; then \
         pip install -r requirements.txt; \
     fi
 ENV ALEMBIC_CONFIG=/app/alembic.ini
-RUN alembic upgrade head && touch /.migrated
 COPY . .
 
 FROM python:3.12-slim

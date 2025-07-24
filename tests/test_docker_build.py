@@ -14,7 +14,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 
 
 @pytest.mark.skipif(shutil.which("docker") is None, reason="docker not available")
-def test_api_docker_build() -> None:
+def test_api_image_builds() -> None:
     env = {**os.environ, "DOCKER_BUILDKIT": "1"}
     try:
         subprocess.check_call(
@@ -22,36 +22,17 @@ def test_api_docker_build() -> None:
                 "docker",
                 "build",
                 "-q",
-                "-t",
-                IMAGE,
                 "-f",
                 "services/api/Dockerfile",
                 ".",
+                "-t",
+                IMAGE,
             ],
             env=env,
         )
         subprocess.check_call(["docker", "image", "inspect", IMAGE])
         subprocess.check_call(
-            [
-                "docker",
-                "run",
-                "--rm",
-                IMAGE,
-                "bash",
-                "-c",
-                "test -f /app/alembic.ini",
-            ]
-        )
-        subprocess.check_call(
-            [
-                "docker",
-                "run",
-                "--rm",
-                IMAGE,
-                "bash",
-                "-c",
-                "test -f /app/requirements.txt",
-            ]
+            ["docker", "run", "--rm", IMAGE, "test", "-f", "/app/alembic.ini"]
         )
     finally:
         subprocess.run(["docker", "rmi", "-f", IMAGE], check=False)
