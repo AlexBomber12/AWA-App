@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-set -e
+set -euo pipefail
+
 echo "⏳ Waiting for Postgres..."
-until pg_isready -h "$PG_HOST" -p "$PG_PORT" -U "$POSTGRES_USER"; do
+until pg_isready -h "$PG_HOST" -p "$PG_PORT" -U "$PG_USER"; do
   sleep 1
 done
-if [ ! -f /.migrated ]; then
-  alembic upgrade head && touch /.migrated
-fi
+
+alembic upgrade head
 exec uvicorn services.api.main:app --host 0.0.0.0 --port 8000

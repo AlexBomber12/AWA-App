@@ -11,9 +11,8 @@ COPY services/api/ .
 COPY services/common/ ../common/
 # config and migrations
 COPY alembic.ini .
-COPY alembic ./alembic
+COPY alembic/ ./alembic/
 ENV ALEMBIC_CONFIG=/app/alembic.ini
-RUN alembic upgrade head && touch /.migrated
 
 FROM python:3.12-slim
 ENV PYTHONUNBUFFERED=1
