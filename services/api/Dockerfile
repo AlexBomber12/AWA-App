@@ -2,6 +2,8 @@
 FROM python:3.12-slim AS base
 ENV PYTHONUNBUFFERED=1
 WORKDIR /app
+# expose alembic.ini for tests
+COPY services/api/alembic.ini /app/services/api/alembic.ini
 # install dependencies from repo root
 COPY services/api/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt

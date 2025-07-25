@@ -12,7 +12,7 @@ __all__ = [
     "_db_available",
     "pytest_collection_modifyitems",
     "_set_db_url",
-    "_migrate",
+    "migrate_db",
     "pg_pool",
     "db_engine",
     "refresh_mvs",
@@ -81,6 +81,27 @@ def _set_db_url():
     os.environ["PG_ASYNC_DSN"] = sync_url.replace("+psycopg", "")
 
 
+@pytest.fixture(scope="session", autouse=True)
+def migrate_db(_set_db_url):
+    """Ensure the database schema is present for tests."""
+    if os.getenv("TESTING") != "1" or not _db_available():
+        return
+
+    async def _has_table() -> bool:
+        conn = await asyncpg.connect(os.environ["DATABASE_URL"])
+        try:
+            return bool(await conn.fetchval("SELECT to_regclass('products')"))
+        finally:
+            await conn.close()
+
+    if not asyncio.run(_has_table()):
+        import subprocess
+
+        subprocess.check_call(
+            ["alembic", "-c", "services/api/alembic.ini", "upgrade", "head"]
+        )
+
+
 @pytest.fixture(scope="session")
 async def _migrate(_set_db_url):
     dsn = os.environ["DATABASE_URL"]
@@ -98,7 +119,7 @@ async def _migrate(_set_db_url):
     from alembic import command
     from alembic.config import Config
 
-    command.upgrade(Config("alembic.ini"), "head")
+    command.upgrade(Config("services/api/alembic.ini"), "head")
 
 
 @pytest.fixture
