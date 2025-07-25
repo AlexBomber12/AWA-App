@@ -30,7 +30,11 @@ app = FastAPI(lifespan=lifespan)
 
 
 @app.get("/health", status_code=status.HTTP_200_OK, include_in_schema=False)
-def health():  # noqa: D401
+async def health(session: AsyncSession = Depends(get_session)) -> dict[str, str]:  # noqa: D401
+    try:
+        await session.execute(text("SELECT 1"))
+    except Exception:
+        raise HTTPException(status_code=503, detail="db unavailable")
     return {"status": "ok"}
 
 

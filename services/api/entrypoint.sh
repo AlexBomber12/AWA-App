@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Default database variables for CI / local use
+: "${PG_HOST:=postgres}"
+: "${PG_PORT:=5432}"
+: "${PG_USER:=postgres}"
+: "${PG_PASSWORD:=postgres}"
+: "${PG_DATABASE:=awa}"
+
 # If arguments are supplied, run them instead of the full app startup.
 if [[ $# -gt 0 ]]; then
   exec "$@"

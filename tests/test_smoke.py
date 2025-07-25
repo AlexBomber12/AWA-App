@@ -3,7 +3,15 @@ import importlib
 import pytest
 from fastapi.testclient import TestClient
 
-from services.api.main import app
+from services.api import main
+
+
+async def _dummy_get_session():
+    class Dummy:
+        async def execute(self, *_args, **_kwargs):
+            return None
+
+    yield Dummy()
 
 
 @pytest.mark.parametrize(
@@ -23,9 +31,14 @@ def test_import(pkg) -> None:
     importlib.import_module(pkg)
 
 
-client = TestClient(app)
+async def _noop():
+    return None
 
 
-def test_health() -> None:
-    for _ in range(5):
-        assert client.get("/health").json() == {"status": "ok"}
+def test_health(monkeypatch) -> None:
+    monkeypatch.setattr(main, "_wait_for_db", _noop)
+    main.app.dependency_overrides[main.get_session] = _dummy_get_session
+    with TestClient(main.app) as client:
+        for _ in range(5):
+            assert client.get("/health").json() == {"status": "ok"}
+    main.app.dependency_overrides.clear()
