@@ -81,6 +81,26 @@ def _set_db_url():
     os.environ["PG_ASYNC_DSN"] = sync_url.replace("+psycopg", "")
 
 
+@pytest.fixture(scope="session", autouse=True)
+def _ensure_schema(_set_db_url):
+    """Run Alembic migrations once if core tables are missing."""
+    if not _db_available():
+        return
+
+    async def _has_table() -> bool:
+        conn = await asyncpg.connect(os.environ["DATABASE_URL"])
+        try:
+            return bool(await conn.fetchval("SELECT to_regclass('products')"))
+        finally:
+            await conn.close()
+
+    if not asyncio.run(_has_table()):
+        from alembic import command
+        from alembic.config import Config
+
+        command.upgrade(Config("services/api/alembic.ini"), "head")
+
+
 @pytest.fixture(scope="session")
 async def _migrate(_set_db_url):
     dsn = os.environ["DATABASE_URL"]
@@ -98,7 +118,7 @@ async def _migrate(_set_db_url):
     from alembic import command
     from alembic.config import Config
 
-    command.upgrade(Config("alembic.ini"), "head")
+    command.upgrade(Config("services/api/alembic.ini"), "head")
 
 
 @pytest.fixture
