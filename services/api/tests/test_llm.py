@@ -9,7 +9,7 @@ from services.api.main import _check_llm
 
 @pytest.mark.asyncio
 async def test_check_llm_sets_fallback(monkeypatch) -> None:
-    os.environ["LLM_PROVIDER"] = "lan"
+    monkeypatch.setenv("LLM_PROVIDER", "lan")
 
     class FakeClient:
         async def __aenter__(self):

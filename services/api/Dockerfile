@@ -19,6 +19,13 @@ ENV ALEMBIC_CONFIG=/app/alembic.ini
 FROM python:3.12-slim
 ENV PYTHONUNBUFFERED=1
 WORKDIR /app
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends tzdata \
+    && cp /usr/share/zoneinfo/UTC /etc/localtime \
+    && echo "UTC" > /etc/timezone \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+ENV TZ=UTC
 COPY --from=base /usr/local /usr/local
 COPY --from=base /app /app
 RUN chmod +x /app/entrypoint.sh
