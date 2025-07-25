@@ -5,11 +5,12 @@ WORKDIR /app
 # install dependencies from repo root
 COPY services/api/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
+# migration config for tests
+COPY services/api/alembic.ini /app/services/api/alembic.ini
 # copy application source
 COPY services/api/ .
 # shared common utilities
 COPY services/common/ ../common/
-# config and migrations
 COPY alembic.ini .
 COPY alembic/ ./alembic/
 ENV ALEMBIC_CONFIG=/app/alembic.ini
