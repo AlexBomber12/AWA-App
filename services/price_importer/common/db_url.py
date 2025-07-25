@@ -7,7 +7,11 @@ def make_dsn(async_: bool = False) -> str:
     pwd = os.getenv("PG_PASSWORD") or os.getenv("POSTGRES_PASSWORD", "")
     host = os.getenv("PG_HOST") or os.getenv("POSTGRES_HOST", "localhost")
     port = os.getenv("PG_PORT") or os.getenv("POSTGRES_PORT", "5432")
-    db = os.getenv("PG_DATABASE") or os.getenv("POSTGRES_DB", "postgres")
+    db = (
+        os.getenv("PG_DATABASE")
+        or os.getenv("PG_DB")
+        or os.getenv("POSTGRES_DB", "postgres")
+    )
     scheme = "postgresql+asyncpg" if async_ else "postgresql+psycopg"
     return f"{scheme}://{user}:{pwd}@{host}:{port}/{db}"
 

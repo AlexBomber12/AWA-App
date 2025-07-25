@@ -15,6 +15,6 @@ def build_url(async_: bool = True) -> str:
     password = os.getenv("PG_PASSWORD", "pass")
     host = os.getenv("PG_HOST", "localhost")
     port = os.getenv("PG_PORT", "5432")
-    database = os.getenv("PG_DATABASE", "awa")
+    database = os.getenv("PG_DATABASE") or os.getenv("PG_DB", "awa")
     scheme = "postgresql+asyncpg" if async_ else "postgresql"
     return f"{scheme}://{user}:{password}@{host}:{port}/{database}"

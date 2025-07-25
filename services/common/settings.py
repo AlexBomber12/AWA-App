@@ -12,13 +12,18 @@ class Settings(BaseSettings):
     PG_HOST: str = "postgres"
     PG_PORT: int = 5432
     PG_DATABASE: str = "awa"
+    PG_DB: str | None = None
     DATA_DIR: Path = Path.cwd() / "data"
 
     model_config = SettingsConfigDict(env_file=".env.postgres", extra="ignore")
 
     @property
     def DATABASE_URL(self) -> str:
-        return f"postgresql+asyncpg://{self.PG_USER}:{self.PG_PASSWORD}@{self.PG_HOST}:{self.PG_PORT}/{self.PG_DATABASE}"
+        database = self.PG_DATABASE or self.PG_DB or "awa"
+        return (
+            f"postgresql+asyncpg://{self.PG_USER}:{self.PG_PASSWORD}"
+            f"@{self.PG_HOST}:{self.PG_PORT}/{database}"
+        )
 
 
 @lru_cache

@@ -34,7 +34,7 @@ async def health(session: AsyncSession = Depends(get_session)) -> dict[str, str]
     try:
         await session.execute(text("SELECT 1"))
     except Exception:
-        raise HTTPException(status_code=503, detail="db unavailable")
+        raise HTTPException(status_code=503, detail="DB not ready")
     return {"status": "ok"}
 
 

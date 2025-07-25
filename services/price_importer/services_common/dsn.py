@@ -18,7 +18,7 @@ def build_dsn(sync: bool = True) -> str:
     port = os.getenv("PG_PORT", "5432")
     user = _u.quote_plus(os.getenv("PG_USER", "postgres"))
     pwd = _u.quote_plus(os.getenv("PG_PASSWORD", "pass"))
-    db = os.getenv("PG_DATABASE", "awa")
+    db = os.getenv("PG_DATABASE") or os.getenv("PG_DB", "awa")
     base = f"postgresql://{user}:{pwd}@{host}:{port}/{db}"
     if sync:
         return base.replace("postgresql://", "postgresql+psycopg://")
