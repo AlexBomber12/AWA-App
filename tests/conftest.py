@@ -12,7 +12,7 @@ __all__ = [
     "_db_available",
     "pytest_collection_modifyitems",
     "_set_db_url",
-    "_migrate",
+    "migrate_db",
     "pg_pool",
     "db_engine",
     "refresh_mvs",
@@ -82,9 +82,9 @@ def _set_db_url():
 
 
 @pytest.fixture(scope="session", autouse=True)
-def _ensure_schema(_set_db_url):
-    """Run Alembic migrations once if core tables are missing."""
-    if not _db_available():
+def migrate_db(_set_db_url):
+    """Ensure the database schema is present for tests."""
+    if os.getenv("TESTING") != "1" or not _db_available():
         return
 
     async def _has_table() -> bool:
@@ -95,10 +95,11 @@ def _ensure_schema(_set_db_url):
             await conn.close()
 
     if not asyncio.run(_has_table()):
-        from alembic import command
-        from alembic.config import Config
+        import subprocess
 
-        command.upgrade(Config("services/api/alembic.ini"), "head")
+        subprocess.check_call(
+            ["alembic", "-c", "services/api/alembic.ini", "upgrade", "head"]
+        )
 
 
 @pytest.fixture(scope="session")

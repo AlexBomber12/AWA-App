@@ -32,7 +32,7 @@ def test_api_image_builds() -> None:
             env=env,
         )
         subprocess.check_call(
-            ["docker", "run", "--rm", IMAGE, "test", "-f", "/app/alembic.ini"]
+            ["docker", "run", "--rm", IMAGE, "test", "-f", "/app/services/api/alembic.ini"]
         )
     finally:
         subprocess.run(["docker", "rmi", "-f", IMAGE], check=False)

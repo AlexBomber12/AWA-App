@@ -8,6 +8,15 @@ on:
 jobs:
   unit:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_PASSWORD: pass
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd="pg_isready -U postgres"
+          --health-interval=5s --health-timeout=5s --health-retries=10
     steps:
       - uses: actions/checkout@v4
       - name: Load env
@@ -19,6 +28,8 @@ jobs:
           cache-dependency-path: requirements-dev.txt
       - name: Install deps
         run: pip install -r requirements-dev.txt
+      - name: Wait for DB
+        run: bash services/etl/wait-for-it.sh localhost:5432 -t 30
       - name: Run migrations
         run: alembic -c services/api/alembic.ini upgrade head
       - name: Ruff
