@@ -28,8 +28,12 @@ jobs:
           cache-dependency-path: requirements-dev.txt
       - name: Install deps
         run: pip install -r requirements-dev.txt
+      - name: Format code
+        run: |
+          ruff check . --fix
+          ruff format .
       - name: Wait for DB
-        run: bash services/etl/wait-for-it.sh "$PG_HOST:5432" -t 30
+        run: bash services/etl/wait-for-it.sh "$PG_HOST:$PG_PORT" -t 30
       - name: Create test database
         run: psql -h "$PG_HOST" -p "$PG_PORT" -U "$PG_USER" -c "CREATE DATABASE $PG_DATABASE;"
         env:
