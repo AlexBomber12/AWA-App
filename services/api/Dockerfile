@@ -5,7 +5,7 @@ WORKDIR /app
 # expose alembic.ini for tests
 COPY services/api/alembic.ini /app/services/api/alembic.ini
 # install dependencies from repo root
-COPY services/api/requirements.txt ./requirements.txt
+COPY services/api/requirements.txt /app/requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 # copy application source
 COPY services/api/ .
