@@ -34,8 +34,10 @@ jobs:
           ruff format .
       - name: Wait for DB
         run: bash services/etl/wait-for-it.sh "$PG_HOST:$PG_PORT" -t 30
-      - name: Create test database
-        run: psql -h "$PG_HOST" -p "$PG_PORT" -U "$PG_USER" -c "CREATE DATABASE $PG_DATABASE;"
+      - name: Ensure test database
+        run: |
+          psql -h "$PG_HOST" -p "$PG_PORT" -U "$PG_USER" -tc "SELECT 1 FROM pg_database WHERE datname='${PG_DATABASE}'" | grep -q 1 || \
+          psql -h "$PG_HOST" -p "$PG_PORT" -U "$PG_USER" -c "CREATE DATABASE ${PG_DATABASE};"
         env:
           PGPASSWORD: ${{ env.PG_PASSWORD }}
       - name: Run migrations
@@ -49,7 +51,9 @@ jobs:
       - name: Type check
         run: python -m mypy services || true
       - name: Ensure test DB exists
-        run: psql -h "$PG_HOST" -p "$PG_PORT" -U "$PG_USER" -c "CREATE DATABASE $PG_DATABASE;"
+        run: |
+          psql -h "$PG_HOST" -p "$PG_PORT" -U "$PG_USER" -tc "SELECT 1 FROM pg_database WHERE datname='${PG_DATABASE}'" | grep -q 1 || \
+          psql -h "$PG_HOST" -p "$PG_PORT" -U "$PG_USER" -c "CREATE DATABASE ${PG_DATABASE};"
         env:
           PGPASSWORD: ${{ env.PG_PASSWORD }}
       - name: Pytest
