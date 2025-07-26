@@ -24,8 +24,8 @@ RUN apt-get update \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 ENV TZ=UTC
-COPY wait-for-it.sh /app/wait-for-it.sh
+COPY wait-for-it.sh /usr/local/bin/
 COPY entrypoint.sh /app/entrypoint.sh
-RUN chmod +x /app/wait-for-it.sh /app/entrypoint.sh
+RUN chmod +x /usr/local/bin/wait-for-it.sh /app/entrypoint.sh
 ENTRYPOINT ["/bin/bash", "/app/entrypoint.sh"]
 HEALTHCHECK CMD ["true"]
