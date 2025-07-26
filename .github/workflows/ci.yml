@@ -20,7 +20,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Load env
-        run: cat .env.ci >> $GITHUB_ENV
+        run: cat .env.ci >> "$GITHUB_ENV"
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -29,11 +29,11 @@ jobs:
       - name: Install deps
         run: pip install -r requirements-dev.txt
       - name: Wait for DB
-        run: bash services/etl/wait-for-it.sh localhost:5432 -t 30
-      - name: Create DB for unit tests
-        run: psql -h localhost -U postgres -c "CREATE DATABASE awa;"
+        run: bash services/etl/wait-for-it.sh "$PG_HOST:5432" -t 30
+      - name: Create test database
+        run: psql -h "$PG_HOST" -p "$PG_PORT" -U "$PG_USER" -c "CREATE DATABASE $PG_DATABASE;"
         env:
-          PGPASSWORD: pass
+          PGPASSWORD: ${{ env.PG_PASSWORD }}
       - name: Run migrations
         run: alembic -c services/api/alembic.ini upgrade head
       - name: Ruff
@@ -44,6 +44,10 @@ jobs:
           args: "format --check ."
       - name: Type check
         run: python -m mypy services || true
+      - name: Ensure test DB exists
+        run: psql -h "$PG_HOST" -p "$PG_PORT" -U "$PG_USER" -c "CREATE DATABASE $PG_DATABASE;"
+        env:
+          PGPASSWORD: ${{ env.PG_PASSWORD }}
       - name: Pytest
         run: pytest -q
       - uses: actions/upload-artifact@v4
