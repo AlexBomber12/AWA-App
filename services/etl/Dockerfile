@@ -22,8 +22,9 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends tzdata \
     && rm -rf /var/lib/apt/lists/*
 ENV TZ=UTC
-COPY services/etl/wait-for-it.sh /usr/local/bin/
+COPY services/etl/wait-for-it.sh /usr/local/bin/wait-for-it.sh
+RUN chmod +x /usr/local/bin/wait-for-it.sh
 COPY services/etl/entrypoint.sh /app/entrypoint.sh
-RUN chmod +x /usr/local/bin/wait-for-it.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
 ENTRYPOINT ["/bin/bash", "/app/entrypoint.sh"]
 HEALTHCHECK CMD ["true"]
