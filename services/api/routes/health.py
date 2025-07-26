@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_session
 
-MAX_SKEW = 30  # seconds
+MAX_SKEW = 60  # seconds
 
 router = APIRouter()
 
@@ -24,7 +24,7 @@ async def health(session: AsyncSession = Depends(get_session)) -> JSONResponse:
         if isinstance(db_naive, datetime)
         else None
     )
-    app_now = datetime.now(timezone.utc)
+    app_now = datetime.utcnow().replace(tzinfo=timezone.utc)
     if db_now is None or abs((db_now - app_now).total_seconds()) > MAX_SKEW:
         return JSONResponse(status_code=503, content={"detail": "clock skew"})
     return JSONResponse(status_code=status.HTTP_200_OK, content={"status": "ok"})

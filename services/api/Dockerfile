@@ -17,6 +17,7 @@ COPY alembic/ ./alembic/
 ENV ALEMBIC_CONFIG=/app/alembic.ini
 
 FROM python:3.12-slim
+ARG TZ_CACHE_BUST
 ENV PYTHONUNBUFFERED=1
 WORKDIR /app
 RUN apt-get update \
