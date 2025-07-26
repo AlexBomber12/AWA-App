@@ -74,11 +74,19 @@ jobs:
       - run: |
           export COMPOSE_DOCKER_CLI_BUILD=1
           export DOCKER_BUILDKIT=1
-          docker compose build --progress plain
+          docker compose \
+            -f docker-compose.yml \
+            -f docker-compose.postgres.yml \
+            build --progress plain
       - run: |
           export COMPOSE_DOCKER_CLI_BUILD=1
           export DOCKER_BUILDKIT=1
-          docker compose up -d --wait --pull never
+          docker compose \
+            -f docker-compose.yml \
+            -f docker-compose.postgres.yml \
+            up -d --wait --no-build --pull never
+      - run: |
+          docker compose config | grep image:
       - run: |
           export COMPOSE_DOCKER_CLI_BUILD=1
           export DOCKER_BUILDKIT=1
@@ -111,7 +119,10 @@ jobs:
         run: |
           export COMPOSE_DOCKER_CLI_BUILD=1
           export DOCKER_BUILDKIT=1
-          docker compose push api
+          docker compose \
+            -f docker-compose.yml \
+            -f docker-compose.postgres.yml \
+            push api
 
   upload-coverage:
     needs: compose-health
