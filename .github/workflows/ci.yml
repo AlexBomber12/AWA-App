@@ -61,11 +61,13 @@ jobs:
       - name: Build API image
         run: docker build -f services/api/Dockerfile .
 
-  compose-up:
+  compose-health:
     needs: container-build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Build images (invalidate TZ layer)
+        run: docker compose build --pull --build-arg TZ_CACHE_BUST=${{ github.sha }}
       - run: docker compose up -d --wait
       - run: docker compose ps
       - name: Gather logs
