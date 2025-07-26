@@ -88,7 +88,8 @@ def migrate_db(_set_db_url):
         return
 
     async def _has_table() -> bool:
-        conn = await asyncpg.connect(os.environ["DATABASE_URL"])
+        dsn = os.getenv("PG_ASYNC_DSN") or build_dsn(sync=False)
+        conn = await asyncpg.connect(dsn)
         try:
             return bool(await conn.fetchval("SELECT to_regclass('products')"))
         finally:
@@ -104,7 +105,7 @@ def migrate_db(_set_db_url):
 
 @pytest.fixture(scope="session")
 async def _migrate(_set_db_url):
-    dsn = os.environ["DATABASE_URL"]
+    dsn = os.getenv("PG_ASYNC_DSN") or build_dsn(sync=False)
     for _ in range(30):
         try:
             conn = await asyncpg.connect(dsn)

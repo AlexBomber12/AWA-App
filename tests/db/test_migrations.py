@@ -3,9 +3,10 @@ import pathlib
 import subprocess
 
 import pytest
+from sqlalchemy.exc import OperationalError
+
 from alembic.command import upgrade
 from alembic.config import Config
-from sqlalchemy.exc import OperationalError
 
 
 def test_all_migrations_apply() -> None:
