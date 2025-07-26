@@ -55,8 +55,9 @@ tests. No `docker compose` commands are required in CI.
 The workflow validates the Dependabot configuration using
 `marocchino/validate-dependabot` to avoid broken update PRs.
 Pytest enforces a minimum of 45% total coverage.
-Docker image builds pre-pull base images and retry up to three times so network
-glitches rarely break the pipeline.
+Docker builds use BuildKit. In CI the stack is built with
+`TZ_CACHE_BUST=${GITHUB_SHA}` and started with `--pull never` so tests run
+against the freshly-built containers instead of any cached `:latest` image.
 
 
 ## Importing supplier prices
