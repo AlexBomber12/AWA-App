@@ -64,9 +64,6 @@ jobs:
             --tag ghcr.io/${{ github.repository }}/api:${{ github.sha }} \
             --build-arg TZ_CACHE_BUST=${{ github.sha }} \
             --load services/api
-      - name: Push image
-        if: github.ref == 'refs/heads/main'
-        run: docker push ghcr.io/${{ github.repository }}/api:${{ github.sha }}
 
   compose-health:
     needs: container-build
@@ -74,7 +71,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: echo "GITHUB_SHA=${GITHUB_SHA}" >> "$GITHUB_ENV"
-      - run: docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d --wait --no-build --pull never
+      - run: docker compose -f docker-compose.ci.yml up -d --wait --no-build --pull never
       - run: docker compose ps
       - name: Gather logs
         if: failure()
@@ -85,3 +82,33 @@ jobs:
         with:
           name: docker-logs
           path: logs.txt
+
+  push-image:
+    if: github.ref == 'refs/heads/main'
+    needs: compose-health
+    runs-on: ubuntu-latest
+    steps:
+      - uses: docker/setup-buildx-action@v3
+      - name: Login to ghcr
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Push image
+        run: docker push ghcr.io/${{ github.repository }}/api:${{ github.sha }}
+
+  upload-coverage:
+    needs: compose-health
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: coverage
+      - uses: codecov/codecov-action@v4
+        if: success() && env.CODECOV_TOKEN != ''
+        with:
+          files: coverage.xml
+          fail_ci_if_error: false
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
