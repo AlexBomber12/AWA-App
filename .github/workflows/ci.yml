@@ -65,6 +65,7 @@ jobs:
             --build-arg TZ_CACHE_BUST=${{ github.sha }} \
             --load services/api
       - name: Push image
+        if: github.ref == 'refs/heads/main'
         run: docker push ghcr.io/${{ github.repository }}/api:${{ github.sha }}
 
   compose-health:
@@ -72,9 +73,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: echo "GIT_SHA=${{ github.sha }}" >> $GITHUB_ENV
-      - run: echo "OWNER_LC=$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
-      - run: docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d --wait --no-build
+      - run: echo "GITHUB_SHA=${GITHUB_SHA}" >> "$GITHUB_ENV"
+      - run: docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d --wait --no-build --pull never
       - run: docker compose ps
       - name: Gather logs
         if: failure()
