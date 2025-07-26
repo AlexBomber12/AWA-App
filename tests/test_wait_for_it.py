@@ -1,5 +1,5 @@
-import subprocess
 import pathlib
+import subprocess
 
 
 def test_wait_for_it_exec() -> None:
