@@ -12,6 +12,7 @@ RUN if [ -n "$CONSTRAINTS" ] && [ -f "$CONSTRAINTS" ]; then \
 COPY . .
 
 FROM python:3.12-slim
+ARG CACHEBUST_TZ
 ENV PYTHONUNBUFFERED=1
 WORKDIR /app
 COPY --from=base /usr/local /usr/local
