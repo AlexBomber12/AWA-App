@@ -182,10 +182,18 @@ jobs:
         with:
           fetch-depth: 0
       - run: if [ ! -f .env ]; then cp .env.postgres .env; fi
-      - run: docker compose build --build-arg TZ_CACHE_BUST=${{ github.sha }}
-      - run: docker compose up -d --wait
+      - run: |
+          export COMPOSE_DOCKER_CLI_BUILD=1
+          export DOCKER_BUILDKIT=1
+          docker compose build --build-arg TZ_CACHE_BUST=${{ github.sha }}
+      - run: |
+          export COMPOSE_DOCKER_CLI_BUILD=1
+          export DOCKER_BUILDKIT=1
+          docker compose up -d --wait
       - name: Ensure services healthy
         run: |
+          export COMPOSE_DOCKER_CLI_BUILD=1
+          export DOCKER_BUILDKIT=1
           docker compose ps --format '{{.Name}} {{.State.Health.Status}}' | tee ps.log
           if grep -E '\b(unhealthy|starting|exited)\b' ps.log; then
             cat ps.log
@@ -193,4 +201,7 @@ jobs:
           fi
       - name: Tear down
         if: always()
-        run: docker compose down -v --remove-orphans
+        run: |
+          export COMPOSE_DOCKER_CLI_BUILD=1
+          export DOCKER_BUILDKIT=1
+          docker compose down -v --remove-orphans

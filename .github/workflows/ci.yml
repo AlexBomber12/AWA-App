@@ -71,11 +71,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: echo "GITHUB_SHA=${GITHUB_SHA}" >> "$GITHUB_ENV"
-      - run: docker compose -f docker-compose.ci.yml up -d --wait --no-build --pull never
-      - run: docker compose ps
+      - run: |
+          export COMPOSE_DOCKER_CLI_BUILD=1
+          export DOCKER_BUILDKIT=1
+          docker compose build --progress plain
+      - run: |
+          export COMPOSE_DOCKER_CLI_BUILD=1
+          export DOCKER_BUILDKIT=1
+          docker compose up -d --wait --pull never
+      - run: |
+          export COMPOSE_DOCKER_CLI_BUILD=1
+          export DOCKER_BUILDKIT=1
+          docker compose ps
       - name: Gather logs
         if: failure()
         run: |
+          export COMPOSE_DOCKER_CLI_BUILD=1
+          export DOCKER_BUILDKIT=1
           docker compose logs > logs.txt
       - uses: actions/upload-artifact@v4
         if: failure()
@@ -96,7 +108,10 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Push image
-        run: docker push ghcr.io/${{ github.repository }}/api:${{ github.sha }}
+        run: |
+          export COMPOSE_DOCKER_CLI_BUILD=1
+          export DOCKER_BUILDKIT=1
+          docker compose push api
 
   upload-coverage:
     needs: compose-health
