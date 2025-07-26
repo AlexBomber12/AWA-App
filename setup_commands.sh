@@ -60,7 +60,7 @@ else
     echo "VITE_API_URL=https://awapricer.lan/api" > web/.env
 fi
 
-docker compose pull && docker compose build && docker compose up -d --wait || exit 1
+docker compose build && docker compose up -d --wait || exit 1
 
 curl -f http://localhost:8000/health >/dev/null || { echo "Health check failed" >&2; exit 1; }
 
