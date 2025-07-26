@@ -3,6 +3,9 @@ services:
   postgres:
     image: postgres:15-alpine
     env_file: .env.postgres
+    environment:
+      TZ: UTC
+      POSTGRES_INITDB_ARGS: --timezone=UTC
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U $${PG_USER}']
       interval: 5s
@@ -13,6 +16,8 @@ services:
       - ./sample_prices:/data
     command: ["python", "-m", "price_importer.import", "/data/acme.xlsx", "--vendor", "ACME GmbH"]
     env_file: .env.postgres
+    environment:
+      TZ: UTC
     depends_on:
       postgres:
         condition: service_healthy

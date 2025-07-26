@@ -15,6 +15,7 @@ from services.ingest.ingest_router import router as ingest_router
 from services.ingest.upload_router import router as upload_router
 
 from .db import get_session
+from .routes import health as health_router
 from .routes.roi import router as roi_router
 from .routes.stats import router as stats_router
 
@@ -27,11 +28,6 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
-
-
-@app.get("/health", status_code=status.HTTP_200_OK, include_in_schema=False)
-def health():  # noqa: D401
-    return {"status": "ok"}
 
 
 @app.get("/ready", status_code=status.HTTP_200_OK, include_in_schema=False)
@@ -50,6 +46,7 @@ app.include_router(upload_router, prefix="/upload")
 app.include_router(ingest_router)
 app.include_router(roi_router)
 app.include_router(stats_router)
+app.include_router(health_router.router)
 
 
 async def _wait_for_db() -> None:

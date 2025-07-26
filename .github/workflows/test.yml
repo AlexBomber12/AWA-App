@@ -24,6 +24,8 @@ jobs:
           --health-retries=10
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v4
         with:
           python-version: '3.12'
@@ -102,11 +104,14 @@ jobs:
           LLM_PROVIDER: lan
           LLM_BASE_URL: http://localhost:8000
 
-      - name: Upload coverage
-        run: |
-          curl -Os https://uploader.codecov.io/latest/linux/codecov
-          chmod +x codecov
-          ./codecov -f coverage.xml -Z
+      - name: Upload coverage to Codecov
+        if: success() && env.CODECOV_TOKEN != ''
+        uses: codecov/codecov-action@v4
+        with:
+          files: coverage.xml
+          fail_ci_if_error: false
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
       - name: Dump Postgres logs
         if: always()
@@ -130,6 +135,8 @@ jobs:
           --health-interval=5s --health-timeout=5s --health-retries=10
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -172,8 +179,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - run: if [ ! -f .env ]; then cp .env.postgres .env; fi
-      - run: docker compose --profile "" build --parallel
+      - run: docker compose --profile "" build --parallel --pull --no-cache
       - run: docker compose up -d --wait
       - name: Ensure services healthy
         run: |

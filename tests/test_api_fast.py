@@ -6,7 +6,13 @@ from services.api.main import app
 
 class FakeSession:
     async def execute(self, query):
-        return None
+        class R:
+            def scalar(self):
+                import datetime
+
+                return datetime.datetime.utcnow()
+
+        return R()
 
 
 async def fake_get_session():
