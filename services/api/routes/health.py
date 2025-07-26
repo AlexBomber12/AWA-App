@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_session
 
-MAX_SKEW = 30  # seconds
+MAX_SKEW = 60  # seconds
 
 router = APIRouter()
 
