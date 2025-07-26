@@ -2,6 +2,11 @@
 set -e
 host="$1"
 shift
+# consume optional timeout flag like "-t 5" and terminator "--"
+if [ "$1" = "-t" ]; then
+    shift 2
+fi
+[ "$1" = "--" ] && shift
 until python - "$host" <<'PY'
 import sys,socket,time
 h,p=sys.argv[1].split(":")
