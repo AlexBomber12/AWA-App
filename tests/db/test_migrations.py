@@ -1,21 +1,15 @@
-import os
-import pathlib
-import subprocess
-
+import psycopg
 import pytest
 from sqlalchemy.exc import OperationalError
 
-from alembic.command import upgrade
+from alembic import command
 from alembic.config import Config
 
 
-def test_all_migrations_apply() -> None:
-    host = os.getenv("PG_HOST", "localhost")
-    port = os.getenv("PG_PORT", "5432")
-    script = pathlib.Path("services/etl/wait-for-it.sh")
-    subprocess.run(["bash", str(script), f"{host}:{port}", "-t", "30"], check=True)
+def test_alembic_up_down() -> None:
     cfg = Config("services/api/alembic.ini")
     try:
-        upgrade(cfg, "head")
-    except OperationalError:
+        command.upgrade(cfg, "head")
+        command.downgrade(cfg, "base")
+    except (psycopg.OperationalError, OperationalError):
         pytest.skip("Postgres unreachable")
