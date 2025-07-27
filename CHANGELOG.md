@@ -8,6 +8,7 @@
 - integrate vulture and extended ruff config
 - enable Dependabot updates and docs publishing
 - Docker healthchecks for services
+- disable logical replication for CI Postgres and add migration smoke test
 
 ## v1.3.0
 - fixed Docker health-check (now probes /health), CI all green.
