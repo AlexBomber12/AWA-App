@@ -1,7 +1,15 @@
-from alembic.command import upgrade
+import psycopg
+import pytest
+from sqlalchemy.exc import OperationalError
+
+from alembic import command
 from alembic.config import Config
 
 
-def test_all_migrations_apply() -> None:
+def test_run_all_migrations() -> None:
     cfg = Config("services/api/alembic.ini")
-    upgrade(cfg, "head")
+    try:
+        command.upgrade(cfg, "head")
+        command.downgrade(cfg, "base")
+    except (psycopg.OperationalError, OperationalError):
+        pytest.skip("Postgres unreachable")

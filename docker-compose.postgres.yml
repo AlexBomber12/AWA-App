@@ -1,7 +1,9 @@
 version: "3.9"
 services:
   postgres:
-    image: postgres:15-alpine
+    build:
+      context: .
+      dockerfile: docker/postgres/Dockerfile
     env_file:
       - .env.postgres
     environment:
@@ -9,16 +11,19 @@ services:
       POSTGRES_USER: ${PG_USER}
       POSTGRES_PASSWORD: ${PG_PASSWORD}
       TZ: UTC
+      LANG: en_US.UTF-8
       POSTGRES_INITDB_ARGS: --timezone=UTC
-    command: ["postgres", "-c", "timezone=UTC"]
+      POSTGRES_CONFIG_FILE: /etc/postgresql/postgresql.conf
+    command: ["postgres", "-c", "config_file=/etc/postgresql/postgresql.conf"]
     ports:
       - "5432:5432"
     volumes:
       - awa-pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
-      retries: 10
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
     networks:
       - awa-net
 
@@ -61,6 +66,8 @@ services:
       - awa-net
     volumes:
       - awa-data:/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   etl:
     build:
@@ -81,6 +88,8 @@ services:
       - awa-net
     volumes:
       - awa-data:/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   web:
     build: ./webapp
@@ -124,6 +133,8 @@ services:
       - awa-net
     volumes:
       - awa-data:/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
   fees_h10:
     build: services/fees_h10
     command: ["celery", "-A", "services.fees_h10.worker", "beat", "-l", "info"]
@@ -133,6 +144,8 @@ services:
         condition: service_healthy
     networks:
       - awa-net
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
   logistics_etl:
     build: services/logistics_etl
     env_file: .env.postgres
@@ -142,6 +155,8 @@ services:
         condition: service_healthy
     networks:
       - awa-net
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
 volumes:
   awa-pgdata:

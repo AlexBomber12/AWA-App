@@ -1,12 +1,14 @@
 # Changelog
 
 ## Unreleased
+- unify DSN handling and build custom Postgres image
 - fix(ci): pipeline passes with updated env defaults
 - drop and recreate refund views to prevent InvalidTableDefinition errors
 - add migration regression test and coverage gate
 - integrate vulture and extended ruff config
 - enable Dependabot updates and docs publishing
 - Docker healthchecks for services
+- disable logical replication for CI Postgres and add migration smoke test
 
 ## v1.3.0
 - fixed Docker health-check (now probes /health), CI all green.

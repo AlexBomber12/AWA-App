@@ -1,20 +1,23 @@
 services:
   postgres:
-    image: postgres:15
+    build:
+      context: .
+      dockerfile: docker/postgres/Dockerfile
     restart: always
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: pass # pragma: allowlist secret
       POSTGRES_DB: awa
       TZ: UTC
+      LANG: en_US.UTF-8
       POSTGRES_INITDB_ARGS: --timezone=UTC
-    command: ["postgres", "-c", "timezone=UTC"]
+      POSTGRES_CONFIG_FILE: /etc/postgresql/postgresql.conf
+    command: ["postgres", "-c", "config_file=/etc/postgresql/postgresql.conf"]
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 5s
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 10s
       timeout: 5s
-      retries: 10
-      start_period: 5s
+      retries: 6
   minio:
     image: minio/minio
     command: server /data --console-address :9001
@@ -67,6 +70,8 @@ services:
       - awa-net
     volumes:
       - awa-data:/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
   etl:
     build:
       context: .
@@ -88,6 +93,8 @@ services:
       - awa-net
     volumes:
       - awa-data:/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
   web:
     build: ./web
     environment:
@@ -99,6 +106,8 @@ services:
       - api
     networks:
       - awa-net
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
   repricer:
     build:
       context: .
@@ -124,6 +133,8 @@ services:
       - awa-net
     volumes:
       - awa-data:/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
   fees_h10:
     build:
       context: ./services/fees_h10
@@ -138,6 +149,8 @@ services:
       retries: 3
     networks:
       - awa-net
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
   logistics_etl:
     build:
       context: ./services/logistics_etl
@@ -149,6 +162,8 @@ services:
         condition: service_healthy
     networks:
       - awa-net
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
   alert_bot:
     build:
       context: ./services/alert_bot
@@ -167,6 +182,8 @@ services:
       CHECK_INTERVAL_MIN: "60"
     depends_on:
       - postgres
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     profiles: [alerts]
 
 volumes:
