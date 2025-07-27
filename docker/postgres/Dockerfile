@@ -5,9 +5,9 @@ RUN apt-get update && apt-get install -y locales \
 ENV LANG en_US.UTF-8
 
 # Ensure MD5 authentication
-COPY pg_hba.conf /usr/share/postgresql/pg_hba.conf
+COPY pg_hba.conf /etc/postgresql/pg_hba.conf
 COPY init-pg_hba.sh /docker-entrypoint-initdb.d/10_init_pg_hba.sh
-RUN chmod 0644 /usr/share/postgresql/pg_hba.conf && \
+RUN chmod 0644 /etc/postgresql/pg_hba.conf && \
     chmod +x /docker-entrypoint-initdb.d/10_init_pg_hba.sh
 
 # Use provided entrypoint

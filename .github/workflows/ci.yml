@@ -30,9 +30,8 @@ jobs:
         run: pip install -r requirements-dev.txt
       - name: Format code
         run: |
-          ruff check . --fix
+          ruff --fix .
           black .
-          ruff format .
       - name: Wait for DB
         run: bash services/etl/wait-for-it.sh "$PG_HOST:$PG_PORT" -t 30
       - name: Ensure test database
@@ -44,7 +43,7 @@ jobs:
       - name: Run migrations
         run: alembic -c services/api/alembic.ini upgrade head
       - name: Ruff
-        run: ruff check . --output-format=github
+        run: ruff . --output-format=github
       - name: Format
         uses: chartboost/ruff-action@v1
         with:
@@ -100,6 +99,13 @@ jobs:
             -f docker-compose.yml \
             -f docker-compose.postgres.yml \
             up -d --wait --no-build --pull never
+      - name: Wait for Postgres
+        run: ./scripts/wait-for-it.sh localhost:5432 -t 60
+      - name: Ensure compose database
+        run: |
+          [ "$(psql -U postgres -h localhost -tAc "select 1 from pg_database where datname='awa'")" = '1' ] || psql -U postgres -h localhost -c "create database awa"
+        env:
+          PGPASSWORD: pass
       - run: |
           docker compose \
             -f docker-compose.yml \

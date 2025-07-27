@@ -2,18 +2,17 @@
 FROM python:3.12-slim AS base
 ENV PYTHONUNBUFFERED=1
 WORKDIR /app
-# expose alembic.ini for tests
-COPY services/api/alembic.ini /app/services/api/alembic.ini
 # install dependencies from repo root
-COPY services/api/requirements.txt /app/requirements.txt
+COPY services/api/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
-# copy application source
-COPY services/api/ .
-# shared common utilities
-COPY services/common/ ../common/
-# config and migrations
-COPY alembic.ini .
+# copy application source under services
+COPY services/api/ ./services/api
+COPY services/common/ ./services/common
+# configuration files for migrations
+COPY services/api/alembic.ini ./alembic.ini
 COPY alembic/ ./alembic/
+COPY services/api/entrypoint.sh ./entrypoint.sh
+RUN chmod +x ./entrypoint.sh
 ENV ALEMBIC_CONFIG=/app/alembic.ini
 
 FROM python:3.12-slim
