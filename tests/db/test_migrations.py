@@ -6,7 +6,7 @@ from alembic import command
 from alembic.config import Config
 
 
-def test_alembic_up_down() -> None:
+def test_run_all_migrations() -> None:
     cfg = Config("services/api/alembic.ini")
     try:
         command.upgrade(cfg, "head")
