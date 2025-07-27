@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- unify DSN handling and build custom Postgres image
 - fix(ci): pipeline passes with updated env defaults
 - drop and recreate refund views to prevent InvalidTableDefinition errors
 - add migration regression test and coverage gate
