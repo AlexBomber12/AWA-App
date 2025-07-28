@@ -1,3 +1,4 @@
 #!/bin/bash
 set -e
-cp /etc/postgresql/pg_hba.conf "$PGDATA/pg_hba.conf"
+TARGET="${PGDATA:-/var/lib/postgresql/data}"
+cp /etc/postgresql/pg_hba.conf "$TARGET/pg_hba.conf"
