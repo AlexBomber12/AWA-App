@@ -5,7 +5,6 @@ import urllib.parse as _u
 def build_dsn(sync: bool = True) -> str:
     """Return safe DSN.
 
-    sync=True → SQLAlchemy (+psycopg) else plain asyncpg.
     """
 
     url = os.getenv("DATABASE_URL")
@@ -15,6 +14,9 @@ def build_dsn(sync: bool = True) -> str:
         return url.replace("+psycopg", "+asyncpg")
 
     host = os.getenv("POSTGRES_HOST") or os.getenv("PG_HOST") or "postgres"
+        # treat local hosts as postgres for container environment
+    if host in ("localhost", "127.0.0.1"):
+        host = "postgres"
     port = os.getenv("PG_PORT", "5432")
     user = _u.quote_plus(os.getenv("PG_USER", "postgres"))
     pwd = _u.quote_plus(os.getenv("PG_PASSWORD", "pass"))
