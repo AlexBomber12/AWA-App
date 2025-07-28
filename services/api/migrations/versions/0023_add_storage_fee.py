@@ -77,9 +77,5 @@ def downgrade() -> None:
     # Drop the ``buybox`` view since earlier revisions did not define it
     op.execute("DROP VIEW IF EXISTS buybox")
 
-    # Finally, remove the ``storage_fee`` column if present to return the
-    # ``fees_raw`` table to its original shape.
-    bind = op.get_bind()
-    cols = {c["name"] for c in inspect(bind).get_columns("fees_raw")}
-    if "storage_fee" in cols:
-        op.drop_column("fees_raw", "storage_fee")
+   
+  
