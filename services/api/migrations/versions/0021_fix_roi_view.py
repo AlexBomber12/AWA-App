@@ -64,8 +64,8 @@ def upgrade() -> None:
                 CREATE VIEW v_roi_full AS
                 SELECT
                     p.asin,
-                    vp.cost,
-                    f.fulfil_fee + f.referral_fee + f.storage_fee AS fees,
+                    f.fulfil_fee + f.referral_fee AS fees,
+
                     COALESCE(rt.refunds, 0) AS refunds,
                     COALESCE(rbt.reimbursements, 0) AS reimbursements,
                     k.buybox_price,
@@ -73,7 +73,7 @@ def upgrade() -> None:
                         100 * (
                             k.buybox_price
                             - vp.cost
-                            - (f.fulfil_fee + f.referral_fee + f.storage_fee)
+                            - (f.- (f.fulfil_fee + f.referral_fee)
                             - COALESCE(rt.refunds, 0)
                             + COALESCE(rbt.reimbursements, 0)
                         ) / vp.cost,
@@ -134,9 +134,9 @@ def downgrade() -> None:
                     SELECT
                         p.asin,
                         vp.cost,
-                        (f.fulfil_fee + f.referral_fee + f.storage_fee) AS fees,
+                        (f.fulfil_fee + f.referral_fee) AS fees,
                         COALESCE(rt.refunds,0) AS refunds,
-                        COALESCE(rbt.reimbursements,0) AS reimbursements,
+                        COALESCE(rbt.reimbursemenreimbursements,
                         k.buybox_price
                     FROM products p
                     JOIN vendor_prices vp ON vp.sku = p.asin
