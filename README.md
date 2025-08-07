@@ -42,8 +42,9 @@ need different accounts.
 variables.  CI exports both a synchronous URL and an async-friendly variant:
 
 ```
-DATABASE_URL=postgresql+psycopg://postgres:pass@localhost:5432/awa  # pragma: allowlist secret
-PG_ASYNC_DSN=postgresql://postgres:pass@localhost:5432/awa  # pragma: allowlist secret
+PG_SYNC_DSN=postgresql+psycopg://postgres:pass@localhost:5432/awa  # pragma: allowlist secret
+PG_ASYNC_DSN=postgresql+asyncpg://postgres:pass@localhost:5432/awa  # pragma: allowlist secret
+DATABASE_URL=$PG_ASYNC_DSN  # pragma: allowlist secret
 ```
 Services and tests read these values automatically.
 
@@ -58,6 +59,19 @@ Pytest enforces a minimum of 45% total coverage.
 Docker builds use BuildKit. In CI the stack is built with
 `TZ_CACHE_BUST=${GITHUB_SHA}` and started with `--pull never` so tests run
 against the freshly-built containers instead of any cached `:latest` image.
+
+### Database commands
+
+Common migration tasks are available via the Makefile:
+
+```bash
+make db-upgrade    # apply migrations
+make db-downgrade  # roll back to base
+make db-reset      # rebuild schema from scratch
+```
+
+CI and local development both connect to Postgres at `localhost:5432` using a
+synchronous DSN for Alembic and an async variant for the application layer.
 
 
 ## Importing supplier prices
