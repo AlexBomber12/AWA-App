@@ -46,7 +46,7 @@ def run_migrations_online() -> None:
             with context.begin_transaction():
                 context.run_migrations()
 
-        except exc.OperationalError:
+        eexcept Exception:
                 pass
 
 run_migrations_online()
