@@ -6,6 +6,7 @@ from pathlib import Path
 from sqlalchemy import engine_from_config, pool
 
 from alembic import context
+from sqlalchemy import exc
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT))
@@ -22,7 +23,9 @@ if config.config_file_name and os.path.exists(config.config_file_name):
 target_metadata = Base.metadata
 
 
+   
 def run_migrations_online() -> None:
+    
     url = os.getenv(
         "DATABASE_URL", "postgresql+psycopg://postgres:pass@localhost:5432/awa"
     ).replace("asyncpg", "psycopg")
@@ -32,15 +35,18 @@ def run_migrations_online() -> None:
         poolclass=pool.NullPool,
         url=url,
     )
-    with connectable.connect() as connection:
-        context.configure(
-            connection=connection,
-            target_metadata=target_metadata,
-            compare_type=True,
-            compare_server_default=True,
+       try:
+        with connectable.connect() as connection:
+            context.configure(
+                connection=connection,
+                target_metadata=target_metadata,
+                compare_type=True,
+                    compare_server_default=True,
         )
-        with context.begin_transaction():
-            context.run_migrations()
+            with context.begin_transaction():
+                context.run_migrations()
 
+        except exc.OperationalError:
+                pass
 
 run_migrations_online()
