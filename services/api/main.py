@@ -73,7 +73,7 @@ async def _check_llm() -> None:
     if LLM_PROVIDER != "lan":
         return
     try:
-        async with httpx.AsyncClient(timeout=5) as cli:
+        async with httpx.AsyncClient(timeout=5, trust_env=False) as cli:
             await cli.get(f"{LAN_BASE}/health")
     except Exception:
         os.environ["LLM_PROVIDER"] = LLM_PROVIDER_FALLBACK
