@@ -8,7 +8,7 @@ URL = os.getenv("FREIGHT_API_URL", "https://example.com/freight.csv")
 
 
 async def fetch_rates() -> list[dict]:
-    async with httpx.AsyncClient(timeout=15) as client:
+    async with httpx.AsyncClient(timeout=15, trust_env=False) as client:
         r = await client.get(URL)
         r.raise_for_status()
         buf = io.StringIO(r.text)
