@@ -14,7 +14,7 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 
 
 async def _local_llm(prompt: str, temp: float, max_toks: int) -> str:
-    async with httpx.AsyncClient(timeout=60) as cli:
+    async with httpx.AsyncClientout=60, trust_env=False) as cli:
         r = await cli.post(
             LOCAL_URL,
             json={"prompt": prompt, "temperature": temp, "max_tokens": max_toks},
@@ -44,7 +44,7 @@ async def _remote_generate(
         "messages": [{"role": "user", "content": prompt}],
         "max_tokens": max_tokens,
     }
-    async with httpx.AsyncClient(timeout=60) as cli:
+    async with httpx.AsyncClient(timeout=60, trust_env=False) as cli:
         resp = await cli.post(
             f"{base}/v1/chat/completions", json=payload, headers=headers
         )
