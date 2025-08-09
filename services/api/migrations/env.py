@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT))
 
 from services.common.base import Base  # noqa: E402
+from services.common.dsn import build_dsn  # noqa: E402
 
 config = context.config
 if config.config_file_name and os.path.exists(config.config_file_name):
@@ -23,14 +24,11 @@ target_metadata = Base.metadata
 
 
 def run_migrations_online() -> None:
-    url = os.getenv(
-        "DATABASE_URL", "postgresql+psycopg://postgres:pass@localhost:5432/awa"
-    ).replace("asyncpg", "psycopg")
     connectable = engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
-        url=url,
+        url=build_dsn(sync=True),
     )
     with connectable.connect() as connection:
         context.configure(

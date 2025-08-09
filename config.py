@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     postgres_user: str = "root"
     postgres_password: str = "pass"
     postgres_db: str = "awa"
-    postgres_host: str = "postgres"
+    postgres_host: str = "localhost"
     postgres_port: int = 5432
     data_dir: Path = Path.cwd() / "data"
 
