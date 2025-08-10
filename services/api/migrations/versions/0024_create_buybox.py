@@ -22,4 +22,3 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.drop_table("buybox")
     # TODO: confirm restored content
-

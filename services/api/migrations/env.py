@@ -33,7 +33,7 @@ target_metadata = Base.metadata
 def run_migrations_online() -> None:
     if not config:
         return  # Exit early if not in Alembic context
-        
+
     connectable = engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",

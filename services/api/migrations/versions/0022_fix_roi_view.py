@@ -60,4 +60,3 @@ def downgrade() -> None:
     op.execute("DROP INDEX IF EXISTS ix_fees_raw_asin")
     op.execute("DROP INDEX IF EXISTS ix_products_asin")
     op.execute("DROP VIEW IF EXISTS v_roi_full CASCADE")
-

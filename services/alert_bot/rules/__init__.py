@@ -61,7 +61,6 @@ except Exception:
     bot = Bot(TOKEN) if TOKEN and CHAT_ID else None
 
 
-
 MSG_ROI_DROP = (
     "⚠️ Маржа по товару упала ниже 5 %. Проверьте цену и закупочную стоимость."
 )

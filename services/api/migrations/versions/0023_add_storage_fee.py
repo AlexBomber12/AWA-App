@@ -23,4 +23,3 @@ def downgrade() -> None:
     if "storage_fee" in cols:
         op.drop_column("fees_raw", "storage_fee")
     # TODO: confirm restored content
-
