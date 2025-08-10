@@ -13,8 +13,15 @@ sys.path.insert(0, str(ROOT))
 from services.common.base import Base  # noqa: E402
 from services.common.dsn import build_dsn  # noqa: E402
 
-config = context.config
-if config.config_file_name and os.path.exists(config.config_file_name):
+# Guard against importing this module outside of Alembic context
+try:
+    config = context.config
+except AttributeError:
+    # This module is being imported outside of Alembic context (e.g., during testing)
+    # Create a dummy config or exit early
+    config = None
+
+if config and config.config_file_name and os.path.exists(config.config_file_name):
     try:
         fileConfig(config.config_file_name)
     except KeyError:
@@ -24,6 +31,9 @@ target_metadata = Base.metadata
 
 
 def run_migrations_online() -> None:
+    if not config:
+        return  # Exit early if not in Alembic context
+        
     connectable = engine_from_config(
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
@@ -41,4 +51,5 @@ def run_migrations_online() -> None:
             context.run_migrations()
 
 
-run_migrations_online()
+if config:  # Only run migrations if we have a proper Alembic context
+    run_migrations_online()
