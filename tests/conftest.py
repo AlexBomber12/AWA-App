@@ -73,6 +73,13 @@ PG_USER = os.getenv("PG_USER", "postgres")
 PG_PASSWORD = os.getenv("PG_PASSWORD", "pass")
 PG_DATABASE = os.getenv("PG_DATABASE", "awa")
 
+# Set environment variables for build_dsn function
+os.environ.setdefault("PG_HOST", PG_HOST)
+os.environ.setdefault("PG_PORT", PG_PORT)
+os.environ.setdefault("PG_USER", PG_USER)
+os.environ.setdefault("PG_PASSWORD", PG_PASSWORD)
+os.environ.setdefault("PG_DATABASE", PG_DATABASE)
+
 
 @pytest.fixture(scope="session", autouse=True)
 def _set_db_url():

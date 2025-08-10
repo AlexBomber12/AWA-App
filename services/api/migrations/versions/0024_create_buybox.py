@@ -2,7 +2,6 @@ import sqlalchemy as sa
 
 from alembic import op
 
-
 revision = "0024_create_buybox"
 down_revision = "0023_add_storage_fee"
 branch_labels = None

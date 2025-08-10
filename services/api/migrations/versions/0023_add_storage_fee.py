@@ -3,7 +3,6 @@ from sqlalchemy import inspect
 
 from alembic import op  # type: ignore[attr-defined]
 
-
 revision = "0023_add_storage_fee"
 down_revision = "0022_fix_roi_view"
 branch_labels = None

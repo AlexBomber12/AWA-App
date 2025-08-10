@@ -31,7 +31,9 @@ ROI_DURATION_DAYS = int(os.getenv("ROI_DURATION_DAYS", "30"))
 COST_DELTA_PCT = int(os.getenv("COST_DELTA_PCT", "10"))
 PRICE_DROP_PCT = int(os.getenv("PRICE_DROP_PCT", "15"))
 RETURNS_PCT = int(os.getenv("RETURNS_PCT", "5"))
-STALE_DAYS = int(os.getenv("STALE_DAYS", "30bot # Telegram bot initialisation
+STALE_DAYS = int(os.getenv("STALE_DAYS", "30"))
+
+# Telegram bot initialisation
 #
 # In some environments the python‑telegram‑bot library will attempt to auto‑configure
 # HTTP/SOCKS proxy support based on environment variables (e.g. `HTTPS_PROXY`).
@@ -54,11 +56,11 @@ except Exception:
 
         async def send_message(self, *a: Any, **k: Any) -> None:
             return None
-      Bot = _BotStub  # type: ignore[assignment]
-    bot = Bot(TOKEN) if TOKEN and CHAT_ID else None
-  
 
- 
+    Bot = _BotStub  # type: ignore[assignment]
+    bot = Bot(TOKEN) if TOKEN and CHAT_ID else None
+
+
 
 MSG_ROI_DROP = (
     "⚠️ Маржа по товару упала ниже 5 %. Проверьте цену и закупочную стоимость."

@@ -1,5 +1,4 @@
 import sqlalchemy as sa
-import sqlalchemy as sa
 from sqlalchemy import inspect
 
 from alembic import op  # type: ignore[attr-defined]

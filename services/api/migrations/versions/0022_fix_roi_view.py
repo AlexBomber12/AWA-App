@@ -2,7 +2,6 @@ from textwrap import dedent
 
 from alembic import op  # type: ignore[attr-defined]
 
-
 revision = "0022_fix_roi_view"
 down_revision = "0020_unified_schema"
 branch_labels = None
