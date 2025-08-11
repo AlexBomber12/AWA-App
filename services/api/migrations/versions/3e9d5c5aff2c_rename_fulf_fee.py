@@ -43,7 +43,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.execute("DROP VIEW roi_view")
+    op.execute("DROP VIEW IF EXISTS roi_view")
     bind = op.get_bind()
     cols = {c["name"] for c in inspect(bind).get_columns("fees_raw")}
     if "fulfil_fee" in cols and "fulf_fee" not in cols:
