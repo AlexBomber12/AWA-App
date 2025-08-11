@@ -21,5 +21,7 @@ def downgrade() -> None:
     bind = op.get_bind()
     cols = {c["name"] for c in inspect(bind).get_columns("fees_raw")}
     if "storage_fee" in cols:
+        # Drop dependent view first to avoid dependency errors when dropping the column
+        op.execute("DROP VIEW IF EXISTS v_roi_full CASCADE")
         op.drop_column("fees_raw", "storage_fee")
     # TODO: confirm restored content
