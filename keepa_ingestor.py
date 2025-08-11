@@ -23,7 +23,7 @@ def main() -> None:
     dsn = build_dsn()
     start = time.time()
     if live:
-        api = keepa.Keepa(key)
+        api = keepa.Keepa(key or "")
         params = {
             "sales_rank_lte": 80000,
             "buybox_price_gte": 2000,

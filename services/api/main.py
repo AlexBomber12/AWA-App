@@ -61,7 +61,7 @@ async def _wait_for_db() -> None:
         url = database_url.replace("postgresql+asyncpg://", "postgresql://")
     else:
         url = build_dsn(sync=True)
-    
+
     delay = 0.2
     for _ in range(10):
         try:
