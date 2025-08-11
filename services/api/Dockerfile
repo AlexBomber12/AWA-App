@@ -8,6 +8,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # copy application source under services
 COPY services/api/ ./services/api
 COPY services/common/ ./services/common
+COPY services/ingest/ ./services/ingest
+COPY services/etl/ ./services/etl
 # configuration files for migrations
 COPY services/api/alembic.ini ./alembic.ini
 COPY alembic/ ./alembic/

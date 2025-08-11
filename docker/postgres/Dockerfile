@@ -1,8 +1,9 @@
-FROM postgres:15
+FROM postgres:16
 RUN apt-get update && apt-get install -y locales \
     && locale-gen en_US.UTF-8 \
     && rm -rf /var/lib/apt/lists/*
 ENV LANG en_US.UTF-8
+ENV POSTGRES_INITDB_ARGS="--encoding=UTF8 --locale=en_US.UTF-8"
 
 # Ensure MD5 authentication
 COPY docker/postgres/pg_hba.conf /etc/postgresql/pg_hba.conf
