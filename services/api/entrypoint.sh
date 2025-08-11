@@ -17,7 +17,7 @@ if [[ $# -gt 0 ]]; then
 fi
 
 echo "⏳ Waiting for Postgres..."
-until pg_isready -h "$PG_HOST" -p "$PG_PORT" -U "$PG_USER"; do
+until pg_isready -h "$PG_HOST" -p "$PG_PORT" -U "$PG_USER" -d "$PG_DATABASE"; do
   sleep 1
 done
 
