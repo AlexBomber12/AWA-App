@@ -161,7 +161,6 @@ def downgrade() -> None:
           ) AS cost,
           f.fulf_fee,
           f.referral_fee,
-          f.storage_fee,
           k.buybox_price,
           ROUND(
             100 * (
@@ -174,7 +173,6 @@ def downgrade() -> None:
               )
               - f.fulf_fee
               - f.referral_fee
-              - f.storage_fee
             ) / k.buybox_price,
           2) AS roi_pct
         FROM products p
@@ -196,7 +194,6 @@ def downgrade() -> None:
           ) AS cost,
           f.fulf_fee,
           f.referral_fee,
-          f.storage_fee,
           k.buybox_price,
           ROUND(
             100 * (
@@ -209,7 +206,6 @@ def downgrade() -> None:
               )
               - f.fulf_fee
               - f.referral_fee
-              - f.storage_fee
             ) / k.buybox_price,
           2) AS roi_pct
         FROM products p
