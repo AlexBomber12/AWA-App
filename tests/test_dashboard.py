@@ -9,6 +9,7 @@ if shutil.which("docker") is None or shutil.which("docker-compose") is None:
     pytest.skip("Docker is not installed on this runner", allow_module_level=True)
 
 
+@pytest.mark.integration
 def test_compose_up() -> None:
     subprocess.check_call("docker compose up -d --wait --wait-timeout 480", shell=True)
     time.sleep(5)

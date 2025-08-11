@@ -15,6 +15,7 @@ def _port_open(host: str, port: int) -> bool:
         return False
 
 
+@pytest.mark.integration
 @pytest.mark.skipif(not _port_open("localhost", 8000), reason="api not running")
 def test_health():  # noqa: D103
     for _ in range(20):
