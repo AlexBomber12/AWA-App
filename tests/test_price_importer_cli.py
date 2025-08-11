@@ -1,7 +1,7 @@
 from importlib import import_module
 from pathlib import Path
 
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
 
 from services.price_importer.repository import Repository
 
