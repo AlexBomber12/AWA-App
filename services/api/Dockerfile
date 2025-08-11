@@ -1,6 +1,7 @@
 # syntax=docker/dockerfile:1.6
 FROM python:3.12-slim AS base
 ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/app:/app/services
 WORKDIR /app
 # install dependencies from repo root
 COPY services/api/requirements.txt ./requirements.txt
@@ -20,6 +21,7 @@ ENV ALEMBIC_CONFIG=/app/alembic.ini
 FROM python:3.12-slim
 ARG TZ_CACHE_BUST
 ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/app:/app/services
 WORKDIR /app
 ARG DEBIAN_FRONTEND=noninteractive
 RUN apt-get update \

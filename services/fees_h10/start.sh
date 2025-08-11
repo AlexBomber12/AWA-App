@@ -1,3 +1,4 @@
 #!/usr/bin/env bash
 set -e
-exec celery -A services.fees_h10.worker beat -l info
+export PYTHONPATH="/app:/app/services:${PYTHONPATH}"
+exec celery -A fees_h10.worker beat -l info

@@ -8,7 +8,7 @@ import boto3
 from fastapi import APIRouter, Depends, UploadFile
 from fastapi.responses import JSONResponse
 
-from etl import load_csv
+from services.etl import load_csv
 
 BUCKET = "awa-bucket"
 
