@@ -57,7 +57,7 @@ except Exception:
         async def send_message(self, *a: Any, **k: Any) -> None:
             return None
 
-    Bot = _BotStub  # type: ignore[assignment]
+    Bot = _BotStub  # type: ignore[assignment,misc]
     bot = Bot(TOKEN) if TOKEN and CHAT_ID else None
 
 

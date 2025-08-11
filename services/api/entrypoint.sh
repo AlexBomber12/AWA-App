@@ -21,5 +21,5 @@ until pg_isready -h "$PG_HOST" -p "$PG_PORT" -U "$PG_USER"; do
   sleep 1
 done
 
-alembic upgrade head
+alembic -c "${ALEMBIC_CONFIG:-alembic.ini}" upgrade head
 exec uvicorn services.api.main:app --host 0.0.0.0 --port 8000

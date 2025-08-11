@@ -29,8 +29,8 @@ def build_dsn(sync: bool = True) -> str:
         joined = ", ".join(missing)
         raise RuntimeError(f"Missing required env vars: {joined}")
 
-    user = _u.quote_plus(os.getenv("PG_USER"))
-    pwd = _u.quote_plus(os.getenv("PG_PASSWORD"))
+    user = _u.quote_plus(os.getenv("PG_USER") or "")
+    pwd = _u.quote_plus(os.getenv("PG_PASSWORD") or "")
     host = os.getenv("PG_HOST")
     port = os.getenv("PG_PORT")
     db = os.getenv("PG_DATABASE")

@@ -51,17 +51,22 @@ services:
       dockerfile: services/api/Dockerfile
       args:
         TZ_CACHE_BUST: ${GITHUB_SHA:-dev}
-    env_file:
-      - .env.example
     environment:
       TZ: UTC
+      PG_USER: postgres
+      PG_PASSWORD: pass
+      PG_DATABASE: awa
+      PG_HOST: postgres
+      PG_PORT: 5432
+      DATABASE_URL: postgresql+asyncpg://postgres:pass@postgres:5432/awa
+      ENABLE_LIVE: 0
     depends_on:
       postgres:
         condition: service_healthy
     ports:
       - "8000:8000"
     healthcheck:
-      test: ["CMD", "curl", "-fsSL", "http://localhost:8000/ready"]
+      test: ["CMD", "curl", "-fsSL", "http://localhost:8000/health"]
       start_period: 120s
       interval: 8s
       timeout: 3s
@@ -78,10 +83,15 @@ services:
       dockerfile: services/etl/Dockerfile
       args:
         TZ_CACHE_BUST: ${GITHUB_SHA:-dev}
-    env_file:
-      - .env.example
     environment:
       TZ: UTC
+      PG_USER: postgres
+      PG_PASSWORD: pass
+      PG_DATABASE: awa
+      PG_HOST: postgres
+      PG_PORT: 5432
+      DATABASE_URL: postgresql+asyncpg://postgres:pass@postgres:5432/awa
+      ENABLE_LIVE: 0
     depends_on:
       postgres:
         condition: service_healthy
@@ -120,10 +130,15 @@ services:
       test: ["CMD-SHELL", "curl -f http://localhost:8100/health || exit 1"]
       interval: 10s
       retries: 5
-    env_file:
-      - .env.example
     environment:
       TZ: UTC
+      PG_USER: postgres
+      PG_PASSWORD: pass
+      PG_DATABASE: awa
+      PG_HOST: postgres
+      PG_PORT: 5432
+      DATABASE_URL: postgresql+asyncpg://postgres:pass@postgres:5432/awa
+      ENABLE_LIVE: 0
     depends_on:
       api:
         condition: service_healthy
@@ -138,8 +153,13 @@ services:
   fees_h10:
     build:
       context: ./services/fees_h10
-    env_file:
-      - .env.example
+    environment:
+      PG_USER: postgres
+      PG_PASSWORD: pass
+      PG_DATABASE: awa
+      PG_HOST: postgres
+      PG_PORT: 5432
+      DATABASE_URL: postgresql+asyncpg://postgres:pass@postgres:5432/awa
     depends_on:
       postgres:
         condition: service_healthy
@@ -154,8 +174,13 @@ services:
   logistics_etl:
     build:
       context: ./services/logistics_etl
-    env_file:
-      - .env.example
+    environment:
+      PG_USER: postgres
+      PG_PASSWORD: pass
+      PG_DATABASE: awa
+      PG_HOST: postgres
+      PG_PORT: 5432
+      DATABASE_URL: postgresql+asyncpg://postgres:pass@postgres:5432/awa
     command: ["python", "-m", "logistics_etl"]
     depends_on:
       postgres:

@@ -33,7 +33,8 @@ app = FastAPI(lifespan=lifespan)
 @app.get("/ready", status_code=status.HTTP_200_OK, include_in_schema=False)
 async def ready(session: AsyncSession = Depends(get_session)) -> dict[str, str]:
     """Return 200 only when migrations are at head."""
-    cfg = Config("alembic.ini")
+    alembic_config = os.getenv("ALEMBIC_CONFIG", "alembic.ini")
+    cfg = Config(alembic_config)
     head = ScriptDirectory.from_config(cfg).get_current_head()
     result = await session.execute(text("SELECT version_num FROM alembic_version"))
     current = result.scalar()
