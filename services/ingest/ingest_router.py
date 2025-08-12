@@ -13,7 +13,7 @@ def ingest(path: str = Query(..., alias="path")) -> dict[str, str]:
         [
             "python",
             "-m",
-            "etl.load_csv",
+            "services.etl.load_csv",
             "--source",
             f"minio://{path}",
             "--table",

@@ -5,6 +5,8 @@ class _LazyLoadCsv:
 
         return _mod.main() if not args else _mod.main()
 
+
 load_csv = _LazyLoadCsv()
+
 
 __all__ = ["load_csv"]

@@ -57,8 +57,8 @@ async def _wait_for_db() -> None:
     # Use DATABASE_URL if set, otherwise build sync DSN
     database_url = os.getenv("DATABASE_URL")
     if database_url:
-        # Convert async URL to sync URL
-        url = database_url.replace("postgresql+asyncpg://", "postgresql://")
+        # Convert async URL to sync URL using psycopg driver
+        url = database_url.replace("postgresql+asyncpg://", "postgresql+psycopg://")
     else:
         url = build_dsn(sync=True)
 
