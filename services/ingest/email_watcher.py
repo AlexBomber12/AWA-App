@@ -9,7 +9,7 @@ from imapclient import IMAPClient
 from sqlalchemy import create_engine, text
 
 from services.common.dsn import build_dsn
-from services.etl import fba_fee_ingestor as load_csv
+from services.etl import load_csv
 
 BUCKET = "awa-bucket"
 
