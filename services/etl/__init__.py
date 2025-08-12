@@ -3,8 +3,7 @@ from typing import Protocol
 
 class LoadCsvRunner(Protocol):
     @staticmethod
-    def main(args: list[str]) -> tuple[int, int]:
-        ...
+    def main(args: list[str]) -> tuple[int, int]: ...
 
 
 class _LazyLoadCsv:

@@ -141,6 +141,7 @@ jobs:
           export COMPOSE_DOCKER_CLI_BUILD=1 DOCKER_BUILDKIT=1
           docker compose \
             -f docker-compose.yml \
+            -f docker-compose.ci.yml \
             -f docker-compose.postgres.yml \
             build --progress plain
       - name: Pull compose images
@@ -148,14 +149,16 @@ jobs:
           export COMPOSE_DOCKER_CLI_BUILD=1 DOCKER_BUILDKIT=1
           docker compose \
             -f docker-compose.yml \
+            -f docker-compose.ci.yml \
             -f docker-compose.postgres.yml \
             pull
       - run: |
           export COMPOSE_DOCKER_CLI_BUILD=1 DOCKER_BUILDKIT=1
           docker compose \
             -f docker-compose.yml \
+            -f docker-compose.ci.yml \
             -f docker-compose.postgres.yml \
-            up -d --wait --no-build --pull always
+            up -d --wait --no-build --pull always --profile ci-skip
       - name: Wait for Postgres
         run: for i in {1..60}; do pg_isready -h localhost -p 5432 && break; sleep 1; done
       - name: Ensure compose database
@@ -166,6 +169,7 @@ jobs:
       - run: |
           docker compose \
             -f docker-compose.yml \
+            -f docker-compose.ci.yml \
             -f docker-compose.postgres.yml \
             config | grep image:
       - run: |
