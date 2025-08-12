@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 class _LazyLoadCsv:
     @staticmethod
     def main(args: list[str]):
