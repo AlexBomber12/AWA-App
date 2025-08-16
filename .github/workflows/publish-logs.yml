@@ -1,0 +1,73 @@
+name: Publish logs
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'ci-logs/**'
+  pull_request:
+    paths-ignore:
+      - 'ci-logs/**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-logs-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  collect-logs:
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare logs
+        run: |
+          mkdir -p .logs
+          if [ -d test-results ]; then cp -r test-results .logs/; fi
+          echo "$GITHUB_REPOSITORY" > .logs/repo.txt
+          echo "$GITHUB_SHA" > .logs/commit.txt
+          echo "$GITHUB_RUN_ID" > .logs/run_id.txt
+          echo "$GITHUB_REF" > .logs/ref.txt
+          date -u +"%Y-%m-%dT%H:%M:%SZ" > .logs/generated_at_utc.txt
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: run-logs
+          path: .logs
+          retention-days: 7
+
+  publish-logs:
+    needs: collect-logs
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Download artifact
+        uses: actions/download-artifact@v5
+        with:
+          name: run-logs
+          path: ci-logs/_tmp
+      - name: Replace repo logs
+        run: |
+          rm -rf ci-logs/latest
+          mkdir -p ci-logs
+          mv ci-logs/_tmp ci-logs/latest
+      - name: Commit and push
+        env:
+          GIT_AUTHOR_NAME: github-actions[bot]
+          GIT_AUTHOR_EMAIL: github-actions[bot]@users.noreply.github.com
+          GIT_COMMITTER_NAME: github-actions[bot]
+          GIT_COMMITTER_EMAIL: github-actions[bot]@users.noreply.github.com
+        run: |
+          git add ci-logs
+          if git diff --staged --quiet; then
+            echo "no changes"
+          else
+            git commit -m "ci: update persisted logs for ${{ github.sha }} [skip ci]"
+            git push
+          fi
