@@ -18,7 +18,8 @@ WORKDIR /app
 COPY --from=base /usr/local /usr/local
 COPY --from=base /app /app
 ARG DEBIAN_FRONTEND=noninteractive
-RUN apt-get update \
+RUN sed -i 's|http://deb.debian.org|https://deb.debian.org|g' /etc/apt/sources.list \
+    && apt-get update \
     && apt-get install -y --no-install-recommends tzdata \
     && rm -rf /var/lib/apt/lists/*
 ENV TZ=UTC

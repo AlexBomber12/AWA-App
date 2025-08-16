@@ -1,5 +1,6 @@
 FROM postgres:16
-RUN apt-get update && apt-get install -y locales \
+RUN sed -i 's|http://deb.debian.org|https://deb.debian.org|g' /etc/apt/sources.list \
+    && apt-get update && apt-get install -y locales \
     && locale-gen en_US.UTF-8 \
     && rm -rf /var/lib/apt/lists/*
 ENV LANG en_US.UTF-8

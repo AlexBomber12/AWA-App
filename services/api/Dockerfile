@@ -24,7 +24,8 @@ ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app:/app/services
 WORKDIR /app
 ARG DEBIAN_FRONTEND=noninteractive
-RUN apt-get update \
+RUN sed -i 's|http://deb.debian.org|https://deb.debian.org|g' /etc/apt/sources.list \
+    && apt-get update \
     && apt-get install -y --no-install-recommends tzdata postgresql-client curl \
     && rm -rf /var/lib/apt/lists/*
 ENV TZ=UTC
