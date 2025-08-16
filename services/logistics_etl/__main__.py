@@ -2,6 +2,11 @@ import asyncio
 
 from .cron import start
 
-if __name__ == "__main__":
+
+async def _run() -> None:
     start()
-    asyncio.get_event_loop().run_forever()
+    await asyncio.Event().wait()
+
+
+if __name__ == "__main__":
+    asyncio.run(_run())
