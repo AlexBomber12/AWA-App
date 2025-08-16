@@ -2,11 +2,25 @@ import asyncio
 import os
 
 from celery import Celery, shared_task
-
-from services.common.keepa import list_active_asins
+from sqlalchemy import create_engine, text
 
 from .client import fetch_fees
 from .repository import upsert
+
+
+def list_active_asins() -> list[str]:
+    """Return known ASINs or an empty list if unavailable."""
+    url = os.getenv("DATABASE_URL")
+    if not url:
+        return []
+    engine = create_engine(url.replace("+asyncpg", "+psycopg"), future=True)
+    try:
+        with engine.begin() as conn:
+            res = conn.execute(text("SELECT asin FROM products"))
+            return [r[0] for r in res.fetchall()]
+    except Exception:
+        return []
+
 
 app = Celery("fees_h10", broker=os.getenv("CELERY_BROKER_URL", "memory://"))
 
