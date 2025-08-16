@@ -1,62 +1,78 @@
-name: Publish logs
+name: Collect all workflow logs
 on:
-  push:
-    branches: [main]
-    paths-ignore:
-      - 'ci-logs/**'
-  pull_request:
-    paths-ignore:
-      - 'ci-logs/**'
-  workflow_dispatch:
-
+  workflow_run:
+    workflows: ["CI", "test", "Docs"]
+    types: [completed]
 permissions:
+  actions: read
   contents: write
-
 concurrency:
-  group: publish-logs-${{ github.ref }}
-  cancel-in-progress: false
-
+  group: collect-logs-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: true
 jobs:
-  collect-logs:
+  collect:
     runs-on: ubuntu-latest
-    if: always()
-    steps:
-      - uses: actions/checkout@v4
-      - name: Prepare logs
-        run: |
-          mkdir -p .logs
-          if [ -d test-results ]; then cp -r test-results .logs/; fi
-          echo "$GITHUB_REPOSITORY" > .logs/repo.txt
-          echo "$GITHUB_SHA" > .logs/commit.txt
-          echo "$GITHUB_RUN_ID" > .logs/run_id.txt
-          echo "$GITHUB_REF" > .logs/ref.txt
-          date -u +"%Y-%m-%dT%H:%M:%SZ" > .logs/generated_at_utc.txt
-      - name: Upload logs
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: run-logs
-          path: .logs
-          retention-days: 7
-
-  publish-logs:
-    needs: collect-logs
-    if: always()
-    runs-on: ubuntu-latest
+    if: ${{ !(github.event.workflow_run.event == 'pull_request' && github.event.workflow_run.head_repository.full_name != github.repository) }}
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      OWNER_REPO: ${{ github.repository }}
+      HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+      HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+      TARGETS: '["CI","test","Docs"]'
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Download artifact
-        uses: actions/download-artifact@v5
-        with:
-          name: run-logs
-          path: ci-logs/_tmp
-      - name: Replace repo logs
+          ref: ${{ github.event.workflow_run.head_branch }}
+      - name: Wait for all workflows to finish for this SHA
         run: |
-          rm -rf ci-logs/latest
-          mkdir -p ci-logs
-          mv ci-logs/_tmp ci-logs/latest
+          python3 - <<'PY'
+          import os, json, subprocess, time
+          repo=os.environ["OWNER_REPO"]; sha=os.environ["HEAD_SHA"]; targets=json.loads(os.environ["TARGETS"])
+          deadline=time.time()+1200
+          def runs():
+              out=subprocess.check_output(["gh","api",f"repos/{repo}/actions/runs","-f",f"head_sha={sha}"])
+              return json.loads(out)["workflow_runs"]
+          while True:
+              all_done=True
+              for t in targets:
+                  rs=[r for r in runs() if r["name"]==t]
+                  if not rs: 
+                      continue
+                  st=set(r["status"] for r in rs)
+                  if any(s in ("queued","in_progress","requested","waiting") for s in st):
+                      all_done=False
+                      break
+              if all_done or time.time()>deadline:
+                  break
+              time.sleep(15)
+          PY
+      - name: Download and unpack logs
+        run: |
+          rm -rf ci-logs/_tmp ci-logs/latest
+          mkdir -p ci-logs/_tmp
+          python3 - <<'PY'
+          import os, json, subprocess, zipfile, shutil
+          repo=os.environ["OWNER_REPO"]; sha=os.environ["HEAD_SHA"]; targets=json.loads(os.environ["TARGETS"])
+          out=subprocess.check_output(["gh","api",f"repos/{repo}/actions/runs","-f",f"head_sha={sha}"])
+          runs=json.loads(out)["workflow_runs"]
+          dest="ci-logs/_tmp"
+          os.makedirs(dest, exist_ok=True)
+          for t in targets:
+              cand=[r for r in runs if r["name"]==t and r["conclusion"] in ("success","failure","cancelled","timed_out","action_required","neutral","skipped")]
+              if not cand:
+                  continue
+              cand.sort(key=lambda r: r["run_number"], reverse=True)
+              rid=cand[0]["id"]
+              zip_path=f"{dest}/{t}-{rid}.zip"
+              subprocess.check_call(["gh","api",f"repos/{repo}/actions/runs/{rid}/logs","--output",zip_path])
+              unpack_dir=f"{dest}/{t}"
+              os.makedirs(unpack_dir, exist_ok=True)
+              with zipfile.ZipFile(zip_path) as z:
+                  z.extractall(unpack_dir)
+              os.remove(zip_path)
+          shutil.move("ci-logs/_tmp","ci-logs/latest")
+          PY
       - name: Commit and push
         env:
           GIT_AUTHOR_NAME: github-actions[bot]
@@ -67,7 +83,7 @@ jobs:
           git add ci-logs
           if git diff --staged --quiet; then
             echo "no changes"
-          else
-            git commit -m "ci: update persisted logs for ${{ github.sha }} [skip ci]"
-            git push
+            exit 0
           fi
+          git commit -m "ci: persist all workflow logs for $GITHUB_SHA [skip ci]"
+          git push origin HEAD:${HEAD_BRANCH}
