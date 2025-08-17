@@ -11,6 +11,8 @@ COPY services/api/ ./services/api
 COPY services/common/ ./services/common
 COPY services/ingest/ ./services/ingest
 COPY services/etl/ ./services/etl
+# copy shared API routers
+COPY api/ ./api
 # configuration files for migrations
 COPY services/api/alembic.ini ./alembic.ini
 COPY alembic/ ./alembic/
