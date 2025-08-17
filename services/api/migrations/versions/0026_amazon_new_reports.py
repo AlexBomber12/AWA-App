@@ -1,4 +1,5 @@
 import sqlalchemy as sa
+
 from alembic import op
 
 revision = "0026_amazon_new_reports"
@@ -115,17 +116,13 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.execute(
-        "DROP INDEX IF EXISTS uq_settlements_txn_raw_transaction_id"
-    )
+    op.execute("DROP INDEX IF EXISTS uq_settlements_txn_raw_transaction_id")
     op.drop_index(
         "idx_settlements_txn_raw_settlement",
         table_name="settlements_txn_raw",
         if_exists=True,
     )
-    op.execute(
-        "DROP INDEX IF EXISTS brin_settlements_txn_raw_posted_date"
-    )
+    op.execute("DROP INDEX IF EXISTS brin_settlements_txn_raw_posted_date")
     op.drop_table("settlements_txn_raw")
 
     op.drop_index(
@@ -156,8 +153,6 @@ def downgrade() -> None:
 
     op.execute("DROP INDEX IF EXISTS brin_fee_preview_raw_captured_at")
     op.drop_index(
-        "idx_fee_preview_raw_asin",
-        table_name="fee_preview_raw",
-        if_exists=True,
+        "idx_fee_preview_raw_asin", table_name="fee_preview_raw", if_exists=True
     )
     op.drop_table("fee_preview_raw")

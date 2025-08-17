@@ -13,11 +13,7 @@ from services.etl.dialects import (
 
 def test_fee_preview_detect_normalise_schema():
     df = pd.DataFrame(
-        {
-            "asin": ["A1"],
-            "estimated-fee-total": [1.23],
-            "currency": ["USD"],
-        }
+        {"asin": ["A1"], "estimated-fee-total": [1.23], "currency": ["USD"]}
     )
     assert amazon_fee_preview.detect(list(df.columns))
     df = amazon_fee_preview.normalise(df)

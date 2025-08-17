@@ -8,13 +8,13 @@ import pandas as pd
 import pytest
 from sqlalchemy import create_engine, text
 
-from services.ingest.copy_loader import copy_df_via_temp
 from services.etl.dialects import (
     amazon_ads_sp_cost,
     amazon_fee_preview,
     amazon_inventory_ledger,
     amazon_settlements,
 )
+from services.ingest.copy_loader import copy_df_via_temp
 
 TEST_DSN = os.getenv("TEST_DATABASE_URL")
 
@@ -57,9 +57,7 @@ def engine():
                 """
             )
         )
-        conn.execute(
-            text("DROP TABLE IF EXISTS test_ingest.fee_preview_raw CASCADE")
-        )
+        conn.execute(text("DROP TABLE IF EXISTS test_ingest.fee_preview_raw CASCADE"))
         conn.execute(
             text(
                 """
@@ -296,11 +294,7 @@ def test_null_handling(engine):
 
 def test_fee_preview_append(engine):
     df = pd.DataFrame(
-        {
-            "asin": ["A1"],
-            "estimated_fee_total": [1.0],
-            "currency": ["USD"],
-        }
+        {"asin": ["A1"], "estimated_fee_total": [1.0], "currency": ["USD"]}
     )
     copy_df_via_temp(
         engine,
