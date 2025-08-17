@@ -8,7 +8,17 @@ def _get_client(monkeypatch) -> TestClient:
     monkeypatch.setenv("CELERY_BROKER_URL", "memory://")
     monkeypatch.setenv("CELERY_RESULT_BACKEND", "cache+memory://")
     monkeypatch.setenv("CELERY_TASK_STORE_EAGER_RESULT", "true")
-    from services.api.main import app
+    from importlib import reload
+
+    import api.routers.ingest as ingest_module
+    import services.api.main as main_module
+    import services.ingest.celery_app as celery_module
+    import services.ingest.tasks as tasks_module
+
+    reload(celery_module)
+    reload(tasks_module)
+    reload(ingest_module)
+    app = reload(main_module).app
 
     return TestClient(app)
 
