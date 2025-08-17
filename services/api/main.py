@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from alembic.config import Config
 from alembic.script import ScriptDirectory
 from services.common.dsn import build_dsn
-from services.ingest.ingest_router import router as ingest_router
+from api.routers.ingest import router as ingest_router
 from services.ingest.upload_router import router as upload_router
 
 from .db import get_session

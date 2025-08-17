@@ -35,6 +35,13 @@ services:
       - miniodata:/data
     networks:
       - awa-net
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    networks:
+      - awa-net
   imap_watcher:
     build:
       context: ./services/ingest
@@ -112,6 +119,54 @@ services:
       - awa-data:/data
     extra_hosts:
       - "host.docker.internal:host-gateway"
+  celery_worker:
+    build:
+      context: .
+      dockerfile: services/etl/Dockerfile
+      args:
+        TZ_CACHE_BUST: ${GITHUB_SHA:-dev}
+    command: ["celery", "-A", "services.ingest.celery_app:celery_app", "worker", "-Q", "ingest", "-l", "INFO"]
+    environment:
+      TZ: UTC
+      PYTHONPATH: /app:/app/services
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+      PG_USER: postgres
+      PG_PASSWORD: pass
+      PG_DATABASE: awa
+      PG_HOST: postgres
+      PG_PORT: 5432
+      DATABASE_URL: postgresql+asyncpg://postgres:pass@postgres:5432/awa
+      ENABLE_LIVE: 0
+    depends_on:
+      redis:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+    networks:
+      - awa-net
+    volumes:
+      - awa-data:/data
+    restart: unless-stopped
+  celery_beat:
+    build:
+      context: .
+      dockerfile: services/etl/Dockerfile
+      args:
+        TZ_CACHE_BUST: ${GITHUB_SHA:-dev}
+    command: ["celery", "-A", "services.ingest.celery_app:celery_app", "beat", "-l", "INFO"]
+    environment:
+      TZ: UTC
+      PYTHONPATH: /app:/app/services
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/1
+    depends_on:
+      redis:
+        condition: service_started
+    networks:
+      - awa-net
+    restart: unless-stopped
+    profiles: ["beat"]
   web:
     build: ./web
     environment:
