@@ -27,8 +27,7 @@ def task_analyze_table(table_fqname: str) -> dict:
 @celery_app.task(name="ingest.maintenance_nightly")
 def task_maintenance_nightly() -> dict:
     tables_cfg = os.getenv(
-        "TABLE_MAINTENANCE_LIST",
-        "public.reimbursements_raw,public.returns_raw",
+        "TABLE_MAINTENANCE_LIST", "public.reimbursements_raw,public.returns_raw"
     )
     tables: List[str] = [t.strip() for t in tables_cfg.split(",") if t.strip()]
     vacuum = os.getenv("VACUUM_ENABLE", "false").lower() in ("1", "true", "yes")

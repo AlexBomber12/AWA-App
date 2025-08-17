@@ -41,11 +41,7 @@ def make_celery() -> Celery:
 
 celery_app = make_celery()
 
-if os.getenv("SCHEDULE_NIGHTLY_MAINTENANCE", "true").lower() in (
-    "1",
-    "true",
-    "yes",
-):
+if os.getenv("SCHEDULE_NIGHTLY_MAINTENANCE", "true").lower() in ("1", "true", "yes"):
     cron = os.getenv("NIGHTLY_MAINTENANCE_CRON", "30 2 * * *").split()
     celery_app.conf.beat_schedule = {
         "nightly-maintenance": {

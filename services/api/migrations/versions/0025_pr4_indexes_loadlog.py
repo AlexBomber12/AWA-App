@@ -14,7 +14,12 @@ def upgrade() -> None:
 
     op.create_table(
         "load_log",
-        sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True, server_default=sa.text("gen_random_uuid()")),
+        sa.Column(
+            "id",
+            postgresql.UUID(as_uuid=True),
+            primary_key=True,
+            server_default=sa.text("gen_random_uuid()"),
+        ),
         sa.Column("source_uri", sa.Text(), nullable=False),
         sa.Column("target_table", sa.Text(), nullable=False),
         sa.Column("dialect", sa.Text(), nullable=True),
@@ -23,7 +28,12 @@ def upgrade() -> None:
         sa.Column("status", sa.Text(), nullable=False),
         sa.Column("error_summary", sa.Text(), nullable=True),
         sa.Column("warnings", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
-        sa.Column("started_at", sa.TIMESTAMP(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column(
+            "started_at",
+            sa.TIMESTAMP(timezone=True),
+            server_default=sa.text("now()"),
+            nullable=False,
+        ),
         sa.Column("finished_at", sa.TIMESTAMP(timezone=True), nullable=True),
     )
     op.create_index("idx_load_log_started_at", "load_log", ["started_at"], unique=False)
@@ -85,7 +95,9 @@ def downgrade() -> None:
     op.execute("DROP INDEX IF EXISTS brin_returns_raw_return_date")
     op.execute("DROP INDEX IF EXISTS brin_returns_raw_processed_at")
     op.execute("DROP INDEX IF EXISTS idx_returns_raw_asin")
-    op.execute("ALTER TABLE reimbursements_raw DROP CONSTRAINT IF EXISTS reimbursements_raw_pkey")
+    op.execute(
+        "ALTER TABLE reimbursements_raw DROP CONSTRAINT IF EXISTS reimbursements_raw_pkey"
+    )
     op.execute("DROP INDEX IF EXISTS uq_reimbursements_raw_reimb_id")
     op.drop_index("idx_load_log_table_hash", table_name="load_log", if_exists=True)
     op.drop_index("idx_load_log_started_at", table_name="load_log", if_exists=True)

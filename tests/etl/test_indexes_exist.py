@@ -23,9 +23,7 @@ def test_indexes_exist():
                 )
             ).scalar()
             idx = conn.execute(
-                text(
-                    "SELECT 1 FROM pg_indexes WHERE indexname='idx_returns_raw_asin'"
-                )
+                text("SELECT 1 FROM pg_indexes WHERE indexname='idx_returns_raw_asin'")
             ).scalar()
             brin = conn.execute(
                 text(
