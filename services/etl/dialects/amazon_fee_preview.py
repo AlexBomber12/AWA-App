@@ -11,7 +11,10 @@ SYNONYMS = {
     "sku": ["seller-sku", "sku"],
     "fnsku": ["fnsku"],
     "referral_fee": ["estimated-referral-fee-per-unit", "referral-fee-per-unit"],
-    "fulfillment_fee": ["estimated-fulfillment-fee-per-unit", "fulfillment-fee-per-unit"],
+    "fulfillment_fee": [
+        "estimated-fulfillment-fee-per-unit",
+        "fulfillment-fee-per-unit",
+    ],
     "storage_fee": ["estimated-storage-fee-per-unit", "storage-fee-per-unit"],
     "estimated_fee_total": [
         "estimated-fee-total",
@@ -50,7 +53,12 @@ def normalise(df: DataFrame) -> DataFrame:
         df["captured_at"] = pd.Timestamp.utcnow()
     for col in TARGET_COLUMNS:
         if col not in df.columns:
-            if col in {"referral_fee", "fulfillment_fee", "storage_fee", "estimated_fee_total"}:
+            if col in {
+                "referral_fee",
+                "fulfillment_fee",
+                "storage_fee",
+                "estimated_fee_total",
+            }:
                 df[col] = pd.Series([np.nan] * len(df), dtype="float64")
             else:
                 df[col] = pd.NA
