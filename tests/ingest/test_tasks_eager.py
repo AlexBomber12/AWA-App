@@ -20,7 +20,7 @@ def test_task_import_file_eager(monkeypatch) -> None:
     file_path = tmp_dir / "data.csv"
     file_path.write_text("a,b\n1,2\n")
 
-    def fake_import_file(path: str, report_type=None, celery_update=None):
+    def fake_import_file(path: str, report_type=None, celery_update=None, force=False):
         return {"rows": 1, "dialect": "returns_report", "target_table": "returns_raw"}
 
     monkeypatch.setattr("etl.load_csv.import_file", fake_import_file)
