@@ -6,7 +6,8 @@ from .repository import upsert_many
 
 async def job() -> None:
     rows = await fetch_rates()
-    await upsert_many(rows)
+    if rows:
+        await upsert_many(rows)
 
 
 def start() -> None:
