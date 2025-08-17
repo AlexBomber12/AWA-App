@@ -9,7 +9,7 @@ RUN if [ -n "$CONSTRAINTS" ] && [ -f "$CONSTRAINTS" ]; then \
     else \
         pip install -r requirements.txt; \
     fi
-COPY . .
+COPY . /app/logistics_etl
 
 FROM python:3.12-slim
 ENV PYTHONUNBUFFERED=1
