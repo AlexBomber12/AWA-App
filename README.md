@@ -135,6 +135,10 @@ dedicated tables.
 | --------------------- | ------------------- |
 | `returns_report`      | `returns_raw`       |
 | `reimbursements_report` | `reimbursements_raw` |
+| `fee_preview_report` | `fee_preview_raw` |
+| `inventory_ledger_report` | `inventory_ledger_raw` |
+| `ads_sp_cost_daily_report` | `ads_sp_cost_daily_raw` |
+| `settlements_txn_report` | `settlements_txn_raw` |
 
 ### Dependency pinning
 Run `./scripts/pin_constraints.sh` whenever you update service requirements to refresh an optional `constraints.txt` for reproducible installs.
