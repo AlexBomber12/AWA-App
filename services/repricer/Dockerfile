@@ -23,7 +23,7 @@ RUN set -eux; \
         sed -i 's|http://deb.debian.org|https://deb.debian.org|g' /etc/apt/sources.list; \
     fi; \
     apt-get update; \
-    apt-get install -y --no-install-recommends tzdata; \
+    apt-get install -y --no-install-recommends tzdata curl; \
     rm -rf /var/lib/apt/lists/*
 ENV TZ=UTC
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8100"]
