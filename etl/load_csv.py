@@ -134,7 +134,9 @@ def import_file(
     engine = create_engine(build_dsn(sync=True))
     try:
         if USE_COPY:
-            conflict_cols = ("reimb_id",) if dialect == "reimbursements_report" else None
+            conflict_cols = (
+                ("reimb_id",) if dialect == "reimbursements_report" else None
+            )
             copy_df_via_temp(
                 engine,
                 df,
