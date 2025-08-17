@@ -2,21 +2,26 @@
 FROM python:3.12-slim AS base
 ENV PYTHONUNBUFFERED=1
 WORKDIR /app
-COPY requirements*.txt constraints.txt ./
+# Install dependencies first to leverage Docker layer caching.  The service
+# sources live under /app/fees_h10 in the final image so that Python can
+# import the `fees_h10` package.
+COPY requirements*.txt constraints.txt ./fees_h10/
 ARG CONSTRAINTS=""
-RUN if [ -n "$CONSTRAINTS" ] && [ -f "$CONSTRAINTS" ]; then \
-        pip install -r requirements.txt -c "$CONSTRAINTS"; \
+RUN if [ -n "$CONSTRAINTS" ] && [ -f "fees_h10/$CONSTRAINTS" ]; then \
+        pip install -r fees_h10/requirements.txt -c fees_h10/$CONSTRAINTS; \
     else \
-        pip install -r requirements.txt; \
+        pip install -r fees_h10/requirements.txt; \
     fi
-COPY . .
+# Copy the application code into a package directory and place the start
+# script at the image root.
+COPY . ./fees_h10
+COPY start.sh ./start.sh
 
 FROM python:3.12-slim
 ENV PYTHONUNBUFFERED=1
 WORKDIR /app
 COPY --from=base /usr/local /usr/local
 COPY --from=base /app /app
-COPY start.sh ./start.sh
 RUN chmod +x ./start.sh
 ENTRYPOINT ["./start.sh"]
 HEALTHCHECK CMD ["celery", "--help"]
