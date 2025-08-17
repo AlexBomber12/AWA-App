@@ -18,6 +18,9 @@ from services.etl.dialects import (
     normalise_headers,
     schemas,
 )
+from services.ingest.copy_loader import copy_df_via_temp
+
+USE_COPY = os.getenv("USE_COPY", "true").lower() in ("1", "true", "yes")
 
 BUCKET = "awa-bucket"
 
@@ -119,9 +122,24 @@ def main(argv: list[str] | None = None) -> tuple[int, int]:
 
     engine = create_engine(build_dsn(sync=True))
     try:
+        if target_table != "auto":
+            if USE_COPY:
+                conflict_cols = (
+                    ("reimb_id",) if dialect == "reimbursements_report" else None
+                )
+                copy_df_via_temp(
+                    engine,
+                    df,
+                    target_table=target_table,
+                    target_schema=None,
+                    columns=list(df.columns),
+                    conflict_cols=conflict_cols,
+                    analyze_after=False,
+                )
+            else:
+                with engine.begin() as conn:
+                    df.to_sql(target_table, conn, if_exists="append", index=False)
         with engine.begin() as conn:
-            if target_table != "auto":
-                df.to_sql(target_table, conn, if_exists="append", index=False)
             load_id = _log_load(
                 conn,
                 source=args.source,
