@@ -44,4 +44,3 @@ def build_dsn(sync: bool = True) -> str:
 
 
 __all__ = ["build_dsn"]
-
