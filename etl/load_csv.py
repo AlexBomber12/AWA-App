@@ -16,9 +16,28 @@ from services.etl.dialects import (
     amazon_reimbursements,
     amazon_returns,
     normalise_headers,
+    schemas,
 )
 
 BUCKET = "awa-bucket"
+
+
+def _read_csv_flex(path: Path) -> pd.DataFrame:
+    # try encodings with sniffer
+    for enc in ("utf-8", "utf-8-sig", "cp1252"):
+        try:
+            return pd.read_csv(path, sep=None, engine="python", encoding=enc)
+        except UnicodeDecodeError:
+            continue
+        except Exception:
+            pass
+    # fallback to explicit separators
+    for sep in (",", ";", "\t", "|"):
+        try:
+            return pd.read_csv(path, sep=sep)
+        except Exception:
+            continue
+    raise RuntimeError(f"Failed to read CSV: {path}")
 
 
 def _log_load(
@@ -73,7 +92,7 @@ def main(argv: list[str] | None = None) -> tuple[int, int]:
     if file_path.suffix in {".xlsx", ".xls"}:
         df = pd.read_excel(file_path)
     else:
-        df = pd.read_csv(file_path)
+        df = _read_csv_flex(file_path)
 
     cols = normalise_headers(df.columns)
     dialect = None
@@ -83,6 +102,11 @@ def main(argv: list[str] | None = None) -> tuple[int, int]:
     elif amazon_reimbursements.detect(cols):
         dialect = "reimbursements_report"
         df = amazon_reimbursements.normalise(df)
+    else:
+        raise RuntimeError("Unknown report: cannot detect dialect")
+
+    # schema validation
+    df = schemas.validate(df, dialect)
 
     target_table = args.table
     if args.table == "auto" and dialect:
