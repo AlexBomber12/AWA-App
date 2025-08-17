@@ -3,14 +3,18 @@ import io
 import os
 
 import httpx
+from httpx import HTTPError
 
 URL = os.getenv("FREIGHT_API_URL", "https://example.com/freight.csv")
 
 
 async def fetch_rates() -> list[dict]:
     async with httpx.AsyncClient(timeout=15, trust_env=False) as client:
-        r = await client.get(URL)
-        r.raise_for_status()
+        try:
+            r = await client.get(URL)
+            r.raise_for_status()
+        except HTTPError:
+            return []
         buf = io.StringIO(r.text)
         reader = csv.DictReader(buf)
         rows = []
