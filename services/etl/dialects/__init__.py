@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable
+
+_WS = re.compile(r"\s+")
 
 
 def normalise_headers(cols: Iterable[str]) -> list[str]:
-    return [c.lower().strip() for c in cols]
+    return [_WS.sub(" ", c.strip().lower()) for c in cols]

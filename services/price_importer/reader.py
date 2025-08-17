@@ -11,17 +11,30 @@ def detect_format(path: str | Path) -> str:
     return "csv"
 
 
-def load_file(path: str | Path) -> Any:
-    """Return DataFrame from CSV or Excel file.
+def _read_csv_flex(path: str | Path):
+    import pandas as pd
 
-    Raises RuntimeError if pandas is unavailable.
-    """
+    for enc in ("utf-8", "utf-8-sig", "cp1252"):
+        try:
+            return pd.read_csv(path, sep=None, engine="python", encoding=enc)
+        except UnicodeDecodeError:
+            continue
+        except Exception:
+            pass
+    for sep in (",", ";", "\t", "|"):
+        try:
+            return pd.read_csv(path, sep=sep)
+        except Exception:
+            continue
+    raise RuntimeError(f"Failed to read CSV: {path}")
+
+
+def load_file(path: str | Path) -> Any:
     try:
         import pandas as pd
     except ModuleNotFoundError as exc:  # pragma: no cover - env without pandas
         raise RuntimeError("pandas is required to load price files") from exc
-
     fmt = detect_format(path)
     if fmt == "excel":
         return pd.read_excel(path)
-    return pd.read_csv(path)
+    return _read_csv_flex(path)
