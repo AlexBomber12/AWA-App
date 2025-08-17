@@ -20,7 +20,9 @@ def engine():
     engine = create_engine(TEST_DSN)
     with engine.begin() as conn:
         conn.execute(text("CREATE SCHEMA IF NOT EXISTS test_ingest"))
-        conn.execute(text("DROP TABLE IF EXISTS test_ingest.reimbursements_raw CASCADE"))
+        conn.execute(
+            text("DROP TABLE IF EXISTS test_ingest.reimbursements_raw CASCADE")
+        )
         conn.execute(
             text(
                 """
@@ -163,7 +165,9 @@ def test_append_only(engine):
         columns=cols,
     )
     with engine.connect() as conn:
-        cnt = conn.execute(text("SELECT count(*) FROM test_ingest.returns_raw")).scalar()
+        cnt = conn.execute(
+            text("SELECT count(*) FROM test_ingest.returns_raw")
+        ).scalar()
     assert cnt == 4
 
 

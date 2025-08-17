@@ -4,8 +4,8 @@ import io
 from typing import Optional, Sequence
 
 import pandas as pd
-from sqlalchemy.engine import Engine
 from psycopg2 import sql
+from sqlalchemy.engine import Engine
 
 
 def _ensure_ident(name: str) -> sql.Identifier:
@@ -91,7 +91,9 @@ def copy_df_via_temp(
                         )
                         ins = sql.SQL(
                             "INSERT INTO {} ({}) SELECT {} FROM {} ON CONFLICT ({}) DO UPDATE SET {}"
-                        ).format(tgt, cols_csv, cols_csv, stg, conflict_list, set_clause)
+                        ).format(
+                            tgt, cols_csv, cols_csv, stg, conflict_list, set_clause
+                        )
                     else:
                         ins = sql.SQL(
                             "INSERT INTO {} ({}) SELECT {} FROM {} ON CONFLICT ({}) DO NOTHING"
