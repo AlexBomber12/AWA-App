@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 import os
 
 from celery import Celery
@@ -60,5 +61,5 @@ if os.getenv("SCHEDULE_NIGHTLY_MAINTENANCE", "true").lower() in (
     }
 
 # ensure tasks are registered
-import services.ingest.tasks  # noqa: F401
-import services.ingest.maintenance  # noqa: F401
+importlib.import_module("services.ingest.tasks")
+importlib.import_module("services.ingest.maintenance")

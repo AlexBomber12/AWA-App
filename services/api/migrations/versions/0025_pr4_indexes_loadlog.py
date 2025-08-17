@@ -1,6 +1,7 @@
 import sqlalchemy as sa
-from alembic import op
 from sqlalchemy.dialects import postgresql
+
+from alembic import op
 
 revision = "0025_pr4_indexes_loadlog"
 down_revision = "0024_create_buybox"
@@ -36,7 +37,9 @@ def upgrade() -> None:
     op.execute(
         """
         DO $$ BEGIN
-            IF NOT EXISTS (
+            IF EXISTS (
+                SELECT 1 FROM information_schema.columns WHERE table_name='reimbursements_raw' AND column_name='reimb_id'
+            ) AND NOT EXISTS (
                 SELECT 1 FROM pg_indexes WHERE schemaname='public' AND indexname='uq_reimbursements_raw_reimb_id'
             ) THEN
                 CREATE UNIQUE INDEX uq_reimbursements_raw_reimb_id ON reimbursements_raw(reimb_id);
@@ -47,7 +50,9 @@ def upgrade() -> None:
     op.execute(
         """
         DO $$ BEGIN
-            IF NOT EXISTS (
+            IF EXISTS (
+                SELECT 1 FROM pg_indexes WHERE schemaname='public' AND indexname='uq_reimbursements_raw_reimb_id'
+            ) AND NOT EXISTS (
                 SELECT 1 FROM pg_constraint WHERE conname='reimbursements_raw_pkey'
             ) THEN
                 ALTER TABLE reimbursements_raw ADD CONSTRAINT reimbursements_raw_pkey PRIMARY KEY USING INDEX uq_reimbursements_raw_reimb_id;
