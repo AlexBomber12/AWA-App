@@ -114,7 +114,7 @@ def import_file(
     try:
         conn.autocommit = False
         with conn.cursor() as cur:
-            key = int(file_hash[:16], 16) % (2 ** 63)
+            key = int(file_hash[:16], 16) % (2**63)
             cur.execute("SELECT pg_advisory_xact_lock(%s)", (key,))
             if idempotent and not force:
                 cur.execute(
@@ -135,9 +135,7 @@ def import_file(
                         "warnings": warnings,
                     }
 
-        conflict_cols = (
-            ("reimb_id",) if dialect == "reimbursements_report" else None
-        )
+        conflict_cols = ("reimb_id",) if dialect == "reimbursements_report" else None
         if USE_COPY:
             copy_df_via_temp(
                 engine,

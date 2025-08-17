@@ -28,12 +28,16 @@ def test_idempotent_load(tmp_path):
 
     engine = create_engine(build_dsn(sync=True))
     with engine.connect() as conn:
-        statuses = conn.execute(
-            text(
-                "SELECT status FROM load_log WHERE target_table='returns_raw' AND file_hash=:h ORDER BY started_at"
-            ),
-            {"h": file_hash},
-        ).scalars().all()
+        statuses = (
+            conn.execute(
+                text(
+                    "SELECT status FROM load_log WHERE target_table='returns_raw' AND file_hash=:h ORDER BY started_at"
+                ),
+                {"h": file_hash},
+            )
+            .scalars()
+            .all()
+        )
     assert statuses.count("success") >= 2
     assert statuses.count("skipped") >= 1
     engine.dispose()
