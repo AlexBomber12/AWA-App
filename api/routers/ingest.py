@@ -20,6 +20,7 @@ async def submit_ingest(
     file: UploadFile | None = File(None),
     uri: Optional[str] = None,
     report_type: Optional[str] = None,
+    force: bool = False,
 ) -> Dict[str, Any]:
     if not file and uri is None:
         try:
@@ -28,6 +29,7 @@ async def submit_ingest(
             payload = {}
         uri = payload.get("uri")
         report_type = report_type or payload.get("report_type")
+        force = force or bool(payload.get("force"))
     if not file and not uri:
         raise HTTPException(status_code=400, detail="Provide a file or a uri")
 
@@ -38,7 +40,9 @@ async def submit_ingest(
             shutil.copyfileobj(file.file, f)
         uri = f"file://{tmp_path}"
     async_result = task_import_file.apply_async(
-        args=[uri], kwargs={"report_type": report_type or None}, queue="ingest"
+        args=[uri],
+        kwargs={"report_type": report_type or None, "force": force},
+        queue="ingest",
     )
     return {"task_id": async_result.id}
 
