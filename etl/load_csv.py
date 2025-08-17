@@ -5,6 +5,7 @@ import os
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Any, Callable, Dict, Optional
 
 import boto3
 import pandas as pd
@@ -81,6 +82,84 @@ def _download_from_minio(path: str) -> Path:
     return Path(tmp.name)
 
 
+def import_file(
+    path: str,
+    report_type: Optional[str] = None,
+    celery_update: Optional[Callable[[Dict[str, Any]], None]] = None,
+) -> Dict[str, Any]:
+    """Import a CSV/Excel file into Postgres.
+
+    Parameters
+    ----------
+    path:
+        Path to local file.
+    report_type:
+        Optional explicit dialect name. If ``None`` the dialect is detected
+        automatically.
+    celery_update:
+        Optional callback used by Celery tasks to report progress.
+    """
+
+    file_path = Path(path)
+    if file_path.suffix in {".xlsx", ".xls"}:
+        df = pd.read_excel(file_path)
+    else:
+        df = _read_csv_flex(file_path)
+    if celery_update:
+        celery_update({"stage": "read", "rows": len(df)})
+
+    cols = normalise_headers(df.columns)
+    dialect = report_type
+    if dialect is None:
+        if amazon_returns.detect(cols):
+            dialect = "returns_report"
+            df = amazon_returns.normalise(df)
+        elif amazon_reimbursements.detect(cols):
+            dialect = "reimbursements_report"
+            df = amazon_reimbursements.normalise(df)
+        else:
+            raise RuntimeError("Unknown report: cannot detect dialect")
+    if celery_update:
+        celery_update({"stage": "detect", "dialect": dialect})
+
+    df = schemas.validate(df, dialect)
+    if celery_update:
+        celery_update({"stage": "validate", "rows": len(df)})
+
+    target_table = {
+        "returns_report": "returns_raw",
+        "reimbursements_report": "reimbursements_raw",
+    }[dialect]
+
+    engine = create_engine(build_dsn(sync=True))
+    try:
+        if USE_COPY:
+            conflict_cols = ("reimb_id",) if dialect == "reimbursements_report" else None
+            copy_df_via_temp(
+                engine,
+                df,
+                target_table=target_table,
+                target_schema=None,
+                columns=list(df.columns),
+                conflict_cols=conflict_cols,
+                analyze_after=False,
+            )
+        else:
+            with engine.begin() as conn:
+                df.to_sql(target_table, conn, if_exists="append", index=False)
+    finally:
+        engine.dispose()
+    if celery_update:
+        celery_update({"stage": "write", "rows": len(df)})
+
+    return {
+        "rows": len(df),
+        "dialect": dialect,
+        "target_table": target_table,
+        "warnings": [],
+    }
+
+
 def main(argv: list[str] | None = None) -> tuple[int, int]:
     parser = argparse.ArgumentParser()
     parser.add_argument("--source", required=True)
@@ -92,53 +171,19 @@ def main(argv: list[str] | None = None) -> tuple[int, int]:
     else:
         file_path = Path(args.source)
 
-    if file_path.suffix in {".xlsx", ".xls"}:
-        df = pd.read_excel(file_path)
-    else:
-        df = _read_csv_flex(file_path)
-
-    cols = normalise_headers(df.columns)
-    dialect = None
-    if amazon_returns.detect(cols):
-        dialect = "returns_report"
-        df = amazon_returns.normalise(df)
-    elif amazon_reimbursements.detect(cols):
-        dialect = "reimbursements_report"
-        df = amazon_reimbursements.normalise(df)
-    else:
-        raise RuntimeError("Unknown report: cannot detect dialect")
-
-    # schema validation
-    df = schemas.validate(df, dialect)
+    summary = import_file(str(file_path), report_type=None)
 
     target_table = args.table
-    if args.table == "auto" and dialect:
+    if args.table == "auto" and summary.get("dialect"):
         target_table = {
             "returns_report": "returns_raw",
             "reimbursements_report": "reimbursements_raw",
-        }[dialect]
+        }[summary["dialect"]]
 
-    inserted_rows = len(df)
+    inserted_rows = summary.get("rows", 0)
 
     engine = create_engine(build_dsn(sync=True))
     try:
-        if target_table != "auto":
-            if USE_COPY:
-                conflict_cols = (
-                    ("reimb_id",) if dialect == "reimbursements_report" else None
-                )
-                copy_df_via_temp(
-                    engine,
-                    df,
-                    target_table=target_table,
-                    target_schema=None,
-                    columns=list(df.columns),
-                    conflict_cols=conflict_cols,
-                    analyze_after=False,
-                )
-            else:
-                with engine.begin() as conn:
-                    df.to_sql(target_table, conn, if_exists="append", index=False)
         with engine.begin() as conn:
             load_id = _log_load(
                 conn,
