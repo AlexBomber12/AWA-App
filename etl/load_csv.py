@@ -13,8 +13,12 @@ from sqlalchemy import create_engine
 
 from services.common.dsn import build_dsn
 from services.etl.dialects import (
+    amazon_ads_sp_cost,
+    amazon_fee_preview,
+    amazon_inventory_ledger,
     amazon_reimbursements,
     amazon_returns,
+    amazon_settlements,
     normalise_headers,
     schemas,
 )
@@ -91,6 +95,33 @@ def import_file(
         elif amazon_reimbursements.detect(cols):
             dialect = "reimbursements_report"
             df = amazon_reimbursements.normalise(df)
+        elif amazon_fee_preview.detect(cols):
+            dialect = "fee_preview_report"
+            df = amazon_fee_preview.normalise(df)
+        elif amazon_inventory_ledger.detect(cols):
+            dialect = "inventory_ledger_report"
+            df = amazon_inventory_ledger.normalise(df)
+        elif amazon_ads_sp_cost.detect(cols):
+            dialect = "ads_sp_cost_daily_report"
+            df = amazon_ads_sp_cost.normalise(df)
+        elif amazon_settlements.detect(cols):
+            dialect = "settlements_txn_report"
+            df = amazon_settlements.normalise(df)
+        else:
+            raise RuntimeError("Unknown report: cannot detect dialect")
+    else:
+        if dialect == "returns_report":
+            df = amazon_returns.normalise(df)
+        elif dialect == "reimbursements_report":
+            df = amazon_reimbursements.normalise(df)
+        elif dialect == "fee_preview_report":
+            df = amazon_fee_preview.normalise(df)
+        elif dialect == "inventory_ledger_report":
+            df = amazon_inventory_ledger.normalise(df)
+        elif dialect == "ads_sp_cost_daily_report":
+            df = amazon_ads_sp_cost.normalise(df)
+        elif dialect == "settlements_txn_report":
+            df = amazon_settlements.normalise(df)
         else:
             raise RuntimeError("Unknown report: cannot detect dialect")
     if celery_update:
@@ -103,6 +134,10 @@ def import_file(
     target_table = {
         "returns_report": "returns_raw",
         "reimbursements_report": "reimbursements_raw",
+        "fee_preview_report": amazon_fee_preview.TARGET_TABLE,
+        "inventory_ledger_report": amazon_inventory_ledger.TARGET_TABLE,
+        "ads_sp_cost_daily_report": amazon_ads_sp_cost.TARGET_TABLE,
+        "settlements_txn_report": amazon_settlements.TARGET_TABLE,
     }[dialect]
 
     idempotent = os.getenv("INGEST_IDEMPOTENT", "true").lower() in ("1", "true", "yes")
@@ -135,14 +170,32 @@ def import_file(
                         "warnings": warnings,
                     }
 
-        conflict_cols = ("reimb_id",) if dialect == "reimbursements_report" else None
+        columns = {
+            "returns_report": list(df.columns),
+            "reimbursements_report": list(df.columns),
+            "fee_preview_report": amazon_fee_preview.TARGET_COLUMNS,
+            "inventory_ledger_report": amazon_inventory_ledger.TARGET_COLUMNS,
+            "ads_sp_cost_daily_report": amazon_ads_sp_cost.TARGET_COLUMNS,
+            "settlements_txn_report": amazon_settlements.TARGET_COLUMNS,
+        }[dialect]
+
+        conflict_cols: tuple[str, ...] | None
+        if dialect == "reimbursements_report":
+            conflict_cols = ("reimb_id",)
+        elif dialect == "ads_sp_cost_daily_report" and df["keyword_id"].notna().all():
+            conflict_cols = amazon_ads_sp_cost.CONFLICT_COLS
+        elif dialect == "settlements_txn_report" and df["transaction_id"].notna().all():
+            conflict_cols = amazon_settlements.CONFLICT_COLS
+        else:
+            conflict_cols = None
+
         if USE_COPY:
             copy_df_via_temp(
                 engine,
                 df,
                 target_table=target_table,
                 target_schema=None,
-                columns=list(df.columns),
+                columns=columns,
                 conflict_cols=conflict_cols,
                 analyze_after=False,
                 connection=conn,
