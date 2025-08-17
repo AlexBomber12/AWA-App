@@ -3,11 +3,10 @@ from __future__ import annotations
 import shutil
 import tempfile
 from pathlib import Path
-from typing import Dict, Optional
-
-from fastapi import APIRouter, File, HTTPException, Request, UploadFile
+from typing import Any, Dict, Optional
 
 from celery import states
+from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 
 from services.ingest.celery_app import celery_app
 from services.ingest.tasks import task_import_file
@@ -39,9 +38,7 @@ async def submit_ingest(
             shutil.copyfileobj(file.file, f)
         uri = f"file://{tmp_path}"
     async_result = task_import_file.apply_async(
-        args=[uri],
-        kwargs={"report_type": report_type or None},
-        queue="ingest",
+        args=[uri], kwargs={"report_type": report_type or None}, queue="ingest"
     )
     return {"task_id": async_result.id}
 

@@ -4,9 +4,10 @@ import os
 import shutil
 import tempfile
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 from celery import states
+from celery.exceptions import Ignore
 from celery.utils.log import get_task_logger
 
 from .celery_app import celery_app
@@ -16,6 +17,7 @@ logger = get_task_logger(__name__)
 
 def _download_minio_to_tmp(uri: str) -> Path:
     from urllib.parse import urlparse
+
     from minio import Minio
 
     parsed = urlparse(uri)
@@ -25,7 +27,9 @@ def _download_minio_to_tmp(uri: str) -> Path:
     secure = os.getenv("MINIO_SECURE", "false").lower() in ("1", "true", "yes")
     access_key = os.getenv("MINIO_ACCESS_KEY")
     secret_key = os.getenv("MINIO_SECRET_KEY")
-    client = Minio(endpoint, access_key=access_key, secret_key=secret_key, secure=secure)
+    client = Minio(
+        endpoint, access_key=access_key, secret_key=secret_key, secure=secure
+    )
     tmpdir = Path(tempfile.mkdtemp(prefix="ingest_"))
     dst = tmpdir / Path(key).name
     client.fget_object(bucket, key, str(dst))
@@ -41,7 +45,9 @@ def _resolve_uri_to_path(uri: str) -> Path:
 
 
 @celery_app.task(name="ingest.import_file", bind=True)
-def task_import_file(self, uri: str, report_type: Optional[str] = None) -> Dict[str, Any]:
+def task_import_file(
+    self, uri: str, report_type: Optional[str] = None
+) -> Dict[str, Any]:
     """Import a file into Postgres using existing ETL pipeline."""
 
     self.update_state(state=states.STARTED, meta={"stage": "resolve_uri"})
@@ -68,7 +74,7 @@ def task_import_file(self, uri: str, report_type: Optional[str] = None) -> Dict[
         logger.exception("task_import_file failed for %s", uri)
         meta = {"status": "error", "error": str(exc)}
         self.update_state(state=states.FAILURE, meta=meta)
-        return meta
+        raise Ignore()
     finally:
         if tmp_dir and tmp_dir.exists():
             shutil.rmtree(tmp_dir, ignore_errors=True)

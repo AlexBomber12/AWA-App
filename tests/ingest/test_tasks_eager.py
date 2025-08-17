@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import tempfile
+from importlib import reload
 from pathlib import Path
 
 
@@ -9,7 +10,11 @@ def test_task_import_file_eager(monkeypatch) -> None:
     monkeypatch.setenv("CELERY_BROKER_URL", "memory://")
     monkeypatch.setenv("CELERY_RESULT_BACKEND", "cache+memory://")
     monkeypatch.setenv("CELERY_TASK_STORE_EAGER_RESULT", "true")
-    from services.ingest.tasks import task_import_file
+    import services.ingest.celery_app as celery_module
+    import services.ingest.tasks as tasks_module
+
+    reload(celery_module)
+    task_import_file = reload(tasks_module).task_import_file
 
     tmp_dir = Path(tempfile.mkdtemp(prefix="ingest_"))
     file_path = tmp_dir / "data.csv"
