@@ -46,7 +46,7 @@ def _resolve_uri_to_path(uri: str) -> Path:
 
 @celery_app.task(name="ingest.import_file", bind=True)
 def task_import_file(
-    self, uri: str, report_type: Optional[str] = None
+    self, uri: str, report_type: Optional[str] = None, force: bool = False
 ) -> Dict[str, Any]:
     """Import a file into Postgres using existing ETL pipeline."""
 
@@ -64,10 +64,12 @@ def task_import_file(
             str(local_path),
             report_type=report_type,
             celery_update=lambda m: self.update_state(state=states.STARTED, meta=m),
+            force=force,
         )
-        summary: Dict[str, Any] = {"status": "success"}
+        summary: Dict[str, Any] = {}
         if isinstance(result, dict):
             summary.update(result)
+        summary.setdefault("status", "success")
         self.update_state(state=states.SUCCESS, meta=summary)
         return summary
     except Exception as exc:  # pragma: no cover - defensive

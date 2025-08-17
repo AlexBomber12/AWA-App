@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 
 from celery import Celery
+from celery.schedules import crontab
 
 
 def make_celery() -> Celery:
@@ -38,3 +39,26 @@ def make_celery() -> Celery:
 
 
 celery_app = make_celery()
+
+if os.getenv("SCHEDULE_NIGHTLY_MAINTENANCE", "true").lower() in (
+    "1",
+    "true",
+    "yes",
+):
+    cron = os.getenv("NIGHTLY_MAINTENANCE_CRON", "30 2 * * *").split()
+    celery_app.conf.beat_schedule = {
+        "nightly-maintenance": {
+            "task": "ingest.maintenance_nightly",
+            "schedule": crontab(
+                minute=cron[0],
+                hour=cron[1],
+                day_of_month=cron[2],
+                month_of_year=cron[3],
+                day_of_week=cron[4],
+            ),
+        }
+    }
+
+# ensure tasks are registered
+import services.ingest.tasks  # noqa: F401
+import services.ingest.maintenance  # noqa: F401
