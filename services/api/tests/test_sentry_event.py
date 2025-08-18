@@ -1,8 +1,8 @@
 import os
+import uuid
 
 import sentry_sdk
 from fastapi.testclient import TestClient
-import uuid
 
 # set env before importing app so init runs
 os.environ["SENTRY_DSN"] = "http://public@selfhosted.invalid/1"
