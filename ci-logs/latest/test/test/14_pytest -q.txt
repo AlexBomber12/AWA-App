@@ -1,159 +1,159 @@
-﻿2025-08-18T21:32:00.5164290Z ##[group]Run pytest -q --cov=services
-2025-08-18T21:32:00.5164706Z [36;1mpytest -q --cov=services[0m
-2025-08-18T21:32:00.5207687Z shell: /usr/bin/bash -e {0}
-2025-08-18T21:32:00.5207988Z env:
-2025-08-18T21:32:00.5208262Z   REDIS_URL: redis://localhost:6379/0
-2025-08-18T21:32:00.5208610Z   RATE_LIMIT_DEFAULT: 100/minute
-2025-08-18T21:32:00.5208915Z   TRUST_X_FORWARDED: 1
-2025-08-18T21:32:00.5209186Z   PG_USER: postgres
-2025-08-18T21:32:00.5209434Z   PG_PASSWORD: pass
-2025-08-18T21:32:00.5209672Z   PG_DATABASE: awa
-2025-08-18T21:32:00.5209914Z   PG_HOST: localhost
-2025-08-18T21:32:00.5210156Z   PG_PORT: 5432
-2025-08-18T21:32:00.5210668Z   PG_SYNC_DSN: ***localhost:5432/awa
-2025-08-18T21:32:00.5211185Z   PG_ASYNC_DSN: ***localhost:5432/awa
-2025-08-18T21:32:00.5211678Z   DATABASE_URL: ***localhost:5432/awa
-2025-08-18T21:32:00.5212008Z   DATA_DIR: /home/runner/work/_temp/awa-data
-2025-08-18T21:32:00.5212334Z   ENABLE_LIVE: 0
-2025-08-18T21:32:00.5212560Z   TESTING: 1
-2025-08-18T21:32:00.5225998Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.11/x64
-2025-08-18T21:32:00.5226772Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.11/x64/lib/pkgconfig
-2025-08-18T21:32:00.5227389Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.11/x64
-2025-08-18T21:32:00.5227862Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.11/x64
-2025-08-18T21:32:00.5228341Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.11/x64
-2025-08-18T21:32:00.5229023Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.11/x64/lib
-2025-08-18T21:32:00.5229424Z   POSTGRES_USER: postgres
-2025-08-18T21:32:00.5229706Z   POSTGRES_PASSWORD: pass
-2025-08-18T21:32:00.5229966Z   POSTGRES_DB: awa
-2025-08-18T21:32:00.5230206Z   LLM_PROVIDER: lan
-2025-08-18T21:32:00.5230480Z   LLM_BASE_URL: http://localhost:8000
-2025-08-18T21:32:00.5230796Z ##[endgroup]
-2025-08-18T21:32:32.3476465Z ........s.............................sssssss........................... [ 46%]
-2025-08-18T21:33:04.5158200Z ..............................................F......................... [ 92%]
-2025-08-18T21:33:05.2224789Z ...........                                                              [100%]
-2025-08-18T21:33:05.2225903Z =================================== FAILURES ===================================
-2025-08-18T21:33:05.2227152Z _______________ test_unhandled_exception_is_captured_and_tagged ________________
-2025-08-18T21:33:05.2227977Z 
-2025-08-18T21:33:05.2228819Z monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f29301c3a70>
-2025-08-18T21:33:05.2229632Z 
-2025-08-18T21:33:05.2230030Z     def test_unhandled_exception_is_captured_and_tagged(monkeypatch):
-2025-08-18T21:33:05.2230718Z         # install dummy transport
-2025-08-18T21:33:05.2231215Z         hub = sentry_sdk.Hub.current
-2025-08-18T21:33:05.2231714Z         if hub.client is not None:
-2025-08-18T21:33:05.2232370Z             hub.client.transport = DummyTransport(hub.client.options)
-2025-08-18T21:33:05.2233199Z     
-2025-08-18T21:33:05.2233560Z         # inject a failing route
-2025-08-18T21:33:05.2233972Z         def boom():
-2025-08-18T21:33:05.2234409Z             raise RuntimeError("boom")
-2025-08-18T21:33:05.2234838Z     
-2025-08-18T21:33:05.2235287Z         app.add_api_route("/__boom", boom, methods=["GET"])
-2025-08-18T21:33:05.2235797Z     
-2025-08-18T21:33:05.2236328Z         with TestClient(app, raise_server_exceptions=False) as client:
-2025-08-18T21:33:05.2237174Z             r = client.get("/__boom", headers={"X-Request-ID": "test-rid-123"})
-2025-08-18T21:33:05.2237843Z             assert r.status_code == 500
-2025-08-18T21:33:05.2238276Z     
-2025-08-18T21:33:05.2238618Z         # verify captured event with tag
-2025-08-18T21:33:05.2238974Z         tr = hub.client.transport
-2025-08-18T21:33:05.2239326Z         assert isinstance(tr, DummyTransport)
-2025-08-18T21:33:05.2239682Z         assert len(tr.captured) >= 1
-2025-08-18T21:33:05.2240014Z         event = tr.captured[-1]
-2025-08-18T21:33:05.2240487Z >       assert event.get("tags", {}).get("request_id") == "test-rid-123"
-2025-08-18T21:33:05.2241123Z E       AssertionError: assert '07e17a34f3fd...866fcf4882211' == 'test-rid-123'
-2025-08-18T21:33:05.2241884Z E         
-2025-08-18T21:33:05.2242127Z E         - test-rid-123
-2025-08-18T21:33:05.2242462Z E         + 07e17a34f3fd442f8a0866fcf4882211
-2025-08-18T21:33:05.2242842Z 
-2025-08-18T21:33:05.2243136Z services/api/tests/test_sentry_event.py:65: AssertionError
-2025-08-18T21:33:05.2243738Z ------------------------------ Captured log call -------------------------------
-2025-08-18T21:33:05.2244773Z WARNING  asgi_correlation_id:middleware.py:74 Generated new request ID (07e17a34f3fd442f8a0866fcf4882211), since request header value failed validation
-2025-08-18T21:33:05.7591906Z ERROR    services.api.errors:errors.py:57 {"event": "unhandled_error", "request_id": "07e17a34f3fd442f8a0866fcf4882211", "level": "error", "timestamp": "2025-08-18T21:33:03.645904Z", "exception": [{"exc_type": "RuntimeError", "exc_value": "boom", "syntax_error": null, "is_cause": false, "frames": [{"filename": "/opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages/starlette/middleware/errors.py", "lineno": 164, "name": "__call__", "line": "", "locals": {"self": "<starlette.middleware.errors.ServerErrorMiddleware object at 0x7f29304cad80>", "scope": "\"{'type': 'http', 'http_version': '1.1', 'method': 'GET', 'path': '/__boom', 'raw\"+1672", "receive": "'<function _enable_span_for_middleware.<locals>._create_span_call.<locals>._sentr'+28", "send": "'<function _enable_span_for_middleware.<locals>._create_span_call.<locals>._sentr'+25", "_send": "<function ServerErrorMiddleware.__call__.<locals>._send at 0x7f2930195080>", "exc": "RuntimeError('boom')", "request": "<starlette.requests.Request object at 0x7f29301b7500>", "response_started": "False"}}, {"filename": "/opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages/sentry_sdk/integrations/starlette.py", "lineno": 199, "name": "_create_span_call", "line": "", "locals": {"app": "'CorrelationIdMiddleware(app=<starlette.middleware.exceptions.ExceptionMiddleware'+286", "scope": "\"{'type': 'http', 'http_version': '1.1', 'method': 'GET', 'path': '/__boom', 'raw\"+1672", "receive": "'<function _enable_span_for_middleware.<locals>._create_span_call.<locals>._sentr'+28", "send": "<function ServerErrorMiddleware.__call__.<locals>._send at 0x7f2930195080>", "kwargs": "{}", "integration": "'<sentry_sdk.integrations.starlette.StarletteIntegration object at 0x7f29303b9c10'+1", "name": "None", "source": "route", "middleware_span": "\"<Span(op='middleware.starlette', description:'CorrelationIdMiddleware', trace_id\"+145", "_sentry_receive": "'<function _enable_span_for_middleware.<locals>._create_span_call.<locals>._sentr'+28", "receive_name": "_sentry_receive", "receive_patched": "True", "new_receive": "'<function _enable_span_for_middleware.<locals>._create_span_call.<locals>._sentr'+28", "_sentry_send": "'<function _enable_span_for_middleware.<locals>._create_span_call.<locals>._sentr'+25", "send_name": "_send", "send_patched": "False", "new_send": "'<function _enable_span_for_middleware.<locals>._create_span_call.<locals>._sentr'+25", "middleware_name": "CorrelationIdMiddleware", "old_call": "<function CorrelationIdMiddleware.__call__ at 0x7f2932837d80>"}}, {"filename": "/opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages/asgi_correlation_id/middleware.py", "lineno": 90, "name": "__call__", "line": "", "locals": {"self": "'CorrelationIdMiddleware(app=<starlette.middleware.exceptions.ExceptionMiddleware'+286", "scope": "\"{'type': 'http', 'http_version': '1.1', 'method': 'GET', 'path': '/__boom', 'raw\"+1672", "receive": "'<function _enable_span_for_middleware.<locals>._create_span_call.<locals>._sentr'+28", "send": "'<function _enable_span_for_middleware.<locals>._create_span_call.<locals>._sentr'+25", "headers": "\"MutableHeaders({'host': 'testserver', 'accept': '*/*', 'accept-encoding': 'gzip,\"+119", "header_value": "test-rid-123", "validation_failed": "True", "id_value": "07e17a34f3fd442f8a0866fcf4882211", "handle_outgoing_request": "'<function CorrelationIdMiddleware.__call__.<locals>.handle_outgoing_request at 0'+14"}}, {"filename": "/opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages/sentry_sdk/integrations/starlette.py", "lineno": 297, "name": "_sentry_exceptionmiddleware_call", "line": "", "locals": {"self": "<starlette.middleware.exceptions.ExceptionMiddleware object at 0x7f29304cb440>", "scope": "\"{'type': 'http', 'http_version': '1.1', 'method': 'GET', 'path': '/__boom', 'raw\"+1672", "receive": "'<function _enable_span_for_middleware.<locals>._create_span_call.<locals>._sentr'+28", "send": "'<function CorrelationIdMiddleware.__call__.<locals>.handle_outgoing_request at 0'+14", "old_call": "'<function _enable_span_for_middleware.<locals>._create_span_call at 0x7f29301ed8'+3"}}, {"filename": "/opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages/sentry_sdk/integrations/starlette.py", "lineno": 199, "name": "_create_span_call", "line": "", "locals": {"app": "<starlette.middleware.exceptions.ExceptionMiddleware object at 0x7f29304cb440>", "scope": "\"{'type': 'http', 'http_version': '1.1', 'method': 'GET', 'path': '/__boom', 'raw\"+1672", "receive": "'<function _enable_span_for_middleware.<locals>._create_span_call.<locals>._sentr'+28", "send": "'<function CorrelationIdMiddleware.__call__.<locals>.handle_outgoing_request at 0'+14", "kwargs": "{}", "integration": "'<sentry_sdk.integrations.starlette.StarletteIntegration object at 0x7f29303b9c10'+1", "name": "None", "source": "route", "middleware_span": "\"<Span(op='middleware.starlette', description:'ExceptionMiddleware', trace_id='fc\"+141", "_sentry_receive": "'<function _enable_span_for_middleware.<locals>._create_span_call.<locals>._sentr'+28", "receive_name": "_sentry_receive", "receive_patched": "True", "new_receive": "'<function _enable_span_for_middleware.<locals>._create_span_call.<locals>._sentr'+28", "_sentry_send": "'<function _enable_span_for_middleware.<locals>._create_span_call.<locals>._sentr'+25", "send_name": "handle_outgoing_request", "send_patched": "False", "new_send": "'<function _enable_span_for_middleware.<locals>._create_span_call.<locals>._sentr'+25", "middleware_name": "ExceptionMiddleware", "old_call": "<function ExceptionMiddleware.__call__ at 0x7f29421c1a80>"}}, {"filename": "/opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages/starlette/middleware/exceptions.py", "lineno": 63, "name": "__call__", "line": "", "locals": {"self": "<starlette.middleware.exceptions.ExceptionMiddleware object at 0x7f29304cb440>", "scope": "\"{'type': 'http', 'http_version': '1.1', 'method': 'GET', 'path': '/__boom', 'raw\"+1672", "receive": "'<function _enable_span_for_middleware.<locals>._create_span_call.<locals>._sentr'+28", "send": "'<function _enable_span_for_middleware.<locals>._create_span_call.<locals>._sentr'+25", "conn": "<starlette.requests.Request object at 0x7f2928f30b90>"}}, {"filename": "/opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages/starlette/_exception_handler.py", "lineno": 53, "name": "wrapped_app", "line": "", "locals": {"scope": "\"{'type': 'http', 'http_version': '1.1', 'method': 'GET', 'path': '/__boom', 'raw\"+1672", "receive": "'<function _enable_span_for_middleware.<locals>._create_span_call.<locals>._sentr'+28", "send": "'<function _enable_span_for_middleware.<locals>._create_span_call.<locals>._sentr'+25", "sender": "'<function wrap_app_handling_exceptions.<locals>.wrapped_app.<locals>.sender at 0'+14", "handler": "None", "response_started": "False", "app": "<fastapi.routing.APIRouter object at 0x7f29320439b0>", "conn": "<starlette.requests.Request object at 0x7f2928f30b90>", "exception_handlers": "\"{<class 'starlette.exceptions.HTTPException'>: <function patch_exception_middlew\"+822", "status_handlers": "{}"}}, {"filename": "/opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages/starlette/_exception_handler.py", "lineno": 42, "name": "wrapped_app", "line": "", "locals": {"scope": "\"{'type': 'http', 'http_version': '1.1', 'method': 'GET', 'path': '/__boom', 'raw\"+1672", "receive": "'<function _enable_span_for_middleware.<locals>._create_span_call.<locals>._sentr'+28", "send": "'<function _enable_span_for_middleware.<locals>._create_span_call.<locals>._sentr'+25", "sender": "'<function wrap_app_handling_exceptions.<locals>.wrapped_app.<locals>.sender at 0'+14", "handler": "None", "response_started": "False", "app": "<fastapi.routing.APIRouter object at 0x7f29320439b0>", "conn": "<starlette.requests.Request object at 0x7f2928f30b90>", "exception_handlers": "\"{<class 'starlette.exceptions.HTTPException'>: <function patch_exception_middlew\"+822", "status_handlers": "{}"}}, {"filename": "/opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages/starlette/routing.py", "lineno": 716, "name": "__call__", "line": "", "locals": {"self": "<fastapi.routing.APIRouter object at 0x7f29320439b0>", "scope": "\"{'type': 'http', 'http_version': '1.1', 'method': 'GET', 'path': '/__boom', 'raw\"+1672", "receive": "'<function _enable_span_for_middleware.<locals>._create_span_call.<locals>._sentr'+28", "send": "'<function wrap_app_handling_exceptions.<locals>.wrapped_app.<locals>.sender at 0'+14"}}, {"filename": "/opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages/starlette/routing.py", "lineno": 736, "name": "app", "line": "", "locals": {"self": "<fastapi.routing.APIRouter object at 0x7f29320439b0>", "scope": "\"{'type': 'http', 'http_version': '1.1', 'method': 'GET', 'path': '/__boom', 'raw\"+1672", "receive": "'<function _enable_span_for_middleware.<locals>._create_span_call.<locals>._sentr'+28", "send": "'<function wrap_app_handling_exceptions.<locals>.wrapped_app.<locals>.sender at 0'+14", "partial": "None", "route": "APIRoute(path='/__boom', name='boom', methods=['GET'])", "match": "<Match.FULL: 2>", "child_scope": "\"{'endpoint': <function test_unhandled_exception_is_captured_and_tagged.<locals>.\"+108"}}, {"filename": "/opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages/starlette/routing.py", "lineno": 290, "name": "handle", "line": "", "locals": {"self": "APIRoute(path='/__boom', name='boom', methods=['GET'])", "scope": "\"{'type': 'http', 'http_version': '1.1', 'method': 'GET', 'path': '/__boom', 'raw\"+1672", "receive": "'<function _enable_span_for_middleware.<locals>._create_span_call.<locals>._sentr'+28", "send": "'<function wrap_app_handling_exceptions.<locals>.wrapped_app.<locals>.sender at 0'+14"}}, {"filename": "/opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages/starlette/routing.py", "lineno": 78, "name": "app", "line": "", "locals": {"scope": "\"{'type': 'http', 'http_version': '1.1', 'method': 'GET', 'path': '/__boom', 'raw\"+1672", "receive": "'<function _enable_span_for_middleware.<locals>._create_span_call.<locals>._sentr'+28", "send": "'<function wrap_app_handling_exceptions.<locals>.wrapped_app.<locals>.sender at 0'+14", "app": "<function request_response.<locals>.app.<locals>.app at 0x7f29301956c0>", "request": "<starlette.requests.Request object at 0x7f2928f30890>", "f": "'<function patch_get_request_handler.<locals>._sentry_get_request_handler.<locals'+32"}}, {"filename": "/opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages/starlette/_exception_handler.py", "lineno": 53, "name": "wrapped_app", "line": "", "locals": {"scope": "\"{'type': 'http', 'http_version': '1.1', 'method': 'GET', 'path': '/__boom', 'raw\"+1672", "receive": "'<function _enable_span_for_middleware.<locals>._create_span_call.<locals>._sentr'+28", "send": "'<function wrap_app_handling_exceptions.<locals>.wrapped_app.<locals>.sender at 0'+14", "sender": "'<function wrap_app_handling_exceptions.<locals>.wrapped_app.<locals>.sender at 0'+14", "handler": "None", "response_started": "False", "app": "<function request_response.<locals>.app.<locals>.app at 0x7f29301956c0>", "conn": "<starlette.requests.Request object at 0x7f2928f30890>", "exception_handlers": "\"{<class 'starlette.exceptions.HTTPException'>: <function patch_exception_middlew\"+822", "status_handlers": "{}"}}, {"filename": "/opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages/starlette/_exception_handler.py", "lineno": 42, "name": "wrapped_app", "line": "", "locals": {"scope": "\"{'type': 'http', 'http_version': '1.1', 'method': 'GET', 'path': '/__boom', 'raw\"+1672", "receive": "'<function _enable_span_for_middleware.<locals>._create_span_call.<locals>._sentr'+28", "send": "'<function wrap_app_handling_exceptions.<locals>.wrapped_app.<locals>.sender at 0'+14", "sender": "'<function wrap_app_handling_exceptions.<locals>.wrapped_app.<locals>.sender at 0'+14", "handler": "None", "response_started": "False", "app": "<function request_response.<locals>.app.<locals>.app at 0x7f29301956c0>", "conn": "<starlette.requests.Request object at 0x7f2928f30890>", "exception_handlers": "\"{<class 'starlette.exceptions.HTTPException'>: <function patch_exception_middlew\"+822", "status_handlers": "{}"}}, {"filename": "/opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages/starlette/routing.py", "lineno": 75, "name": "app", "line": "", "locals": {"scope": "\"{'type': 'http', 'http_version': '1.1', 'method': 'GET', 'path': '/__boom', 'raw\"+1672", "receive": "'<function _enable_span_for_middleware.<locals>._create_span_call.<locals>._sentr'+28", "send": "'<function wrap_app_handling_exceptions.<locals>.wrapped_app.<locals>.sender at 0'+14", "f": "'<function patch_get_request_handler.<locals>._sentry_get_request_handler.<locals'+32", "request": "<starlette.requests.Request object at 0x7f2928f30890>"}}, {"filename": "/opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages/sentry_sdk/integrations/fastapi.py", "lineno": 137, "name": "_sentry_app", "line": "", "locals": {"args": "(<starlette.requests.Request object at 0x7f2928f30890>,)", "kwargs": "{}", "integration": "<sentry_sdk.integrations.fastapi.FastApiIntegration object at 0x7f2930353170>", "request": "<starlette.requests.Request object at 0x7f2928f30890>", "sentry_scope": "<Scope id=0x7f293014bd80 name=fastapi type=ScopeType.ISOLATION>", "extractor": "'<sentry_sdk.integrations.starlette.StarletteRequestExtractor object at 0x7f2928f'+6", "_make_request_event_processor": "'<function patch_get_request_handler.<locals>._sentry_get_request_handler.<locals'+71", "info": "{}", "old_app": "<function get_request_handler.<locals>.app at 0x7f2930160400>"}}, {"filename": "/opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages/fastapi/routing.py", "lineno": 302, "name": "app", "line": "", "locals": {"request": "<starlette.requests.Request object at 0x7f2928f30890>", "response": "None", "file_stack": "<contextlib.AsyncExitStack object at 0x7f2928f311c0>", "body": "None", "errors": "[]", "async_exit_stack": "<contextlib.AsyncExitStack object at 0x7f2928f313a0>", "solved_result": "'SolvedDependency(values={}, errors=[], background_tasks=None, response=<starlett'+142", "actual_response_class": "<class 'starlette.responses.JSONResponse'>", "body_field": "None", "dependant": "'Dependant(path_params=[], query_params=[], header_params=[], cookie_params=[], b'+1043", "dependency_overrides_provider": "<fastapi.applications.FastAPI object at 0x7f2932042480>", "embed_body_fields": "False", "is_body_form": "None", "is_coroutine": "False", "response_field": "None", "response_model_by_alias": "True", "response_model_exclude": "None", "response_model_exclude_defaults": "False", "response_model_exclude_none": "False", "response_model_exclude_unset": "False", "response_model_include": "None", "status_code": "None"}}, {"filename": "/opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages/fastapi/routing.py", "lineno": 215, "name": "run_endpoint_function", "line": "", "locals": {"dependant": "'Dependant(path_params=[], query_params=[], header_params=[], cookie_params=[], b'+1043", "values": "{}", "is_coroutine": "False"}}, {"filename": "/opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages/starlette/concurrency.py", "lineno": 38, "name": "run_in_threadpool", "line": "", "locals": {"func": "'functools.partial(<function test_unhandled_exception_is_captured_and_tagged.<loc'+29", "args": "()", "kwargs": "{}"}}, {"filename": "/opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages/anyio/to_thread.py", "lineno": 56, "name": "run_sync", "line": "", "locals": {"func": "'functools.partial(<function test_unhandled_exception_is_captured_and_tagged.<loc'+29", "abandon_on_cancel": "False", "cancellable": "None", "limiter": "None", "args": "()"}}, {"filename": "/opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages/anyio/_backends/_asyncio.py", "lineno": 2476, "name": "run_sync_in_worker_thread", "line": "", "locals": {"cls": "<class 'anyio._backends._asyncio.AsyncIOBackend'>", "func": "'functools.partial(<function test_unhandled_exception_is_captured_and_tagged.<loc'+29", "args": "()", "abandon_on_cancel": "False", "limiter": "None", "idle_workers": "deque([<WorkerThread(AnyIO worker thread, started daemon 139813718058688)>])", "workers": "{<WorkerThread(AnyIO worker thread, started daemon 139813718058688)>}", "scope": "<anyio._backends._asyncio.CancelScope object at 0x7f293019eea0>", "future": "<Future finished exception=RuntimeError('boom')>", "root_task": "\"<Task pending name='anyio.from_thread.start_blocking_portal.<locals>.run_portal'\"+351", "worker": "<WorkerThread(AnyIO worker thread, started daemon 139813718058688)>", "context": "<_contextvars.Context object at 0x7f29304d1a80>", "worker_scope": "<anyio._backends._asyncio.CancelScope object at 0x7f29301d75f0>"}}, {"filename": "/opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages/anyio/_backends/_asyncio.py", "lineno": 967, "name": "run", "line": "", "locals": {"self": "<WorkerThread(AnyIO worker thread, started daemon 139813718058688)>"}}, {"filename": "/opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages/sentry_sdk/integrations/fastapi.py", "lineno": 93, "name": "_sentry_call", "line": "", "locals": {"args": "()", "kwargs": "{}", "current_scope": "<Scope id=0x7f293014adc0 name=None type=ScopeType.CURRENT>", "sentry_scope": "<Scope id=0x7f293014bd80 name=fastapi type=ScopeType.ISOLATION>", "old_call": "'<function test_unhandled_exception_is_captured_and_tagged.<locals>.boom at 0x7f2'+10"}}, {"filename": "/home/runner/work/AWA-App/AWA-App/services/api/tests/test_sentry_event.py", "lineno": 52, "name": "boom", "line": "", "locals": {}}]}]}
-2025-08-18T21:33:05.7641749Z Sentry is attempting to send 0 pending events
-2025-08-18T21:33:05.7642083Z Waiting up to True seconds
-2025-08-18T21:33:05.7642326Z Press Ctrl-C to quit
-2025-08-18T21:33:05.7642767Z =============================== warnings summary ===============================
-2025-08-18T21:33:05.7643139Z services/alert_bot/tests/test_smoke.py:5
-2025-08-18T21:33:05.7644427Z   /home/runner/work/AWA-App/AWA-App/services/alert_bot/tests/test_smoke.py:5: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
-2025-08-18T21:33:05.7645571Z     import pkg_resources  # noqa: F401
-2025-08-18T21:33:05.7645754Z 
-2025-08-18T21:33:05.7645932Z tests/api/test_ingest_endpoints.py: 12 warnings
-2025-08-18T21:33:05.7646282Z tests/ingest/test_tasks_eager.py: 3 warnings
-2025-08-18T21:33:05.7646588Z tests/test_api_fast.py: 1 warning
-2025-08-18T21:33:05.7646868Z tests/test_health.py: 5 warnings
-2025-08-18T21:33:05.7647140Z tests/test_smoke.py: 5 warnings
-2025-08-18T21:33:05.7647427Z services/api/tests/test_cors.py: 1 warning
-2025-08-18T21:33:05.7647778Z services/api/tests/test_errors_json.py: 2 warnings
-2025-08-18T21:33:05.7648124Z services/api/tests/test_health.py: 1 warning
-2025-08-18T21:33:05.7648474Z services/api/tests/test_rate_limit.py: 122 warnings
-2025-08-18T21:33:05.7648836Z services/api/tests/test_sentry_event.py: 1 warning
-2025-08-18T21:33:05.7650335Z   /opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages/asgi_correlation_id/extensions/sentry.py:27: DeprecationWarning: sentry_sdk.configure_scope is deprecated and will be removed in the next major version. Please consult our migration guide to learn how to migrate to the new API: https://docs.sentry.io/platforms/python/migration/1.x-to-2.x#scope-configuring
-2025-08-18T21:33:05.7651813Z     with configure_scope() as scope:
-2025-08-18T21:33:05.7651983Z 
-2025-08-18T21:33:05.7652152Z tests/api/test_ingest_endpoints.py: 3 warnings
-2025-08-18T21:33:05.7652458Z tests/test_api_fast.py: 1 warning
-2025-08-18T21:33:05.7652839Z tests/test_health.py: 5 warnings
-2025-08-18T21:33:05.7653116Z tests/test_smoke.py: 5 warnings
-2025-08-18T21:33:05.7653411Z services/api/tests/test_cors.py: 3 warnings
-2025-08-18T21:33:05.7653758Z services/api/tests/test_errors_json.py: 2 warnings
-2025-08-18T21:33:05.7654097Z services/api/tests/test_health.py: 1 warning
-2025-08-18T21:33:05.7654437Z services/api/tests/test_rate_limit.py: 2 warnings
-2025-08-18T21:33:05.7654798Z services/api/tests/test_sentry_event.py: 1 warning
-2025-08-18T21:33:05.7655695Z   /opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages/fastapi_limiter/__init__.py:89: DeprecationWarning: Call to deprecated close. (Use aclose() instead) -- Deprecated since version 5.0.1.
-2025-08-18T21:33:05.7656464Z     await cls.redis.close()
-2025-08-18T21:33:05.7656607Z 
-2025-08-18T21:33:05.7656798Z tests/test_api_fast.py::test_health_endpoint
-2025-08-18T21:33:05.7657893Z   /home/runner/work/AWA-App/AWA-App/tests/test_api_fast.py:13: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
-2025-08-18T21:33:05.7659013Z     return datetime.datetime.utcnow()
-2025-08-18T21:33:05.7659185Z 
-2025-08-18T21:33:05.7659318Z tests/test_api_fast.py: 1 warning
-2025-08-18T21:33:05.7659592Z tests/test_health.py: 5 warnings
-2025-08-18T21:33:05.7659858Z tests/test_smoke.py: 5 warnings
-2025-08-18T21:33:05.7660134Z services/api/tests/test_cors.py: 1 warning
-2025-08-18T21:33:05.7660457Z services/api/tests/test_health.py: 1 warning
-2025-08-18T21:33:05.7660809Z services/api/tests/test_rate_limit.py: 102 warnings
-2025-08-18T21:33:05.7661968Z   /home/runner/work/AWA-App/AWA-App/services/api/routes/health.py:24: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
-2025-08-18T21:33:05.7663435Z     app_now = datetime.utcnow().replace(tzinfo=timezone.utc)
-2025-08-18T21:33:05.7663814Z 
-2025-08-18T21:33:05.7664047Z tests/test_health.py::test_health[0]
-2025-08-18T21:33:05.7664353Z tests/test_health.py::test_health[1]
-2025-08-18T21:33:05.7664638Z tests/test_health.py::test_health[2]
-2025-08-18T21:33:05.7664920Z tests/test_health.py::test_health[3]
-2025-08-18T21:33:05.7665198Z tests/test_health.py::test_health[4]
-2025-08-18T21:33:05.7666253Z   /home/runner/work/AWA-App/AWA-App/tests/test_health.py:22: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
-2025-08-18T21:33:05.7667232Z     return datetime.datetime.utcnow()
-2025-08-18T21:33:05.7667398Z 
-2025-08-18T21:33:05.7667537Z tests/test_smoke.py::test_health[0]
-2025-08-18T21:33:05.7667824Z tests/test_smoke.py::test_health[1]
-2025-08-18T21:33:05.7668122Z tests/test_smoke.py::test_health[2]
-2025-08-18T21:33:05.7668394Z tests/test_smoke.py::test_health[3]
-2025-08-18T21:33:05.7668677Z tests/test_smoke.py::test_health[4]
-2025-08-18T21:33:05.7669722Z   /home/runner/work/AWA-App/AWA-App/tests/test_smoke.py:32: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
-2025-08-18T21:33:05.7670678Z     return datetime.datetime.utcnow()
-2025-08-18T21:33:05.7670844Z 
-2025-08-18T21:33:05.7671074Z services/api/tests/test_cors.py::test_cors_simple_get_allowed
-2025-08-18T21:33:05.7672263Z   /home/runner/work/AWA-App/AWA-App/services/api/tests/test_cors.py:27: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
-2025-08-18T21:33:05.7673651Z     return datetime.datetime.utcnow()
-2025-08-18T21:33:05.7673821Z 
-2025-08-18T21:33:05.7674017Z services/api/tests/test_health.py::test_health_route
-2025-08-18T21:33:05.7675177Z   /home/runner/work/AWA-App/AWA-App/services/api/tests/test_health.py:14: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
-2025-08-18T21:33:05.7676197Z     return datetime.datetime.utcnow()
-2025-08-18T21:33:05.7676360Z 
-2025-08-18T21:33:05.7676537Z services/api/tests/test_rate_limit.py: 102 warnings
-2025-08-18T21:33:05.7677701Z   /home/runner/work/AWA-App/AWA-App/services/api/tests/test_rate_limit.py:33: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
-2025-08-18T21:33:05.7678739Z     return datetime.datetime.utcnow()
-2025-08-18T21:33:05.7679081Z 
-2025-08-18T21:33:05.7679410Z services/api/tests/test_sentry_event.py::test_unhandled_exception_is_captured_and_tagged
-2025-08-18T21:33:05.7680955Z   /home/runner/work/AWA-App/AWA-App/services/api/tests/test_sentry_event.py:46: SentryHubDeprecationWarning: `sentry_sdk.Hub` is deprecated and will be removed in a future major release. Please consult our 1.x to 2.x migration guide for details on how to migrate `Hub` usage to the new API: https://docs.sentry.io/platforms/python/migration/1.x-to-2.x
-2025-08-18T21:33:05.7682259Z     hub = sentry_sdk.Hub.current
-2025-08-18T21:33:05.7682418Z 
-2025-08-18T21:33:05.7682785Z -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-2025-08-18T21:33:05.7683260Z ================================ tests coverage ================================
-2025-08-18T21:33:05.7683720Z _______________ coverage: platform linux, python 3.12.11-final-0 _______________
-2025-08-18T21:33:05.7683977Z 
-2025-08-18T21:33:05.7684125Z Coverage XML written to file coverage.xml
-2025-08-18T21:33:05.7684522Z Required test coverage of 45% reached. Total coverage: 64.10%
-2025-08-18T21:33:05.7684953Z =========================== short test summary info ============================
-2025-08-18T21:33:05.7685818Z FAILED services/api/tests/test_sentry_event.py::test_unhandled_exception_is_captured_and_tagged - AssertionError: assert '07e17a34f3fd...866fcf4882211' == 'test-rid-123'
-2025-08-18T21:33:05.7686454Z   
-2025-08-18T21:33:05.7686620Z   - test-rid-123
-2025-08-18T21:33:05.7686847Z   + 07e17a34f3fd442f8a0866fcf4882211
-2025-08-18T21:33:06.2151315Z ##[error]Process completed with exit code 1.
+﻿2025-08-18T21:34:49.4771862Z ##[group]Run pytest -q --cov=services
+2025-08-18T21:34:49.4772225Z [36;1mpytest -q --cov=services[0m
+2025-08-18T21:34:49.4812545Z shell: /usr/bin/bash -e {0}
+2025-08-18T21:34:49.4812793Z env:
+2025-08-18T21:34:49.4813014Z   REDIS_URL: redis://localhost:6379/0
+2025-08-18T21:34:49.4813302Z   RATE_LIMIT_DEFAULT: 100/minute
+2025-08-18T21:34:49.4813558Z   TRUST_X_FORWARDED: 1
+2025-08-18T21:34:49.4813775Z   PG_USER: postgres
+2025-08-18T21:34:49.4813987Z   PG_PASSWORD: pass
+2025-08-18T21:34:49.4814200Z   PG_DATABASE: awa
+2025-08-18T21:34:49.4814413Z   PG_HOST: localhost
+2025-08-18T21:34:49.4814629Z   PG_PORT: 5432
+2025-08-18T21:34:49.4815060Z   PG_SYNC_DSN: ***localhost:5432/awa
+2025-08-18T21:34:49.4815501Z   PG_ASYNC_DSN: ***localhost:5432/awa
+2025-08-18T21:34:49.4815926Z   DATABASE_URL: ***localhost:5432/awa
+2025-08-18T21:34:49.4816212Z   DATA_DIR: /home/runner/work/_temp/awa-data
+2025-08-18T21:34:49.4816491Z   ENABLE_LIVE: 0
+2025-08-18T21:34:49.4816685Z   TESTING: 1
+2025-08-18T21:34:49.4816950Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.11/x64
+2025-08-18T21:34:49.4817424Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.11/x64/lib/pkgconfig
+2025-08-18T21:34:49.4817855Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.11/x64
+2025-08-18T21:34:49.4818257Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.11/x64
+2025-08-18T21:34:49.4818647Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.11/x64
+2025-08-18T21:34:49.4819037Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.11/x64/lib
+2025-08-18T21:34:49.4819373Z   POSTGRES_USER: postgres
+2025-08-18T21:34:49.4819717Z   POSTGRES_PASSWORD: pass
+2025-08-18T21:34:49.4819942Z   POSTGRES_DB: awa
+2025-08-18T21:34:49.4820141Z   LLM_PROVIDER: lan
+2025-08-18T21:34:49.4820375Z   LLM_BASE_URL: http://localhost:8000
+2025-08-18T21:34:49.4820640Z ##[endgroup]
+2025-08-18T21:35:18.5168620Z ........s.............................sssssss........................... [ 46%]
+2025-08-18T21:35:50.6824606Z ..............................................F......................... [ 92%]
+2025-08-18T21:35:51.3393457Z ...........                                                              [100%]
+2025-08-18T21:35:51.3394259Z =================================== FAILURES ===================================
+2025-08-18T21:35:51.3395049Z _______________ test_unhandled_exception_is_captured_and_tagged ________________
+2025-08-18T21:35:51.3395503Z 
+2025-08-18T21:35:51.3395966Z monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f0360544f20>
+2025-08-18T21:35:51.3396430Z 
+2025-08-18T21:35:51.3396798Z     def test_unhandled_exception_is_captured_and_tagged(monkeypatch):
+2025-08-18T21:35:51.3397417Z         # install dummy transport
+2025-08-18T21:35:51.3397886Z         hub = sentry_sdk.Hub.current
+2025-08-18T21:35:51.3398363Z         if hub.client is not None:
+2025-08-18T21:35:51.3398984Z             hub.client.transport = DummyTransport(hub.client.options)
+2025-08-18T21:35:51.3399929Z     
+2025-08-18T21:35:51.3400326Z         # inject a failing route
+2025-08-18T21:35:51.3400755Z         def boom():
+2025-08-18T21:35:51.3401221Z             raise RuntimeError("boom")
+2025-08-18T21:35:51.3401651Z     
+2025-08-18T21:35:51.3402093Z         app.add_api_route("/__boom", boom, methods=["GET"])
+2025-08-18T21:35:51.3402570Z     
+2025-08-18T21:35:51.3403058Z         with TestClient(app, raise_server_exceptions=False) as client:
+2025-08-18T21:35:51.3403788Z             r = client.get("/__boom", headers={"X-Request-ID": "test-rid-123"})
+2025-08-18T21:35:51.3404350Z             assert r.status_code == 500
+2025-08-18T21:35:51.3404730Z     
+2025-08-18T21:35:51.3405052Z         # verify captured event with tag
+2025-08-18T21:35:51.3405511Z         tr = hub.client.transport
+2025-08-18T21:35:51.3405987Z         assert isinstance(tr, DummyTransport)
+2025-08-18T21:35:51.3406460Z         assert len(tr.captured) >= 1
+2025-08-18T21:35:51.3406888Z         event = tr.captured[-1]
+2025-08-18T21:35:51.3407500Z >       assert event.get("tags", {}).get("request_id") == "test-rid-123"
+2025-08-18T21:35:51.3408295Z E       AssertionError: assert 'e40e93f4496a...e52a501bcd97c' == 'test-rid-123'
+2025-08-18T21:35:51.3409262Z E         
+2025-08-18T21:35:51.3409853Z E         - test-rid-123
+2025-08-18T21:35:51.3410351Z E         + e40e93f4496a4586904e52a501bcd97c
+2025-08-18T21:35:51.3410657Z 
+2025-08-18T21:35:51.3411074Z services/api/tests/test_sentry_event.py:65: AssertionError
+2025-08-18T21:35:51.3411890Z ------------------------------ Captured log call -------------------------------
+2025-08-18T21:35:51.3413346Z WARNING  asgi_correlation_id:middleware.py:74 Generated new request ID (e40e93f4496a4586904e52a501bcd97c), since request header value failed validation
+2025-08-18T21:35:51.8616116Z ERROR    services.api.errors:errors.py:57 {"event": "unhandled_error", "request_id": "e40e93f4496a4586904e52a501bcd97c", "level": "error", "timestamp": "2025-08-18T21:35:49.818519Z", "exception": [{"exc_type": "RuntimeError", "exc_value": "boom", "syntax_error": null, "is_cause": false, "frames": [{"filename": "/opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages/starlette/middleware/errors.py", "lineno": 164, "name": "__call__", "line": "", "locals": {"self": "<starlette.middleware.errors.ServerErrorMiddleware object at 0x7f036084b050>", "scope": "\"{'type': 'http', 'http_version': '1.1', 'method': 'GET', 'path': '/__boom', 'raw\"+1672", "receive": "'<function _enable_span_for_middleware.<locals>._create_span_call.<locals>._sentr'+28", "send": "'<function _enable_span_for_middleware.<locals>._create_span_call.<locals>._sentr'+25", "_send": "<function ServerErrorMiddleware.__call__.<locals>._send at 0x7f0360519080>", "exc": "RuntimeError('boom')", "request": "<starlette.requests.Request object at 0x7f03604a45c0>", "response_started": "False"}}, {"filename": "/opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages/sentry_sdk/integrations/starlette.py", "lineno": 199, "name": "_create_span_call", "line": "", "locals": {"app": "'CorrelationIdMiddleware(app=<starlette.middleware.exceptions.ExceptionMiddleware'+286", "scope": "\"{'type': 'http', 'http_version': '1.1', 'method': 'GET', 'path': '/__boom', 'raw\"+1672", "receive": "'<function _enable_span_for_middleware.<locals>._create_span_call.<locals>._sentr'+28", "send": "<function ServerErrorMiddleware.__call__.<locals>._send at 0x7f0360519080>", "kwargs": "{}", "integration": "'<sentry_sdk.integrations.starlette.StarletteIntegration object at 0x7f03606bb260'+1", "name": "None", "source": "route", "middleware_span": "\"<Span(op='middleware.starlette', description:'CorrelationIdMiddleware', trace_id\"+145", "_sentry_receive": "'<function _enable_span_for_middleware.<locals>._create_span_call.<locals>._sentr'+28", "receive_name": "_sentry_receive", "receive_patched": "True", "new_receive": "'<function _enable_span_for_middleware.<locals>._create_span_call.<locals>._sentr'+28", "_sentry_send": "'<function _enable_span_for_middleware.<locals>._create_span_call.<locals>._sentr'+25", "send_name": "_send", "send_patched": "False", "new_send": "'<function _enable_span_for_middleware.<locals>._create_span_call.<locals>._sentr'+25", "middleware_name": "CorrelationIdMiddleware", "old_call": "<function CorrelationIdMiddleware.__call__ at 0x7f0363c1bd80>"}}, {"filename": "/opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages/asgi_correlation_id/middleware.py", "lineno": 90, "name": "__call__", "line": "", "locals": {"self": "'CorrelationIdMiddleware(app=<starlette.middleware.exceptions.ExceptionMiddleware'+286", "scope": "\"{'type': 'http', 'http_version': '1.1', 'method': 'GET', 'path': '/__boom', 'raw\"+1672", "receive": "'<function _enable_span_for_middleware.<locals>._create_span_call.<locals>._sentr'+28", "send": "'<function _enable_span_for_middleware.<locals>._create_span_call.<locals>._sentr'+25", "headers": "\"MutableHeaders({'host': 'testserver', 'accept': '*/*', 'accept-encoding': 'gzip,\"+119", "header_value": "test-rid-123", "validation_failed": "True", "id_value": "e40e93f4496a4586904e52a501bcd97c", "handle_outgoing_request": "'<function CorrelationIdMiddleware.__call__.<locals>.handle_outgoing_request at 0'+14"}}, {"filename": "/opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages/sentry_sdk/integrations/starlette.py", "lineno": 297, "name": "_sentry_exceptionmiddleware_call", "line": "", "locals": {"self": "<starlette.middleware.exceptions.ExceptionMiddleware object at 0x7f036084baa0>", "scope": "\"{'type': 'http', 'http_version': '1.1', 'method': 'GET', 'path': '/__boom', 'raw\"+1672", "receive": "'<function _enable_span_for_middleware.<locals>._create_span_call.<locals>._sentr'+28", "send": "'<function CorrelationIdMiddleware.__call__.<locals>.handle_outgoing_request at 0'+14", "old_call": "'<function _enable_span_for_middleware.<locals>._create_span_call at 0x7f03605818'+3"}}, {"filename": "/opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages/sentry_sdk/integrations/starlette.py", "lineno": 199, "name": "_create_span_call", "line": "", "locals": {"app": "<starlette.middleware.exceptions.ExceptionMiddleware object at 0x7f036084baa0>", "scope": "\"{'type': 'http', 'http_version': '1.1', 'method': 'GET', 'path': '/__boom', 'raw\"+1672", "receive": "'<function _enable_span_for_middleware.<locals>._create_span_call.<locals>._sentr'+28", "send": "'<function CorrelationIdMiddleware.__call__.<locals>.handle_outgoing_request at 0'+14", "kwargs": "{}", "integration": "'<sentry_sdk.integrations.starlette.StarletteIntegration object at 0x7f03606bb260'+1", "name": "None", "source": "route", "middleware_span": "\"<Span(op='middleware.starlette', description:'ExceptionMiddleware', trace_id='c8\"+141", "_sentry_receive": "'<function _enable_span_for_middleware.<locals>._create_span_call.<locals>._sentr'+28", "receive_name": "_sentry_receive", "receive_patched": "True", "new_receive": "'<function _enable_span_for_middleware.<locals>._create_span_call.<locals>._sentr'+28", "_sentry_send": "'<function _enable_span_for_middleware.<locals>._create_span_call.<locals>._sentr'+25", "send_name": "handle_outgoing_request", "send_patched": "False", "new_send": "'<function _enable_span_for_middleware.<locals>._create_span_call.<locals>._sentr'+25", "middleware_name": "ExceptionMiddleware", "old_call": "<function ExceptionMiddleware.__call__ at 0x7f03734b5a80>"}}, {"filename": "/opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages/starlette/middleware/exceptions.py", "lineno": 63, "name": "__call__", "line": "", "locals": {"self": "<starlette.middleware.exceptions.ExceptionMiddleware object at 0x7f036084baa0>", "scope": "\"{'type': 'http', 'http_version': '1.1', 'method': 'GET', 'path': '/__boom', 'raw\"+1672", "receive": "'<function _enable_span_for_middleware.<locals>._create_span_call.<locals>._sentr'+28", "send": "'<function _enable_span_for_middleware.<locals>._create_span_call.<locals>._sentr'+25", "conn": "<starlette.requests.Request object at 0x7f03604de2a0>"}}, {"filename": "/opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages/starlette/_exception_handler.py", "lineno": 53, "name": "wrapped_app", "line": "", "locals": {"scope": "\"{'type': 'http', 'http_version': '1.1', 'method': 'GET', 'path': '/__boom', 'raw\"+1672", "receive": "'<function _enable_span_for_middleware.<locals>._create_span_call.<locals>._sentr'+28", "send": "'<function _enable_span_for_middleware.<locals>._create_span_call.<locals>._sentr'+25", "sender": "'<function wrap_app_handling_exceptions.<locals>.wrapped_app.<locals>.sender at 0'+14", "handler": "None", "response_started": "False", "app": "<fastapi.routing.APIRouter object at 0x7f03747bfa40>", "conn": "<starlette.requests.Request object at 0x7f03604de2a0>", "exception_handlers": "\"{<class 'starlette.exceptions.HTTPException'>: <function patch_exception_middlew\"+822", "status_handlers": "{}"}}, {"filename": "/opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages/starlette/_exception_handler.py", "lineno": 42, "name": "wrapped_app", "line": "", "locals": {"scope": "\"{'type': 'http', 'http_version': '1.1', 'method': 'GET', 'path': '/__boom', 'raw\"+1672", "receive": "'<function _enable_span_for_middleware.<locals>._create_span_call.<locals>._sentr'+28", "send": "'<function _enable_span_for_middleware.<locals>._create_span_call.<locals>._sentr'+25", "sender": "'<function wrap_app_handling_exceptions.<locals>.wrapped_app.<locals>.sender at 0'+14", "handler": "None", "response_started": "False", "app": "<fastapi.routing.APIRouter object at 0x7f03747bfa40>", "conn": "<starlette.requests.Request object at 0x7f03604de2a0>", "exception_handlers": "\"{<class 'starlette.exceptions.HTTPException'>: <function patch_exception_middlew\"+822", "status_handlers": "{}"}}, {"filename": "/opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages/starlette/routing.py", "lineno": 716, "name": "__call__", "line": "", "locals": {"self": "<fastapi.routing.APIRouter object at 0x7f03747bfa40>", "scope": "\"{'type': 'http', 'http_version': '1.1', 'method': 'GET', 'path': '/__boom', 'raw\"+1672", "receive": "'<function _enable_span_for_middleware.<locals>._create_span_call.<locals>._sentr'+28", "send": "'<function wrap_app_handling_exceptions.<locals>.wrapped_app.<locals>.sender at 0'+14"}}, {"filename": "/opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages/starlette/routing.py", "lineno": 736, "name": "app", "line": "", "locals": {"self": "<fastapi.routing.APIRouter object at 0x7f03747bfa40>", "scope": "\"{'type': 'http', 'http_version': '1.1', 'method': 'GET', 'path': '/__boom', 'raw\"+1672", "receive": "'<function _enable_span_for_middleware.<locals>._create_span_call.<locals>._sentr'+28", "send": "'<function wrap_app_handling_exceptions.<locals>.wrapped_app.<locals>.sender at 0'+14", "partial": "None", "route": "APIRoute(path='/__boom', name='boom', methods=['GET'])", "match": "<Match.FULL: 2>", "child_scope": "\"{'endpoint': <function test_unhandled_exception_is_captured_and_tagged.<locals>.\"+108"}}, {"filename": "/opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages/starlette/routing.py", "lineno": 290, "name": "handle", "line": "", "locals": {"self": "APIRoute(path='/__boom', name='boom', methods=['GET'])", "scope": "\"{'type': 'http', 'http_version': '1.1', 'method': 'GET', 'path': '/__boom', 'raw\"+1672", "receive": "'<function _enable_span_for_middleware.<locals>._create_span_call.<locals>._sentr'+28", "send": "'<function wrap_app_handling_exceptions.<locals>.wrapped_app.<locals>.sender at 0'+14"}}, {"filename": "/opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages/starlette/routing.py", "lineno": 78, "name": "app", "line": "", "locals": {"scope": "\"{'type': 'http', 'http_version': '1.1', 'method': 'GET', 'path': '/__boom', 'raw\"+1672", "receive": "'<function _enable_span_for_middleware.<locals>._create_span_call.<locals>._sentr'+28", "send": "'<function wrap_app_handling_exceptions.<locals>.wrapped_app.<locals>.sender at 0'+14", "app": "<function request_response.<locals>.app.<locals>.app at 0x7f0360519760>", "request": "<starlette.requests.Request object at 0x7f0360394c20>", "f": "'<function patch_get_request_handler.<locals>._sentry_get_request_handler.<locals'+32"}}, {"filename": "/opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages/starlette/_exception_handler.py", "lineno": 53, "name": "wrapped_app", "line": "", "locals": {"scope": "\"{'type': 'http', 'http_version': '1.1', 'method': 'GET', 'path': '/__boom', 'raw\"+1672", "receive": "'<function _enable_span_for_middleware.<locals>._create_span_call.<locals>._sentr'+28", "send": "'<function wrap_app_handling_exceptions.<locals>.wrapped_app.<locals>.sender at 0'+14", "sender": "'<function wrap_app_handling_exceptions.<locals>.wrapped_app.<locals>.sender at 0'+14", "handler": "None", "response_started": "False", "app": "<function request_response.<locals>.app.<locals>.app at 0x7f0360519760>", "conn": "<starlette.requests.Request object at 0x7f0360394c20>", "exception_handlers": "\"{<class 'starlette.exceptions.HTTPException'>: <function patch_exception_middlew\"+822", "status_handlers": "{}"}}, {"filename": "/opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages/starlette/_exception_handler.py", "lineno": 42, "name": "wrapped_app", "line": "", "locals": {"scope": "\"{'type': 'http', 'http_version': '1.1', 'method': 'GET', 'path': '/__boom', 'raw\"+1672", "receive": "'<function _enable_span_for_middleware.<locals>._create_span_call.<locals>._sentr'+28", "send": "'<function wrap_app_handling_exceptions.<locals>.wrapped_app.<locals>.sender at 0'+14", "sender": "'<function wrap_app_handling_exceptions.<locals>.wrapped_app.<locals>.sender at 0'+14", "handler": "None", "response_started": "False", "app": "<function request_response.<locals>.app.<locals>.app at 0x7f0360519760>", "conn": "<starlette.requests.Request object at 0x7f0360394c20>", "exception_handlers": "\"{<class 'starlette.exceptions.HTTPException'>: <function patch_exception_middlew\"+822", "status_handlers": "{}"}}, {"filename": "/opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages/starlette/routing.py", "lineno": 75, "name": "app", "line": "", "locals": {"scope": "\"{'type': 'http', 'http_version': '1.1', 'method': 'GET', 'path': '/__boom', 'raw\"+1672", "receive": "'<function _enable_span_for_middleware.<locals>._create_span_call.<locals>._sentr'+28", "send": "'<function wrap_app_handling_exceptions.<locals>.wrapped_app.<locals>.sender at 0'+14", "f": "'<function patch_get_request_handler.<locals>._sentry_get_request_handler.<locals'+32", "request": "<starlette.requests.Request object at 0x7f0360394c20>"}}, {"filename": "/opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages/sentry_sdk/integrations/fastapi.py", "lineno": 137, "name": "_sentry_app", "line": "", "locals": {"args": "(<starlette.requests.Request object at 0x7f0360394c20>,)", "kwargs": "{}", "integration": "<sentry_sdk.integrations.fastapi.FastApiIntegration object at 0x7f03606d7dd0>", "request": "<starlette.requests.Request object at 0x7f0360394c20>", "sentry_scope": "<Scope id=0x7f03604fd9a0 name=fastapi type=ScopeType.ISOLATION>", "extractor": "'<sentry_sdk.integrations.starlette.StarletteRequestExtractor object at 0x7f03603'+6", "_make_request_event_processor": "'<function patch_get_request_handler.<locals>._sentry_get_request_handler.<locals'+71", "info": "{}", "old_app": "<function get_request_handler.<locals>.app at 0x7f03604bf740>"}}, {"filename": "/opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages/fastapi/routing.py", "lineno": 302, "name": "app", "line": "", "locals": {"request": "<starlette.requests.Request object at 0x7f0360394c20>", "response": "None", "file_stack": "<contextlib.AsyncExitStack object at 0x7f0360523c50>", "body": "None", "errors": "[]", "async_exit_stack": "<contextlib.AsyncExitStack object at 0x7f0360394ec0>", "solved_result": "'SolvedDependency(values={}, errors=[], background_tasks=None, response=<starlett'+142", "actual_response_class": "<class 'starlette.responses.JSONResponse'>", "body_field": "None", "dependant": "'Dependant(path_params=[], query_params=[], header_params=[], cookie_params=[], b'+1043", "dependency_overrides_provider": "<fastapi.applications.FastAPI object at 0x7f03633cbb30>", "embed_body_fields": "False", "is_body_form": "None", "is_coroutine": "False", "response_field": "None", "response_model_by_alias": "True", "response_model_exclude": "None", "response_model_exclude_defaults": "False", "response_model_exclude_none": "False", "response_model_exclude_unset": "False", "response_model_include": "None", "status_code": "None"}}, {"filename": "/opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages/fastapi/routing.py", "lineno": 215, "name": "run_endpoint_function", "line": "", "locals": {"dependant": "'Dependant(path_params=[], query_params=[], header_params=[], cookie_params=[], b'+1043", "values": "{}", "is_coroutine": "False"}}, {"filename": "/opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages/starlette/concurrency.py", "lineno": 38, "name": "run_in_threadpool", "line": "", "locals": {"func": "'functools.partial(<function test_unhandled_exception_is_captured_and_tagged.<loc'+29", "args": "()", "kwargs": "{}"}}, {"filename": "/opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages/anyio/to_thread.py", "lineno": 56, "name": "run_sync", "line": "", "locals": {"func": "'functools.partial(<function test_unhandled_exception_is_captured_and_tagged.<loc'+29", "abandon_on_cancel": "False", "cancellable": "None", "limiter": "None", "args": "()"}}, {"filename": "/opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages/anyio/_backends/_asyncio.py", "lineno": 2476, "name": "run_sync_in_worker_thread", "line": "", "locals": {"cls": "<class 'anyio._backends._asyncio.AsyncIOBackend'>", "func": "'functools.partial(<function test_unhandled_exception_is_captured_and_tagged.<loc'+29", "args": "()", "abandon_on_cancel": "False", "limiter": "None", "idle_workers": "deque([<WorkerThread(AnyIO worker thread, started daemon 139651264280256)>])", "workers": "{<WorkerThread(AnyIO worker thread, started daemon 139651264280256)>}", "scope": "<anyio._backends._asyncio.CancelScope object at 0x7f036055e9c0>", "future": "<Future finished exception=RuntimeError('boom')>", "root_task": "\"<Task pending name='anyio.from_thread.start_blocking_portal.<locals>.run_portal'\"+351", "worker": "<WorkerThread(AnyIO worker thread, started daemon 139651264280256)>", "context": "<_contextvars.Context object at 0x7f036082b1c0>", "worker_scope": "<anyio._backends._asyncio.CancelScope object at 0x7f036055d0a0>"}}, {"filename": "/opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages/anyio/_backends/_asyncio.py", "lineno": 967, "name": "run", "line": "", "locals": {"self": "<WorkerThread(AnyIO worker thread, started daemon 139651264280256)>"}}, {"filename": "/opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages/sentry_sdk/integrations/fastapi.py", "lineno": 93, "name": "_sentry_call", "line": "", "locals": {"args": "()", "kwargs": "{}", "current_scope": "<Scope id=0x7f03604fdfc0 name=None type=ScopeType.CURRENT>", "sentry_scope": "<Scope id=0x7f03604fd9a0 name=fastapi type=ScopeType.ISOLATION>", "old_call": "'<function test_unhandled_exception_is_captured_and_tagged.<locals>.boom at 0x7f0'+10"}}, {"filename": "/home/runner/work/AWA-App/AWA-App/services/api/tests/test_sentry_event.py", "lineno": 52, "name": "boom", "line": "", "locals": {}}]}]}
+2025-08-18T21:35:51.8666917Z =============================== warnings summary ===============================
+2025-08-18T21:35:51.8680981Z services/alert_bot/tests/test_smoke.py:5
+2025-08-18T21:35:51.8683011Z   /home/runner/work/AWA-App/AWA-App/services/alert_bot/tests/test_smoke.py:5: UserWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html. The pkg_resources package is slated for removal as early as 2025-11-30. Refrain from using this package or pin to Setuptools<81.
+2025-08-18T21:35:51.8684199Z     import pkg_resources  # noqa: F401
+2025-08-18T21:35:51.8684380Z 
+2025-08-18T21:35:51.8684569Z tests/api/test_ingest_endpoints.py: 12 warnings
+2025-08-18T21:35:51.8684925Z tests/ingest/test_tasks_eager.py: 3 warnings
+2025-08-18T21:35:51.8685248Z tests/test_api_fast.py: 1 warning
+2025-08-18T21:35:51.8685559Z tests/test_health.py: 5 warnings
+2025-08-18T21:35:51.8685836Z tests/test_smoke.py: 5 warnings
+2025-08-18T21:35:51.8686126Z services/api/tests/test_cors.py: 1 warning
+2025-08-18T21:35:51.8686476Z services/api/tests/test_errors_json.py: 2 warnings
+2025-08-18T21:35:51.8686892Z Sentry is attempting to send 0 pending events
+2025-08-18T21:35:51.8687188Z Waiting up to True seconds
+2025-08-18T21:35:51.8687426Z Press Ctrl-C to quit
+2025-08-18T21:35:51.8687715Z services/api/tests/test_health.py: 1 warning
+2025-08-18T21:35:51.8688074Z services/api/tests/test_rate_limit.py: 122 warnings
+2025-08-18T21:35:51.8688445Z services/api/tests/test_sentry_event.py: 1 warning
+2025-08-18T21:35:51.8690289Z   /opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages/asgi_correlation_id/extensions/sentry.py:27: DeprecationWarning: sentry_sdk.configure_scope is deprecated and will be removed in the next major version. Please consult our migration guide to learn how to migrate to the new API: https://docs.sentry.io/platforms/python/migration/1.x-to-2.x#scope-configuring
+2025-08-18T21:35:51.8691835Z     with configure_scope() as scope:
+2025-08-18T21:35:51.8692019Z 
+2025-08-18T21:35:51.8692198Z tests/api/test_ingest_endpoints.py: 3 warnings
+2025-08-18T21:35:51.8692523Z tests/test_api_fast.py: 1 warning
+2025-08-18T21:35:51.8692807Z tests/test_health.py: 5 warnings
+2025-08-18T21:35:51.8693080Z tests/test_smoke.py: 5 warnings
+2025-08-18T21:35:51.8693371Z services/api/tests/test_cors.py: 3 warnings
+2025-08-18T21:35:51.8693729Z services/api/tests/test_errors_json.py: 2 warnings
+2025-08-18T21:35:51.8694081Z services/api/tests/test_health.py: 1 warning
+2025-08-18T21:35:51.8694427Z services/api/tests/test_rate_limit.py: 2 warnings
+2025-08-18T21:35:51.8694788Z services/api/tests/test_sentry_event.py: 1 warning
+2025-08-18T21:35:51.8695687Z   /opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages/fastapi_limiter/__init__.py:89: DeprecationWarning: Call to deprecated close. (Use aclose() instead) -- Deprecated since version 5.0.1.
+2025-08-18T21:35:51.8696456Z     await cls.redis.close()
+2025-08-18T21:35:51.8696605Z 
+2025-08-18T21:35:51.8696787Z tests/test_api_fast.py::test_health_endpoint
+2025-08-18T21:35:51.8697874Z   /home/runner/work/AWA-App/AWA-App/tests/test_api_fast.py:13: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+2025-08-18T21:35:51.8698852Z     return datetime.datetime.utcnow()
+2025-08-18T21:35:51.8699032Z 
+2025-08-18T21:35:51.8699160Z tests/test_api_fast.py: 1 warning
+2025-08-18T21:35:51.8699443Z tests/test_health.py: 5 warnings
+2025-08-18T21:35:51.8700104Z tests/test_smoke.py: 5 warnings
+2025-08-18T21:35:51.8700430Z services/api/tests/test_cors.py: 1 warning
+2025-08-18T21:35:51.8700763Z services/api/tests/test_health.py: 1 warning
+2025-08-18T21:35:51.8701125Z services/api/tests/test_rate_limit.py: 102 warnings
+2025-08-18T21:35:51.8702285Z   /home/runner/work/AWA-App/AWA-App/services/api/routes/health.py:24: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+2025-08-18T21:35:51.8703501Z     app_now = datetime.utcnow().replace(tzinfo=timezone.utc)
+2025-08-18T21:35:51.8703725Z 
+2025-08-18T21:35:51.8703872Z tests/test_health.py::test_health[0]
+2025-08-18T21:35:51.8704169Z tests/test_health.py::test_health[1]
+2025-08-18T21:35:51.8704454Z tests/test_health.py::test_health[2]
+2025-08-18T21:35:51.8704740Z tests/test_health.py::test_health[3]
+2025-08-18T21:35:51.8705021Z tests/test_health.py::test_health[4]
+2025-08-18T21:35:51.8706068Z   /home/runner/work/AWA-App/AWA-App/tests/test_health.py:22: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+2025-08-18T21:35:51.8707043Z     return datetime.datetime.utcnow()
+2025-08-18T21:35:51.8707217Z 
+2025-08-18T21:35:51.8707349Z tests/test_smoke.py::test_health[0]
+2025-08-18T21:35:51.8707638Z tests/test_smoke.py::test_health[1]
+2025-08-18T21:35:51.8707920Z tests/test_smoke.py::test_health[2]
+2025-08-18T21:35:51.8708197Z tests/test_smoke.py::test_health[3]
+2025-08-18T21:35:51.8708472Z tests/test_smoke.py::test_health[4]
+2025-08-18T21:35:51.8709703Z   /home/runner/work/AWA-App/AWA-App/tests/test_smoke.py:32: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+2025-08-18T21:35:51.8710843Z     return datetime.datetime.utcnow()
+2025-08-18T21:35:51.8711018Z 
+2025-08-18T21:35:51.8711257Z services/api/tests/test_cors.py::test_cors_simple_get_allowed
+2025-08-18T21:35:51.8712434Z   /home/runner/work/AWA-App/AWA-App/services/api/tests/test_cors.py:27: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+2025-08-18T21:35:51.8713572Z     return datetime.datetime.utcnow()
+2025-08-18T21:35:51.8713741Z 
+2025-08-18T21:35:51.8713934Z services/api/tests/test_health.py::test_health_route
+2025-08-18T21:35:51.8715091Z   /home/runner/work/AWA-App/AWA-App/services/api/tests/test_health.py:14: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+2025-08-18T21:35:51.8716104Z     return datetime.datetime.utcnow()
+2025-08-18T21:35:51.8716271Z 
+2025-08-18T21:35:51.8716455Z services/api/tests/test_rate_limit.py: 102 warnings
+2025-08-18T21:35:51.8717613Z   /home/runner/work/AWA-App/AWA-App/services/api/tests/test_rate_limit.py:33: DeprecationWarning: datetime.datetime.utcnow() is deprecated and scheduled for removal in a future version. Use timezone-aware objects to represent datetimes in UTC: datetime.datetime.now(datetime.UTC).
+2025-08-18T21:35:51.8718639Z     return datetime.datetime.utcnow()
+2025-08-18T21:35:51.8718865Z 
+2025-08-18T21:35:51.8719193Z services/api/tests/test_sentry_event.py::test_unhandled_exception_is_captured_and_tagged
+2025-08-18T21:35:51.8721044Z   /home/runner/work/AWA-App/AWA-App/services/api/tests/test_sentry_event.py:46: SentryHubDeprecationWarning: `sentry_sdk.Hub` is deprecated and will be removed in a future major release. Please consult our 1.x to 2.x migration guide for details on how to migrate `Hub` usage to the new API: https://docs.sentry.io/platforms/python/migration/1.x-to-2.x
+2025-08-18T21:35:51.8722210Z     hub = sentry_sdk.Hub.current
+2025-08-18T21:35:51.8722371Z 
+2025-08-18T21:35:51.8722631Z -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+2025-08-18T21:35:51.8723099Z ================================ tests coverage ================================
+2025-08-18T21:35:51.8723740Z _______________ coverage: platform linux, python 3.12.11-final-0 _______________
+2025-08-18T21:35:51.8723998Z 
+2025-08-18T21:35:51.8724149Z Coverage XML written to file coverage.xml
+2025-08-18T21:35:51.8724543Z Required test coverage of 45% reached. Total coverage: 64.10%
+2025-08-18T21:35:51.8724974Z =========================== short test summary info ============================
+2025-08-18T21:35:51.8725828Z FAILED services/api/tests/test_sentry_event.py::test_unhandled_exception_is_captured_and_tagged - AssertionError: assert 'e40e93f4496a...e52a501bcd97c' == 'test-rid-123'
+2025-08-18T21:35:51.8726455Z   
+2025-08-18T21:35:51.8726628Z   - test-rid-123
+2025-08-18T21:35:51.8726853Z   + e40e93f4496a4586904e52a501bcd97c
+2025-08-18T21:35:52.3595112Z ##[error]Process completed with exit code 1.
