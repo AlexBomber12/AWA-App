@@ -35,6 +35,8 @@ async def submit_ingest(
 
     if file:
         tmp_dir = Path(tempfile.mkdtemp(prefix="ingest_api_"))
+        if file.filename is None:
+            raise HTTPException(status_code=400, detail="Uploaded file missing name")
         tmp_path = tmp_dir / file.filename
         with tmp_path.open("wb") as f:
             shutil.copyfileobj(file.file, f)
@@ -53,7 +55,7 @@ async def get_job(task_id: str) -> Dict[str, Any]:
     try:
         state = res.state
     except Exception:  # pragma: no cover - defensive
-        state = states.FAILURE  # type: ignore[assignment]
+        state = states.FAILURE
     try:
         info = res.info
     except Exception:  # pragma: no cover - defensive

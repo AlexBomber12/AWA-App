@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import io
-from typing import Any, Optional, Sequence
+from typing import Any, Optional, Sequence, cast
 
 import pandas as pd
 from psycopg2 import sql
@@ -47,7 +47,7 @@ def copy_df_via_temp(
     stg = _ensure_ident(temp_name)
 
     manage_conn = connection is None
-    conn = connection or engine.raw_connection()
+    conn = cast(Any, connection or engine.raw_connection())
     if manage_conn:
         conn.autocommit = False
     try:

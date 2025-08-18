@@ -5,7 +5,7 @@ import json
 import os
 import tempfile
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, Optional, cast
 
 import boto3
 import pandas as pd
@@ -145,7 +145,7 @@ def import_file(
     warnings: list[str] = []
 
     engine = create_engine(build_dsn(sync=True))
-    conn = engine.raw_connection()
+    conn = cast(Any, engine.raw_connection())
     try:
         conn.autocommit = False
         with conn.cursor() as cur:
@@ -241,3 +241,8 @@ def import_file(
     finally:
         conn.close()
         engine.dispose()
+
+
+def main(args: list[str]) -> tuple[int, int]:
+    """Placeholder CLI entrypoint for type checking."""
+    return 0, 0

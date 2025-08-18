@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from typing import List
+from typing import Any, List
 
 from celery.utils.log import get_task_logger
 from sqlalchemy import create_engine, text
@@ -13,8 +13,8 @@ from .celery_app import celery_app
 logger = get_task_logger(__name__)
 
 
-@celery_app.task(name="ingest.analyze_table")
-def task_analyze_table(table_fqname: str) -> dict:
+@celery_app.task(name="ingest.analyze_table")  # type: ignore[misc]
+def task_analyze_table(table_fqname: str) -> dict[str, str]:
     engine = create_engine(build_dsn(sync=True))
     try:
         with engine.begin() as conn:
@@ -24,8 +24,8 @@ def task_analyze_table(table_fqname: str) -> dict:
         engine.dispose()
 
 
-@celery_app.task(name="ingest.maintenance_nightly")
-def task_maintenance_nightly() -> dict:
+@celery_app.task(name="ingest.maintenance_nightly")  # type: ignore[misc]
+def task_maintenance_nightly() -> dict[str, Any]:
     tables_cfg = os.getenv(
         "TABLE_MAINTENANCE_LIST", "public.reimbursements_raw,public.returns_raw"
     )
