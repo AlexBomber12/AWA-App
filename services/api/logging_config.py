@@ -1,10 +1,10 @@
 import logging
 import os
 import sys
+from typing import Any, Mapping, MutableMapping
 
 import structlog
 from asgi_correlation_id import correlation_id
-from typing import Any, Mapping, MutableMapping
 
 
 def _request_id_injector(
