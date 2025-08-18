@@ -6,6 +6,7 @@ from typing import List
 import httpx
 from asgi_correlation_id import CorrelationIdMiddleware
 from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import bindparam, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -36,6 +37,25 @@ app = FastAPI(lifespan=lifespan)
 
 app.add_middleware(CorrelationIdMiddleware, header_name="X-Request-ID")
 install_exception_handlers(app)
+
+origins = [o.strip() for o in os.getenv("CORS_ORIGINS", "").split(",") if o.strip()]
+origin_regex = os.getenv("CORS_ALLOW_ORIGIN_REGEX", "").strip()
+allow_credentials = os.getenv("CORS_ALLOW_CREDENTIALS", "false").lower() in {
+    "1",
+    "true",
+    "yes",
+}
+
+if origins or origin_regex:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=origins if origins else [],
+        allow_origin_regex=origin_regex if origin_regex else None,
+        allow_credentials=allow_credentials,
+        allow_methods=["*"],
+        allow_headers=["*"],
+        expose_headers=["*"],
+    )
 
 
 @app.get("/ready", status_code=status.HTTP_200_OK, include_in_schema=False)
