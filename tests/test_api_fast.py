@@ -21,8 +21,8 @@ async def fake_get_session():
 
 def test_health_endpoint(monkeypatch):
     app.dependency_overrides[db.get_session] = fake_get_session
-    client = TestClient(app)
-    r = client.get("/health")
-    assert r.status_code == 200
-    assert r.json() == {"status": "ok"}
+    with TestClient(app) as client:
+        r = client.get("/health")
+        assert r.status_code == 200
+        assert r.json() == {"status": "ok"}
     app.dependency_overrides.clear()
