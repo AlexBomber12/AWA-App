@@ -4,7 +4,15 @@ import os
 from celery import Celery, shared_task
 from sqlalchemy import create_engine, text
 
-from services.api.sentry_config import init_sentry_if_configured as _init_sentry
+try:
+    # The worker can run as a standalone image where the full `services`
+    # package is not present.  Import Sentry configuration if available but
+    # fall back to a no-op in slim containers.
+    from services.api.sentry_config import init_sentry_if_configured as _init_sentry
+except ModuleNotFoundError:  # pragma: no cover - optional dependency
+    def _init_sentry() -> None:  # type: ignore[return-value]
+        """Initialize Sentry when the shared config is unavailable."""
+        return None
 
 from .client import fetch_fees
 from .repository import upsert
