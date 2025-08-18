@@ -2,6 +2,7 @@ import os
 
 import sentry_sdk
 from fastapi.testclient import TestClient
+import uuid
 
 # set env before importing app so init runs
 os.environ["SENTRY_DSN"] = "http://public@selfhosted.invalid/1"
@@ -54,7 +55,8 @@ def test_unhandled_exception_is_captured_and_tagged(monkeypatch):
     app.add_api_route("/__boom", boom, methods=["GET"])
 
     with TestClient(app, raise_server_exceptions=False) as client:
-        r = client.get("/__boom", headers={"X-Request-ID": "test-rid-123"})
+        request_id = str(uuid.uuid4())
+        r = client.get("/__boom", headers={"X-Request-ID": request_id})
         assert r.status_code == 500
 
     # verify captured event with tag
@@ -62,4 +64,4 @@ def test_unhandled_exception_is_captured_and_tagged(monkeypatch):
     assert isinstance(tr, DummyTransport)
     assert len(tr.captured) >= 1
     event = tr.captured[-1]
-    assert event.get("tags", {}).get("request_id") == "test-rid-123"
+    assert event.get("tags", {}).get("request_id") == request_id
