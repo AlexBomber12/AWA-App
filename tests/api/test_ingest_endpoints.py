@@ -28,18 +28,17 @@ def test_ingest_file_upload(monkeypatch, tmp_path) -> None:
         return {"rows": 2, "dialect": "returns_report", "target_table": "returns_raw"}
 
     monkeypatch.setattr("etl.load_csv.import_file", fake_import_file)
-    client = _get_client(monkeypatch)
+    with _get_client(monkeypatch) as client:
+        resp = client.post("/ingest", files={"file": ("test.csv", b"a,b\n1,2\n")})
+        assert resp.status_code == 200
+        task_id = resp.json()["task_id"]
 
-    resp = client.post("/ingest", files={"file": ("test.csv", b"a,b\n1,2\n")})
-    assert resp.status_code == 200
-    task_id = resp.json()["task_id"]
-
-    res = client.get(f"/jobs/{task_id}")
-    assert res.status_code == 200
-    body = res.json()
-    assert body["state"] == "SUCCESS"
-    assert body["meta"]["rows"] == 2
-    assert body["meta"]["dialect"] == "returns_report"
+        res = client.get(f"/jobs/{task_id}")
+        assert res.status_code == 200
+        body = res.json()
+        assert body["state"] == "SUCCESS"
+        assert body["meta"]["rows"] == 2
+        assert body["meta"]["dialect"] == "returns_report"
 
 
 def test_ingest_json_uri(monkeypatch, tmp_path) -> None:
@@ -47,18 +46,17 @@ def test_ingest_json_uri(monkeypatch, tmp_path) -> None:
         return {"rows": 1, "dialect": "returns_report", "target_table": "returns_raw"}
 
     monkeypatch.setattr("etl.load_csv.import_file", fake_import_file)
-    client = _get_client(monkeypatch)
+    with _get_client(monkeypatch) as client:
+        f = tmp_path / "sample.csv"
+        f.write_text("a,b\n1,2\n")
 
-    f = tmp_path / "sample.csv"
-    f.write_text("a,b\n1,2\n")
+        resp = client.post("/ingest", json={"uri": f"file://{f}"})
+        assert resp.status_code == 200
+        task_id = resp.json()["task_id"]
 
-    resp = client.post("/ingest", json={"uri": f"file://{f}"})
-    assert resp.status_code == 200
-    task_id = resp.json()["task_id"]
-
-    res = client.get(f"/jobs/{task_id}")
-    assert res.status_code == 200
-    assert res.json()["state"] == "SUCCESS"
+        res = client.get(f"/jobs/{task_id}")
+        assert res.status_code == 200
+        assert res.json()["state"] == "SUCCESS"
 
 
 def test_ingest_failure(monkeypatch, tmp_path) -> None:
@@ -66,20 +64,20 @@ def test_ingest_failure(monkeypatch, tmp_path) -> None:
         raise RuntimeError("boom")
 
     monkeypatch.setattr("etl.load_csv.import_file", bad_import_file)
-    client = _get_client(monkeypatch)
-    from services.ingest.celery_app import celery_app
+    with _get_client(monkeypatch) as client:
+        from services.ingest.celery_app import celery_app
 
-    celery_app.conf.task_eager_propagates = False
+        celery_app.conf.task_eager_propagates = False
 
-    f = tmp_path / "bad.csv"
-    f.write_text("a,b\n1,2\n")
+        f = tmp_path / "bad.csv"
+        f.write_text("a,b\n1,2\n")
 
-    resp = client.post("/ingest", json={"uri": f"file://{f}"})
-    assert resp.status_code == 200
-    task_id = resp.json()["task_id"]
+        resp = client.post("/ingest", json={"uri": f"file://{f}"})
+        assert resp.status_code == 200
+        task_id = resp.json()["task_id"]
 
-    res = client.get(f"/jobs/{task_id}")
-    assert res.status_code == 200
-    body = res.json()
-    assert body["state"] == "FAILURE"
-    assert body["meta"]["status"] == "error"
+        res = client.get(f"/jobs/{task_id}")
+        assert res.status_code == 200
+        body = res.json()
+        assert body["state"] == "FAILURE"
+        assert body["meta"]["status"] == "error"

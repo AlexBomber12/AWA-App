@@ -161,7 +161,8 @@ def api_client(pg_pool):
 
     from services.api.main import app
 
-    return TestClient(app)  # type: ignore[arg-type]
+    with TestClient(app) as client:  # type: ignore[arg-type]
+        yield client
 
 
 @pytest.fixture

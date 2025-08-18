@@ -19,8 +19,8 @@ def test_health_route() -> None:
         yield FakeSession()
 
     app.dependency_overrides[db.get_session] = fake_get_session
-    client = TestClient(app)
-    resp = client.get("/health")
-    assert resp.status_code == 200
-    assert resp.json() == {"status": "ok"}
+    with TestClient(app) as client:
+        resp = client.get("/health")
+        assert resp.status_code == 200
+        assert resp.json() == {"status": "ok"}
     app.dependency_overrides.clear()
