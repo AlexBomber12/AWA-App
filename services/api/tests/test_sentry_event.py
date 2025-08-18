@@ -26,7 +26,13 @@ class DummyTransport:
         return 0
 
     def capture_envelope(self, envelope):  # pragma: no cover - test helper
-        pass
+        """Capture events sent as envelopes by Sentry SDK >= 2.0."""
+        try:
+            event = envelope.get_event()
+        except Exception:  # pragma: no cover - defensive
+            event = None
+        if event is not None:
+            self.captured.append(event)
 
     def record_lost_event(self, *args, **kwargs):  # pragma: no cover - test helper
         pass
