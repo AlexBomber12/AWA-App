@@ -1,6 +1,7 @@
 from typing import Any
 
 import psycopg
+import sentry_sdk
 import structlog
 from asgi_correlation_id import correlation_id
 from fastapi import FastAPI, Request
@@ -54,5 +55,6 @@ def install_exception_handlers(app: FastAPI) -> None:
         request: Request, exc: Exception
     ) -> JSONResponse:
         structlog.get_logger().exception("unhandled_error")
+        sentry_sdk.capture_exception(exc)
         payload = _payload("internal_error", "Internal server error", request)
         return JSONResponse(status_code=500, content=payload)
