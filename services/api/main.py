@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from typing import List
 
 import httpx
+from asgi_correlation_id import CorrelationIdMiddleware
 from fastapi import Depends, FastAPI, HTTPException, status
 from sqlalchemy import bindparam, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,6 +12,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from alembic.config import Config
 from alembic.script import ScriptDirectory
 from api.routers.ingest import router as ingest_router
+from services.api.errors import install_exception_handlers
+from services.api.logging_config import configure_logging
 from services.common.dsn import build_dsn
 from services.ingest.upload_router import router as upload_router
 
@@ -18,6 +21,8 @@ from .db import get_session
 from .routes import health as health_router
 from .routes.roi import router as roi_router
 from .routes.stats import router as stats_router
+
+configure_logging()
 
 
 @asynccontextmanager
@@ -28,6 +33,9 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(lifespan=lifespan)
+
+app.add_middleware(CorrelationIdMiddleware, header_name="X-Request-ID")
+install_exception_handlers(app)
 
 
 @app.get("/ready", status_code=status.HTTP_200_OK, include_in_schema=False)
