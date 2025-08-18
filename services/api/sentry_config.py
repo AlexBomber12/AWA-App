@@ -3,14 +3,13 @@ from __future__ import annotations
 import os
 from typing import Any, Dict, Mapping
 
-from sentry_sdk.types import Event, Hint
-
 import sentry_sdk
 from asgi_correlation_id import correlation_id
 from sentry_sdk.integrations.celery import CeleryIntegration
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 from sentry_sdk.integrations.logging import LoggingIntegration
 from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
+from sentry_sdk.types import Event, Hint
 
 _SCRUB_HEADERS: set[str] = {"authorization", "cookie", "set-cookie", "x-api-key"}
 _SCRUB_FIELDS: set[str] = {
@@ -53,12 +52,16 @@ def _scrub_mapping(d: Mapping[str, Any]) -> Dict[str, Any]:
 
 def before_send(event: Event, hint: Hint) -> Event | None:
     # attach request_id tag
-    rid = correlation_id.get()
+    req: Dict[str, Any] = event.get("request") or {}
+    headers = req.get("headers")
+    rid: str | None = None
+    if isinstance(headers, Mapping):
+        rid = headers.get("x-request-id")
+    if not rid:
+        rid = correlation_id.get()
     if rid:
         event.setdefault("tags", {})["request_id"] = rid
     # scrub request headers/body
-    req: Dict[str, Any] = event.get("request") or {}
-    headers = req.get("headers")
     if isinstance(headers, Mapping):
         req["headers"] = {
             k: ("[redacted]" if str(k).lower() in _SCRUB_HEADERS else v)
