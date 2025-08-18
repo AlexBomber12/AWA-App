@@ -4,11 +4,15 @@ from contextlib import asynccontextmanager
 from typing import List
 
 import httpx
+import redis.asyncio as aioredis
 from asgi_correlation_id import CorrelationIdMiddleware
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi_limiter import FastAPILimiter
+from fastapi_limiter.depends import RateLimiter
 from sqlalchemy import bindparam, text
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.requests import Request
 
 from alembic.config import Config
 from alembic.script import ScriptDirectory
@@ -26,10 +30,54 @@ from .routes.stats import router as stats_router
 configure_logging()
 
 
+def _is_truthy(v: str | None) -> bool:
+    return (v or "").strip().lower() in {"1", "true", "yes", "y"}
+
+
+async def client_ip_identifier(request: Request) -> str:
+    if _is_truthy(os.getenv("TRUST_X_FORWARDED", "1")):
+        xff = request.headers.get("x-forwarded-for")
+        if xff:
+            # first IP in the chain
+            ip = xff.split(",")[0].strip()
+            if ip:
+                return ip
+        xri = request.headers.get("x-real-ip")
+        if xri:
+            return xri.strip()
+    return request.client.host or "unknown"
+
+
+def _parse_rate_limit(s: str) -> tuple[int, int]:
+    # formats: "100/minute", "60/second", "1000/hour"
+    try:
+        n, unit = s.split("/", 1)
+        times = int(n.strip())
+        unit = unit.strip().lower()
+    except Exception:
+        return 100, 60
+    seconds = (
+        60
+        if unit.startswith("min")
+        else 1
+        if unit.startswith("sec")
+        else 3600
+        if unit.startswith("hour")
+        else 60
+    )
+    return max(times, 1), seconds
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await _wait_for_db()
     await _check_llm()
+    r = aioredis.from_url(
+        os.getenv("REDIS_URL", "redis://redis:6379/0"),
+        encoding="utf-8",
+        decode_responses=True,
+    )
+    await FastAPILimiter.init(r)
     yield
 
 
@@ -56,6 +104,15 @@ if origins or origin_regex:
         allow_headers=["*"],
         expose_headers=["*"],
     )
+
+
+_default = os.getenv("RATE_LIMIT_DEFAULT", "100/minute")
+_times, _seconds = _parse_rate_limit(_default)
+app.router.dependencies.append(
+    Depends(
+        RateLimiter(times=_times, seconds=_seconds, identifier=client_ip_identifier)
+    )
+)
 
 
 @app.get("/ready", status_code=status.HTTP_200_OK, include_in_schema=False)
