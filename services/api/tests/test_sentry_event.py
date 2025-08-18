@@ -47,7 +47,7 @@ def test_unhandled_exception_is_captured_and_tagged(monkeypatch):
 
     app.add_api_route("/__boom", boom, methods=["GET"])
 
-    with TestClient(app) as client:
+    with TestClient(app, raise_server_exceptions=False) as client:
         r = client.get("/__boom", headers={"X-Request-ID": "test-rid-123"})
         assert r.status_code == 500
 
