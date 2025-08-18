@@ -10,6 +10,10 @@ on:
 jobs:
   unit:
     runs-on: ubuntu-latest
+    env:
+      REDIS_URL: redis://localhost:6379/0
+      RATE_LIMIT_DEFAULT: 100/minute
+      TRUST_X_FORWARDED: 1
     services:
       postgres:
         image: postgres:15
@@ -21,6 +25,9 @@ jobs:
         options: >-
           --health-cmd="pg_isready -U postgres -d awa"
           --health-interval=5s --health-timeout=5s --health-retries=10
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
     steps:
       - uses: actions/checkout@v4
       - name: Load env
@@ -65,6 +72,10 @@ jobs:
   migrations-check:
     needs: unit
     runs-on: ubuntu-latest
+    env:
+      REDIS_URL: redis://localhost:6379/0
+      RATE_LIMIT_DEFAULT: 100/minute
+      TRUST_X_FORWARDED: 1
     services:
       postgres:
         image: postgres:15
@@ -76,6 +87,9 @@ jobs:
         options: >-
           --health-cmd="pg_isready -U postgres -d awa"
           --health-interval=5s --health-timeout=5s --health-retries=10
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
     steps:
       - uses: actions/checkout@v4
       - name: Load env

@@ -24,9 +24,14 @@ def install_exception_handlers(app: FastAPI) -> None:
 
     @app.exception_handler(StarletteHTTPException)
     async def _http_exception_handler(request: Request, exc: StarletteHTTPException):
-        structlog.get_logger().warning(
-            "http_error", status_code=exc.status_code, detail=str(exc.detail)
-        )
+        log = structlog.get_logger()
+        if exc.status_code == 429:
+            log.warning("rate_limited", detail=str(exc.detail))
+            return JSONResponse(
+                status_code=429,
+                content=_payload("rate_limited", "Too Many Requests", request),
+            )
+        log.warning("http_error", status_code=exc.status_code, detail=str(exc.detail))
         payload = _payload("http_error", str(exc.detail), request)
         return JSONResponse(status_code=exc.status_code, content=payload)
 
