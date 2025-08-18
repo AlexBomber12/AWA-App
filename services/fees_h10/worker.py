@@ -4,8 +4,12 @@ import os
 from celery import Celery, shared_task
 from sqlalchemy import create_engine, text
 
+from services.api.sentry_config import init_sentry_if_configured as _init_sentry
+
 from .client import fetch_fees
 from .repository import upsert
+
+_init_sentry()
 
 
 def list_active_asins() -> list[str]:

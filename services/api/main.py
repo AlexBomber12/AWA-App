@@ -19,6 +19,7 @@ from alembic.script import ScriptDirectory
 from api.routers.ingest import router as ingest_router
 from services.api.errors import install_exception_handlers
 from services.api.logging_config import configure_logging
+from services.api.sentry_config import init_sentry_if_configured
 from services.common.dsn import build_dsn
 from services.ingest.upload_router import router as upload_router
 
@@ -28,6 +29,7 @@ from .routes.roi import router as roi_router
 from .routes.stats import router as stats_router
 
 configure_logging()
+init_sentry_if_configured()
 
 
 def _is_truthy(v: str | None) -> bool:
@@ -59,11 +61,7 @@ def _parse_rate_limit(s: str) -> tuple[int, int]:
     seconds = (
         60
         if unit.startswith("min")
-        else 1
-        if unit.startswith("sec")
-        else 3600
-        if unit.startswith("hour")
-        else 60
+        else 1 if unit.startswith("sec") else 3600 if unit.startswith("hour") else 60
     )
     return max(times, 1), seconds
 
