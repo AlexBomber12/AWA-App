@@ -41,7 +41,9 @@ def _scrub_mapping(d: Mapping[str, Any]) -> Dict[str, Any]:
         elif isinstance(v, list):
             red[k] = [
                 (
-                    "[redacted]" if isinstance(x, (str, bytes)) and key in _SCRUB_FIELDS else x
+                    "[redacted]"
+                    if isinstance(x, (str, bytes)) and key in _SCRUB_FIELDS
+                    else x
                 )
                 for x in v
             ]
@@ -57,6 +59,11 @@ def before_send(event: Event, hint: Hint) -> Event | None:
     rid: str | None = None
     if isinstance(headers, Mapping):
         rid = headers.get("x-request-id")
+    elif isinstance(headers, list):
+        for k, v in headers:
+            if str(k).lower() == "x-request-id":
+                rid = v
+                break
     if not rid:
         rid = correlation_id.get()
     if rid:
@@ -67,6 +74,11 @@ def before_send(event: Event, hint: Hint) -> Event | None:
             k: ("[redacted]" if str(k).lower() in _SCRUB_HEADERS else v)
             for k, v in headers.items()
         }
+    elif isinstance(headers, list):
+        req["headers"] = [
+            (k, "[redacted]" if str(k).lower() in _SCRUB_HEADERS else v)
+            for k, v in headers
+        ]
     data = req.get("data")
     if isinstance(data, Mapping):
         req["data"] = _scrub_mapping(data)
