@@ -61,7 +61,11 @@ def _parse_rate_limit(s: str) -> tuple[int, int]:
     seconds = (
         60
         if unit.startswith("min")
-        else 1 if unit.startswith("sec") else 3600 if unit.startswith("hour") else 60
+        else 1
+        if unit.startswith("sec")
+        else 3600
+        if unit.startswith("hour")
+        else 60
     )
     return max(times, 1), seconds
 

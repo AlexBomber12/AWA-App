@@ -22,12 +22,16 @@ class DummyTransport:
 
     def flush(self, timeout=None, callback=None):  # pragma: no cover - test helper
         if callback:
-            callback(None, True)
+            callback(0, True)
+        return 0
 
     def capture_envelope(self, envelope):  # pragma: no cover - test helper
         pass
 
     def record_lost_event(self, *args, **kwargs):  # pragma: no cover - test helper
+        pass
+
+    def kill(self):  # pragma: no cover - test helper
         pass
 
 
