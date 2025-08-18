@@ -1,951 +1,937 @@
-﻿2025-08-18T19:42:30.8285943Z Current runner version: '2.327.1'
-2025-08-18T19:42:30.8310588Z ##[group]Runner Image Provisioner
-2025-08-18T19:42:30.8311418Z Hosted Compute Agent
-2025-08-18T19:42:30.8311940Z Version: 20250818.377
-2025-08-18T19:42:30.8312653Z Commit: 3c593e9f75fe0b87e893bca80d6e12ba089c61fc
-2025-08-18T19:42:30.8313345Z Build Date: 2025-08-18T14:52:18Z
-2025-08-18T19:42:30.8314006Z ##[endgroup]
-2025-08-18T19:42:30.8314486Z ##[group]Operating System
-2025-08-18T19:42:30.8315435Z Ubuntu
-2025-08-18T19:42:30.8315959Z 24.04.2
-2025-08-18T19:42:30.8316393Z LTS
-2025-08-18T19:42:30.8316979Z ##[endgroup]
-2025-08-18T19:42:30.8317450Z ##[group]Runner Image
-2025-08-18T19:42:30.8318022Z Image: ubuntu-24.04
-2025-08-18T19:42:30.8318590Z Version: 20250810.1.0
-2025-08-18T19:42:30.8319605Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20250810.1/images/ubuntu/Ubuntu2404-Readme.md
-2025-08-18T19:42:30.8321198Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20250810.1
-2025-08-18T19:42:30.8322162Z ##[endgroup]
-2025-08-18T19:42:30.8324702Z ##[group]GITHUB_TOKEN Permissions
-2025-08-18T19:42:30.8327431Z Actions: write
-2025-08-18T19:42:30.8327967Z Attestations: write
-2025-08-18T19:42:30.8328698Z Checks: write
-2025-08-18T19:42:30.8329209Z Contents: write
-2025-08-18T19:42:30.8329724Z Deployments: write
-2025-08-18T19:42:30.8330318Z Discussions: write
-2025-08-18T19:42:30.8330891Z Issues: write
-2025-08-18T19:42:30.8331339Z Metadata: read
-2025-08-18T19:42:30.8331909Z Models: read
-2025-08-18T19:42:30.8332431Z Packages: write
-2025-08-18T19:42:30.8332893Z Pages: write
-2025-08-18T19:42:30.8333458Z PullRequests: write
-2025-08-18T19:42:30.8334011Z RepositoryProjects: write
-2025-08-18T19:42:30.8334581Z SecurityEvents: write
-2025-08-18T19:42:30.8335515Z Statuses: write
-2025-08-18T19:42:30.8336054Z ##[endgroup]
-2025-08-18T19:42:30.8338521Z Secret source: Actions
-2025-08-18T19:42:30.8339975Z Prepare workflow directory
-2025-08-18T19:42:30.8939418Z Prepare all required actions
-2025-08-18T19:42:30.8994059Z Getting action download info
-2025-08-18T19:42:31.1551432Z Download action repository 'actions/checkout@v4' (SHA:08eba0b27e820071cde6df949e0beb9ba4906955)
-2025-08-18T19:42:31.4065465Z Download action repository 'actions/setup-python@v5' (SHA:a26af69be951a213d495a4c3e4e4022e16d87065)
-2025-08-18T19:42:31.6631534Z Download action repository 'actions/upload-artifact@v4' (SHA:ea165f8d65b6e75b540449e92b4886f43607fa02)
-2025-08-18T19:42:31.8565368Z Complete job name: unit
-2025-08-18T19:42:31.9070149Z ##[group]Checking docker version
-2025-08-18T19:42:31.9083173Z ##[command]/usr/bin/docker version --format '{{.Server.APIVersion}}'
-2025-08-18T19:42:31.9952757Z '1.48'
-2025-08-18T19:42:31.9964989Z Docker daemon API version: '1.48'
-2025-08-18T19:42:31.9966075Z ##[command]/usr/bin/docker version --format '{{.Client.APIVersion}}'
-2025-08-18T19:42:32.0124510Z '1.48'
-2025-08-18T19:42:32.0137058Z Docker client API version: '1.48'
-2025-08-18T19:42:32.0141996Z ##[endgroup]
-2025-08-18T19:42:32.0144936Z ##[group]Clean up resources from previous jobs
-2025-08-18T19:42:32.0150725Z ##[command]/usr/bin/docker ps --all --quiet --no-trunc --filter "label=be7792"
-2025-08-18T19:42:32.0283041Z ##[command]/usr/bin/docker network prune --force --filter "label=be7792"
-2025-08-18T19:42:32.0403527Z ##[endgroup]
-2025-08-18T19:42:32.0404080Z ##[group]Create local container network
-2025-08-18T19:42:32.0414264Z ##[command]/usr/bin/docker network create --label be7792 github_network_ef65600690b94a778c4eae3ef91eb645
-2025-08-18T19:42:32.0896295Z 1215b67055372b130de5c856c0baf9b6205df183f7f803439ac76fd551eb5d8e
-2025-08-18T19:42:32.0916133Z ##[endgroup]
-2025-08-18T19:42:32.0940482Z ##[group]Starting postgres service container
-2025-08-18T19:42:32.0959599Z ##[command]/usr/bin/docker pull postgres:15
-2025-08-18T19:42:32.3930437Z 15: Pulling from library/postgres
-2025-08-18T19:42:32.4571686Z 396b1da7636e: Pulling fs layer
-2025-08-18T19:42:32.4573579Z fca2566eba32: Pulling fs layer
-2025-08-18T19:42:32.4575142Z 631fe8c6d606: Pulling fs layer
-2025-08-18T19:42:32.4576712Z 77c7671c4414: Pulling fs layer
-2025-08-18T19:42:32.4578344Z 2d9e29180a27: Pulling fs layer
-2025-08-18T19:42:32.4579281Z c6bcc2c9a041: Pulling fs layer
-2025-08-18T19:42:32.4580302Z ac4b721eb66f: Pulling fs layer
-2025-08-18T19:42:32.4581266Z 606bd164980e: Pulling fs layer
-2025-08-18T19:42:32.4582224Z f5dfd246bc6e: Pulling fs layer
-2025-08-18T19:42:32.4583152Z ba7036bb0a60: Pulling fs layer
-2025-08-18T19:42:32.4584018Z 799f859abbbd: Pulling fs layer
-2025-08-18T19:42:32.4584905Z d903e777080c: Pulling fs layer
-2025-08-18T19:42:32.4586093Z 04adcb462801: Pulling fs layer
-2025-08-18T19:42:32.4586943Z 5c10925b29ff: Pulling fs layer
-2025-08-18T19:42:32.4587778Z f5dfd246bc6e: Waiting
-2025-08-18T19:42:32.4588512Z ba7036bb0a60: Waiting
-2025-08-18T19:42:32.4589359Z 799f859abbbd: Waiting
-2025-08-18T19:42:32.4590311Z d903e777080c: Waiting
-2025-08-18T19:42:32.4591279Z 04adcb462801: Waiting
-2025-08-18T19:42:32.4592230Z 5c10925b29ff: Waiting
-2025-08-18T19:42:32.4593225Z 2d9e29180a27: Waiting
-2025-08-18T19:42:32.4594211Z 77c7671c4414: Waiting
-2025-08-18T19:42:32.4595431Z c6bcc2c9a041: Waiting
-2025-08-18T19:42:32.4596466Z ac4b721eb66f: Waiting
-2025-08-18T19:42:32.4597438Z 606bd164980e: Waiting
-2025-08-18T19:42:32.5457779Z fca2566eba32: Verifying Checksum
-2025-08-18T19:42:32.5459975Z fca2566eba32: Download complete
-2025-08-18T19:42:32.5965148Z 631fe8c6d606: Verifying Checksum
-2025-08-18T19:42:32.5967364Z 631fe8c6d606: Download complete
-2025-08-18T19:42:32.6656048Z 77c7671c4414: Verifying Checksum
-2025-08-18T19:42:32.6658524Z 77c7671c4414: Download complete
-2025-08-18T19:42:32.7577484Z c6bcc2c9a041: Verifying Checksum
-2025-08-18T19:42:32.7579417Z c6bcc2c9a041: Download complete
-2025-08-18T19:42:32.7691761Z 2d9e29180a27: Verifying Checksum
-2025-08-18T19:42:32.7693244Z 2d9e29180a27: Download complete
-2025-08-18T19:42:32.8522089Z 606bd164980e: Download complete
-2025-08-18T19:42:32.8672386Z 396b1da7636e: Download complete
-2025-08-18T19:42:32.8700686Z ac4b721eb66f: Verifying Checksum
-2025-08-18T19:42:32.8704917Z ac4b721eb66f: Download complete
-2025-08-18T19:42:32.9380725Z ba7036bb0a60: Verifying Checksum
-2025-08-18T19:42:32.9382541Z ba7036bb0a60: Download complete
-2025-08-18T19:42:32.9744301Z 799f859abbbd: Verifying Checksum
-2025-08-18T19:42:32.9746359Z 799f859abbbd: Download complete
-2025-08-18T19:42:33.0223614Z d903e777080c: Verifying Checksum
-2025-08-18T19:42:33.0226180Z d903e777080c: Download complete
-2025-08-18T19:42:33.1100614Z 5c10925b29ff: Verifying Checksum
-2025-08-18T19:42:33.1103122Z 5c10925b29ff: Download complete
-2025-08-18T19:42:33.3958937Z 04adcb462801: Verifying Checksum
-2025-08-18T19:42:33.3960803Z 04adcb462801: Download complete
-2025-08-18T19:42:33.9209061Z 396b1da7636e: Pull complete
-2025-08-18T19:42:33.9940067Z f5dfd246bc6e: Verifying Checksum
-2025-08-18T19:42:33.9940698Z f5dfd246bc6e: Download complete
-2025-08-18T19:42:34.1996402Z fca2566eba32: Pull complete
-2025-08-18T19:42:34.3677565Z 631fe8c6d606: Pull complete
-2025-08-18T19:42:34.4082755Z 77c7671c4414: Pull complete
-2025-08-18T19:42:34.7220560Z 2d9e29180a27: Pull complete
-2025-08-18T19:42:34.8023236Z c6bcc2c9a041: Pull complete
-2025-08-18T19:42:34.8104270Z ac4b721eb66f: Pull complete
-2025-08-18T19:42:34.8227798Z 606bd164980e: Pull complete
-2025-08-18T19:42:37.6995045Z f5dfd246bc6e: Pull complete
-2025-08-18T19:42:37.7155055Z ba7036bb0a60: Pull complete
-2025-08-18T19:42:37.7264201Z 799f859abbbd: Pull complete
-2025-08-18T19:42:37.7364366Z d903e777080c: Pull complete
-2025-08-18T19:42:37.7464955Z 04adcb462801: Pull complete
-2025-08-18T19:42:37.7577250Z 5c10925b29ff: Pull complete
-2025-08-18T19:42:37.7614770Z Digest: sha256:bc51cf4f1fe02cce7ed2370b20128a9b00b4eb804573a77d2a0d877aaa9c82b1
-2025-08-18T19:42:37.7627092Z Status: Downloaded newer image for postgres:15
-2025-08-18T19:42:37.7636186Z docker.io/library/postgres:15
-2025-08-18T19:42:37.7696001Z ##[command]/usr/bin/docker create --name 0627f55afab04c1c812bf358443b71e7_postgres15_bae36c --label be7792 --network github_network_ef65600690b94a778c4eae3ef91eb645 --network-alias postgres -p 5432:5432 --health-cmd="pg_isready -U postgres -d awa" --health-interval=5s --health-timeout=5s --health-retries=10 -e "POSTGRES_USER=postgres" -e "POSTGRES_PASSWORD=pass" -e "POSTGRES_DB=awa" -e GITHUB_ACTIONS=true -e CI=true postgres:15
-2025-08-18T19:42:37.7943435Z 3c4182ff3423734a86b55f7eb855f9536dc1df69288d6763ff326beecdd24d83
-2025-08-18T19:42:37.7964559Z ##[command]/usr/bin/docker start 3c4182ff3423734a86b55f7eb855f9536dc1df69288d6763ff326beecdd24d83
-2025-08-18T19:42:37.9710491Z 3c4182ff3423734a86b55f7eb855f9536dc1df69288d6763ff326beecdd24d83
-2025-08-18T19:42:37.9731228Z ##[command]/usr/bin/docker ps --all --filter id=3c4182ff3423734a86b55f7eb855f9536dc1df69288d6763ff326beecdd24d83 --filter status=running --no-trunc --format "{{.ID}} {{.Status}}"
-2025-08-18T19:42:37.9857919Z 3c4182ff3423734a86b55f7eb855f9536dc1df69288d6763ff326beecdd24d83 Up Less than a second (health: starting)
-2025-08-18T19:42:37.9882003Z ##[command]/usr/bin/docker port 3c4182ff3423734a86b55f7eb855f9536dc1df69288d6763ff326beecdd24d83
-2025-08-18T19:42:38.0009440Z 5432/tcp -> 0.0.0.0:5432
-2025-08-18T19:42:38.0009976Z 5432/tcp -> [::]:5432
-2025-08-18T19:42:38.0055492Z ##[endgroup]
-2025-08-18T19:42:38.0056757Z ##[group]Starting redis service container
-2025-08-18T19:42:38.0058345Z ##[command]/usr/bin/docker pull redis:7-alpine
-2025-08-18T19:42:38.2414948Z 7-alpine: Pulling from library/redis
-2025-08-18T19:42:38.3045774Z 0368fd46e3c6: Pulling fs layer
-2025-08-18T19:42:38.3047380Z 4c55286bbede: Pulling fs layer
-2025-08-18T19:42:38.3048179Z 5e28347af205: Pulling fs layer
-2025-08-18T19:42:38.3048804Z 311eca34042e: Pulling fs layer
-2025-08-18T19:42:38.3049363Z e6fe6f07e192: Pulling fs layer
-2025-08-18T19:42:38.3050010Z a2cadbfeca72: Pulling fs layer
-2025-08-18T19:42:38.3050577Z 4f4fb700ef54: Pulling fs layer
-2025-08-18T19:42:38.3051217Z a976ed7e7808: Pulling fs layer
-2025-08-18T19:42:38.3051839Z e6fe6f07e192: Waiting
-2025-08-18T19:42:38.3052386Z a2cadbfeca72: Waiting
-2025-08-18T19:42:38.3052817Z 4f4fb700ef54: Waiting
-2025-08-18T19:42:38.3053407Z a976ed7e7808: Waiting
-2025-08-18T19:42:38.3053900Z 311eca34042e: Waiting
-2025-08-18T19:42:38.4064582Z 5e28347af205: Verifying Checksum
-2025-08-18T19:42:38.4065497Z 5e28347af205: Download complete
-2025-08-18T19:42:38.4384155Z 4c55286bbede: Verifying Checksum
-2025-08-18T19:42:38.4385621Z 4c55286bbede: Download complete
-2025-08-18T19:42:38.4423815Z 0368fd46e3c6: Download complete
-2025-08-18T19:42:38.5128961Z 311eca34042e: Download complete
-2025-08-18T19:42:38.5364258Z a2cadbfeca72: Verifying Checksum
-2025-08-18T19:42:38.5365463Z a2cadbfeca72: Download complete
-2025-08-18T19:42:38.5895919Z 0368fd46e3c6: Pull complete
-2025-08-18T19:42:38.5980382Z 4f4fb700ef54: Verifying Checksum
-2025-08-18T19:42:38.5981099Z 4f4fb700ef54: Download complete
-2025-08-18T19:42:38.6226321Z e6fe6f07e192: Verifying Checksum
-2025-08-18T19:42:38.6227034Z e6fe6f07e192: Download complete
-2025-08-18T19:42:38.6264442Z a976ed7e7808: Download complete
-2025-08-18T19:42:38.6288692Z 4c55286bbede: Pull complete
-2025-08-18T19:42:38.7702402Z 5e28347af205: Pull complete
-2025-08-18T19:42:38.7968312Z 311eca34042e: Pull complete
-2025-08-18T19:42:38.9951192Z e6fe6f07e192: Pull complete
-2025-08-18T19:42:39.0027870Z a2cadbfeca72: Pull complete
-2025-08-18T19:42:39.0099751Z 4f4fb700ef54: Pull complete
-2025-08-18T19:42:39.0195118Z a976ed7e7808: Pull complete
-2025-08-18T19:42:39.0232985Z Digest: sha256:bb186d083732f669da90be8b0f975a37812b15e913465bb14d845db72a4e3e08
-2025-08-18T19:42:39.0243477Z Status: Downloaded newer image for redis:7-alpine
-2025-08-18T19:42:39.0252627Z docker.io/library/redis:7-alpine
-2025-08-18T19:42:39.0269130Z ##[command]/usr/bin/docker create --name 2245f206c7904ae7806dacbc6bd5d4a2_redis7alpine_e1d85f --label be7792 --network github_network_ef65600690b94a778c4eae3ef91eb645 --network-alias redis -p 6379:6379  -e GITHUB_ACTIONS=true -e CI=true redis:7-alpine
-2025-08-18T19:42:39.0505675Z 79af88283043410e145ca1ab0f42fc8dfea01773536a4fba44df28a242b5b239
-2025-08-18T19:42:39.0519510Z ##[command]/usr/bin/docker start 79af88283043410e145ca1ab0f42fc8dfea01773536a4fba44df28a242b5b239
-2025-08-18T19:42:39.1857890Z 79af88283043410e145ca1ab0f42fc8dfea01773536a4fba44df28a242b5b239
-2025-08-18T19:42:39.1880008Z ##[command]/usr/bin/docker ps --all --filter id=79af88283043410e145ca1ab0f42fc8dfea01773536a4fba44df28a242b5b239 --filter status=running --no-trunc --format "{{.ID}} {{.Status}}"
-2025-08-18T19:42:39.2000912Z 79af88283043410e145ca1ab0f42fc8dfea01773536a4fba44df28a242b5b239 Up Less than a second
-2025-08-18T19:42:39.2013666Z ##[command]/usr/bin/docker port 79af88283043410e145ca1ab0f42fc8dfea01773536a4fba44df28a242b5b239
-2025-08-18T19:42:39.2132444Z 6379/tcp -> 0.0.0.0:6379
-2025-08-18T19:42:39.2133115Z 6379/tcp -> [::]:6379
-2025-08-18T19:42:39.2147236Z ##[endgroup]
-2025-08-18T19:42:39.2156729Z ##[group]Waiting for all services to be ready
-2025-08-18T19:42:39.2169963Z ##[command]/usr/bin/docker inspect --format="{{if .Config.Healthcheck}}{{print .State.Health.Status}}{{end}}" 3c4182ff3423734a86b55f7eb855f9536dc1df69288d6763ff326beecdd24d83
-2025-08-18T19:42:39.2278441Z starting
-2025-08-18T19:42:39.2299410Z postgres service is starting, waiting 2 seconds before checking again.
-2025-08-18T19:42:41.2301164Z ##[command]/usr/bin/docker inspect --format="{{if .Config.Healthcheck}}{{print .State.Health.Status}}{{end}}" 3c4182ff3423734a86b55f7eb855f9536dc1df69288d6763ff326beecdd24d83
-2025-08-18T19:42:41.2426904Z starting
-2025-08-18T19:42:41.2440537Z postgres service is starting, waiting 3 seconds before checking again.
-2025-08-18T19:42:45.1422400Z ##[command]/usr/bin/docker inspect --format="{{if .Config.Healthcheck}}{{print .State.Health.Status}}{{end}}" 3c4182ff3423734a86b55f7eb855f9536dc1df69288d6763ff326beecdd24d83
-2025-08-18T19:42:45.1540710Z healthy
-2025-08-18T19:42:45.1557475Z postgres service is healthy.
-2025-08-18T19:42:45.1558252Z ##[command]/usr/bin/docker inspect --format="{{if .Config.Healthcheck}}{{print .State.Health.Status}}{{end}}" 79af88283043410e145ca1ab0f42fc8dfea01773536a4fba44df28a242b5b239
-2025-08-18T19:42:45.1679535Z redis service is healthy.
-2025-08-18T19:42:45.1680141Z ##[endgroup]
-2025-08-18T19:42:45.1920604Z ##[group]Run actions/checkout@v4
-2025-08-18T19:42:45.1921127Z with:
-2025-08-18T19:42:45.1921325Z   repository: AlexBomber12/AWA-App
-2025-08-18T19:42:45.1921708Z   token: ***
-2025-08-18T19:42:45.1921886Z   ssh-strict: true
-2025-08-18T19:42:45.1922071Z   ssh-user: git
-2025-08-18T19:42:45.1922265Z   persist-credentials: true
-2025-08-18T19:42:45.1922470Z   clean: true
-2025-08-18T19:42:45.1922660Z   sparse-checkout-cone-mode: true
-2025-08-18T19:42:45.1922883Z   fetch-depth: 1
-2025-08-18T19:42:45.1923060Z   fetch-tags: false
-2025-08-18T19:42:45.1923242Z   show-progress: true
-2025-08-18T19:42:45.1923427Z   lfs: false
-2025-08-18T19:42:45.1923586Z   submodules: false
-2025-08-18T19:42:45.1923771Z   set-safe-directory: true
-2025-08-18T19:42:45.1924141Z env:
-2025-08-18T19:42:45.1924379Z   REDIS_URL: redis://localhost:6379/0
-2025-08-18T19:42:45.1924655Z   RATE_LIMIT_DEFAULT: 100/minute
-2025-08-18T19:42:45.1924873Z   TRUST_X_FORWARDED: 1
-2025-08-18T19:42:45.1925067Z ##[endgroup]
-2025-08-18T19:42:45.2981045Z Syncing repository: AlexBomber12/AWA-App
-2025-08-18T19:42:45.2982262Z ##[group]Getting Git version info
-2025-08-18T19:42:45.2982615Z Working directory is '/home/runner/work/AWA-App/AWA-App'
-2025-08-18T19:42:45.2983124Z [command]/usr/bin/git version
-2025-08-18T19:42:45.3082822Z git version 2.50.1
-2025-08-18T19:42:45.3108458Z ##[endgroup]
-2025-08-18T19:42:45.3121330Z Temporarily overriding HOME='/home/runner/work/_temp/4306df6a-7dab-4025-b6db-b3b2a39b4301' before making global git config changes
-2025-08-18T19:42:45.3122332Z Adding repository directory to the temporary git global config as a safe directory
-2025-08-18T19:42:45.3126713Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/AWA-App/AWA-App
-2025-08-18T19:42:45.3163518Z Deleting the contents of '/home/runner/work/AWA-App/AWA-App'
-2025-08-18T19:42:45.3167041Z ##[group]Initializing the repository
-2025-08-18T19:42:45.3171048Z [command]/usr/bin/git init /home/runner/work/AWA-App/AWA-App
-2025-08-18T19:42:45.3311887Z hint: Using 'master' as the name for the initial branch. This default branch name
-2025-08-18T19:42:45.3312664Z hint: is subject to change. To configure the initial branch name to use in all
-2025-08-18T19:42:45.3313217Z hint: of your new repositories, which will suppress this warning, call:
-2025-08-18T19:42:45.3313606Z hint:
-2025-08-18T19:42:45.3313945Z hint: 	git config --global init.defaultBranch <name>
-2025-08-18T19:42:45.3314470Z hint:
-2025-08-18T19:42:45.3314954Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
-2025-08-18T19:42:45.3316023Z hint: 'development'. The just-created branch can be renamed via this command:
-2025-08-18T19:42:45.3316687Z hint:
-2025-08-18T19:42:45.3317051Z hint: 	git branch -m <name>
-2025-08-18T19:42:45.3317458Z hint:
-2025-08-18T19:42:45.3318081Z hint: Disable this message with "git config set advice.defaultBranchName false"
-2025-08-18T19:42:45.3319134Z Initialized empty Git repository in /home/runner/work/AWA-App/AWA-App/.git/
-2025-08-18T19:42:45.3329283Z [command]/usr/bin/git remote add origin https://github.com/AlexBomber12/AWA-App
-2025-08-18T19:42:45.3362280Z ##[endgroup]
-2025-08-18T19:42:45.3362680Z ##[group]Disabling automatic garbage collection
-2025-08-18T19:42:45.3366785Z [command]/usr/bin/git config --local gc.auto 0
-2025-08-18T19:42:45.3393407Z ##[endgroup]
-2025-08-18T19:42:45.3393785Z ##[group]Setting up auth
-2025-08-18T19:42:45.3400382Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
-2025-08-18T19:42:45.3429162Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
-2025-08-18T19:42:45.3758069Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
-2025-08-18T19:42:45.3788068Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
-2025-08-18T19:42:45.4006846Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
-2025-08-18T19:42:45.4040573Z ##[endgroup]
-2025-08-18T19:42:45.4041224Z ##[group]Fetching the repository
-2025-08-18T19:42:45.4049766Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +8edab8cd46a2755f190dc037cdb47cfa75f0692b:refs/remotes/pull/252/merge
-2025-08-18T19:42:45.6998732Z From https://github.com/AlexBomber12/AWA-App
-2025-08-18T19:42:45.6999726Z  * [new ref]         8edab8cd46a2755f190dc037cdb47cfa75f0692b -> pull/252/merge
-2025-08-18T19:42:45.7028510Z ##[endgroup]
-2025-08-18T19:42:45.7029107Z ##[group]Determining the checkout info
-2025-08-18T19:42:45.7031293Z ##[endgroup]
-2025-08-18T19:42:45.7036688Z [command]/usr/bin/git sparse-checkout disable
-2025-08-18T19:42:45.7080183Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
-2025-08-18T19:42:45.7110882Z ##[group]Checking out the ref
-2025-08-18T19:42:45.7116151Z [command]/usr/bin/git checkout --progress --force refs/remotes/pull/252/merge
-2025-08-18T19:42:45.7454319Z Note: switching to 'refs/remotes/pull/252/merge'.
-2025-08-18T19:42:45.7454947Z 
-2025-08-18T19:42:45.7455667Z You are in 'detached HEAD' state. You can look around, make experimental
-2025-08-18T19:42:45.7456614Z changes and commit them, and you can discard any commits you make in this
-2025-08-18T19:42:45.7458333Z state without impacting any branches by switching back to a branch.
-2025-08-18T19:42:45.7458797Z 
-2025-08-18T19:42:45.7459090Z If you want to create a new branch to retain commits you create, you may
-2025-08-18T19:42:45.7459787Z do so (now or later) by using -c with the switch command. Example:
-2025-08-18T19:42:45.7460185Z 
-2025-08-18T19:42:45.7460341Z   git switch -c <new-branch-name>
-2025-08-18T19:42:45.7460626Z 
-2025-08-18T19:42:45.7460784Z Or undo this operation with:
-2025-08-18T19:42:45.7461040Z 
-2025-08-18T19:42:45.7461189Z   git switch -
-2025-08-18T19:42:45.7461667Z 
-2025-08-18T19:42:45.7461975Z Turn off this advice by setting config variable advice.detachedHead to false
-2025-08-18T19:42:45.7462274Z 
-2025-08-18T19:42:45.7462610Z HEAD is now at 8edab8c Merge ab9512fe48d502f4d8d8091c2b1d92c6028b37e7 into e9688acefdf89e687ff1aeced5c82fb721066871
-2025-08-18T19:42:45.7465728Z ##[endgroup]
-2025-08-18T19:42:45.7505541Z [command]/usr/bin/git log -1 --format=%H
-2025-08-18T19:42:45.7529047Z 8edab8cd46a2755f190dc037cdb47cfa75f0692b
-2025-08-18T19:42:45.7695781Z ##[group]Run cat .env.ci >> "$GITHUB_ENV"
-2025-08-18T19:42:45.7696149Z [36;1mcat .env.ci >> "$GITHUB_ENV"[0m
-2025-08-18T19:42:45.7696832Z [36;1mecho "DATABASE_URL=***localhost:5432/awa" >> "$GITHUB_ENV"[0m
-2025-08-18T19:42:45.7697187Z [36;1mecho "PG_HOST=localhost" >> "$GITHUB_ENV"[0m
-2025-08-18T19:42:45.7697473Z [36;1mecho "PG_PORT=5432" >> "$GITHUB_ENV"[0m
-2025-08-18T19:42:45.7697750Z [36;1mecho "PG_USER=postgres" >> "$GITHUB_ENV"[0m
-2025-08-18T19:42:45.7698023Z [36;1mecho "PG_PASSWORD=pass" >> "$GITHUB_ENV"[0m
-2025-08-18T19:42:45.7698310Z [36;1mecho "PG_DATABASE=awa" >> "$GITHUB_ENV"[0m
-2025-08-18T19:42:45.7742267Z shell: /usr/bin/bash -e {0}
-2025-08-18T19:42:45.7742489Z env:
-2025-08-18T19:42:45.7742692Z   REDIS_URL: redis://localhost:6379/0
-2025-08-18T19:42:45.7742945Z   RATE_LIMIT_DEFAULT: 100/minute
-2025-08-18T19:42:45.7743164Z   TRUST_X_FORWARDED: 1
-2025-08-18T19:42:45.7743350Z ##[endgroup]
-2025-08-18T19:42:45.7908715Z ##[group]Run actions/setup-python@v5
-2025-08-18T19:42:45.7908985Z with:
-2025-08-18T19:42:45.7909164Z   python-version: 3.12
-2025-08-18T19:42:45.7909362Z   cache: pip
-2025-08-18T19:42:45.7909578Z   cache-dependency-path: requirements-dev.txt
-2025-08-18T19:42:45.7909842Z   check-latest: false
-2025-08-18T19:42:45.7910149Z   token: ***
-2025-08-18T19:42:45.7910324Z   update-environment: true
-2025-08-18T19:42:45.7910544Z   allow-prereleases: false
-2025-08-18T19:42:45.7910748Z   freethreaded: false
-2025-08-18T19:42:45.7910920Z env:
-2025-08-18T19:42:45.7911106Z   REDIS_URL: redis://localhost:6379/0
-2025-08-18T19:42:45.7911355Z   RATE_LIMIT_DEFAULT: 100/minute
-2025-08-18T19:42:45.7911566Z   TRUST_X_FORWARDED: 1
-2025-08-18T19:42:45.7911747Z   PG_USER: postgres
-2025-08-18T19:42:45.7911928Z   PG_PASSWORD: pass
-2025-08-18T19:42:45.7912109Z   PG_DATABASE: awa
-2025-08-18T19:42:45.7912283Z   PG_HOST: localhost
-2025-08-18T19:42:45.7912453Z   PG_PORT: 5432
-2025-08-18T19:42:45.7912869Z   PG_SYNC_DSN: ***localhost:5432/awa
-2025-08-18T19:42:45.7913259Z   PG_ASYNC_DSN: ***localhost:5432/awa
-2025-08-18T19:42:45.7913637Z   DATABASE_URL: ***localhost:5432/awa
-2025-08-18T19:42:45.7913853Z   DATA_DIR: /tmp/awa-data
-2025-08-18T19:42:45.7914045Z   ENABLE_LIVE: 0
-2025-08-18T19:42:45.7914202Z   TESTING: 1
-2025-08-18T19:42:45.7914361Z ##[endgroup]
-2025-08-18T19:42:45.9530728Z ##[group]Installed versions
-2025-08-18T19:42:45.9640043Z Successfully set up CPython (3.12.11)
-2025-08-18T19:42:45.9640822Z ##[endgroup]
-2025-08-18T19:42:45.9991966Z [command]/opt/hostedtoolcache/Python/3.12.11/x64/bin/pip cache dir
-2025-08-18T19:42:47.4402349Z /home/runner/.cache/pip
-2025-08-18T19:42:47.5530460Z Cache hit for: setup-python-Linux-x64-24.04-Ubuntu-python-3.12.11-pip-5e718741e550cec7917fae13efe91a31293d04a98c3c0932315e8f58598cbd2c
-2025-08-18T19:42:48.6119026Z Received 205520896 of 318225224 (64.6%), 195.2 MBs/sec
-2025-08-18T19:42:49.0801538Z Received 318225224 of 318225224 (100.0%), 206.2 MBs/sec
-2025-08-18T19:42:49.0804711Z Cache Size: ~303 MB (318225224 B)
-2025-08-18T19:42:49.0842751Z [command]/usr/bin/tar -xf /home/runner/work/_temp/fa51132f-17d5-4f94-9485-f21fbbdc9d89/cache.tzst -P -C /home/runner/work/AWA-App/AWA-App --use-compress-program unzstd
-2025-08-18T19:42:49.6048779Z Cache restored successfully
-2025-08-18T19:42:49.6650595Z Cache restored from key: setup-python-Linux-x64-24.04-Ubuntu-python-3.12.11-pip-5e718741e550cec7917fae13efe91a31293d04a98c3c0932315e8f58598cbd2c
-2025-08-18T19:42:49.6823770Z ##[group]Run pip install -r requirements-dev.txt
-2025-08-18T19:42:49.6824144Z [36;1mpip install -r requirements-dev.txt[0m
-2025-08-18T19:42:49.6824635Z [36;1mpip install keepa==1.3.15 minio==7.1.15[0m
-2025-08-18T19:42:49.6868442Z shell: /usr/bin/bash -e {0}
-2025-08-18T19:42:49.6868679Z env:
-2025-08-18T19:42:49.6868888Z   REDIS_URL: redis://localhost:6379/0
-2025-08-18T19:42:49.6869154Z   RATE_LIMIT_DEFAULT: 100/minute
-2025-08-18T19:42:49.6869380Z   TRUST_X_FORWARDED: 1
-2025-08-18T19:42:49.6869582Z   PG_USER: postgres
-2025-08-18T19:42:49.6869783Z   PG_PASSWORD: pass
-2025-08-18T19:42:49.6869972Z   PG_DATABASE: awa
-2025-08-18T19:42:49.6870161Z   PG_HOST: localhost
-2025-08-18T19:42:49.6870351Z   PG_PORT: 5432
-2025-08-18T19:42:49.6870827Z   PG_SYNC_DSN: ***localhost:5432/awa
-2025-08-18T19:42:49.6871284Z   PG_ASYNC_DSN: ***localhost:5432/awa
-2025-08-18T19:42:49.6871674Z   DATABASE_URL: ***localhost:5432/awa
-2025-08-18T19:42:49.6871917Z   DATA_DIR: /tmp/awa-data
-2025-08-18T19:42:49.6872163Z   ENABLE_LIVE: 0
-2025-08-18T19:42:49.6872338Z   TESTING: 1
-2025-08-18T19:42:49.6872578Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.11/x64
-2025-08-18T19:42:49.6873002Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.11/x64/lib/pkgconfig
-2025-08-18T19:42:49.6873398Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.11/x64
-2025-08-18T19:42:49.6873755Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.11/x64
-2025-08-18T19:42:49.6874116Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.11/x64
-2025-08-18T19:42:49.6874490Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.11/x64/lib
-2025-08-18T19:42:49.6874785Z ##[endgroup]
-2025-08-18T19:42:50.7145049Z Collecting Jinja2==3.1.6 (from -r requirements-dev.txt (line 2))
-2025-08-18T19:42:50.7158402Z   Using cached jinja2-3.1.6-py3-none-any.whl.metadata (2.9 kB)
-2025-08-18T19:42:50.7400508Z Collecting alembic==1.13.1 (from -r requirements-dev.txt (line 3))
-2025-08-18T19:42:50.7411746Z   Using cached alembic-1.13.1-py3-none-any.whl.metadata (7.4 kB)
-2025-08-18T19:42:50.7598390Z Collecting apscheduler==3.10.4 (from -r requirements-dev.txt (line 4))
-2025-08-18T19:42:50.7611304Z   Using cached APScheduler-3.10.4-py3-none-any.whl.metadata (5.7 kB)
-2025-08-18T19:42:50.7787398Z Collecting asgi-correlation-id==4.3.1 (from -r requirements-dev.txt (line 5))
-2025-08-18T19:42:50.7798226Z   Using cached asgi_correlation_id-4.3.1-py3-none-any.whl.metadata (28 kB)
-2025-08-18T19:42:50.8229048Z Collecting asyncpg==0.30.0 (from -r requirements-dev.txt (line 6))
-2025-08-18T19:42:50.8241462Z   Using cached asyncpg-0.30.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (5.0 kB)
-2025-08-18T19:42:50.8699759Z Collecting black==25.1.0 (from -r requirements-dev.txt (line 7))
-2025-08-18T19:42:50.8712368Z   Using cached black-25.1.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.manylinux_2_28_x86_64.whl.metadata (81 kB)
-2025-08-18T19:42:51.2318379Z Collecting boto3 (from -r requirements-dev.txt (line 8))
-2025-08-18T19:42:51.2769364Z   Downloading boto3-1.40.12-py3-none-any.whl.metadata (6.7 kB)
-2025-08-18T19:42:51.3104249Z Collecting redis==5.* (from -r requirements-dev.txt (line 9))
-2025-08-18T19:42:51.3120709Z   Using cached redis-5.3.1-py3-none-any.whl.metadata (9.2 kB)
-2025-08-18T19:42:51.3469057Z Collecting minio==7.* (from -r requirements-dev.txt (line 10))
-2025-08-18T19:42:51.3481624Z   Using cached minio-7.2.16-py3-none-any.whl.metadata (6.5 kB)
-2025-08-18T19:42:51.3813576Z Collecting celery==5.4.0 (from -r requirements-dev.txt (line 11))
-2025-08-18T19:42:51.3825861Z   Using cached celery-5.4.0-py3-none-any.whl.metadata (21 kB)
-2025-08-18T19:42:51.4438230Z Collecting fastapi==0.116.1 (from -r requirements-dev.txt (line 12))
-2025-08-18T19:42:51.4451332Z   Using cached fastapi-0.116.1-py3-none-any.whl.metadata (28 kB)
-2025-08-18T19:42:51.4644435Z Collecting fastapi-limiter==0.1.6 (from -r requirements-dev.txt (line 14))
-2025-08-18T19:42:51.4655903Z   Using cached fastapi_limiter-0.1.6-py3-none-any.whl.metadata (5.3 kB)
-2025-08-18T19:42:51.4877960Z Collecting httpx<0.29,>=0.27 (from -r requirements-dev.txt (line 15))
-2025-08-18T19:42:51.4889189Z   Using cached httpx-0.28.1-py3-none-any.whl.metadata (7.1 kB)
-2025-08-18T19:42:51.5039106Z Collecting imapclient==3.0.1 (from -r requirements-dev.txt (line 16))
-2025-08-18T19:42:51.5050459Z   Using cached IMAPClient-3.0.1-py2.py3-none-any.whl.metadata (1.7 kB)
-2025-08-18T19:42:51.5174261Z Collecting itsdangerous (from -r requirements-dev.txt (line 17))
-2025-08-18T19:42:51.5185949Z   Using cached itsdangerous-2.2.0-py3-none-any.whl.metadata (1.9 kB)
-2025-08-18T19:42:51.6188189Z Collecting mypy==1.* (from -r requirements-dev.txt (line 18))
-2025-08-18T19:42:51.6202182Z   Using cached mypy-1.17.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (2.2 kB)
-2025-08-18T19:42:51.6335677Z Collecting mypy-extensions==1.1.0 (from -r requirements-dev.txt (line 19))
-2025-08-18T19:42:51.6347348Z   Using cached mypy_extensions-1.1.0-py3-none-any.whl.metadata (1.1 kB)
-2025-08-18T19:42:51.8224596Z Collecting numpy<2 (from -r requirements-dev.txt (line 20))
-2025-08-18T19:42:51.8239270Z   Using cached numpy-1.26.4-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (61 kB)
-2025-08-18T19:42:51.8521073Z Collecting openpyxl==3.1.5 (from -r requirements-dev.txt (line 21))
-2025-08-18T19:42:51.8533544Z   Using cached openpyxl-3.1.5-py2.py3-none-any.whl.metadata (2.5 kB)
-2025-08-18T19:42:51.9607659Z Collecting pandas==2.2.* (from -r requirements-dev.txt (line 22))
-2025-08-18T19:42:51.9622050Z   Using cached pandas-2.2.3-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (89 kB)
-2025-08-18T19:42:52.0567668Z Collecting psycopg2-binary==2.9.9 (from -r requirements-dev.txt (line 23))
-2025-08-18T19:42:52.0581772Z   Using cached psycopg2_binary-2.9.9-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (4.4 kB)
-2025-08-18T19:42:52.0764667Z Collecting psycopg==3.2.9 (from psycopg[binary]==3.2.9->-r requirements-dev.txt (line 24))
-2025-08-18T19:42:52.0776753Z   Using cached psycopg-3.2.9-py3-none-any.whl.metadata (4.5 kB)
-2025-08-18T19:42:52.1944084Z Collecting pydantic==2.11.7 (from -r requirements-dev.txt (line 25))
-2025-08-18T19:42:52.1956875Z   Using cached pydantic-2.11.7-py3-none-any.whl.metadata (67 kB)
-2025-08-18T19:42:52.3221153Z Collecting setuptools (from -r requirements-dev.txt (line 26))
-2025-08-18T19:42:52.3234670Z   Using cached setuptools-80.9.0-py3-none-any.whl.metadata (6.6 kB)
-2025-08-18T19:42:52.3522318Z Collecting pytest-asyncio==0.23.6 (from -r requirements-dev.txt (line 27))
-2025-08-18T19:42:52.3547715Z   Using cached pytest_asyncio-0.23.6-py3-none-any.whl.metadata (3.9 kB)
-2025-08-18T19:42:52.3703545Z Collecting pytest-cov==6.2.1 (from -r requirements-dev.txt (line 28))
-2025-08-18T19:42:52.3715584Z   Using cached pytest_cov-6.2.1-py3-none-any.whl.metadata (30 kB)
-2025-08-18T19:42:52.3895665Z Collecting pytest-postgresql==7.0.2 (from -r requirements-dev.txt (line 29))
-2025-08-18T19:42:52.3907347Z   Using cached pytest_postgresql-7.0.2-py3-none-any.whl.metadata (18 kB)
-2025-08-18T19:42:52.4102311Z Collecting python-dotenv (from -r requirements-dev.txt (line 30))
-2025-08-18T19:42:52.4113713Z   Using cached python_dotenv-1.1.1-py3-none-any.whl.metadata (24 kB)
-2025-08-18T19:42:52.4263147Z Collecting python-multipart (from -r requirements-dev.txt (line 31))
-2025-08-18T19:42:52.4274760Z   Using cached python_multipart-0.0.20-py3-none-any.whl.metadata (1.8 kB)
-2025-08-18T19:42:52.4590503Z Collecting python-telegram-bot==22.2 (from -r requirements-dev.txt (line 32))
-2025-08-18T19:42:52.4603227Z   Using cached python_telegram_bot-22.2-py3-none-any.whl.metadata (17 kB)
-2025-08-18T19:42:52.4920924Z Collecting requests==2.32.4 (from -r requirements-dev.txt (line 33))
-2025-08-18T19:42:52.4933370Z   Using cached requests-2.32.4-py3-none-any.whl.metadata (4.9 kB)
-2025-08-18T19:42:52.5113739Z Collecting respx==0.22.0 (from -r requirements-dev.txt (line 34))
-2025-08-18T19:42:52.5125691Z   Using cached respx-0.22.0-py2.py3-none-any.whl.metadata (4.1 kB)
-2025-08-18T19:42:52.8721261Z Collecting ruff==0.4.4 (from -r requirements-dev.txt (line 35))
-2025-08-18T19:42:52.8735431Z   Using cached ruff-0.4.4-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (23 kB)
-2025-08-18T19:42:53.1335500Z Collecting sqlalchemy==2.0.29 (from -r requirements-dev.txt (line 36))
-2025-08-18T19:42:53.1348954Z   Using cached SQLAlchemy-2.0.29-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (9.6 kB)
-2025-08-18T19:42:53.1667735Z Collecting structlog==24.1.0 (from -r requirements-dev.txt (line 37))
-2025-08-18T19:42:53.1678869Z   Using cached structlog-24.1.0-py3-none-any.whl.metadata (6.9 kB)
-2025-08-18T19:42:53.1882169Z Collecting testcontainers==4.10.0 (from testcontainers[postgres]==4.10.0->-r requirements-dev.txt (line 38))
-2025-08-18T19:42:53.1894538Z   Using cached testcontainers-4.10.0-py3-none-any.whl.metadata (7.8 kB)
-2025-08-18T19:42:53.2324032Z Collecting types-requests==2.32.0.20240602 (from -r requirements-dev.txt (line 39))
-2025-08-18T19:42:53.2336847Z   Using cached types_requests-2.32.0.20240602-py3-none-any.whl.metadata (1.8 kB)
-2025-08-18T19:42:53.2487061Z Collecting docspec-python==2.2.2 (from -r requirements-dev.txt (line 40))
-2025-08-18T19:42:53.2499520Z   Using cached docspec_python-2.2.2-py3-none-any.whl.metadata (1.0 kB)
-2025-08-18T19:42:53.2742666Z Collecting pydoc-markdown==4.8.2 (from -r requirements-dev.txt (line 41))
-2025-08-18T19:42:53.2755416Z   Using cached pydoc_markdown-4.8.2-py3-none-any.whl.metadata (5.9 kB)
-2025-08-18T19:42:53.3060343Z Collecting pandera==0.19.* (from -r requirements-dev.txt (line 42))
-2025-08-18T19:42:53.3072734Z   Using cached pandera-0.19.3-py3-none-any.whl.metadata (15 kB)
-2025-08-18T19:42:53.4111680Z Collecting MarkupSafe>=2.0 (from Jinja2==3.1.6->-r requirements-dev.txt (line 2))
-2025-08-18T19:42:53.4124931Z   Using cached MarkupSafe-3.0.2-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (4.0 kB)
-2025-08-18T19:42:53.4443396Z Collecting Mako (from alembic==1.13.1->-r requirements-dev.txt (line 3))
-2025-08-18T19:42:53.4455720Z   Using cached mako-1.3.10-py3-none-any.whl.metadata (2.9 kB)
-2025-08-18T19:42:53.4652228Z Collecting typing-extensions>=4 (from alembic==1.13.1->-r requirements-dev.txt (line 3))
-2025-08-18T19:42:53.4664467Z   Using cached typing_extensions-4.14.1-py3-none-any.whl.metadata (3.0 kB)
-2025-08-18T19:42:53.4826587Z Collecting six>=1.4.0 (from apscheduler==3.10.4->-r requirements-dev.txt (line 4))
-2025-08-18T19:42:53.4838418Z   Using cached six-1.17.0-py2.py3-none-any.whl.metadata (1.7 kB)
-2025-08-18T19:42:53.5200642Z Collecting pytz (from apscheduler==3.10.4->-r requirements-dev.txt (line 4))
-2025-08-18T19:42:53.5213175Z   Using cached pytz-2025.2-py2.py3-none-any.whl.metadata (22 kB)
-2025-08-18T19:42:53.5406378Z Collecting tzlocal!=3.*,>=2.0 (from apscheduler==3.10.4->-r requirements-dev.txt (line 4))
-2025-08-18T19:42:53.5417506Z   Using cached tzlocal-5.3.1-py3-none-any.whl.metadata (7.6 kB)
-2025-08-18T19:42:53.5742452Z Collecting starlette>=0.18 (from asgi-correlation-id==4.3.1->-r requirements-dev.txt (line 5))
-2025-08-18T19:42:53.5753917Z   Using cached starlette-0.47.2-py3-none-any.whl.metadata (6.2 kB)
-2025-08-18T19:42:53.5978191Z Collecting click>=8.0.0 (from black==25.1.0->-r requirements-dev.txt (line 7))
-2025-08-18T19:42:53.5989850Z   Using cached click-8.2.1-py3-none-any.whl.metadata (2.5 kB)
-2025-08-18T19:42:53.6176918Z Collecting packaging>=22.0 (from black==25.1.0->-r requirements-dev.txt (line 7))
-2025-08-18T19:42:53.6188605Z   Using cached packaging-25.0-py3-none-any.whl.metadata (3.3 kB)
-2025-08-18T19:42:53.6326713Z Collecting pathspec>=0.9.0 (from black==25.1.0->-r requirements-dev.txt (line 7))
-2025-08-18T19:42:53.6338430Z   Using cached pathspec-0.12.1-py3-none-any.whl.metadata (21 kB)
-2025-08-18T19:42:53.6547971Z Collecting platformdirs>=2 (from black==25.1.0->-r requirements-dev.txt (line 7))
-2025-08-18T19:42:53.6559647Z   Using cached platformdirs-4.3.8-py3-none-any.whl.metadata (12 kB)
-2025-08-18T19:42:53.6791203Z Collecting billiard<5.0,>=4.2.0 (from celery==5.4.0->-r requirements-dev.txt (line 11))
-2025-08-18T19:42:53.6802702Z   Using cached billiard-4.2.1-py3-none-any.whl.metadata (4.4 kB)
-2025-08-18T19:42:53.7130400Z Collecting kombu<6.0,>=5.3.4 (from celery==5.4.0->-r requirements-dev.txt (line 11))
-2025-08-18T19:42:53.7141340Z   Using cached kombu-5.5.4-py3-none-any.whl.metadata (3.5 kB)
-2025-08-18T19:42:53.7336571Z Collecting vine<6.0,>=5.1.0 (from celery==5.4.0->-r requirements-dev.txt (line 11))
-2025-08-18T19:42:53.7347441Z   Using cached vine-5.1.0-py3-none-any.whl.metadata (2.7 kB)
-2025-08-18T19:42:53.7508308Z Collecting click-didyoumean>=0.3.0 (from celery==5.4.0->-r requirements-dev.txt (line 11))
-2025-08-18T19:42:53.7519158Z   Using cached click_didyoumean-0.3.1-py3-none-any.whl.metadata (3.9 kB)
-2025-08-18T19:42:53.7634956Z Collecting click-repl>=0.2.0 (from celery==5.4.0->-r requirements-dev.txt (line 11))
-2025-08-18T19:42:53.7645841Z   Using cached click_repl-0.3.0-py3-none-any.whl.metadata (3.6 kB)
-2025-08-18T19:42:53.7766844Z Collecting click-plugins>=1.1.1 (from celery==5.4.0->-r requirements-dev.txt (line 11))
-2025-08-18T19:42:53.7777842Z   Using cached click_plugins-1.1.1.2-py2.py3-none-any.whl.metadata (6.5 kB)
-2025-08-18T19:42:53.7941999Z Collecting tzdata>=2022.7 (from celery==5.4.0->-r requirements-dev.txt (line 11))
-2025-08-18T19:42:53.7953083Z   Using cached tzdata-2025.2-py2.py3-none-any.whl.metadata (1.4 kB)
-2025-08-18T19:42:53.8092433Z Collecting python-dateutil>=2.8.2 (from celery==5.4.0->-r requirements-dev.txt (line 11))
-2025-08-18T19:42:53.8103482Z   Using cached python_dateutil-2.9.0.post0-py2.py3-none-any.whl.metadata (8.4 kB)
-2025-08-18T19:42:53.8495840Z Collecting annotated-types>=0.6.0 (from pydantic==2.11.7->-r requirements-dev.txt (line 25))
-2025-08-18T19:42:53.8506699Z   Using cached annotated_types-0.7.0-py3-none-any.whl.metadata (15 kB)
-2025-08-18T19:42:54.5025813Z Collecting pydantic-core==2.33.2 (from pydantic==2.11.7->-r requirements-dev.txt (line 25))
-2025-08-18T19:42:54.5039648Z   Using cached pydantic_core-2.33.2-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (6.8 kB)
-2025-08-18T19:42:54.5193869Z Collecting typing-inspection>=0.4.0 (from pydantic==2.11.7->-r requirements-dev.txt (line 25))
-2025-08-18T19:42:54.5205601Z   Using cached typing_inspection-0.4.1-py3-none-any.whl.metadata (2.6 kB)
-2025-08-18T19:42:54.5497663Z Collecting et-xmlfile (from openpyxl==3.1.5->-r requirements-dev.txt (line 21))
-2025-08-18T19:42:54.5509036Z   Using cached et_xmlfile-2.0.0-py3-none-any.whl.metadata (2.7 kB)
-2025-08-18T19:42:54.5968474Z Collecting pytest<9,>=7.0.0 (from pytest-asyncio==0.23.6->-r requirements-dev.txt (line 27))
-2025-08-18T19:42:54.5979637Z   Using cached pytest-8.4.1-py3-none-any.whl.metadata (7.7 kB)
-2025-08-18T19:42:54.9043656Z Collecting coverage>=7.5 (from coverage[toml]>=7.5->pytest-cov==6.2.1->-r requirements-dev.txt (line 28))
-2025-08-18T19:42:54.9057429Z   Using cached coverage-7.10.4-cp312-cp312-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl.metadata (8.9 kB)
-2025-08-18T19:42:54.9206223Z Collecting pluggy>=1.2 (from pytest-cov==6.2.1->-r requirements-dev.txt (line 28))
-2025-08-18T19:42:54.9217786Z   Using cached pluggy-1.6.0-py3-none-any.whl.metadata (4.8 kB)
-2025-08-18T19:42:54.9483988Z Collecting port-for>=0.7.3 (from pytest-postgresql==7.0.2->-r requirements-dev.txt (line 29))
-2025-08-18T19:42:54.9494544Z   Using cached port_for-0.7.4-py3-none-any.whl.metadata (7.1 kB)
-2025-08-18T19:42:54.9655098Z Collecting mirakuru>=2.6.0 (from pytest-postgresql==7.0.2->-r requirements-dev.txt (line 29))
-2025-08-18T19:42:54.9666430Z   Using cached mirakuru-2.6.1-py3-none-any.whl.metadata (10 kB)
-2025-08-18T19:42:55.0495515Z Collecting charset_normalizer<4,>=2 (from requests==2.32.4->-r requirements-dev.txt (line 33))
-2025-08-18T19:42:55.0507670Z   Using cached charset_normalizer-3.4.3-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (36 kB)
-2025-08-18T19:42:55.0681330Z Collecting idna<4,>=2.5 (from requests==2.32.4->-r requirements-dev.txt (line 33))
-2025-08-18T19:42:55.0692028Z   Using cached idna-3.10-py3-none-any.whl.metadata (10 kB)
-2025-08-18T19:42:55.0988970Z Collecting urllib3<3,>=1.21.1 (from requests==2.32.4->-r requirements-dev.txt (line 33))
-2025-08-18T19:42:55.1000156Z   Using cached urllib3-2.5.0-py3-none-any.whl.metadata (6.5 kB)
-2025-08-18T19:42:55.1223552Z Collecting certifi>=2017.4.17 (from requests==2.32.4->-r requirements-dev.txt (line 33))
-2025-08-18T19:42:55.1234545Z   Using cached certifi-2025.8.3-py3-none-any.whl.metadata (2.4 kB)
-2025-08-18T19:42:55.3232931Z Collecting greenlet!=0.4.17 (from sqlalchemy==2.0.29->-r requirements-dev.txt (line 36))
-2025-08-18T19:42:55.3247324Z   Using cached greenlet-3.2.4-cp312-cp312-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl.metadata (4.1 kB)
-2025-08-18T19:42:55.3560882Z Collecting docker (from testcontainers==4.10.0->testcontainers[postgres]==4.10.0->-r requirements-dev.txt (line 38))
-2025-08-18T19:42:55.3572744Z   Using cached docker-7.1.0-py3-none-any.whl.metadata (3.8 kB)
-2025-08-18T19:42:55.4517363Z Collecting wrapt (from testcontainers==4.10.0->testcontainers[postgres]==4.10.0->-r requirements-dev.txt (line 38))
-2025-08-18T19:42:55.4529223Z   Using cached wrapt-1.17.3-cp312-cp312-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl.metadata (6.4 kB)
-2025-08-18T19:42:55.4807984Z Collecting docspec==2.2.1 (from docspec-python==2.2.2->-r requirements-dev.txt (line 40))
-2025-08-18T19:42:55.4818761Z   Using cached docspec-2.2.1-py3-none-any.whl.metadata (1.5 kB)
-2025-08-18T19:42:55.5002451Z Collecting nr-util>=0.8.12 (from docspec-python==2.2.2->-r requirements-dev.txt (line 40))
-2025-08-18T19:42:55.5013291Z   Using cached nr.util-0.8.12-py3-none-any.whl.metadata (813 bytes)
-2025-08-18T19:42:55.5368249Z Collecting PyYAML<7.0,>=5.0 (from pydoc-markdown==4.8.2->-r requirements-dev.txt (line 41))
-2025-08-18T19:42:55.5379659Z   Using cached PyYAML-6.0.2-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (2.1 kB)
-2025-08-18T19:42:55.5681473Z Collecting databind.core<5.0.0,>=4.4.0 (from pydoc-markdown==4.8.2->-r requirements-dev.txt (line 41))
-2025-08-18T19:42:55.5692407Z   Using cached databind.core-4.5.2-py3-none-any.whl.metadata (1.1 kB)
-2025-08-18T19:42:55.5933913Z Collecting databind.json<5.0.0,>=4.4.0 (from pydoc-markdown==4.8.2->-r requirements-dev.txt (line 41))
-2025-08-18T19:42:55.5944773Z   Using cached databind.json-4.5.2-py3-none-any.whl.metadata (1.1 kB)
-2025-08-18T19:42:55.6104395Z Collecting docstring-parser<0.12,>=0.11 (from pydoc-markdown==4.8.2->-r requirements-dev.txt (line 41))
-2025-08-18T19:42:55.6106161Z   Using cached docstring_parser-0.11-py3-none-any.whl
-2025-08-18T19:42:55.6474140Z Collecting tomli<3.0.0,>=2.0.0 (from pydoc-markdown==4.8.2->-r requirements-dev.txt (line 41))
-2025-08-18T19:42:55.6485580Z   Using cached tomli-2.2.1-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (11 kB)
-2025-08-18T19:42:55.6610788Z Collecting tomli_w<2.0.0,>=1.0.0 (from pydoc-markdown==4.8.2->-r requirements-dev.txt (line 41))
-2025-08-18T19:42:55.6621756Z   Using cached tomli_w-1.2.0-py3-none-any.whl.metadata (5.7 kB)
-2025-08-18T19:42:55.7088980Z Collecting watchdog (from pydoc-markdown==4.8.2->-r requirements-dev.txt (line 41))
-2025-08-18T19:42:55.7100559Z   Using cached watchdog-6.0.0-py3-none-manylinux2014_x86_64.whl.metadata (44 kB)
-2025-08-18T19:42:55.7333557Z Collecting yapf>=0.30.0 (from pydoc-markdown==4.8.2->-r requirements-dev.txt (line 41))
-2025-08-18T19:42:55.7344538Z   Using cached yapf-0.43.0-py3-none-any.whl.metadata (46 kB)
-2025-08-18T19:42:55.7560739Z Collecting Deprecated<2.0.0,>=1.2.12 (from docspec==2.2.1->docspec-python==2.2.2->-r requirements-dev.txt (line 40))
-2025-08-18T19:42:55.7571828Z   Using cached Deprecated-1.2.18-py2.py3-none-any.whl.metadata (5.7 kB)
-2025-08-18T19:42:55.9079533Z Collecting psycopg-binary==3.2.9 (from psycopg[binary]==3.2.9->-r requirements-dev.txt (line 24))
-2025-08-18T19:42:55.9093185Z   Using cached psycopg_binary-3.2.9-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (2.9 kB)
-2025-08-18T19:42:55.9377124Z Collecting PyJWT>=2.9.0 (from redis==5.*->-r requirements-dev.txt (line 9))
-2025-08-18T19:42:55.9388906Z   Using cached PyJWT-2.10.1-py3-none-any.whl.metadata (4.0 kB)
-2025-08-18T19:42:55.9635738Z Collecting argon2-cffi (from minio==7.*->-r requirements-dev.txt (line 10))
-2025-08-18T19:42:55.9647361Z   Using cached argon2_cffi-25.1.0-py3-none-any.whl.metadata (4.1 kB)
-2025-08-18T19:42:56.0452575Z Collecting pycryptodome (from minio==7.*->-r requirements-dev.txt (line 10))
-2025-08-18T19:42:56.0465515Z   Using cached pycryptodome-3.23.0-cp37-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (3.4 kB)
-2025-08-18T19:42:56.0683853Z Collecting anyio (from httpx<0.29,>=0.27->-r requirements-dev.txt (line 15))
-2025-08-18T19:42:56.0695406Z   Using cached anyio-4.10.0-py3-none-any.whl.metadata (4.0 kB)
-2025-08-18T19:42:56.0908650Z Collecting httpcore==1.* (from httpx<0.29,>=0.27->-r requirements-dev.txt (line 15))
-2025-08-18T19:42:56.0920325Z   Using cached httpcore-1.0.9-py3-none-any.whl.metadata (21 kB)
-2025-08-18T19:42:56.1276426Z Collecting multimethod<=1.10.0 (from pandera==0.19.*->-r requirements-dev.txt (line 42))
-2025-08-18T19:42:56.1287788Z   Using cached multimethod-1.10-py3-none-any.whl.metadata (8.2 kB)
-2025-08-18T19:42:56.1688820Z Collecting typeguard (from pandera==0.19.*->-r requirements-dev.txt (line 42))
-2025-08-18T19:42:56.1700531Z   Using cached typeguard-4.4.4-py3-none-any.whl.metadata (3.3 kB)
-2025-08-18T19:42:56.1830218Z Collecting typing-inspect>=0.6.0 (from pandera==0.19.*->-r requirements-dev.txt (line 42))
-2025-08-18T19:42:56.1845574Z   Using cached typing_inspect-0.9.0-py3-none-any.whl.metadata (1.5 kB)
-2025-08-18T19:42:56.2167249Z Collecting databind<5.0.0,>=4.5.2 (from databind.core<5.0.0,>=4.4.0->pydoc-markdown==4.8.2->-r requirements-dev.txt (line 41))
-2025-08-18T19:42:56.2178717Z   Using cached databind-4.5.2-py3-none-any.whl.metadata (4.3 kB)
-2025-08-18T19:42:56.2323633Z Collecting nr-date<3.0.0,>=2.0.0 (from databind<5.0.0,>=4.5.2->databind.core<5.0.0,>=4.4.0->pydoc-markdown==4.8.2->-r requirements-dev.txt (line 41))
-2025-08-18T19:42:56.2334902Z   Using cached nr_date-2.1.0-py3-none-any.whl.metadata (746 bytes)
-2025-08-18T19:42:56.2486336Z Collecting nr-stream<2.0.0,>=1.0.0 (from databind<5.0.0,>=4.5.2->databind.core<5.0.0,>=4.4.0->pydoc-markdown==4.8.2->-r requirements-dev.txt (line 41))
-2025-08-18T19:42:56.2497954Z   Using cached nr_stream-1.1.5-py3-none-any.whl.metadata (3.6 kB)
-2025-08-18T19:42:56.2688963Z Collecting typeapi<3,>=2.0.1 (from databind<5.0.0,>=4.5.2->databind.core<5.0.0,>=4.4.0->pydoc-markdown==4.8.2->-r requirements-dev.txt (line 41))
-2025-08-18T19:42:56.2701321Z   Using cached typeapi-2.2.4-py3-none-any.whl.metadata (1.5 kB)
-2025-08-18T19:42:56.3008444Z Collecting h11>=0.16 (from httpcore==1.*->httpx<0.29,>=0.27->-r requirements-dev.txt (line 15))
-2025-08-18T19:42:56.3020612Z   Using cached h11-0.16.0-py3-none-any.whl.metadata (8.3 kB)
-2025-08-18T19:42:56.3270019Z Collecting amqp<6.0.0,>=5.1.1 (from kombu<6.0,>=5.3.4->celery==5.4.0->-r requirements-dev.txt (line 11))
-2025-08-18T19:42:56.3282240Z   Using cached amqp-5.3.1-py3-none-any.whl.metadata (8.9 kB)
-2025-08-18T19:42:56.3695637Z Collecting iniconfig>=1 (from pytest<9,>=7.0.0->pytest-asyncio==0.23.6->-r requirements-dev.txt (line 27))
-2025-08-18T19:42:56.3707795Z   Using cached iniconfig-2.1.0-py3-none-any.whl.metadata (2.7 kB)
-2025-08-18T19:42:56.3937652Z Collecting pygments>=2.7.2 (from pytest<9,>=7.0.0->pytest-asyncio==0.23.6->-r requirements-dev.txt (line 27))
-2025-08-18T19:42:56.3949691Z   Using cached pygments-2.19.2-py3-none-any.whl.metadata (2.5 kB)
-2025-08-18T19:42:56.4380211Z Collecting sniffio>=1.1 (from anyio->httpx<0.29,>=0.27->-r requirements-dev.txt (line 15))
-2025-08-18T19:42:56.4392562Z   Using cached sniffio-1.3.1-py3-none-any.whl.metadata (3.9 kB)
-2025-08-18T19:42:56.8847047Z Collecting botocore<1.41.0,>=1.40.12 (from boto3->-r requirements-dev.txt (line 8))
-2025-08-18T19:42:56.8923654Z   Downloading botocore-1.40.12-py3-none-any.whl.metadata (5.7 kB)
-2025-08-18T19:42:56.9095148Z Collecting jmespath<2.0.0,>=0.7.1 (from boto3->-r requirements-dev.txt (line 8))
-2025-08-18T19:42:56.9107818Z   Using cached jmespath-1.0.1-py3-none-any.whl.metadata (7.6 kB)
-2025-08-18T19:42:56.9303231Z Collecting s3transfer<0.14.0,>=0.13.0 (from boto3->-r requirements-dev.txt (line 8))
-2025-08-18T19:42:56.9314721Z   Using cached s3transfer-0.13.1-py3-none-any.whl.metadata (1.7 kB)
-2025-08-18T19:42:57.0811670Z Collecting fastapi-cli>=0.0.8 (from fastapi-cli[standard]>=0.0.8; extra == "all"->fastapi[all]->-r requirements-dev.txt (line 13))
-2025-08-18T19:42:57.0823755Z   Using cached fastapi_cli-0.0.8-py3-none-any.whl.metadata (6.3 kB)
-2025-08-18T19:42:57.1599264Z Collecting ujson!=4.0.2,!=4.1.0,!=4.2.0,!=4.3.0,!=5.0.0,!=5.1.0,>=4.0.1 (from fastapi[all]->-r requirements-dev.txt (line 13))
-2025-08-18T19:42:57.1617635Z   Using cached ujson-5.10.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (9.3 kB)
-2025-08-18T19:42:57.3899537Z Collecting orjson>=3.2.1 (from fastapi[all]->-r requirements-dev.txt (line 13))
-2025-08-18T19:42:57.3913201Z   Using cached orjson-3.11.2-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (1.2 kB)
-2025-08-18T19:42:57.4066733Z Collecting email-validator>=2.0.0 (from fastapi[all]->-r requirements-dev.txt (line 13))
-2025-08-18T19:42:57.4079182Z   Using cached email_validator-2.2.0-py3-none-any.whl.metadata (25 kB)
-2025-08-18T19:42:57.4390389Z Collecting uvicorn>=0.12.0 (from uvicorn[standard]>=0.12.0; extra == "all"->fastapi[all]->-r requirements-dev.txt (line 13))
-2025-08-18T19:42:57.4401805Z   Using cached uvicorn-0.35.0-py3-none-any.whl.metadata (6.5 kB)
-2025-08-18T19:42:57.4590977Z Collecting pydantic-settings>=2.0.0 (from fastapi[all]->-r requirements-dev.txt (line 13))
-2025-08-18T19:42:57.4602637Z   Using cached pydantic_settings-2.10.1-py3-none-any.whl.metadata (3.4 kB)
-2025-08-18T19:42:57.4776573Z Collecting pydantic-extra-types>=2.0.0 (from fastapi[all]->-r requirements-dev.txt (line 13))
-2025-08-18T19:42:57.4788230Z   Using cached pydantic_extra_types-2.10.5-py3-none-any.whl.metadata (3.9 kB)
-2025-08-18T19:42:57.5471557Z Collecting prompt-toolkit>=3.0.36 (from click-repl>=0.2.0->celery==5.4.0->-r requirements-dev.txt (line 11))
-2025-08-18T19:42:57.5483330Z   Using cached prompt_toolkit-3.0.51-py3-none-any.whl.metadata (6.4 kB)
-2025-08-18T19:42:57.5696463Z Collecting dnspython>=2.0.0 (from email-validator>=2.0.0->fastapi[all]->-r requirements-dev.txt (line 13))
-2025-08-18T19:42:57.5708255Z   Using cached dnspython-2.7.0-py3-none-any.whl.metadata (5.8 kB)
-2025-08-18T19:42:57.6026398Z Collecting typer>=0.15.1 (from fastapi-cli>=0.0.8->fastapi-cli[standard]>=0.0.8; extra == "all"->fastapi[all]->-r requirements-dev.txt (line 13))
-2025-08-18T19:42:57.6100672Z   Downloading typer-0.16.1-py3-none-any.whl.metadata (15 kB)
-2025-08-18T19:42:57.6416141Z Collecting rich-toolkit>=0.14.8 (from fastapi-cli>=0.0.8->fastapi-cli[standard]>=0.0.8; extra == "all"->fastapi[all]->-r requirements-dev.txt (line 13))
-2025-08-18T19:42:57.6427848Z   Using cached rich_toolkit-0.15.0-py3-none-any.whl.metadata (1.0 kB)
-2025-08-18T19:42:57.6567916Z Collecting fastapi-cloud-cli>=0.1.1 (from fastapi-cli[standard]>=0.0.8; extra == "all"->fastapi[all]->-r requirements-dev.txt (line 13))
-2025-08-18T19:42:57.6579422Z   Using cached fastapi_cloud_cli-0.1.5-py3-none-any.whl.metadata (3.2 kB)
-2025-08-18T19:42:57.7324596Z Collecting rignore>=0.5.1 (from fastapi-cloud-cli>=0.1.1->fastapi-cli[standard]>=0.0.8; extra == "all"->fastapi[all]->-r requirements-dev.txt (line 13))
-2025-08-18T19:42:57.7337874Z   Using cached rignore-0.6.4-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (3.8 kB)
-2025-08-18T19:42:57.7982447Z Collecting sentry-sdk>=2.20.0 (from fastapi-cloud-cli>=0.1.1->fastapi-cli[standard]>=0.0.8; extra == "all"->fastapi[all]->-r requirements-dev.txt (line 13))
-2025-08-18T19:42:57.7994393Z   Using cached sentry_sdk-2.35.0-py2.py3-none-any.whl.metadata (10 kB)
-2025-08-18T19:42:57.8939110Z Collecting psutil>=4.0.0 (from mirakuru>=2.6.0->pytest-postgresql==7.0.2->-r requirements-dev.txt (line 29))
-2025-08-18T19:42:57.8952242Z   Using cached psutil-7.0.0-cp36-abi3-manylinux_2_12_x86_64.manylinux2010_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (22 kB)
-2025-08-18T19:42:57.9309691Z Collecting wcwidth (from prompt-toolkit>=3.0.36->click-repl>=0.2.0->celery==5.4.0->-r requirements-dev.txt (line 11))
-2025-08-18T19:42:57.9321250Z   Using cached wcwidth-0.2.13-py2.py3-none-any.whl.metadata (14 kB)
-2025-08-18T19:42:58.0182531Z Collecting rich>=13.7.1 (from rich-toolkit>=0.14.8->fastapi-cli>=0.0.8->fastapi-cli[standard]>=0.0.8; extra == "all"->fastapi[all]->-r requirements-dev.txt (line 13))
-2025-08-18T19:42:58.0194122Z   Using cached rich-14.1.0-py3-none-any.whl.metadata (18 kB)
-2025-08-18T19:42:58.0406848Z Collecting markdown-it-py>=2.2.0 (from rich>=13.7.1->rich-toolkit>=0.14.8->fastapi-cli>=0.0.8->fastapi-cli[standard]>=0.0.8; extra == "all"->fastapi[all]->-r requirements-dev.txt (line 13))
-2025-08-18T19:42:58.0418023Z   Using cached markdown_it_py-4.0.0-py3-none-any.whl.metadata (7.3 kB)
-2025-08-18T19:42:58.0659210Z Collecting mdurl~=0.1 (from markdown-it-py>=2.2.0->rich>=13.7.1->rich-toolkit>=0.14.8->fastapi-cli>=0.0.8->fastapi-cli[standard]>=0.0.8; extra == "all"->fastapi[all]->-r requirements-dev.txt (line 13))
-2025-08-18T19:42:58.0671238Z   Using cached mdurl-0.1.2-py3-none-any.whl.metadata (1.6 kB)
-2025-08-18T19:42:58.1214715Z Collecting shellingham>=1.3.0 (from typer>=0.15.1->fastapi-cli>=0.0.8->fastapi-cli[standard]>=0.0.8; extra == "all"->fastapi[all]->-r requirements-dev.txt (line 13))
-2025-08-18T19:42:58.1226730Z   Using cached shellingham-1.5.4-py2.py3-none-any.whl.metadata (3.5 kB)
-2025-08-18T19:42:58.2046973Z Collecting httptools>=0.6.3 (from uvicorn[standard]>=0.12.0; extra == "all"->fastapi[all]->-r requirements-dev.txt (line 13))
-2025-08-18T19:42:58.2064762Z   Using cached httptools-0.6.4-cp312-cp312-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (3.6 kB)
-2025-08-18T19:42:58.2522620Z Collecting uvloop>=0.15.1 (from uvicorn[standard]>=0.12.0; extra == "all"->fastapi[all]->-r requirements-dev.txt (line 13))
-2025-08-18T19:42:58.2535088Z   Using cached uvloop-0.21.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (4.9 kB)
-2025-08-18T19:42:58.3253435Z Collecting watchfiles>=0.13 (from uvicorn[standard]>=0.12.0; extra == "all"->fastapi[all]->-r requirements-dev.txt (line 13))
-2025-08-18T19:42:58.3264825Z   Using cached watchfiles-1.1.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (4.9 kB)
-2025-08-18T19:42:58.4122544Z Collecting websockets>=10.4 (from uvicorn[standard]>=0.12.0; extra == "all"->fastapi[all]->-r requirements-dev.txt (line 13))
-2025-08-18T19:42:58.4134946Z   Using cached websockets-15.0.1-cp312-cp312-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (6.8 kB)
-2025-08-18T19:42:58.5756205Z Collecting argon2-cffi-bindings (from argon2-cffi->minio==7.*->-r requirements-dev.txt (line 10))
-2025-08-18T19:42:58.5767448Z   Using cached argon2_cffi_bindings-25.1.0-cp39-abi3-manylinux_2_26_x86_64.manylinux_2_28_x86_64.whl.metadata (7.4 kB)
-2025-08-18T19:42:58.6802466Z Collecting cffi>=1.0.1 (from argon2-cffi-bindings->argon2-cffi->minio==7.*->-r requirements-dev.txt (line 10))
-2025-08-18T19:42:58.6815744Z   Using cached cffi-1.17.1-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (1.5 kB)
-2025-08-18T19:42:58.6977223Z Collecting pycparser (from cffi>=1.0.1->argon2-cffi-bindings->argon2-cffi->minio==7.*->-r requirements-dev.txt (line 10))
-2025-08-18T19:42:58.6988607Z   Using cached pycparser-2.22-py3-none-any.whl.metadata (943 bytes)
-2025-08-18T19:42:58.7603316Z Using cached jinja2-3.1.6-py3-none-any.whl (134 kB)
-2025-08-18T19:42:58.7615455Z Using cached alembic-1.13.1-py3-none-any.whl (233 kB)
-2025-08-18T19:42:58.7628173Z Using cached APScheduler-3.10.4-py3-none-any.whl (59 kB)
-2025-08-18T19:42:58.7639271Z Using cached asgi_correlation_id-4.3.1-py3-none-any.whl (15 kB)
-2025-08-18T19:42:58.7650698Z Using cached asyncpg-0.30.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (3.6 MB)
-2025-08-18T19:42:58.7687067Z Using cached black-25.1.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.manylinux_2_28_x86_64.whl (1.8 MB)
-2025-08-18T19:42:58.7710714Z Using cached celery-5.4.0-py3-none-any.whl (425 kB)
-2025-08-18T19:42:58.7724230Z Using cached fastapi-0.116.1-py3-none-any.whl (95 kB)
-2025-08-18T19:42:58.7735557Z Using cached pydantic-2.11.7-py3-none-any.whl (444 kB)
-2025-08-18T19:42:58.7749403Z Using cached fastapi_limiter-0.1.6-py3-none-any.whl (15 kB)
-2025-08-18T19:42:58.7760234Z Using cached IMAPClient-3.0.1-py2.py3-none-any.whl (182 kB)
-2025-08-18T19:42:58.7772278Z Using cached mypy_extensions-1.1.0-py3-none-any.whl (5.0 kB)
-2025-08-18T19:42:58.7783064Z Using cached openpyxl-3.1.5-py2.py3-none-any.whl (250 kB)
-2025-08-18T19:42:58.7795683Z Using cached psycopg2_binary-2.9.9-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (3.0 MB)
-2025-08-18T19:42:58.7827213Z Using cached psycopg-3.2.9-py3-none-any.whl (202 kB)
-2025-08-18T19:42:58.7839122Z Using cached pytest_asyncio-0.23.6-py3-none-any.whl (17 kB)
-2025-08-18T19:42:58.7850000Z Using cached pytest_cov-6.2.1-py3-none-any.whl (24 kB)
-2025-08-18T19:42:58.7860845Z Using cached pytest_postgresql-7.0.2-py3-none-any.whl (41 kB)
-2025-08-18T19:42:58.7871815Z Using cached python_telegram_bot-22.2-py3-none-any.whl (708 kB)
-2025-08-18T19:42:58.7887534Z Using cached requests-2.32.4-py3-none-any.whl (64 kB)
-2025-08-18T19:42:58.7898736Z Using cached respx-0.22.0-py2.py3-none-any.whl (25 kB)
-2025-08-18T19:42:58.7909782Z Using cached ruff-0.4.4-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (8.7 MB)
-2025-08-18T19:42:58.7981508Z Using cached SQLAlchemy-2.0.29-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (3.2 MB)
-2025-08-18T19:42:58.8015113Z Using cached structlog-24.1.0-py3-none-any.whl (65 kB)
-2025-08-18T19:42:58.8026542Z Using cached testcontainers-4.10.0-py3-none-any.whl (107 kB)
-2025-08-18T19:42:58.8038074Z Using cached types_requests-2.32.0.20240602-py3-none-any.whl (15 kB)
-2025-08-18T19:42:58.8048921Z Using cached docspec_python-2.2.2-py3-none-any.whl (15 kB)
-2025-08-18T19:42:58.8059704Z Using cached pydoc_markdown-4.8.2-py3-none-any.whl (67 kB)
-2025-08-18T19:42:58.8070638Z Using cached docspec-2.2.1-py3-none-any.whl (9.8 kB)
-2025-08-18T19:42:58.8081782Z Using cached psycopg_binary-3.2.9-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (4.4 MB)
-2025-08-18T19:42:58.8123398Z Using cached pydantic_core-2.33.2-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (2.0 MB)
-2025-08-18T19:42:58.8149341Z Using cached redis-5.3.1-py3-none-any.whl (272 kB)
-2025-08-18T19:42:58.8162265Z Using cached minio-7.2.16-py3-none-any.whl (95 kB)
-2025-08-18T19:42:58.8173946Z Using cached httpx-0.28.1-py3-none-any.whl (73 kB)
-2025-08-18T19:42:58.8186105Z Using cached mypy-1.17.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (12.7 MB)
-2025-08-18T19:42:58.8285929Z Using cached numpy-1.26.4-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (18.0 MB)
-2025-08-18T19:42:58.8423592Z Using cached pandas-2.2.3-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (12.7 MB)
-2025-08-18T19:42:58.8524193Z Using cached pandera-0.19.3-py3-none-any.whl (251 kB)
-2025-08-18T19:42:58.8537061Z Using cached billiard-4.2.1-py3-none-any.whl (86 kB)
-2025-08-18T19:42:58.8549427Z Using cached charset_normalizer-3.4.3-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (151 kB)
-2025-08-18T19:42:58.8560762Z Using cached click-8.2.1-py3-none-any.whl (102 kB)
-2025-08-18T19:42:58.8572165Z Using cached databind.core-4.5.2-py3-none-any.whl (1.5 kB)
-2025-08-18T19:42:58.8582720Z Using cached databind-4.5.2-py3-none-any.whl (49 kB)
-2025-08-18T19:42:58.8593595Z Using cached databind.json-4.5.2-py3-none-any.whl (1.5 kB)
-2025-08-18T19:42:58.8604226Z Using cached Deprecated-1.2.18-py2.py3-none-any.whl (10.0 kB)
-2025-08-18T19:42:58.8614789Z Using cached httpcore-1.0.9-py3-none-any.whl (78 kB)
-2025-08-18T19:42:58.8626431Z Using cached idna-3.10-py3-none-any.whl (70 kB)
-2025-08-18T19:42:58.8637195Z Using cached kombu-5.5.4-py3-none-any.whl (210 kB)
-2025-08-18T19:42:58.8648990Z Using cached vine-5.1.0-py3-none-any.whl (9.6 kB)
-2025-08-18T19:42:58.8659497Z Using cached amqp-5.3.1-py3-none-any.whl (50 kB)
-2025-08-18T19:42:58.8670260Z Using cached multimethod-1.10-py3-none-any.whl (9.9 kB)
-2025-08-18T19:42:58.8680681Z Using cached nr_date-2.1.0-py3-none-any.whl (10 kB)
-2025-08-18T19:42:58.8691282Z Using cached nr_stream-1.1.5-py3-none-any.whl (10 kB)
-2025-08-18T19:42:58.8701811Z Using cached nr.util-0.8.12-py3-none-any.whl (90 kB)
-2025-08-18T19:42:58.8712926Z Using cached pytest-8.4.1-py3-none-any.whl (365 kB)
-2025-08-18T19:42:58.8726150Z Using cached pluggy-1.6.0-py3-none-any.whl (20 kB)
-2025-08-18T19:42:58.8737151Z Using cached PyYAML-6.0.2-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (767 kB)
-2025-08-18T19:42:58.8752815Z Using cached starlette-0.47.2-py3-none-any.whl (72 kB)
-2025-08-18T19:42:58.8763764Z Using cached anyio-4.10.0-py3-none-any.whl (107 kB)
-2025-08-18T19:42:58.8775430Z Using cached tomli-2.2.1-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (242 kB)
-2025-08-18T19:42:58.8787694Z Using cached tomli_w-1.2.0-py3-none-any.whl (6.7 kB)
-2025-08-18T19:42:58.8798183Z Using cached typeapi-2.2.4-py3-none-any.whl (26 kB)
-2025-08-18T19:42:58.8809112Z Using cached typing_extensions-4.14.1-py3-none-any.whl (43 kB)
-2025-08-18T19:42:58.8819881Z Using cached urllib3-2.5.0-py3-none-any.whl (129 kB)
-2025-08-18T19:42:58.8831775Z Using cached wrapt-1.17.3-cp312-cp312-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl (88 kB)
-2025-08-18T19:42:58.8902459Z Downloading boto3-1.40.12-py3-none-any.whl (140 kB)
-2025-08-18T19:42:58.9095005Z Downloading botocore-1.40.12-py3-none-any.whl (14.0 MB)
-2025-08-18T19:42:58.9812475Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 14.0/14.0 MB 212.8 MB/s  0:00:00
-2025-08-18T19:42:58.9824688Z Using cached jmespath-1.0.1-py3-none-any.whl (20 kB)
-2025-08-18T19:42:58.9836108Z Using cached python_dateutil-2.9.0.post0-py2.py3-none-any.whl (229 kB)
-2025-08-18T19:42:58.9848234Z Using cached s3transfer-0.13.1-py3-none-any.whl (85 kB)
-2025-08-18T19:42:58.9859511Z Using cached itsdangerous-2.2.0-py3-none-any.whl (16 kB)
-2025-08-18T19:42:58.9870564Z Using cached setuptools-80.9.0-py3-none-any.whl (1.2 MB)
-2025-08-18T19:42:58.9889756Z Using cached python_dotenv-1.1.1-py3-none-any.whl (20 kB)
-2025-08-18T19:42:58.9900822Z Using cached python_multipart-0.0.20-py3-none-any.whl (24 kB)
-2025-08-18T19:42:58.9911657Z Using cached annotated_types-0.7.0-py3-none-any.whl (13 kB)
-2025-08-18T19:42:58.9922450Z Using cached certifi-2025.8.3-py3-none-any.whl (161 kB)
-2025-08-18T19:42:58.9933981Z Using cached click_didyoumean-0.3.1-py3-none-any.whl (3.6 kB)
-2025-08-18T19:42:58.9944495Z Using cached click_plugins-1.1.1.2-py2.py3-none-any.whl (11 kB)
-2025-08-18T19:42:58.9955578Z Using cached click_repl-0.3.0-py3-none-any.whl (10 kB)
-2025-08-18T19:42:58.9966852Z Using cached coverage-7.10.4-cp312-cp312-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl (251 kB)
-2025-08-18T19:42:58.9978656Z Using cached email_validator-2.2.0-py3-none-any.whl (33 kB)
-2025-08-18T19:42:58.9989499Z Using cached dnspython-2.7.0-py3-none-any.whl (313 kB)
-2025-08-18T19:42:59.0002174Z Using cached fastapi_cli-0.0.8-py3-none-any.whl (10 kB)
-2025-08-18T19:42:59.0012863Z Using cached fastapi_cloud_cli-0.1.5-py3-none-any.whl (18 kB)
-2025-08-18T19:42:59.0023923Z Using cached greenlet-3.2.4-cp312-cp312-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl (607 kB)
-2025-08-18T19:42:59.0038622Z Using cached h11-0.16.0-py3-none-any.whl (37 kB)
-2025-08-18T19:42:59.0049499Z Using cached iniconfig-2.1.0-py3-none-any.whl (6.0 kB)
-2025-08-18T19:42:59.0060782Z Using cached MarkupSafe-3.0.2-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (23 kB)
-2025-08-18T19:42:59.0071194Z Using cached mirakuru-2.6.1-py3-none-any.whl (26 kB)
-2025-08-18T19:42:59.0082514Z Using cached orjson-3.11.2-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (121 kB)
-2025-08-18T19:42:59.0093383Z Using cached packaging-25.0-py3-none-any.whl (66 kB)
-2025-08-18T19:42:59.0104376Z Using cached pathspec-0.12.1-py3-none-any.whl (31 kB)
-2025-08-18T19:42:59.0115330Z Using cached platformdirs-4.3.8-py3-none-any.whl (18 kB)
-2025-08-18T19:42:59.0125838Z Using cached port_for-0.7.4-py3-none-any.whl (21 kB)
-2025-08-18T19:42:59.0136771Z Using cached prompt_toolkit-3.0.51-py3-none-any.whl (387 kB)
-2025-08-18T19:42:59.0150782Z Using cached psutil-7.0.0-cp36-abi3-manylinux_2_12_x86_64.manylinux2010_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl (277 kB)
-2025-08-18T19:42:59.0163085Z Using cached pydantic_extra_types-2.10.5-py3-none-any.whl (38 kB)
-2025-08-18T19:42:59.0173835Z Using cached pydantic_settings-2.10.1-py3-none-any.whl (45 kB)
-2025-08-18T19:42:59.0184793Z Using cached pygments-2.19.2-py3-none-any.whl (1.2 MB)
-2025-08-18T19:42:59.0204271Z Using cached PyJWT-2.10.1-py3-none-any.whl (22 kB)
-2025-08-18T19:42:59.0215312Z Using cached pytz-2025.2-py2.py3-none-any.whl (509 kB)
-2025-08-18T19:42:59.0229544Z Using cached rich_toolkit-0.15.0-py3-none-any.whl (29 kB)
-2025-08-18T19:42:59.0240398Z Using cached rich-14.1.0-py3-none-any.whl (243 kB)
-2025-08-18T19:42:59.0252728Z Using cached markdown_it_py-4.0.0-py3-none-any.whl (87 kB)
-2025-08-18T19:42:59.0263962Z Using cached mdurl-0.1.2-py3-none-any.whl (10.0 kB)
-2025-08-18T19:42:59.0275006Z Using cached rignore-0.6.4-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (949 kB)
-2025-08-18T19:42:59.0292451Z Using cached sentry_sdk-2.35.0-py2.py3-none-any.whl (363 kB)
-2025-08-18T19:42:59.0305727Z Using cached six-1.17.0-py2.py3-none-any.whl (11 kB)
-2025-08-18T19:42:59.0316531Z Using cached sniffio-1.3.1-py3-none-any.whl (10 kB)
-2025-08-18T19:42:59.0386369Z Downloading typer-0.16.1-py3-none-any.whl (46 kB)
-2025-08-18T19:42:59.0418856Z Using cached shellingham-1.5.4-py2.py3-none-any.whl (9.8 kB)
-2025-08-18T19:42:59.0429470Z Using cached typing_inspect-0.9.0-py3-none-any.whl (8.8 kB)
-2025-08-18T19:42:59.0440377Z Using cached typing_inspection-0.4.1-py3-none-any.whl (14 kB)
-2025-08-18T19:42:59.0451053Z Using cached tzdata-2025.2-py2.py3-none-any.whl (347 kB)
-2025-08-18T19:42:59.0464081Z Using cached tzlocal-5.3.1-py3-none-any.whl (18 kB)
-2025-08-18T19:42:59.0476821Z Using cached ujson-5.10.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (53 kB)
-2025-08-18T19:42:59.0487590Z Using cached uvicorn-0.35.0-py3-none-any.whl (66 kB)
-2025-08-18T19:42:59.0499437Z Using cached httptools-0.6.4-cp312-cp312-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl (510 kB)
-2025-08-18T19:42:59.0513421Z Using cached uvloop-0.21.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (4.7 MB)
-2025-08-18T19:42:59.0558008Z Using cached watchfiles-1.1.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (452 kB)
-2025-08-18T19:42:59.0572242Z Using cached websockets-15.0.1-cp312-cp312-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl (182 kB)
-2025-08-18T19:42:59.0583483Z Using cached yapf-0.43.0-py3-none-any.whl (256 kB)
-2025-08-18T19:42:59.0596203Z Using cached argon2_cffi-25.1.0-py3-none-any.whl (14 kB)
-2025-08-18T19:42:59.0607505Z Using cached argon2_cffi_bindings-25.1.0-cp39-abi3-manylinux_2_26_x86_64.manylinux_2_28_x86_64.whl (87 kB)
-2025-08-18T19:42:59.0618917Z Using cached cffi-1.17.1-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (479 kB)
-2025-08-18T19:42:59.0632663Z Using cached docker-7.1.0-py3-none-any.whl (147 kB)
-2025-08-18T19:42:59.0644291Z Using cached et_xmlfile-2.0.0-py3-none-any.whl (18 kB)
-2025-08-18T19:42:59.0655054Z Using cached mako-1.3.10-py3-none-any.whl (78 kB)
-2025-08-18T19:42:59.0666605Z Using cached pycparser-2.22-py3-none-any.whl (117 kB)
-2025-08-18T19:42:59.0678527Z Using cached pycryptodome-3.23.0-cp37-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (2.3 MB)
-2025-08-18T19:42:59.0704919Z Using cached typeguard-4.4.4-py3-none-any.whl (34 kB)
-2025-08-18T19:42:59.0716266Z Using cached watchdog-6.0.0-py3-none-manylinux2014_x86_64.whl (79 kB)
-2025-08-18T19:42:59.0727299Z Using cached wcwidth-0.2.13-py2.py3-none-any.whl (34 kB)
-2025-08-18T19:42:59.5394340Z Installing collected packages: wcwidth, pytz, wrapt, websockets, watchdog, vine, uvloop, urllib3, ujson, tzlocal, tzdata, typing-extensions, tomli_w, tomli, structlog, sniffio, six, shellingham, setuptools, ruff, rignore, PyYAML, python-multipart, python-dotenv, PyJWT, pygments, pycryptodome, pycparser, psycopg2-binary, psycopg-binary, psutil, prompt-toolkit, port-for, pluggy, platformdirs, pathspec, packaging, orjson, numpy, nr-stream, nr-date, mypy-extensions, multimethod, mdurl, MarkupSafe, jmespath, itsdangerous, iniconfig, imapclient, idna, httptools, h11, greenlet, et-xmlfile, docstring-parser, dnspython, coverage, click, charset_normalizer, certifi, billiard, asyncpg, annotated-types, yapf, uvicorn, typing-inspection, typing-inspect, types-requests, typeguard, typeapi, sqlalchemy, sentry-sdk, requests, redis, python-dateutil, pytest, pydantic-core, psycopg, openpyxl, mypy, mirakuru, markdown-it-py, Mako, Jinja2, httpcore, email-validator, Deprecated, click-repl, click-plugins, click-didyoumean, cffi, black, apscheduler, anyio, amqp, watchfiles, starlette, rich, pytest-postgresql, pytest-cov, pytest-asyncio, pydantic, pandas, nr-util, kombu, httpx, docker, databind, botocore, argon2-cffi-bindings, alembic, typer, testcontainers, s3transfer, rich-toolkit, respx, python-telegram-bot, pydantic-settings, pydantic-extra-types, pandera, fastapi, databind.json, databind.core, celery, asgi-correlation-id, argon2-cffi, minio, fastapi-limiter, fastapi-cloud-cli, fastapi-cli, docspec, boto3, docspec-python, pydoc-markdown
-2025-08-18T19:43:18.4872006Z 
-2025-08-18T19:43:18.4999660Z Successfully installed Deprecated-1.2.18 Jinja2-3.1.6 Mako-1.3.10 MarkupSafe-3.0.2 PyJWT-2.10.1 PyYAML-6.0.2 alembic-1.13.1 amqp-5.3.1 annotated-types-0.7.0 anyio-4.10.0 apscheduler-3.10.4 argon2-cffi-25.1.0 argon2-cffi-bindings-25.1.0 asgi-correlation-id-4.3.1 asyncpg-0.30.0 billiard-4.2.1 black-25.1.0 boto3-1.40.12 botocore-1.40.12 celery-5.4.0 certifi-2025.8.3 cffi-1.17.1 charset_normalizer-3.4.3 click-8.2.1 click-didyoumean-0.3.1 click-plugins-1.1.1.2 click-repl-0.3.0 coverage-7.10.4 databind-4.5.2 databind.core-4.5.2 databind.json-4.5.2 dnspython-2.7.0 docker-7.1.0 docspec-2.2.1 docspec-python-2.2.2 docstring-parser-0.11 email-validator-2.2.0 et-xmlfile-2.0.0 fastapi-0.116.1 fastapi-cli-0.0.8 fastapi-cloud-cli-0.1.5 fastapi-limiter-0.1.6 greenlet-3.2.4 h11-0.16.0 httpcore-1.0.9 httptools-0.6.4 httpx-0.28.1 idna-3.10 imapclient-3.0.1 iniconfig-2.1.0 itsdangerous-2.2.0 jmespath-1.0.1 kombu-5.5.4 markdown-it-py-4.0.0 mdurl-0.1.2 minio-7.2.16 mirakuru-2.6.1 multimethod-1.10 mypy-1.17.1 mypy-extensions-1.1.0 nr-date-2.1.0 nr-stream-1.1.5 nr-util-0.8.12 numpy-1.26.4 openpyxl-3.1.5 orjson-3.11.2 packaging-25.0 pandas-2.2.3 pandera-0.19.3 pathspec-0.12.1 platformdirs-4.3.8 pluggy-1.6.0 port-for-0.7.4 prompt-toolkit-3.0.51 psutil-7.0.0 psycopg-3.2.9 psycopg-binary-3.2.9 psycopg2-binary-2.9.9 pycparser-2.22 pycryptodome-3.23.0 pydantic-2.11.7 pydantic-core-2.33.2 pydantic-extra-types-2.10.5 pydantic-settings-2.10.1 pydoc-markdown-4.8.2 pygments-2.19.2 pytest-8.4.1 pytest-asyncio-0.23.6 pytest-cov-6.2.1 pytest-postgresql-7.0.2 python-dateutil-2.9.0.post0 python-dotenv-1.1.1 python-multipart-0.0.20 python-telegram-bot-22.2 pytz-2025.2 redis-5.3.1 requests-2.32.4 respx-0.22.0 rich-14.1.0 rich-toolkit-0.15.0 rignore-0.6.4 ruff-0.4.4 s3transfer-0.13.1 sentry-sdk-2.35.0 setuptools-80.9.0 shellingham-1.5.4 six-1.17.0 sniffio-1.3.1 sqlalchemy-2.0.29 starlette-0.47.2 structlog-24.1.0 testcontainers-4.10.0 tomli-2.2.1 tomli_w-1.2.0 typeapi-2.2.4 typeguard-4.4.4 typer-0.16.1 types-requests-2.32.0.20240602 typing-extensions-4.14.1 typing-inspect-0.9.0 typing-inspection-0.4.1 tzdata-2025.2 tzlocal-5.3.1 ujson-5.10.0 urllib3-2.5.0 uvicorn-0.35.0 uvloop-0.21.0 vine-5.1.0 watchdog-6.0.0 watchfiles-1.1.0 wcwidth-0.2.13 websockets-15.0.1 wrapt-1.17.3 yapf-0.43.0
-2025-08-18T19:43:19.7824687Z Collecting keepa==1.3.15
-2025-08-18T19:43:19.7837804Z   Using cached keepa-1.3.15-py3-none-any.whl.metadata (11 kB)
-2025-08-18T19:43:19.8146314Z Collecting minio==7.1.15
-2025-08-18T19:43:19.8157816Z   Using cached minio-7.1.15-py3-none-any.whl.metadata (4.2 kB)
-2025-08-18T19:43:19.8186550Z Requirement already satisfied: numpy>=1.9.3 in /opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages (from keepa==1.3.15) (1.26.4)
-2025-08-18T19:43:19.8190403Z Requirement already satisfied: requests>=2.2 in /opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages (from keepa==1.3.15) (2.32.4)
-2025-08-18T19:43:19.8533641Z Collecting tqdm (from keepa==1.3.15)
-2025-08-18T19:43:19.8544894Z   Using cached tqdm-4.67.1-py3-none-any.whl.metadata (57 kB)
-2025-08-18T19:43:20.3801680Z Collecting aiohttp (from keepa==1.3.15)
-2025-08-18T19:43:20.3815082Z   Using cached aiohttp-3.12.15-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (7.7 kB)
-2025-08-18T19:43:20.3856332Z Requirement already satisfied: pandas<=3.0 in /opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages (from keepa==1.3.15) (2.2.3)
-2025-08-18T19:43:20.3861497Z Requirement already satisfied: pydantic in /opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages (from keepa==1.3.15) (2.11.7)
-2025-08-18T19:43:20.3871221Z Requirement already satisfied: certifi in /opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages (from minio==7.1.15) (2025.8.3)
-2025-08-18T19:43:20.3877351Z Requirement already satisfied: urllib3 in /opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages (from minio==7.1.15) (2.5.0)
-2025-08-18T19:43:20.3944115Z Requirement already satisfied: python-dateutil>=2.8.2 in /opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages (from pandas<=3.0->keepa==1.3.15) (2.9.0.post0)
-2025-08-18T19:43:20.3949190Z Requirement already satisfied: pytz>=2020.1 in /opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages (from pandas<=3.0->keepa==1.3.15) (2025.2)
-2025-08-18T19:43:20.3953956Z Requirement already satisfied: tzdata>=2022.7 in /opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages (from pandas<=3.0->keepa==1.3.15) (2025.2)
-2025-08-18T19:43:20.4080676Z Requirement already satisfied: six>=1.5 in /opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages (from python-dateutil>=2.8.2->pandas<=3.0->keepa==1.3.15) (1.17.0)
-2025-08-18T19:43:20.4099600Z Requirement already satisfied: charset_normalizer<4,>=2 in /opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages (from requests>=2.2->keepa==1.3.15) (3.4.3)
-2025-08-18T19:43:20.4105754Z Requirement already satisfied: idna<4,>=2.5 in /opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages (from requests>=2.2->keepa==1.3.15) (3.10)
-2025-08-18T19:43:20.4451855Z Collecting aiohappyeyeballs>=2.5.0 (from aiohttp->keepa==1.3.15)
-2025-08-18T19:43:20.4463689Z   Using cached aiohappyeyeballs-2.6.1-py3-none-any.whl.metadata (5.9 kB)
-2025-08-18T19:43:20.7899149Z Collecting aiosignal>=1.4.0 (from aiohttp->keepa==1.3.15)
-2025-08-18T19:43:20.7911666Z   Using cached aiosignal-1.4.0-py3-none-any.whl.metadata (3.7 kB)
-2025-08-18T19:43:20.8086397Z Collecting attrs>=17.3.0 (from aiohttp->keepa==1.3.15)
-2025-08-18T19:43:20.8097388Z   Using cached attrs-25.3.0-py3-none-any.whl.metadata (10 kB)
-2025-08-18T19:43:20.8820198Z Collecting frozenlist>=1.1.1 (from aiohttp->keepa==1.3.15)
-2025-08-18T19:43:20.8831980Z   Using cached frozenlist-1.7.0-cp312-cp312-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (18 kB)
-2025-08-18T19:43:21.1220759Z Collecting multidict<7.0,>=4.5 (from aiohttp->keepa==1.3.15)
-2025-08-18T19:43:21.1234453Z   Using cached multidict-6.6.4-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (5.3 kB)
-2025-08-18T19:43:21.1671450Z Collecting propcache>=0.2.0 (from aiohttp->keepa==1.3.15)
-2025-08-18T19:43:21.1683366Z   Using cached propcache-0.3.2-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (12 kB)
-2025-08-18T19:43:21.4052854Z Collecting yarl<2.0,>=1.17.0 (from aiohttp->keepa==1.3.15)
-2025-08-18T19:43:21.4066117Z   Using cached yarl-1.20.1-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (73 kB)
-2025-08-18T19:43:21.4277865Z Requirement already satisfied: typing-extensions>=4.2 in /opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages (from aiosignal>=1.4.0->aiohttp->keepa==1.3.15) (4.14.1)
-2025-08-18T19:43:21.4326372Z Requirement already satisfied: annotated-types>=0.6.0 in /opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages (from pydantic->keepa==1.3.15) (0.7.0)
-2025-08-18T19:43:21.4332373Z Requirement already satisfied: pydantic-core==2.33.2 in /opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages (from pydantic->keepa==1.3.15) (2.33.2)
-2025-08-18T19:43:21.4340269Z Requirement already satisfied: typing-inspection>=0.4.0 in /opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages (from pydantic->keepa==1.3.15) (0.4.1)
-2025-08-18T19:43:21.4399696Z Using cached keepa-1.3.15-py3-none-any.whl (38 kB)
-2025-08-18T19:43:21.4411177Z Using cached minio-7.1.15-py3-none-any.whl (77 kB)
-2025-08-18T19:43:21.4422993Z Using cached aiohttp-3.12.15-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (1.7 MB)
-2025-08-18T19:43:21.4447883Z Using cached multidict-6.6.4-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (256 kB)
-2025-08-18T19:43:21.4460949Z Using cached yarl-1.20.1-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (355 kB)
-2025-08-18T19:43:21.4474485Z Using cached aiohappyeyeballs-2.6.1-py3-none-any.whl (15 kB)
-2025-08-18T19:43:21.4485843Z Using cached aiosignal-1.4.0-py3-none-any.whl (7.5 kB)
-2025-08-18T19:43:21.4496910Z Using cached attrs-25.3.0-py3-none-any.whl (63 kB)
-2025-08-18T19:43:21.4508978Z Using cached frozenlist-1.7.0-cp312-cp312-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl (241 kB)
-2025-08-18T19:43:21.4521726Z Using cached propcache-0.3.2-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (224 kB)
-2025-08-18T19:43:21.4533879Z Using cached tqdm-4.67.1-py3-none-any.whl (78 kB)
-2025-08-18T19:43:21.6350284Z Installing collected packages: tqdm, propcache, multidict, minio, frozenlist, attrs, aiohappyeyeballs, yarl, aiosignal, aiohttp, keepa
-2025-08-18T19:43:21.7092367Z   Attempting uninstall: minio
-2025-08-18T19:43:21.7140356Z     Found existing installation: minio 7.2.16
-2025-08-18T19:43:21.7177641Z     Uninstalling minio-7.2.16:
-2025-08-18T19:43:21.7187709Z       Successfully uninstalled minio-7.2.16
-2025-08-18T19:43:22.0814329Z 
-2025-08-18T19:43:22.0929511Z Successfully installed aiohappyeyeballs-2.6.1 aiohttp-3.12.15 aiosignal-1.4.0 attrs-25.3.0 frozenlist-1.7.0 keepa-1.3.15 minio-7.1.15 multidict-6.6.4 propcache-0.3.2 tqdm-4.67.1 yarl-1.20.1
-2025-08-18T19:43:22.2496492Z ##[group]Run ruff check .
-2025-08-18T19:43:22.2496764Z [36;1mruff check .[0m
-2025-08-18T19:43:22.2496975Z [36;1mruff format --check .[0m
-2025-08-18T19:43:22.2538498Z shell: /usr/bin/bash -e {0}
-2025-08-18T19:43:22.2538726Z env:
-2025-08-18T19:43:22.2538924Z   REDIS_URL: redis://localhost:6379/0
-2025-08-18T19:43:22.2539193Z   RATE_LIMIT_DEFAULT: 100/minute
-2025-08-18T19:43:22.2539410Z   TRUST_X_FORWARDED: 1
-2025-08-18T19:43:22.2539603Z   PG_USER: postgres
-2025-08-18T19:43:22.2539788Z   PG_PASSWORD: pass
-2025-08-18T19:43:22.2539969Z   PG_DATABASE: awa
-2025-08-18T19:43:22.2540145Z   PG_HOST: localhost
-2025-08-18T19:43:22.2540319Z   PG_PORT: 5432
-2025-08-18T19:43:22.2540915Z   PG_SYNC_DSN: ***localhost:5432/awa
-2025-08-18T19:43:22.2541319Z   PG_ASYNC_DSN: ***localhost:5432/awa
-2025-08-18T19:43:22.2541682Z   DATABASE_URL: ***localhost:5432/awa
-2025-08-18T19:43:22.2541909Z   DATA_DIR: /tmp/awa-data
-2025-08-18T19:43:22.2542101Z   ENABLE_LIVE: 0
-2025-08-18T19:43:22.2542305Z   TESTING: 1
-2025-08-18T19:43:22.2542534Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.11/x64
-2025-08-18T19:43:22.2542931Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.11/x64/lib/pkgconfig
-2025-08-18T19:43:22.2543312Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.11/x64
-2025-08-18T19:43:22.2543654Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.11/x64
-2025-08-18T19:43:22.2544169Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.11/x64
-2025-08-18T19:43:22.2544516Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.11/x64/lib
-2025-08-18T19:43:22.2544799Z ##[endgroup]
-2025-08-18T19:43:22.2800677Z All checks passed!
-2025-08-18T19:43:22.3005680Z Would reformat: services/api/main.py
-2025-08-18T19:43:22.3006243Z 1 file would be reformatted, 225 files already formatted
-2025-08-18T19:43:22.3028001Z ##[error]Process completed with exit code 1.
-2025-08-18T19:43:22.3121177Z Post job cleanup.
-2025-08-18T19:43:22.4057196Z [command]/usr/bin/git version
-2025-08-18T19:43:22.4094545Z git version 2.50.1
-2025-08-18T19:43:22.4145017Z Temporarily overriding HOME='/home/runner/work/_temp/5a1f268c-df16-4d53-bbc7-9d114147b3b6' before making global git config changes
-2025-08-18T19:43:22.4160112Z Adding repository directory to the temporary git global config as a safe directory
-2025-08-18T19:43:22.4160958Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/AWA-App/AWA-App
-2025-08-18T19:43:22.4187712Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
-2025-08-18T19:43:22.4220157Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
-2025-08-18T19:43:22.4449568Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
-2025-08-18T19:43:22.4472731Z http.https://github.com/.extraheader
-2025-08-18T19:43:22.4485512Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
-2025-08-18T19:43:22.4515043Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
-2025-08-18T19:43:22.4819392Z Print service container logs: 0627f55afab04c1c812bf358443b71e7_postgres15_bae36c
-2025-08-18T19:43:22.4824029Z ##[command]/usr/bin/docker logs --details 3c4182ff3423734a86b55f7eb855f9536dc1df69288d6763ff326beecdd24d83
-2025-08-18T19:43:22.4943300Z  The files belonging to this database system will be owned by user "postgres".
-2025-08-18T19:43:22.4944935Z  initdb: warning: enabling "trust" authentication for local connections
-2025-08-18T19:43:22.4946269Z  initdb: hint: You can change this by editing pg_hba.conf or using the option -A, or --auth-local and --auth-host, the next time you run initdb.
-2025-08-18T19:43:22.4946861Z  This user must also own the server process.
-2025-08-18T19:43:22.4947113Z  
-2025-08-18T19:43:22.4947370Z  The database cluster will be initialized with locale "en_US.utf8".
-2025-08-18T19:43:22.4947791Z  The default database encoding has accordingly been set to "UTF8".
-2025-08-18T19:43:22.4948178Z  The default text search configuration will be set to "english".
-2025-08-18T19:43:22.4948519Z  
-2025-08-18T19:43:22.4948687Z  Data page checksums are disabled.
-2025-08-18T19:43:22.4948916Z  
-2025-08-18T19:43:22.4949183Z  fixing permissions on existing directory /var/lib/postgresql/data ... ok
-2025-08-18T19:43:22.4949537Z  creating subdirectories ... ok
-2025-08-18T19:43:22.4949814Z  selecting dynamic shared memory implementation ... posix
-2025-08-18T19:43:22.4950129Z  selecting default max_connections ... 100
-2025-08-18T19:43:22.4950395Z  selecting default shared_buffers ... 128MB
-2025-08-18T19:43:22.4950652Z  selecting default time zone ... Etc/UTC
-2025-08-18T19:43:22.4950896Z  creating configuration files ... ok
-2025-08-18T19:43:22.4951140Z  running bootstrap script ... ok
-2025-08-18T19:43:22.4951402Z  performing post-bootstrap initialization ... ok
-2025-08-18T19:43:22.4951676Z  syncing data to disk ... ok
-2025-08-18T19:43:22.4951870Z  
-2025-08-18T19:43:22.4952010Z  
-2025-08-18T19:43:22.4952211Z  Success. You can now start the database server using:
-2025-08-18T19:43:22.4952478Z  
-2025-08-18T19:43:22.4952675Z      pg_ctl -D /var/lib/postgresql/data -l logfile start
-2025-08-18T19:43:22.4953166Z  
-2025-08-18T19:43:22.4953715Z  waiting for server to start....2025-08-18 19:42:38.691 UTC [48] LOG:  starting PostgreSQL 15.14 (Debian 15.14-1.pgdg13+1) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit
-2025-08-18T19:43:22.4954461Z  2025-08-18 19:42:38.691 UTC [48] LOG:  listening on Unix socket "/var/run/postgresql/.s.PGSQL.5432"
-2025-08-18T19:43:22.4954945Z  2025-08-18 19:42:38.695 UTC [51] LOG:  database system was shut down at 2025-08-18 19:42:38 UTC
-2025-08-18T19:43:22.4955610Z  2025-08-18 19:42:38.699 UTC [48] LOG:  database system is ready to accept connections
-2025-08-18T19:43:22.4955931Z   done
-2025-08-18T19:43:22.4956444Z  2025-08-18 19:42:39.030 UTC [1] LOG:  starting PostgreSQL 15.14 (Debian 15.14-1.pgdg13+1) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit
-2025-08-18T19:43:22.4957706Z  2025-08-18 19:42:39.031 UTC [1] LOG:  listening on IPv4 address "0.0.0.0", port 5432
-2025-08-18T19:43:22.4958150Z  2025-08-18 19:42:39.031 UTC [1] LOG:  listening on IPv6 address "::", port 5432
-2025-08-18T19:43:22.4958596Z  2025-08-18 19:42:39.031 UTC [1] LOG:  listening on Unix socket "/var/run/postgresql/.s.PGSQL.5432"
-2025-08-18T19:43:22.4959068Z  2025-08-18 19:42:39.034 UTC [64] LOG:  database system was shut down at 2025-08-18 19:42:38 UTC
-2025-08-18T19:43:22.4959503Z  2025-08-18 19:42:39.039 UTC [1] LOG:  database system is ready to accept connections
-2025-08-18T19:43:22.4959822Z  server started
-2025-08-18T19:43:22.4959993Z  CREATE DATABASE
-2025-08-18T19:43:22.4960161Z  
-2025-08-18T19:43:22.4960303Z  
-2025-08-18T19:43:22.4960596Z  /usr/local/bin/docker-entrypoint.sh: ignoring /docker-entrypoint-initdb.d/*
-2025-08-18T19:43:22.4960939Z  
-2025-08-18T19:43:22.4961246Z  waiting for server to shut down...2025-08-18 19:42:38.909 UTC [48] LOG:  received fast shutdown request
-2025-08-18T19:43:22.4961924Z  .2025-08-18 19:42:38.909 UTC [48] LOG:  aborting any active transactions
-2025-08-18T19:43:22.4962430Z  2025-08-18 19:42:38.911 UTC [48] LOG:  background worker "logical replication launcher" (PID 54) exited with exit code 1
-2025-08-18T19:43:22.4962893Z  2025-08-18 19:42:38.912 UTC [49] LOG:  shutting down
-2025-08-18T19:43:22.4963226Z  2025-08-18 19:42:38.913 UTC [49] LOG:  checkpoint starting: shutdown immediate
-2025-08-18T19:43:22.4964050Z  2025-08-18 19:42:38.934 UTC [49] LOG:  checkpoint complete: wrote 922 buffers (5.6%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.019 s, sync=0.002 s, total=0.022 s; sync files=301, longest=0.001 s, average=0.001 s; distance=4239 kB, estimate=4239 kB
-2025-08-18T19:43:22.4964846Z  2025-08-18 19:42:38.942 UTC [48] LOG:  database system is shut down
-2025-08-18T19:43:22.4965123Z   done
-2025-08-18T19:43:22.4965474Z  server stopped
-2025-08-18T19:43:22.4965648Z  
-2025-08-18T19:43:22.4965861Z  PostgreSQL init process complete; ready for start up.
-2025-08-18T19:43:22.4966131Z  
-2025-08-18T19:43:22.4971200Z Stop and remove container: 0627f55afab04c1c812bf358443b71e7_postgres15_bae36c
-2025-08-18T19:43:22.4976120Z ##[command]/usr/bin/docker rm --force 3c4182ff3423734a86b55f7eb855f9536dc1df69288d6763ff326beecdd24d83
-2025-08-18T19:43:22.7973842Z 3c4182ff3423734a86b55f7eb855f9536dc1df69288d6763ff326beecdd24d83
-2025-08-18T19:43:22.7998745Z Print service container logs: 2245f206c7904ae7806dacbc6bd5d4a2_redis7alpine_e1d85f
-2025-08-18T19:43:22.7999880Z ##[command]/usr/bin/docker logs --details 79af88283043410e145ca1ab0f42fc8dfea01773536a4fba44df28a242b5b239
-2025-08-18T19:43:22.8121974Z  1:C 18 Aug 2025 19:42:39.193 # WARNING Memory overcommit must be enabled! Without it, a background save or replication may fail under low memory condition. Being disabled, it can also cause failures without low memory condition, see https://github.com/jemalloc/jemalloc/issues/1328. To fix this issue add 'vm.overcommit_memory = 1' to /etc/sysctl.conf and then reboot or run the command 'sysctl vm.overcommit_memory=1' for this to take effect.
-2025-08-18T19:43:22.8124754Z  1:C 18 Aug 2025 19:42:39.193 * oO0OoO0OoO0Oo Redis is starting oO0OoO0OoO0Oo
-2025-08-18T19:43:22.8126086Z  1:C 18 Aug 2025 19:42:39.193 * Redis version=7.4.5, bits=64, commit=00000000, modified=0, pid=1, just started
-2025-08-18T19:43:22.8127339Z  1:C 18 Aug 2025 19:42:39.193 # Warning: no config file specified, using the default config. In order to specify a config file use redis-server /path/to/redis.conf
-2025-08-18T19:43:22.8128411Z  1:M 18 Aug 2025 19:42:39.193 * monotonic clock: POSIX clock_gettime
-2025-08-18T19:43:22.8129024Z  1:M 18 Aug 2025 19:42:39.194 * Running mode=standalone, port=6379.
-2025-08-18T19:43:22.8129569Z  1:M 18 Aug 2025 19:42:39.194 * Server initialized
-2025-08-18T19:43:22.8130100Z  1:M 18 Aug 2025 19:42:39.194 * Ready to accept connections tcp
-2025-08-18T19:43:22.8137054Z Stop and remove container: 2245f206c7904ae7806dacbc6bd5d4a2_redis7alpine_e1d85f
-2025-08-18T19:43:22.8137762Z ##[command]/usr/bin/docker rm --force 79af88283043410e145ca1ab0f42fc8dfea01773536a4fba44df28a242b5b239
-2025-08-18T19:43:22.9274910Z 79af88283043410e145ca1ab0f42fc8dfea01773536a4fba44df28a242b5b239
-2025-08-18T19:43:22.9300054Z Remove container network: github_network_ef65600690b94a778c4eae3ef91eb645
-2025-08-18T19:43:22.9304937Z ##[command]/usr/bin/docker network rm github_network_ef65600690b94a778c4eae3ef91eb645
-2025-08-18T19:43:23.0320927Z github_network_ef65600690b94a778c4eae3ef91eb645
-2025-08-18T19:43:23.0379305Z Cleaning up orphan processes
+﻿2025-08-18T19:45:30.8868956Z Current runner version: '2.327.1'
+2025-08-18T19:45:30.8900419Z ##[group]Runner Image Provisioner
+2025-08-18T19:45:30.8901669Z Hosted Compute Agent
+2025-08-18T19:45:30.8902917Z Version: 20250818.377
+2025-08-18T19:45:30.8903858Z Commit: 3c593e9f75fe0b87e893bca80d6e12ba089c61fc
+2025-08-18T19:45:30.8905020Z Build Date: 2025-08-18T14:52:18Z
+2025-08-18T19:45:30.8906110Z ##[endgroup]
+2025-08-18T19:45:30.8907079Z ##[group]Operating System
+2025-08-18T19:45:30.8907963Z Ubuntu
+2025-08-18T19:45:30.8908902Z 24.04.2
+2025-08-18T19:45:30.8909650Z LTS
+2025-08-18T19:45:30.8910428Z ##[endgroup]
+2025-08-18T19:45:30.8911305Z ##[group]Runner Image
+2025-08-18T19:45:30.8912554Z Image: ubuntu-24.04
+2025-08-18T19:45:30.8913454Z Version: 20250810.1.0
+2025-08-18T19:45:30.8915749Z Included Software: https://github.com/actions/runner-images/blob/ubuntu24/20250810.1/images/ubuntu/Ubuntu2404-Readme.md
+2025-08-18T19:45:30.8918392Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu24%2F20250810.1
+2025-08-18T19:45:30.8920083Z ##[endgroup]
+2025-08-18T19:45:30.8924737Z ##[group]GITHUB_TOKEN Permissions
+2025-08-18T19:45:30.8927995Z Actions: write
+2025-08-18T19:45:30.8928866Z Attestations: write
+2025-08-18T19:45:30.8929765Z Checks: write
+2025-08-18T19:45:30.8930699Z Contents: write
+2025-08-18T19:45:30.8931500Z Deployments: write
+2025-08-18T19:45:30.8932624Z Discussions: write
+2025-08-18T19:45:30.8933437Z Issues: write
+2025-08-18T19:45:30.8934391Z Metadata: read
+2025-08-18T19:45:30.8935165Z Models: read
+2025-08-18T19:45:30.8936091Z Packages: write
+2025-08-18T19:45:30.8937007Z Pages: write
+2025-08-18T19:45:30.8937849Z PullRequests: write
+2025-08-18T19:45:30.8938843Z RepositoryProjects: write
+2025-08-18T19:45:30.8939724Z SecurityEvents: write
+2025-08-18T19:45:30.8940707Z Statuses: write
+2025-08-18T19:45:30.8941594Z ##[endgroup]
+2025-08-18T19:45:30.8944547Z Secret source: Actions
+2025-08-18T19:45:30.8945919Z Prepare workflow directory
+2025-08-18T19:45:30.9546686Z Prepare all required actions
+2025-08-18T19:45:30.9600548Z Getting action download info
+2025-08-18T19:45:31.2180032Z Download action repository 'actions/checkout@v4' (SHA:08eba0b27e820071cde6df949e0beb9ba4906955)
+2025-08-18T19:45:31.5216853Z Download action repository 'actions/setup-python@v5' (SHA:a26af69be951a213d495a4c3e4e4022e16d87065)
+2025-08-18T19:45:31.7977858Z Download action repository 'actions/upload-artifact@v4' (SHA:ea165f8d65b6e75b540449e92b4886f43607fa02)
+2025-08-18T19:45:32.0101674Z Complete job name: unit
+2025-08-18T19:45:32.0611051Z ##[group]Checking docker version
+2025-08-18T19:45:32.0624223Z ##[command]/usr/bin/docker version --format '{{.Server.APIVersion}}'
+2025-08-18T19:45:32.1501043Z '1.48'
+2025-08-18T19:45:32.1513950Z Docker daemon API version: '1.48'
+2025-08-18T19:45:32.1514806Z ##[command]/usr/bin/docker version --format '{{.Client.APIVersion}}'
+2025-08-18T19:45:32.1666746Z '1.48'
+2025-08-18T19:45:32.1680086Z Docker client API version: '1.48'
+2025-08-18T19:45:32.1685580Z ##[endgroup]
+2025-08-18T19:45:32.1688656Z ##[group]Clean up resources from previous jobs
+2025-08-18T19:45:32.1694422Z ##[command]/usr/bin/docker ps --all --quiet --no-trunc --filter "label=6d5975"
+2025-08-18T19:45:32.1839906Z ##[command]/usr/bin/docker network prune --force --filter "label=6d5975"
+2025-08-18T19:45:32.1959595Z ##[endgroup]
+2025-08-18T19:45:32.1960154Z ##[group]Create local container network
+2025-08-18T19:45:32.1970006Z ##[command]/usr/bin/docker network create --label 6d5975 github_network_1126bc916a3f4a2b8513ed9e2c627d73
+2025-08-18T19:45:32.2453881Z c7181fe5783c70eb35f4c0dfaa77feb59e65fb58200e99f6d6c620ecc23c3a5e
+2025-08-18T19:45:32.2472298Z ##[endgroup]
+2025-08-18T19:45:32.2496618Z ##[group]Starting postgres service container
+2025-08-18T19:45:32.2515355Z ##[command]/usr/bin/docker pull postgres:15
+2025-08-18T19:45:32.6053007Z 15: Pulling from library/postgres
+2025-08-18T19:45:32.6714808Z 396b1da7636e: Pulling fs layer
+2025-08-18T19:45:32.6716074Z fca2566eba32: Pulling fs layer
+2025-08-18T19:45:32.6717250Z 631fe8c6d606: Pulling fs layer
+2025-08-18T19:45:32.6718346Z 77c7671c4414: Pulling fs layer
+2025-08-18T19:45:32.6719866Z 2d9e29180a27: Pulling fs layer
+2025-08-18T19:45:32.6721430Z c6bcc2c9a041: Pulling fs layer
+2025-08-18T19:45:32.6722932Z ac4b721eb66f: Pulling fs layer
+2025-08-18T19:45:32.6724210Z 606bd164980e: Pulling fs layer
+2025-08-18T19:45:32.6725371Z f5dfd246bc6e: Pulling fs layer
+2025-08-18T19:45:32.6726248Z ba7036bb0a60: Pulling fs layer
+2025-08-18T19:45:32.6727204Z 799f859abbbd: Pulling fs layer
+2025-08-18T19:45:32.6728029Z d903e777080c: Pulling fs layer
+2025-08-18T19:45:32.6728841Z 04adcb462801: Pulling fs layer
+2025-08-18T19:45:32.6729636Z 5c10925b29ff: Pulling fs layer
+2025-08-18T19:45:32.6730421Z 606bd164980e: Waiting
+2025-08-18T19:45:32.6731101Z f5dfd246bc6e: Waiting
+2025-08-18T19:45:32.6731833Z 2d9e29180a27: Waiting
+2025-08-18T19:45:32.6732833Z c6bcc2c9a041: Waiting
+2025-08-18T19:45:32.6733651Z ba7036bb0a60: Waiting
+2025-08-18T19:45:32.6734450Z ac4b721eb66f: Waiting
+2025-08-18T19:45:32.6735298Z 799f859abbbd: Waiting
+2025-08-18T19:45:32.6736129Z d903e777080c: Waiting
+2025-08-18T19:45:32.6736980Z 04adcb462801: Waiting
+2025-08-18T19:45:32.6737810Z 5c10925b29ff: Waiting
+2025-08-18T19:45:32.6738647Z 77c7671c4414: Waiting
+2025-08-18T19:45:32.7731290Z fca2566eba32: Download complete
+2025-08-18T19:45:32.8746484Z 77c7671c4414: Verifying Checksum
+2025-08-18T19:45:32.8748118Z 77c7671c4414: Download complete
+2025-08-18T19:45:32.8967818Z 631fe8c6d606: Verifying Checksum
+2025-08-18T19:45:32.8969332Z 631fe8c6d606: Download complete
+2025-08-18T19:45:32.9967108Z c6bcc2c9a041: Verifying Checksum
+2025-08-18T19:45:32.9973255Z c6bcc2c9a041: Download complete
+2025-08-18T19:45:33.0713731Z 2d9e29180a27: Verifying Checksum
+2025-08-18T19:45:33.0715494Z 2d9e29180a27: Download complete
+2025-08-18T19:45:33.0720256Z ac4b721eb66f: Verifying Checksum
+2025-08-18T19:45:33.0722069Z ac4b721eb66f: Download complete
+2025-08-18T19:45:33.1600673Z 606bd164980e: Verifying Checksum
+2025-08-18T19:45:33.1602514Z 606bd164980e: Download complete
+2025-08-18T19:45:33.2639102Z ba7036bb0a60: Verifying Checksum
+2025-08-18T19:45:33.2641334Z ba7036bb0a60: Download complete
+2025-08-18T19:45:33.3526955Z 799f859abbbd: Verifying Checksum
+2025-08-18T19:45:33.3529311Z 799f859abbbd: Download complete
+2025-08-18T19:45:33.4361205Z d903e777080c: Verifying Checksum
+2025-08-18T19:45:33.4366978Z d903e777080c: Download complete
+2025-08-18T19:45:33.5468241Z 04adcb462801: Verifying Checksum
+2025-08-18T19:45:33.5470132Z 04adcb462801: Download complete
+2025-08-18T19:45:33.6417383Z 5c10925b29ff: Verifying Checksum
+2025-08-18T19:45:33.6418524Z 5c10925b29ff: Download complete
+2025-08-18T19:45:33.6498764Z 396b1da7636e: Verifying Checksum
+2025-08-18T19:45:33.6500363Z 396b1da7636e: Download complete
+2025-08-18T19:45:34.6098656Z 396b1da7636e: Pull complete
+2025-08-18T19:45:34.8389790Z fca2566eba32: Pull complete
+2025-08-18T19:45:35.0117010Z f5dfd246bc6e: Verifying Checksum
+2025-08-18T19:45:35.0117737Z f5dfd246bc6e: Download complete
+2025-08-18T19:45:35.0360004Z 631fe8c6d606: Pull complete
+2025-08-18T19:45:35.0963707Z 77c7671c4414: Pull complete
+2025-08-18T19:45:35.3930768Z 2d9e29180a27: Pull complete
+2025-08-18T19:45:35.4931235Z c6bcc2c9a041: Pull complete
+2025-08-18T19:45:35.5053933Z ac4b721eb66f: Pull complete
+2025-08-18T19:45:35.5183940Z 606bd164980e: Pull complete
+2025-08-18T19:45:38.4402216Z f5dfd246bc6e: Pull complete
+2025-08-18T19:45:38.4577972Z ba7036bb0a60: Pull complete
+2025-08-18T19:45:38.4706577Z 799f859abbbd: Pull complete
+2025-08-18T19:45:38.4836911Z d903e777080c: Pull complete
+2025-08-18T19:45:38.4982516Z 04adcb462801: Pull complete
+2025-08-18T19:45:38.5124721Z 5c10925b29ff: Pull complete
+2025-08-18T19:45:38.5176967Z Digest: sha256:bc51cf4f1fe02cce7ed2370b20128a9b00b4eb804573a77d2a0d877aaa9c82b1
+2025-08-18T19:45:38.5197503Z Status: Downloaded newer image for postgres:15
+2025-08-18T19:45:38.5213522Z docker.io/library/postgres:15
+2025-08-18T19:45:38.5271402Z ##[command]/usr/bin/docker create --name 30a5bd31278a4ca0ae8bf7575bf20b7f_postgres15_f3aaf4 --label 6d5975 --network github_network_1126bc916a3f4a2b8513ed9e2c627d73 --network-alias postgres -p 5432:5432 --health-cmd="pg_isready -U postgres -d awa" --health-interval=5s --health-timeout=5s --health-retries=10 -e "POSTGRES_USER=postgres" -e "POSTGRES_PASSWORD=pass" -e "POSTGRES_DB=awa" -e GITHUB_ACTIONS=true -e CI=true postgres:15
+2025-08-18T19:45:38.5561358Z 03a41e7aa7ae000626158f8e6558db25571d1a70312e21d2b5c19376f5ae457c
+2025-08-18T19:45:38.5582693Z ##[command]/usr/bin/docker start 03a41e7aa7ae000626158f8e6558db25571d1a70312e21d2b5c19376f5ae457c
+2025-08-18T19:45:38.7720936Z 03a41e7aa7ae000626158f8e6558db25571d1a70312e21d2b5c19376f5ae457c
+2025-08-18T19:45:38.7740329Z ##[command]/usr/bin/docker ps --all --filter id=03a41e7aa7ae000626158f8e6558db25571d1a70312e21d2b5c19376f5ae457c --filter status=running --no-trunc --format "{{.ID}} {{.Status}}"
+2025-08-18T19:45:38.7863617Z 03a41e7aa7ae000626158f8e6558db25571d1a70312e21d2b5c19376f5ae457c Up Less than a second (health: starting)
+2025-08-18T19:45:38.7888158Z ##[command]/usr/bin/docker port 03a41e7aa7ae000626158f8e6558db25571d1a70312e21d2b5c19376f5ae457c
+2025-08-18T19:45:38.8006883Z 5432/tcp -> 0.0.0.0:5432
+2025-08-18T19:45:38.8007614Z 5432/tcp -> [::]:5432
+2025-08-18T19:45:38.8051072Z ##[endgroup]
+2025-08-18T19:45:38.8052229Z ##[group]Starting redis service container
+2025-08-18T19:45:38.8053595Z ##[command]/usr/bin/docker pull redis:7-alpine
+2025-08-18T19:45:39.0340053Z 7-alpine: Pulling from library/redis
+2025-08-18T19:45:39.1069942Z 0368fd46e3c6: Pulling fs layer
+2025-08-18T19:45:39.1070405Z 4c55286bbede: Pulling fs layer
+2025-08-18T19:45:39.1070702Z 5e28347af205: Pulling fs layer
+2025-08-18T19:45:39.1070942Z 311eca34042e: Pulling fs layer
+2025-08-18T19:45:39.1071180Z e6fe6f07e192: Pulling fs layer
+2025-08-18T19:45:39.1071384Z a2cadbfeca72: Pulling fs layer
+2025-08-18T19:45:39.1071587Z 4f4fb700ef54: Pulling fs layer
+2025-08-18T19:45:39.1071779Z a976ed7e7808: Pulling fs layer
+2025-08-18T19:45:39.1072187Z a2cadbfeca72: Waiting
+2025-08-18T19:45:39.1072389Z 4f4fb700ef54: Waiting
+2025-08-18T19:45:39.1072560Z a976ed7e7808: Waiting
+2025-08-18T19:45:39.1072737Z e6fe6f07e192: Waiting
+2025-08-18T19:45:39.2069016Z 5e28347af205: Verifying Checksum
+2025-08-18T19:45:39.2069663Z 5e28347af205: Download complete
+2025-08-18T19:45:39.2117553Z 4c55286bbede: Verifying Checksum
+2025-08-18T19:45:39.2119111Z 4c55286bbede: Download complete
+2025-08-18T19:45:39.2241107Z 0368fd46e3c6: Verifying Checksum
+2025-08-18T19:45:39.2244146Z 0368fd46e3c6: Download complete
+2025-08-18T19:45:39.3001027Z a2cadbfeca72: Download complete
+2025-08-18T19:45:39.3217484Z 311eca34042e: Verifying Checksum
+2025-08-18T19:45:39.3218844Z 311eca34042e: Download complete
+2025-08-18T19:45:39.3467635Z 0368fd46e3c6: Pull complete
+2025-08-18T19:45:39.3895816Z 4f4fb700ef54: Verifying Checksum
+2025-08-18T19:45:39.3896103Z 4f4fb700ef54: Download complete
+2025-08-18T19:45:39.3918042Z 4c55286bbede: Pull complete
+2025-08-18T19:45:39.4165358Z a976ed7e7808: Verifying Checksum
+2025-08-18T19:45:39.4165881Z a976ed7e7808: Download complete
+2025-08-18T19:45:39.5529725Z 5e28347af205: Pull complete
+2025-08-18T19:45:39.5816996Z e6fe6f07e192: Verifying Checksum
+2025-08-18T19:45:39.5817469Z e6fe6f07e192: Download complete
+2025-08-18T19:45:39.5882367Z 311eca34042e: Pull complete
+2025-08-18T19:45:39.7906272Z e6fe6f07e192: Pull complete
+2025-08-18T19:45:39.8005702Z a2cadbfeca72: Pull complete
+2025-08-18T19:45:39.8098866Z 4f4fb700ef54: Pull complete
+2025-08-18T19:45:39.8262285Z a976ed7e7808: Pull complete
+2025-08-18T19:45:39.8343953Z Digest: sha256:bb186d083732f669da90be8b0f975a37812b15e913465bb14d845db72a4e3e08
+2025-08-18T19:45:39.8362500Z Status: Downloaded newer image for redis:7-alpine
+2025-08-18T19:45:39.8374000Z docker.io/library/redis:7-alpine
+2025-08-18T19:45:39.8392628Z ##[command]/usr/bin/docker create --name ce19a6bd3bb947d6871e2ce93c26996d_redis7alpine_56b323 --label 6d5975 --network github_network_1126bc916a3f4a2b8513ed9e2c627d73 --network-alias redis -p 6379:6379  -e GITHUB_ACTIONS=true -e CI=true redis:7-alpine
+2025-08-18T19:45:39.8697465Z 6f88983203f20996d20245820ca488c3d8f857994999d5d121c48b747f3c968c
+2025-08-18T19:45:39.8710524Z ##[command]/usr/bin/docker start 6f88983203f20996d20245820ca488c3d8f857994999d5d121c48b747f3c968c
+2025-08-18T19:45:40.0050459Z 6f88983203f20996d20245820ca488c3d8f857994999d5d121c48b747f3c968c
+2025-08-18T19:45:40.0067225Z ##[command]/usr/bin/docker ps --all --filter id=6f88983203f20996d20245820ca488c3d8f857994999d5d121c48b747f3c968c --filter status=running --no-trunc --format "{{.ID}} {{.Status}}"
+2025-08-18T19:45:40.0184991Z 6f88983203f20996d20245820ca488c3d8f857994999d5d121c48b747f3c968c Up Less than a second
+2025-08-18T19:45:40.0198712Z ##[command]/usr/bin/docker port 6f88983203f20996d20245820ca488c3d8f857994999d5d121c48b747f3c968c
+2025-08-18T19:45:40.0307735Z 6379/tcp -> 0.0.0.0:6379
+2025-08-18T19:45:40.0308231Z 6379/tcp -> [::]:6379
+2025-08-18T19:45:40.0320261Z ##[endgroup]
+2025-08-18T19:45:40.0331187Z ##[group]Waiting for all services to be ready
+2025-08-18T19:45:40.0344485Z ##[command]/usr/bin/docker inspect --format="{{if .Config.Healthcheck}}{{print .State.Health.Status}}{{end}}" 03a41e7aa7ae000626158f8e6558db25571d1a70312e21d2b5c19376f5ae457c
+2025-08-18T19:45:40.0455345Z starting
+2025-08-18T19:45:40.0475191Z postgres service is starting, waiting 2 seconds before checking again.
+2025-08-18T19:45:42.0476526Z ##[command]/usr/bin/docker inspect --format="{{if .Config.Healthcheck}}{{print .State.Health.Status}}{{end}}" 03a41e7aa7ae000626158f8e6558db25571d1a70312e21d2b5c19376f5ae457c
+2025-08-18T19:45:42.0594477Z starting
+2025-08-18T19:45:42.0607442Z postgres service is starting, waiting 3 seconds before checking again.
+2025-08-18T19:45:45.7900899Z ##[command]/usr/bin/docker inspect --format="{{if .Config.Healthcheck}}{{print .State.Health.Status}}{{end}}" 03a41e7aa7ae000626158f8e6558db25571d1a70312e21d2b5c19376f5ae457c
+2025-08-18T19:45:45.8018795Z healthy
+2025-08-18T19:45:45.8035723Z postgres service is healthy.
+2025-08-18T19:45:45.8036472Z ##[command]/usr/bin/docker inspect --format="{{if .Config.Healthcheck}}{{print .State.Health.Status}}{{end}}" 6f88983203f20996d20245820ca488c3d8f857994999d5d121c48b747f3c968c
+2025-08-18T19:45:45.8159231Z redis service is healthy.
+2025-08-18T19:45:45.8159563Z ##[endgroup]
+2025-08-18T19:45:45.8471214Z ##[group]Run actions/checkout@v4
+2025-08-18T19:45:45.8471721Z with:
+2025-08-18T19:45:45.8472208Z   repository: AlexBomber12/AWA-App
+2025-08-18T19:45:45.8472660Z   token: ***
+2025-08-18T19:45:45.8472845Z   ssh-strict: true
+2025-08-18T19:45:45.8473034Z   ssh-user: git
+2025-08-18T19:45:45.8473213Z   persist-credentials: true
+2025-08-18T19:45:45.8473420Z   clean: true
+2025-08-18T19:45:45.8473598Z   sparse-checkout-cone-mode: true
+2025-08-18T19:45:45.8473824Z   fetch-depth: 1
+2025-08-18T19:45:45.8473993Z   fetch-tags: false
+2025-08-18T19:45:45.8474171Z   show-progress: true
+2025-08-18T19:45:45.8474344Z   lfs: false
+2025-08-18T19:45:45.8474506Z   submodules: false
+2025-08-18T19:45:45.8474681Z   set-safe-directory: true
+2025-08-18T19:45:45.8475153Z env:
+2025-08-18T19:45:45.8475370Z   REDIS_URL: redis://localhost:6379/0
+2025-08-18T19:45:45.8475622Z   RATE_LIMIT_DEFAULT: 100/minute
+2025-08-18T19:45:45.8475846Z   TRUST_X_FORWARDED: 1
+2025-08-18T19:45:45.8476023Z ##[endgroup]
+2025-08-18T19:45:45.9540957Z Syncing repository: AlexBomber12/AWA-App
+2025-08-18T19:45:45.9543386Z ##[group]Getting Git version info
+2025-08-18T19:45:45.9543989Z Working directory is '/home/runner/work/AWA-App/AWA-App'
+2025-08-18T19:45:45.9544893Z [command]/usr/bin/git version
+2025-08-18T19:45:45.9569412Z git version 2.50.1
+2025-08-18T19:45:45.9595507Z ##[endgroup]
+2025-08-18T19:45:45.9614503Z Temporarily overriding HOME='/home/runner/work/_temp/ef725973-63a6-4e50-bea2-a62abe5eb19e' before making global git config changes
+2025-08-18T19:45:45.9615249Z Adding repository directory to the temporary git global config as a safe directory
+2025-08-18T19:45:45.9619344Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/AWA-App/AWA-App
+2025-08-18T19:45:45.9655405Z Deleting the contents of '/home/runner/work/AWA-App/AWA-App'
+2025-08-18T19:45:45.9658603Z ##[group]Initializing the repository
+2025-08-18T19:45:45.9662726Z [command]/usr/bin/git init /home/runner/work/AWA-App/AWA-App
+2025-08-18T19:45:45.9722129Z hint: Using 'master' as the name for the initial branch. This default branch name
+2025-08-18T19:45:45.9723008Z hint: is subject to change. To configure the initial branch name to use in all
+2025-08-18T19:45:45.9723891Z hint: of your new repositories, which will suppress this warning, call:
+2025-08-18T19:45:45.9724557Z hint:
+2025-08-18T19:45:45.9724914Z hint: 	git config --global init.defaultBranch <name>
+2025-08-18T19:45:45.9725186Z hint:
+2025-08-18T19:45:45.9725460Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2025-08-18T19:45:45.9726135Z hint: 'development'. The just-created branch can be renamed via this command:
+2025-08-18T19:45:45.9726752Z hint:
+2025-08-18T19:45:45.9727081Z hint: 	git branch -m <name>
+2025-08-18T19:45:45.9727446Z hint:
+2025-08-18T19:45:45.9727974Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2025-08-18T19:45:45.9728912Z Initialized empty Git repository in /home/runner/work/AWA-App/AWA-App/.git/
+2025-08-18T19:45:45.9736982Z [command]/usr/bin/git remote add origin https://github.com/AlexBomber12/AWA-App
+2025-08-18T19:45:45.9767814Z ##[endgroup]
+2025-08-18T19:45:45.9768396Z ##[group]Disabling automatic garbage collection
+2025-08-18T19:45:45.9772772Z [command]/usr/bin/git config --local gc.auto 0
+2025-08-18T19:45:45.9800443Z ##[endgroup]
+2025-08-18T19:45:45.9801030Z ##[group]Setting up auth
+2025-08-18T19:45:45.9808015Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2025-08-18T19:45:45.9837452Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2025-08-18T19:45:46.0094532Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2025-08-18T19:45:46.0123853Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2025-08-18T19:45:46.0338380Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2025-08-18T19:45:46.0378665Z ##[endgroup]
+2025-08-18T19:45:46.0379309Z ##[group]Fetching the repository
+2025-08-18T19:45:46.0387683Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +0e05b1bfda9e2e2f95ad7bd1c304c959eb9a225c:refs/remotes/origin/main
+2025-08-18T19:45:46.3225946Z From https://github.com/AlexBomber12/AWA-App
+2025-08-18T19:45:46.3226978Z  * [new ref]         0e05b1bfda9e2e2f95ad7bd1c304c959eb9a225c -> origin/main
+2025-08-18T19:45:46.3252369Z ##[endgroup]
+2025-08-18T19:45:46.3252967Z ##[group]Determining the checkout info
+2025-08-18T19:45:46.3255150Z ##[endgroup]
+2025-08-18T19:45:46.3260781Z [command]/usr/bin/git sparse-checkout disable
+2025-08-18T19:45:46.3305530Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2025-08-18T19:45:46.3335712Z ##[group]Checking out the ref
+2025-08-18T19:45:46.3341531Z [command]/usr/bin/git checkout --progress --force -B main refs/remotes/origin/main
+2025-08-18T19:45:46.3685013Z Switched to a new branch 'main'
+2025-08-18T19:45:46.3687947Z branch 'main' set up to track 'origin/main'.
+2025-08-18T19:45:46.3696009Z ##[endgroup]
+2025-08-18T19:45:46.3736260Z [command]/usr/bin/git log -1 --format=%H
+2025-08-18T19:45:46.3759485Z 0e05b1bfda9e2e2f95ad7bd1c304c959eb9a225c
+2025-08-18T19:45:46.3919999Z ##[group]Run cat .env.ci >> "$GITHUB_ENV"
+2025-08-18T19:45:46.3920333Z [36;1mcat .env.ci >> "$GITHUB_ENV"[0m
+2025-08-18T19:45:46.3921006Z [36;1mecho "DATABASE_URL=***localhost:5432/awa" >> "$GITHUB_ENV"[0m
+2025-08-18T19:45:46.3921354Z [36;1mecho "PG_HOST=localhost" >> "$GITHUB_ENV"[0m
+2025-08-18T19:45:46.3921637Z [36;1mecho "PG_PORT=5432" >> "$GITHUB_ENV"[0m
+2025-08-18T19:45:46.3922148Z [36;1mecho "PG_USER=postgres" >> "$GITHUB_ENV"[0m
+2025-08-18T19:45:46.3922629Z [36;1mecho "PG_PASSWORD=pass" >> "$GITHUB_ENV"[0m
+2025-08-18T19:45:46.3922898Z [36;1mecho "PG_DATABASE=awa" >> "$GITHUB_ENV"[0m
+2025-08-18T19:45:46.3966693Z shell: /usr/bin/bash -e {0}
+2025-08-18T19:45:46.3966908Z env:
+2025-08-18T19:45:46.3967103Z   REDIS_URL: redis://localhost:6379/0
+2025-08-18T19:45:46.3967356Z   RATE_LIMIT_DEFAULT: 100/minute
+2025-08-18T19:45:46.3967571Z   TRUST_X_FORWARDED: 1
+2025-08-18T19:45:46.3967749Z ##[endgroup]
+2025-08-18T19:45:46.4129827Z ##[group]Run actions/setup-python@v5
+2025-08-18T19:45:46.4130076Z with:
+2025-08-18T19:45:46.4130248Z   python-version: 3.12
+2025-08-18T19:45:46.4130433Z   cache: pip
+2025-08-18T19:45:46.4130640Z   cache-dependency-path: requirements-dev.txt
+2025-08-18T19:45:46.4130906Z   check-latest: false
+2025-08-18T19:45:46.4131192Z   token: ***
+2025-08-18T19:45:46.4131378Z   update-environment: true
+2025-08-18T19:45:46.4131589Z   allow-prereleases: false
+2025-08-18T19:45:46.4131788Z   freethreaded: false
+2025-08-18T19:45:46.4132185Z env:
+2025-08-18T19:45:46.4132377Z   REDIS_URL: redis://localhost:6379/0
+2025-08-18T19:45:46.4132617Z   RATE_LIMIT_DEFAULT: 100/minute
+2025-08-18T19:45:46.4132832Z   TRUST_X_FORWARDED: 1
+2025-08-18T19:45:46.4133019Z   PG_USER: postgres
+2025-08-18T19:45:46.4133193Z   PG_PASSWORD: pass
+2025-08-18T19:45:46.4133369Z   PG_DATABASE: awa
+2025-08-18T19:45:46.4133536Z   PG_HOST: localhost
+2025-08-18T19:45:46.4133714Z   PG_PORT: 5432
+2025-08-18T19:45:46.4134147Z   PG_SYNC_DSN: ***localhost:5432/awa
+2025-08-18T19:45:46.4134520Z   PG_ASYNC_DSN: ***localhost:5432/awa
+2025-08-18T19:45:46.4134885Z   DATABASE_URL: ***localhost:5432/awa
+2025-08-18T19:45:46.4135110Z   DATA_DIR: /tmp/awa-data
+2025-08-18T19:45:46.4135301Z   ENABLE_LIVE: 0
+2025-08-18T19:45:46.4135458Z   TESTING: 1
+2025-08-18T19:45:46.4135625Z ##[endgroup]
+2025-08-18T19:45:46.5755609Z ##[group]Installed versions
+2025-08-18T19:45:46.5839467Z Successfully set up CPython (3.12.11)
+2025-08-18T19:45:46.5840272Z ##[endgroup]
+2025-08-18T19:45:46.6174279Z [command]/opt/hostedtoolcache/Python/3.12.11/x64/bin/pip cache dir
+2025-08-18T19:45:48.0296703Z /home/runner/.cache/pip
+2025-08-18T19:45:48.1554204Z Cache hit for: setup-python-Linux-x64-24.04-Ubuntu-python-3.12.11-pip-5e718741e550cec7917fae13efe91a31293d04a98c3c0932315e8f58598cbd2c
+2025-08-18T19:45:49.2122712Z Received 251658240 of 318225224 (79.1%), 239.8 MBs/sec
+2025-08-18T19:45:49.5745418Z Received 318225224 of 318225224 (100.0%), 221.7 MBs/sec
+2025-08-18T19:45:49.5748415Z Cache Size: ~303 MB (318225224 B)
+2025-08-18T19:45:49.5785283Z [command]/usr/bin/tar -xf /home/runner/work/_temp/152f9ce6-7bbf-4e4e-b83e-1d267d42eca7/cache.tzst -P -C /home/runner/work/AWA-App/AWA-App --use-compress-program unzstd
+2025-08-18T19:45:50.1564392Z Cache restored successfully
+2025-08-18T19:45:50.2161424Z Cache restored from key: setup-python-Linux-x64-24.04-Ubuntu-python-3.12.11-pip-5e718741e550cec7917fae13efe91a31293d04a98c3c0932315e8f58598cbd2c
+2025-08-18T19:45:50.2329703Z ##[group]Run pip install -r requirements-dev.txt
+2025-08-18T19:45:50.2330096Z [36;1mpip install -r requirements-dev.txt[0m
+2025-08-18T19:45:50.2330401Z [36;1mpip install keepa==1.3.15 minio==7.1.15[0m
+2025-08-18T19:45:50.2377375Z shell: /usr/bin/bash -e {0}
+2025-08-18T19:45:50.2377595Z env:
+2025-08-18T19:45:50.2377802Z   REDIS_URL: redis://localhost:6379/0
+2025-08-18T19:45:50.2378065Z   RATE_LIMIT_DEFAULT: 100/minute
+2025-08-18T19:45:50.2378280Z   TRUST_X_FORWARDED: 1
+2025-08-18T19:45:50.2378475Z   PG_USER: postgres
+2025-08-18T19:45:50.2378659Z   PG_PASSWORD: pass
+2025-08-18T19:45:50.2378833Z   PG_DATABASE: awa
+2025-08-18T19:45:50.2379009Z   PG_HOST: localhost
+2025-08-18T19:45:50.2379194Z   PG_PORT: 5432
+2025-08-18T19:45:50.2379656Z   PG_SYNC_DSN: ***localhost:5432/awa
+2025-08-18T19:45:50.2380096Z   PG_ASYNC_DSN: ***localhost:5432/awa
+2025-08-18T19:45:50.2380463Z   DATABASE_URL: ***localhost:5432/awa
+2025-08-18T19:45:50.2380694Z   DATA_DIR: /tmp/awa-data
+2025-08-18T19:45:50.2380924Z   ENABLE_LIVE: 0
+2025-08-18T19:45:50.2381088Z   TESTING: 1
+2025-08-18T19:45:50.2381490Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.11/x64
+2025-08-18T19:45:50.2382134Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.11/x64/lib/pkgconfig
+2025-08-18T19:45:50.2382531Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.11/x64
+2025-08-18T19:45:50.2382872Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.11/x64
+2025-08-18T19:45:50.2383210Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.11/x64
+2025-08-18T19:45:50.2383553Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.11/x64/lib
+2025-08-18T19:45:50.2383832Z ##[endgroup]
+2025-08-18T19:45:51.3153575Z Collecting Jinja2==3.1.6 (from -r requirements-dev.txt (line 2))
+2025-08-18T19:45:51.3165858Z   Using cached jinja2-3.1.6-py3-none-any.whl.metadata (2.9 kB)
+2025-08-18T19:45:51.3417366Z Collecting alembic==1.13.1 (from -r requirements-dev.txt (line 3))
+2025-08-18T19:45:51.3429429Z   Using cached alembic-1.13.1-py3-none-any.whl.metadata (7.4 kB)
+2025-08-18T19:45:51.3627848Z Collecting apscheduler==3.10.4 (from -r requirements-dev.txt (line 4))
+2025-08-18T19:45:51.3639952Z   Using cached APScheduler-3.10.4-py3-none-any.whl.metadata (5.7 kB)
+2025-08-18T19:45:51.3829011Z Collecting asgi-correlation-id==4.3.1 (from -r requirements-dev.txt (line 5))
+2025-08-18T19:45:51.3840751Z   Using cached asgi_correlation_id-4.3.1-py3-none-any.whl.metadata (28 kB)
+2025-08-18T19:45:51.4284895Z Collecting asyncpg==0.30.0 (from -r requirements-dev.txt (line 6))
+2025-08-18T19:45:51.4297348Z   Using cached asyncpg-0.30.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (5.0 kB)
+2025-08-18T19:45:51.4800449Z Collecting black==25.1.0 (from -r requirements-dev.txt (line 7))
+2025-08-18T19:45:51.4813346Z   Using cached black-25.1.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.manylinux_2_28_x86_64.whl.metadata (81 kB)
+2025-08-18T19:45:51.8492490Z Collecting boto3 (from -r requirements-dev.txt (line 8))
+2025-08-18T19:45:51.8943381Z   Downloading boto3-1.40.12-py3-none-any.whl.metadata (6.7 kB)
+2025-08-18T19:45:51.9277495Z Collecting redis==5.* (from -r requirements-dev.txt (line 9))
+2025-08-18T19:45:51.9288790Z   Using cached redis-5.3.1-py3-none-any.whl.metadata (9.2 kB)
+2025-08-18T19:45:51.9626273Z Collecting minio==7.* (from -r requirements-dev.txt (line 10))
+2025-08-18T19:45:51.9637730Z   Using cached minio-7.2.16-py3-none-any.whl.metadata (6.5 kB)
+2025-08-18T19:45:51.9971677Z Collecting celery==5.4.0 (from -r requirements-dev.txt (line 11))
+2025-08-18T19:45:51.9988689Z   Using cached celery-5.4.0-py3-none-any.whl.metadata (21 kB)
+2025-08-18T19:45:52.0640386Z Collecting fastapi==0.116.1 (from -r requirements-dev.txt (line 12))
+2025-08-18T19:45:52.0652517Z   Using cached fastapi-0.116.1-py3-none-any.whl.metadata (28 kB)
+2025-08-18T19:45:52.0835376Z Collecting fastapi-limiter==0.1.6 (from -r requirements-dev.txt (line 14))
+2025-08-18T19:45:52.0847179Z   Using cached fastapi_limiter-0.1.6-py3-none-any.whl.metadata (5.3 kB)
+2025-08-18T19:45:52.1056922Z Collecting httpx<0.29,>=0.27 (from -r requirements-dev.txt (line 15))
+2025-08-18T19:45:52.1068476Z   Using cached httpx-0.28.1-py3-none-any.whl.metadata (7.1 kB)
+2025-08-18T19:45:52.1226575Z Collecting imapclient==3.0.1 (from -r requirements-dev.txt (line 16))
+2025-08-18T19:45:52.1238359Z   Using cached IMAPClient-3.0.1-py2.py3-none-any.whl.metadata (1.7 kB)
+2025-08-18T19:45:52.1364320Z Collecting itsdangerous (from -r requirements-dev.txt (line 17))
+2025-08-18T19:45:52.1376274Z   Using cached itsdangerous-2.2.0-py3-none-any.whl.metadata (1.9 kB)
+2025-08-18T19:45:52.2367335Z Collecting mypy==1.* (from -r requirements-dev.txt (line 18))
+2025-08-18T19:45:52.2379956Z   Using cached mypy-1.17.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (2.2 kB)
+2025-08-18T19:45:52.2511804Z Collecting mypy-extensions==1.1.0 (from -r requirements-dev.txt (line 19))
+2025-08-18T19:45:52.2523773Z   Using cached mypy_extensions-1.1.0-py3-none-any.whl.metadata (1.1 kB)
+2025-08-18T19:45:52.4421663Z Collecting numpy<2 (from -r requirements-dev.txt (line 20))
+2025-08-18T19:45:52.4435622Z   Using cached numpy-1.26.4-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (61 kB)
+2025-08-18T19:45:52.4716632Z Collecting openpyxl==3.1.5 (from -r requirements-dev.txt (line 21))
+2025-08-18T19:45:52.4728657Z   Using cached openpyxl-3.1.5-py2.py3-none-any.whl.metadata (2.5 kB)
+2025-08-18T19:45:52.5790442Z Collecting pandas==2.2.* (from -r requirements-dev.txt (line 22))
+2025-08-18T19:45:52.5803477Z   Using cached pandas-2.2.3-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (89 kB)
+2025-08-18T19:45:52.6827526Z Collecting psycopg2-binary==2.9.9 (from -r requirements-dev.txt (line 23))
+2025-08-18T19:45:52.6839602Z   Using cached psycopg2_binary-2.9.9-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (4.4 kB)
+2025-08-18T19:45:52.7029691Z Collecting psycopg==3.2.9 (from psycopg[binary]==3.2.9->-r requirements-dev.txt (line 24))
+2025-08-18T19:45:52.7041095Z   Using cached psycopg-3.2.9-py3-none-any.whl.metadata (4.5 kB)
+2025-08-18T19:45:52.8264967Z Collecting pydantic==2.11.7 (from -r requirements-dev.txt (line 25))
+2025-08-18T19:45:52.8277316Z   Using cached pydantic-2.11.7-py3-none-any.whl.metadata (67 kB)
+2025-08-18T19:45:52.9642561Z Collecting setuptools (from -r requirements-dev.txt (line 26))
+2025-08-18T19:45:52.9654834Z   Using cached setuptools-80.9.0-py3-none-any.whl.metadata (6.6 kB)
+2025-08-18T19:45:52.9941296Z Collecting pytest-asyncio==0.23.6 (from -r requirements-dev.txt (line 27))
+2025-08-18T19:45:52.9952886Z   Using cached pytest_asyncio-0.23.6-py3-none-any.whl.metadata (3.9 kB)
+2025-08-18T19:45:53.0162885Z Collecting pytest-cov==6.2.1 (from -r requirements-dev.txt (line 28))
+2025-08-18T19:45:53.0178812Z   Using cached pytest_cov-6.2.1-py3-none-any.whl.metadata (30 kB)
+2025-08-18T19:45:53.0365771Z Collecting pytest-postgresql==7.0.2 (from -r requirements-dev.txt (line 29))
+2025-08-18T19:45:53.0377041Z   Using cached pytest_postgresql-7.0.2-py3-none-any.whl.metadata (18 kB)
+2025-08-18T19:45:53.0574043Z Collecting python-dotenv (from -r requirements-dev.txt (line 30))
+2025-08-18T19:45:53.0585249Z   Using cached python_dotenv-1.1.1-py3-none-any.whl.metadata (24 kB)
+2025-08-18T19:45:53.0739835Z Collecting python-multipart (from -r requirements-dev.txt (line 31))
+2025-08-18T19:45:53.0751415Z   Using cached python_multipart-0.0.20-py3-none-any.whl.metadata (1.8 kB)
+2025-08-18T19:45:53.1060567Z Collecting python-telegram-bot==22.2 (from -r requirements-dev.txt (line 32))
+2025-08-18T19:45:53.1071840Z   Using cached python_telegram_bot-22.2-py3-none-any.whl.metadata (17 kB)
+2025-08-18T19:45:53.1406484Z Collecting requests==2.32.4 (from -r requirements-dev.txt (line 33))
+2025-08-18T19:45:53.1418336Z   Using cached requests-2.32.4-py3-none-any.whl.metadata (4.9 kB)
+2025-08-18T19:45:53.1606741Z Collecting respx==0.22.0 (from -r requirements-dev.txt (line 34))
+2025-08-18T19:45:53.1618325Z   Using cached respx-0.22.0-py2.py3-none-any.whl.metadata (4.1 kB)
+2025-08-18T19:45:53.5236032Z Collecting ruff==0.4.4 (from -r requirements-dev.txt (line 35))
+2025-08-18T19:45:53.5248828Z   Using cached ruff-0.4.4-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (23 kB)
+2025-08-18T19:45:53.7955749Z Collecting sqlalchemy==2.0.29 (from -r requirements-dev.txt (line 36))
+2025-08-18T19:45:53.7969548Z   Using cached SQLAlchemy-2.0.29-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (9.6 kB)
+2025-08-18T19:45:53.8225976Z Collecting structlog==24.1.0 (from -r requirements-dev.txt (line 37))
+2025-08-18T19:45:53.8237643Z   Using cached structlog-24.1.0-py3-none-any.whl.metadata (6.9 kB)
+2025-08-18T19:45:53.8450759Z Collecting testcontainers==4.10.0 (from testcontainers[postgres]==4.10.0->-r requirements-dev.txt (line 38))
+2025-08-18T19:45:53.8462829Z   Using cached testcontainers-4.10.0-py3-none-any.whl.metadata (7.8 kB)
+2025-08-18T19:45:53.8871025Z Collecting types-requests==2.32.0.20240602 (from -r requirements-dev.txt (line 39))
+2025-08-18T19:45:53.8882820Z   Using cached types_requests-2.32.0.20240602-py3-none-any.whl.metadata (1.8 kB)
+2025-08-18T19:45:53.9049741Z Collecting docspec-python==2.2.2 (from -r requirements-dev.txt (line 40))
+2025-08-18T19:45:53.9061602Z   Using cached docspec_python-2.2.2-py3-none-any.whl.metadata (1.0 kB)
+2025-08-18T19:45:53.9301294Z Collecting pydoc-markdown==4.8.2 (from -r requirements-dev.txt (line 41))
+2025-08-18T19:45:53.9313792Z   Using cached pydoc_markdown-4.8.2-py3-none-any.whl.metadata (5.9 kB)
+2025-08-18T19:45:53.9637445Z Collecting pandera==0.19.* (from -r requirements-dev.txt (line 42))
+2025-08-18T19:45:53.9649952Z   Using cached pandera-0.19.3-py3-none-any.whl.metadata (15 kB)
+2025-08-18T19:45:54.0653482Z Collecting MarkupSafe>=2.0 (from Jinja2==3.1.6->-r requirements-dev.txt (line 2))
+2025-08-18T19:45:54.0665561Z   Using cached MarkupSafe-3.0.2-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (4.0 kB)
+2025-08-18T19:45:54.0988976Z Collecting Mako (from alembic==1.13.1->-r requirements-dev.txt (line 3))
+2025-08-18T19:45:54.1000638Z   Using cached mako-1.3.10-py3-none-any.whl.metadata (2.9 kB)
+2025-08-18T19:45:54.1196844Z Collecting typing-extensions>=4 (from alembic==1.13.1->-r requirements-dev.txt (line 3))
+2025-08-18T19:45:54.1208806Z   Using cached typing_extensions-4.14.1-py3-none-any.whl.metadata (3.0 kB)
+2025-08-18T19:45:54.1378041Z Collecting six>=1.4.0 (from apscheduler==3.10.4->-r requirements-dev.txt (line 4))
+2025-08-18T19:45:54.1390960Z   Using cached six-1.17.0-py2.py3-none-any.whl.metadata (1.7 kB)
+2025-08-18T19:45:54.1752446Z Collecting pytz (from apscheduler==3.10.4->-r requirements-dev.txt (line 4))
+2025-08-18T19:45:54.1764689Z   Using cached pytz-2025.2-py2.py3-none-any.whl.metadata (22 kB)
+2025-08-18T19:45:54.1967292Z Collecting tzlocal!=3.*,>=2.0 (from apscheduler==3.10.4->-r requirements-dev.txt (line 4))
+2025-08-18T19:45:54.1978913Z   Using cached tzlocal-5.3.1-py3-none-any.whl.metadata (7.6 kB)
+2025-08-18T19:45:54.2307457Z Collecting starlette>=0.18 (from asgi-correlation-id==4.3.1->-r requirements-dev.txt (line 5))
+2025-08-18T19:45:54.2319255Z   Using cached starlette-0.47.2-py3-none-any.whl.metadata (6.2 kB)
+2025-08-18T19:45:54.2539023Z Collecting click>=8.0.0 (from black==25.1.0->-r requirements-dev.txt (line 7))
+2025-08-18T19:45:54.2550631Z   Using cached click-8.2.1-py3-none-any.whl.metadata (2.5 kB)
+2025-08-18T19:45:54.2734144Z Collecting packaging>=22.0 (from black==25.1.0->-r requirements-dev.txt (line 7))
+2025-08-18T19:45:54.2745893Z   Using cached packaging-25.0-py3-none-any.whl.metadata (3.3 kB)
+2025-08-18T19:45:54.2882630Z Collecting pathspec>=0.9.0 (from black==25.1.0->-r requirements-dev.txt (line 7))
+2025-08-18T19:45:54.2894514Z   Using cached pathspec-0.12.1-py3-none-any.whl.metadata (21 kB)
+2025-08-18T19:45:54.3105859Z Collecting platformdirs>=2 (from black==25.1.0->-r requirements-dev.txt (line 7))
+2025-08-18T19:45:54.3117746Z   Using cached platformdirs-4.3.8-py3-none-any.whl.metadata (12 kB)
+2025-08-18T19:45:54.3335199Z Collecting billiard<5.0,>=4.2.0 (from celery==5.4.0->-r requirements-dev.txt (line 11))
+2025-08-18T19:45:54.3346941Z   Using cached billiard-4.2.1-py3-none-any.whl.metadata (4.4 kB)
+2025-08-18T19:45:54.3689318Z Collecting kombu<6.0,>=5.3.4 (from celery==5.4.0->-r requirements-dev.txt (line 11))
+2025-08-18T19:45:54.3701121Z   Using cached kombu-5.5.4-py3-none-any.whl.metadata (3.5 kB)
+2025-08-18T19:45:54.3887571Z Collecting vine<6.0,>=5.1.0 (from celery==5.4.0->-r requirements-dev.txt (line 11))
+2025-08-18T19:45:54.3899153Z   Using cached vine-5.1.0-py3-none-any.whl.metadata (2.7 kB)
+2025-08-18T19:45:54.4072417Z Collecting click-didyoumean>=0.3.0 (from celery==5.4.0->-r requirements-dev.txt (line 11))
+2025-08-18T19:45:54.4084046Z   Using cached click_didyoumean-0.3.1-py3-none-any.whl.metadata (3.9 kB)
+2025-08-18T19:45:54.4204584Z Collecting click-repl>=0.2.0 (from celery==5.4.0->-r requirements-dev.txt (line 11))
+2025-08-18T19:45:54.4216173Z   Using cached click_repl-0.3.0-py3-none-any.whl.metadata (3.6 kB)
+2025-08-18T19:45:54.4353689Z Collecting click-plugins>=1.1.1 (from celery==5.4.0->-r requirements-dev.txt (line 11))
+2025-08-18T19:45:54.4365451Z   Using cached click_plugins-1.1.1.2-py2.py3-none-any.whl.metadata (6.5 kB)
+2025-08-18T19:45:54.4526856Z Collecting tzdata>=2022.7 (from celery==5.4.0->-r requirements-dev.txt (line 11))
+2025-08-18T19:45:54.4539264Z   Using cached tzdata-2025.2-py2.py3-none-any.whl.metadata (1.4 kB)
+2025-08-18T19:45:54.4690072Z Collecting python-dateutil>=2.8.2 (from celery==5.4.0->-r requirements-dev.txt (line 11))
+2025-08-18T19:45:54.4702501Z   Using cached python_dateutil-2.9.0.post0-py2.py3-none-any.whl.metadata (8.4 kB)
+2025-08-18T19:45:54.5399368Z Collecting annotated-types>=0.6.0 (from pydantic==2.11.7->-r requirements-dev.txt (line 25))
+2025-08-18T19:45:54.5411206Z   Using cached annotated_types-0.7.0-py3-none-any.whl.metadata (15 kB)
+2025-08-18T19:45:55.1959240Z Collecting pydantic-core==2.33.2 (from pydantic==2.11.7->-r requirements-dev.txt (line 25))
+2025-08-18T19:45:55.1973266Z   Using cached pydantic_core-2.33.2-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (6.8 kB)
+2025-08-18T19:45:55.2130671Z Collecting typing-inspection>=0.4.0 (from pydantic==2.11.7->-r requirements-dev.txt (line 25))
+2025-08-18T19:45:55.2142618Z   Using cached typing_inspection-0.4.1-py3-none-any.whl.metadata (2.6 kB)
+2025-08-18T19:45:55.2436455Z Collecting et-xmlfile (from openpyxl==3.1.5->-r requirements-dev.txt (line 21))
+2025-08-18T19:45:55.2448281Z   Using cached et_xmlfile-2.0.0-py3-none-any.whl.metadata (2.7 kB)
+2025-08-18T19:45:55.2911770Z Collecting pytest<9,>=7.0.0 (from pytest-asyncio==0.23.6->-r requirements-dev.txt (line 27))
+2025-08-18T19:45:55.2923998Z   Using cached pytest-8.4.1-py3-none-any.whl.metadata (7.7 kB)
+2025-08-18T19:45:55.6199975Z Collecting coverage>=7.5 (from coverage[toml]>=7.5->pytest-cov==6.2.1->-r requirements-dev.txt (line 28))
+2025-08-18T19:45:55.6213701Z   Using cached coverage-7.10.4-cp312-cp312-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl.metadata (8.9 kB)
+2025-08-18T19:45:55.6367443Z Collecting pluggy>=1.2 (from pytest-cov==6.2.1->-r requirements-dev.txt (line 28))
+2025-08-18T19:45:55.6379045Z   Using cached pluggy-1.6.0-py3-none-any.whl.metadata (4.8 kB)
+2025-08-18T19:45:55.6695305Z Collecting port-for>=0.7.3 (from pytest-postgresql==7.0.2->-r requirements-dev.txt (line 29))
+2025-08-18T19:45:55.6706874Z   Using cached port_for-0.7.4-py3-none-any.whl.metadata (7.1 kB)
+2025-08-18T19:45:55.6878043Z Collecting mirakuru>=2.6.0 (from pytest-postgresql==7.0.2->-r requirements-dev.txt (line 29))
+2025-08-18T19:45:55.6890110Z   Using cached mirakuru-2.6.1-py3-none-any.whl.metadata (10 kB)
+2025-08-18T19:45:55.7813919Z Collecting charset_normalizer<4,>=2 (from requests==2.32.4->-r requirements-dev.txt (line 33))
+2025-08-18T19:45:55.7826995Z   Using cached charset_normalizer-3.4.3-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (36 kB)
+2025-08-18T19:45:55.8008544Z Collecting idna<4,>=2.5 (from requests==2.32.4->-r requirements-dev.txt (line 33))
+2025-08-18T19:45:55.8019905Z   Using cached idna-3.10-py3-none-any.whl.metadata (10 kB)
+2025-08-18T19:45:55.8314444Z Collecting urllib3<3,>=1.21.1 (from requests==2.32.4->-r requirements-dev.txt (line 33))
+2025-08-18T19:45:55.8326253Z   Using cached urllib3-2.5.0-py3-none-any.whl.metadata (6.5 kB)
+2025-08-18T19:45:55.8549981Z Collecting certifi>=2017.4.17 (from requests==2.32.4->-r requirements-dev.txt (line 33))
+2025-08-18T19:45:55.8561617Z   Using cached certifi-2025.8.3-py3-none-any.whl.metadata (2.4 kB)
+2025-08-18T19:45:56.0593729Z Collecting greenlet!=0.4.17 (from sqlalchemy==2.0.29->-r requirements-dev.txt (line 36))
+2025-08-18T19:45:56.0606908Z   Using cached greenlet-3.2.4-cp312-cp312-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl.metadata (4.1 kB)
+2025-08-18T19:45:56.1011286Z Collecting docker (from testcontainers==4.10.0->testcontainers[postgres]==4.10.0->-r requirements-dev.txt (line 38))
+2025-08-18T19:45:56.1022258Z   Using cached docker-7.1.0-py3-none-any.whl.metadata (3.8 kB)
+2025-08-18T19:45:56.2016454Z Collecting wrapt (from testcontainers==4.10.0->testcontainers[postgres]==4.10.0->-r requirements-dev.txt (line 38))
+2025-08-18T19:45:56.2029851Z   Using cached wrapt-1.17.3-cp312-cp312-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl.metadata (6.4 kB)
+2025-08-18T19:45:56.2342719Z Collecting docspec==2.2.1 (from docspec-python==2.2.2->-r requirements-dev.txt (line 40))
+2025-08-18T19:45:56.2354833Z   Using cached docspec-2.2.1-py3-none-any.whl.metadata (1.5 kB)
+2025-08-18T19:45:56.2595236Z Collecting nr-util>=0.8.12 (from docspec-python==2.2.2->-r requirements-dev.txt (line 40))
+2025-08-18T19:45:56.2638622Z   Using cached nr.util-0.8.12-py3-none-any.whl.metadata (813 bytes)
+2025-08-18T19:45:56.3011100Z Collecting PyYAML<7.0,>=5.0 (from pydoc-markdown==4.8.2->-r requirements-dev.txt (line 41))
+2025-08-18T19:45:56.3023281Z   Using cached PyYAML-6.0.2-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (2.1 kB)
+2025-08-18T19:45:56.3326676Z Collecting databind.core<5.0.0,>=4.4.0 (from pydoc-markdown==4.8.2->-r requirements-dev.txt (line 41))
+2025-08-18T19:45:56.3338545Z   Using cached databind.core-4.5.2-py3-none-any.whl.metadata (1.1 kB)
+2025-08-18T19:45:56.3557924Z Collecting databind.json<5.0.0,>=4.4.0 (from pydoc-markdown==4.8.2->-r requirements-dev.txt (line 41))
+2025-08-18T19:45:56.3569647Z   Using cached databind.json-4.5.2-py3-none-any.whl.metadata (1.1 kB)
+2025-08-18T19:45:56.3734644Z Collecting docstring-parser<0.12,>=0.11 (from pydoc-markdown==4.8.2->-r requirements-dev.txt (line 41))
+2025-08-18T19:45:56.3736141Z   Using cached docstring_parser-0.11-py3-none-any.whl
+2025-08-18T19:45:56.4087908Z Collecting tomli<3.0.0,>=2.0.0 (from pydoc-markdown==4.8.2->-r requirements-dev.txt (line 41))
+2025-08-18T19:45:56.4099212Z   Using cached tomli-2.2.1-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (11 kB)
+2025-08-18T19:45:56.4228496Z Collecting tomli_w<2.0.0,>=1.0.0 (from pydoc-markdown==4.8.2->-r requirements-dev.txt (line 41))
+2025-08-18T19:45:56.4239987Z   Using cached tomli_w-1.2.0-py3-none-any.whl.metadata (5.7 kB)
+2025-08-18T19:45:56.4763615Z Collecting watchdog (from pydoc-markdown==4.8.2->-r requirements-dev.txt (line 41))
+2025-08-18T19:45:56.4775809Z   Using cached watchdog-6.0.0-py3-none-manylinux2014_x86_64.whl.metadata (44 kB)
+2025-08-18T19:45:56.5031237Z Collecting yapf>=0.30.0 (from pydoc-markdown==4.8.2->-r requirements-dev.txt (line 41))
+2025-08-18T19:45:56.5042959Z   Using cached yapf-0.43.0-py3-none-any.whl.metadata (46 kB)
+2025-08-18T19:45:56.5260392Z Collecting Deprecated<2.0.0,>=1.2.12 (from docspec==2.2.1->docspec-python==2.2.2->-r requirements-dev.txt (line 40))
+2025-08-18T19:45:56.5271618Z   Using cached Deprecated-1.2.18-py2.py3-none-any.whl.metadata (5.7 kB)
+2025-08-18T19:45:56.6776397Z Collecting psycopg-binary==3.2.9 (from psycopg[binary]==3.2.9->-r requirements-dev.txt (line 24))
+2025-08-18T19:45:56.6788938Z   Using cached psycopg_binary-3.2.9-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (2.9 kB)
+2025-08-18T19:45:56.7077486Z Collecting PyJWT>=2.9.0 (from redis==5.*->-r requirements-dev.txt (line 9))
+2025-08-18T19:45:56.7088603Z   Using cached PyJWT-2.10.1-py3-none-any.whl.metadata (4.0 kB)
+2025-08-18T19:45:56.7364468Z Collecting argon2-cffi (from minio==7.*->-r requirements-dev.txt (line 10))
+2025-08-18T19:45:56.7375739Z   Using cached argon2_cffi-25.1.0-py3-none-any.whl.metadata (4.1 kB)
+2025-08-18T19:45:56.8202444Z Collecting pycryptodome (from minio==7.*->-r requirements-dev.txt (line 10))
+2025-08-18T19:45:56.8215289Z   Using cached pycryptodome-3.23.0-cp37-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (3.4 kB)
+2025-08-18T19:45:56.8452776Z Collecting anyio (from httpx<0.29,>=0.27->-r requirements-dev.txt (line 15))
+2025-08-18T19:45:56.8464285Z   Using cached anyio-4.10.0-py3-none-any.whl.metadata (4.0 kB)
+2025-08-18T19:45:56.8700443Z Collecting httpcore==1.* (from httpx<0.29,>=0.27->-r requirements-dev.txt (line 15))
+2025-08-18T19:45:56.8712355Z   Using cached httpcore-1.0.9-py3-none-any.whl.metadata (21 kB)
+2025-08-18T19:45:56.9096855Z Collecting multimethod<=1.10.0 (from pandera==0.19.*->-r requirements-dev.txt (line 42))
+2025-08-18T19:45:56.9108867Z   Using cached multimethod-1.10-py3-none-any.whl.metadata (8.2 kB)
+2025-08-18T19:45:56.9527030Z Collecting typeguard (from pandera==0.19.*->-r requirements-dev.txt (line 42))
+2025-08-18T19:45:56.9538526Z   Using cached typeguard-4.4.4-py3-none-any.whl.metadata (3.3 kB)
+2025-08-18T19:45:56.9673299Z Collecting typing-inspect>=0.6.0 (from pandera==0.19.*->-r requirements-dev.txt (line 42))
+2025-08-18T19:45:56.9684478Z   Using cached typing_inspect-0.9.0-py3-none-any.whl.metadata (1.5 kB)
+2025-08-18T19:45:56.9978418Z Collecting databind<5.0.0,>=4.5.2 (from databind.core<5.0.0,>=4.4.0->pydoc-markdown==4.8.2->-r requirements-dev.txt (line 41))
+2025-08-18T19:45:56.9989406Z   Using cached databind-4.5.2-py3-none-any.whl.metadata (4.3 kB)
+2025-08-18T19:45:57.0132433Z Collecting nr-date<3.0.0,>=2.0.0 (from databind<5.0.0,>=4.5.2->databind.core<5.0.0,>=4.4.0->pydoc-markdown==4.8.2->-r requirements-dev.txt (line 41))
+2025-08-18T19:45:57.0143340Z   Using cached nr_date-2.1.0-py3-none-any.whl.metadata (746 bytes)
+2025-08-18T19:45:57.0288980Z Collecting nr-stream<2.0.0,>=1.0.0 (from databind<5.0.0,>=4.5.2->databind.core<5.0.0,>=4.4.0->pydoc-markdown==4.8.2->-r requirements-dev.txt (line 41))
+2025-08-18T19:45:57.0300143Z   Using cached nr_stream-1.1.5-py3-none-any.whl.metadata (3.6 kB)
+2025-08-18T19:45:57.0488000Z Collecting typeapi<3,>=2.0.1 (from databind<5.0.0,>=4.5.2->databind.core<5.0.0,>=4.4.0->pydoc-markdown==4.8.2->-r requirements-dev.txt (line 41))
+2025-08-18T19:45:57.0499032Z   Using cached typeapi-2.2.4-py3-none-any.whl.metadata (1.5 kB)
+2025-08-18T19:45:57.0796360Z Collecting h11>=0.16 (from httpcore==1.*->httpx<0.29,>=0.27->-r requirements-dev.txt (line 15))
+2025-08-18T19:45:57.0807650Z   Using cached h11-0.16.0-py3-none-any.whl.metadata (8.3 kB)
+2025-08-18T19:45:57.1057263Z Collecting amqp<6.0.0,>=5.1.1 (from kombu<6.0,>=5.3.4->celery==5.4.0->-r requirements-dev.txt (line 11))
+2025-08-18T19:45:57.1068571Z   Using cached amqp-5.3.1-py3-none-any.whl.metadata (8.9 kB)
+2025-08-18T19:45:57.1471370Z Collecting iniconfig>=1 (from pytest<9,>=7.0.0->pytest-asyncio==0.23.6->-r requirements-dev.txt (line 27))
+2025-08-18T19:45:57.1483365Z   Using cached iniconfig-2.1.0-py3-none-any.whl.metadata (2.7 kB)
+2025-08-18T19:45:57.1713077Z Collecting pygments>=2.7.2 (from pytest<9,>=7.0.0->pytest-asyncio==0.23.6->-r requirements-dev.txt (line 27))
+2025-08-18T19:45:57.1724381Z   Using cached pygments-2.19.2-py3-none-any.whl.metadata (2.5 kB)
+2025-08-18T19:45:57.2068620Z Collecting sniffio>=1.1 (from anyio->httpx<0.29,>=0.27->-r requirements-dev.txt (line 15))
+2025-08-18T19:45:57.2080081Z   Using cached sniffio-1.3.1-py3-none-any.whl.metadata (3.9 kB)
+2025-08-18T19:45:57.6743452Z Collecting botocore<1.41.0,>=1.40.12 (from boto3->-r requirements-dev.txt (line 8))
+2025-08-18T19:45:57.6824049Z   Downloading botocore-1.40.12-py3-none-any.whl.metadata (5.7 kB)
+2025-08-18T19:45:57.7009379Z Collecting jmespath<2.0.0,>=0.7.1 (from boto3->-r requirements-dev.txt (line 8))
+2025-08-18T19:45:57.7022660Z   Using cached jmespath-1.0.1-py3-none-any.whl.metadata (7.6 kB)
+2025-08-18T19:45:57.7208953Z Collecting s3transfer<0.14.0,>=0.13.0 (from boto3->-r requirements-dev.txt (line 8))
+2025-08-18T19:45:57.7220684Z   Using cached s3transfer-0.13.1-py3-none-any.whl.metadata (1.7 kB)
+2025-08-18T19:45:57.9344358Z Collecting fastapi-cli>=0.0.8 (from fastapi-cli[standard]>=0.0.8; extra == "all"->fastapi[all]->-r requirements-dev.txt (line 13))
+2025-08-18T19:45:57.9356060Z   Using cached fastapi_cli-0.0.8-py3-none-any.whl.metadata (6.3 kB)
+2025-08-18T19:45:58.0093759Z Collecting ujson!=4.0.2,!=4.1.0,!=4.2.0,!=4.3.0,!=5.0.0,!=5.1.0,>=4.0.1 (from fastapi[all]->-r requirements-dev.txt (line 13))
+2025-08-18T19:45:58.0105657Z   Using cached ujson-5.10.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (9.3 kB)
+2025-08-18T19:45:58.2390599Z Collecting orjson>=3.2.1 (from fastapi[all]->-r requirements-dev.txt (line 13))
+2025-08-18T19:45:58.2404179Z   Using cached orjson-3.11.2-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (1.2 kB)
+2025-08-18T19:45:58.2555806Z Collecting email-validator>=2.0.0 (from fastapi[all]->-r requirements-dev.txt (line 13))
+2025-08-18T19:45:58.2567821Z   Using cached email_validator-2.2.0-py3-none-any.whl.metadata (25 kB)
+2025-08-18T19:45:58.2877665Z Collecting uvicorn>=0.12.0 (from uvicorn[standard]>=0.12.0; extra == "all"->fastapi[all]->-r requirements-dev.txt (line 13))
+2025-08-18T19:45:58.2889120Z   Using cached uvicorn-0.35.0-py3-none-any.whl.metadata (6.5 kB)
+2025-08-18T19:45:58.3084288Z Collecting pydantic-settings>=2.0.0 (from fastapi[all]->-r requirements-dev.txt (line 13))
+2025-08-18T19:45:58.3095872Z   Using cached pydantic_settings-2.10.1-py3-none-any.whl.metadata (3.4 kB)
+2025-08-18T19:45:58.3253227Z Collecting pydantic-extra-types>=2.0.0 (from fastapi[all]->-r requirements-dev.txt (line 13))
+2025-08-18T19:45:58.3264663Z   Using cached pydantic_extra_types-2.10.5-py3-none-any.whl.metadata (3.9 kB)
+2025-08-18T19:45:58.3994538Z Collecting prompt-toolkit>=3.0.36 (from click-repl>=0.2.0->celery==5.4.0->-r requirements-dev.txt (line 11))
+2025-08-18T19:45:58.4006682Z   Using cached prompt_toolkit-3.0.51-py3-none-any.whl.metadata (6.4 kB)
+2025-08-18T19:45:58.4225279Z Collecting dnspython>=2.0.0 (from email-validator>=2.0.0->fastapi[all]->-r requirements-dev.txt (line 13))
+2025-08-18T19:45:58.4237012Z   Using cached dnspython-2.7.0-py3-none-any.whl.metadata (5.8 kB)
+2025-08-18T19:45:58.4587037Z Collecting typer>=0.15.1 (from fastapi-cli>=0.0.8->fastapi-cli[standard]>=0.0.8; extra == "all"->fastapi[all]->-r requirements-dev.txt (line 13))
+2025-08-18T19:45:58.4663623Z   Downloading typer-0.16.1-py3-none-any.whl.metadata (15 kB)
+2025-08-18T19:45:58.5034183Z Collecting rich-toolkit>=0.14.8 (from fastapi-cli>=0.0.8->fastapi-cli[standard]>=0.0.8; extra == "all"->fastapi[all]->-r requirements-dev.txt (line 13))
+2025-08-18T19:45:58.5045676Z   Using cached rich_toolkit-0.15.0-py3-none-any.whl.metadata (1.0 kB)
+2025-08-18T19:45:58.5202125Z Collecting fastapi-cloud-cli>=0.1.1 (from fastapi-cli[standard]>=0.0.8; extra == "all"->fastapi[all]->-r requirements-dev.txt (line 13))
+2025-08-18T19:45:58.5213737Z   Using cached fastapi_cloud_cli-0.1.5-py3-none-any.whl.metadata (3.2 kB)
+2025-08-18T19:45:58.6032498Z Collecting rignore>=0.5.1 (from fastapi-cloud-cli>=0.1.1->fastapi-cli[standard]>=0.0.8; extra == "all"->fastapi[all]->-r requirements-dev.txt (line 13))
+2025-08-18T19:45:58.6044511Z   Using cached rignore-0.6.4-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (3.8 kB)
+2025-08-18T19:45:58.7002405Z Collecting sentry-sdk>=2.20.0 (from fastapi-cloud-cli>=0.1.1->fastapi-cli[standard]>=0.0.8; extra == "all"->fastapi[all]->-r requirements-dev.txt (line 13))
+2025-08-18T19:45:58.7013918Z   Using cached sentry_sdk-2.35.0-py2.py3-none-any.whl.metadata (10 kB)
+2025-08-18T19:45:58.8033037Z Collecting psutil>=4.0.0 (from mirakuru>=2.6.0->pytest-postgresql==7.0.2->-r requirements-dev.txt (line 29))
+2025-08-18T19:45:58.8045160Z   Using cached psutil-7.0.0-cp36-abi3-manylinux_2_12_x86_64.manylinux2010_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (22 kB)
+2025-08-18T19:45:58.8417461Z Collecting wcwidth (from prompt-toolkit>=3.0.36->click-repl>=0.2.0->celery==5.4.0->-r requirements-dev.txt (line 11))
+2025-08-18T19:45:58.8428635Z   Using cached wcwidth-0.2.13-py2.py3-none-any.whl.metadata (14 kB)
+2025-08-18T19:45:58.9934604Z Collecting rich>=13.7.1 (from rich-toolkit>=0.14.8->fastapi-cli>=0.0.8->fastapi-cli[standard]>=0.0.8; extra == "all"->fastapi[all]->-r requirements-dev.txt (line 13))
+2025-08-18T19:45:58.9951652Z   Using cached rich-14.1.0-py3-none-any.whl.metadata (18 kB)
+2025-08-18T19:45:59.0175022Z Collecting markdown-it-py>=2.2.0 (from rich>=13.7.1->rich-toolkit>=0.14.8->fastapi-cli>=0.0.8->fastapi-cli[standard]>=0.0.8; extra == "all"->fastapi[all]->-r requirements-dev.txt (line 13))
+2025-08-18T19:45:59.0186914Z   Using cached markdown_it_py-4.0.0-py3-none-any.whl.metadata (7.3 kB)
+2025-08-18T19:45:59.0441561Z Collecting mdurl~=0.1 (from markdown-it-py>=2.2.0->rich>=13.7.1->rich-toolkit>=0.14.8->fastapi-cli>=0.0.8->fastapi-cli[standard]>=0.0.8; extra == "all"->fastapi[all]->-r requirements-dev.txt (line 13))
+2025-08-18T19:45:59.0454832Z   Using cached mdurl-0.1.2-py3-none-any.whl.metadata (1.6 kB)
+2025-08-18T19:45:59.1069005Z Collecting shellingham>=1.3.0 (from typer>=0.15.1->fastapi-cli>=0.0.8->fastapi-cli[standard]>=0.0.8; extra == "all"->fastapi[all]->-r requirements-dev.txt (line 13))
+2025-08-18T19:45:59.1081275Z   Using cached shellingham-1.5.4-py2.py3-none-any.whl.metadata (3.5 kB)
+2025-08-18T19:45:59.1919447Z Collecting httptools>=0.6.3 (from uvicorn[standard]>=0.12.0; extra == "all"->fastapi[all]->-r requirements-dev.txt (line 13))
+2025-08-18T19:45:59.1932879Z   Using cached httptools-0.6.4-cp312-cp312-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (3.6 kB)
+2025-08-18T19:45:59.2419182Z Collecting uvloop>=0.15.1 (from uvicorn[standard]>=0.12.0; extra == "all"->fastapi[all]->-r requirements-dev.txt (line 13))
+2025-08-18T19:45:59.2431689Z   Using cached uvloop-0.21.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (4.9 kB)
+2025-08-18T19:45:59.3230777Z Collecting watchfiles>=0.13 (from uvicorn[standard]>=0.12.0; extra == "all"->fastapi[all]->-r requirements-dev.txt (line 13))
+2025-08-18T19:45:59.3242963Z   Using cached watchfiles-1.1.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (4.9 kB)
+2025-08-18T19:45:59.4106566Z Collecting websockets>=10.4 (from uvicorn[standard]>=0.12.0; extra == "all"->fastapi[all]->-r requirements-dev.txt (line 13))
+2025-08-18T19:45:59.4118979Z   Using cached websockets-15.0.1-cp312-cp312-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (6.8 kB)
+2025-08-18T19:45:59.4596592Z Collecting argon2-cffi-bindings (from argon2-cffi->minio==7.*->-r requirements-dev.txt (line 10))
+2025-08-18T19:45:59.4608970Z   Using cached argon2_cffi_bindings-25.1.0-cp39-abi3-manylinux_2_26_x86_64.manylinux_2_28_x86_64.whl.metadata (7.4 kB)
+2025-08-18T19:45:59.6731308Z Collecting cffi>=1.0.1 (from argon2-cffi-bindings->argon2-cffi->minio==7.*->-r requirements-dev.txt (line 10))
+2025-08-18T19:45:59.6745906Z   Using cached cffi-1.17.1-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (1.5 kB)
+2025-08-18T19:45:59.6909730Z Collecting pycparser (from cffi>=1.0.1->argon2-cffi-bindings->argon2-cffi->minio==7.*->-r requirements-dev.txt (line 10))
+2025-08-18T19:45:59.6921742Z   Using cached pycparser-2.22-py3-none-any.whl.metadata (943 bytes)
+2025-08-18T19:45:59.7570920Z Using cached jinja2-3.1.6-py3-none-any.whl (134 kB)
+2025-08-18T19:45:59.7583401Z Using cached alembic-1.13.1-py3-none-any.whl (233 kB)
+2025-08-18T19:45:59.7596097Z Using cached APScheduler-3.10.4-py3-none-any.whl (59 kB)
+2025-08-18T19:45:59.7607626Z Using cached asgi_correlation_id-4.3.1-py3-none-any.whl (15 kB)
+2025-08-18T19:45:59.7619203Z Using cached asyncpg-0.30.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (3.6 MB)
+2025-08-18T19:45:59.7655732Z Using cached black-25.1.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.manylinux_2_28_x86_64.whl (1.8 MB)
+2025-08-18T19:45:59.7679345Z Using cached celery-5.4.0-py3-none-any.whl (425 kB)
+2025-08-18T19:45:59.7693351Z Using cached fastapi-0.116.1-py3-none-any.whl (95 kB)
+2025-08-18T19:45:59.7704962Z Using cached pydantic-2.11.7-py3-none-any.whl (444 kB)
+2025-08-18T19:45:59.7718911Z Using cached fastapi_limiter-0.1.6-py3-none-any.whl (15 kB)
+2025-08-18T19:45:59.7729993Z Using cached IMAPClient-3.0.1-py2.py3-none-any.whl (182 kB)
+2025-08-18T19:45:59.7742443Z Using cached mypy_extensions-1.1.0-py3-none-any.whl (5.0 kB)
+2025-08-18T19:45:59.7753814Z Using cached openpyxl-3.1.5-py2.py3-none-any.whl (250 kB)
+2025-08-18T19:45:59.7766776Z Using cached psycopg2_binary-2.9.9-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (3.0 MB)
+2025-08-18T19:45:59.7799278Z Using cached psycopg-3.2.9-py3-none-any.whl (202 kB)
+2025-08-18T19:45:59.7811526Z Using cached pytest_asyncio-0.23.6-py3-none-any.whl (17 kB)
+2025-08-18T19:45:59.7822508Z Using cached pytest_cov-6.2.1-py3-none-any.whl (24 kB)
+2025-08-18T19:45:59.7833793Z Using cached pytest_postgresql-7.0.2-py3-none-any.whl (41 kB)
+2025-08-18T19:45:59.7845139Z Using cached python_telegram_bot-22.2-py3-none-any.whl (708 kB)
+2025-08-18T19:45:59.7860930Z Using cached requests-2.32.4-py3-none-any.whl (64 kB)
+2025-08-18T19:45:59.7872509Z Using cached respx-0.22.0-py2.py3-none-any.whl (25 kB)
+2025-08-18T19:45:59.7883868Z Using cached ruff-0.4.4-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (8.7 MB)
+2025-08-18T19:45:59.7956376Z Using cached SQLAlchemy-2.0.29-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (3.2 MB)
+2025-08-18T19:45:59.7989566Z Using cached structlog-24.1.0-py3-none-any.whl (65 kB)
+2025-08-18T19:45:59.8001034Z Using cached testcontainers-4.10.0-py3-none-any.whl (107 kB)
+2025-08-18T19:45:59.8013003Z Using cached types_requests-2.32.0.20240602-py3-none-any.whl (15 kB)
+2025-08-18T19:45:59.8024288Z Using cached docspec_python-2.2.2-py3-none-any.whl (15 kB)
+2025-08-18T19:45:59.8035481Z Using cached pydoc_markdown-4.8.2-py3-none-any.whl (67 kB)
+2025-08-18T19:45:59.8046751Z Using cached docspec-2.2.1-py3-none-any.whl (9.8 kB)
+2025-08-18T19:45:59.8058230Z Using cached psycopg_binary-3.2.9-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (4.4 MB)
+2025-08-18T19:45:59.8100722Z Using cached pydantic_core-2.33.2-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (2.0 MB)
+2025-08-18T19:45:59.8125462Z Using cached redis-5.3.1-py3-none-any.whl (272 kB)
+2025-08-18T19:45:59.8138347Z Using cached minio-7.2.16-py3-none-any.whl (95 kB)
+2025-08-18T19:45:59.8149956Z Using cached httpx-0.28.1-py3-none-any.whl (73 kB)
+2025-08-18T19:45:59.8162045Z Using cached mypy-1.17.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (12.7 MB)
+2025-08-18T19:45:59.8262593Z Using cached numpy-1.26.4-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (18.0 MB)
+2025-08-18T19:45:59.8398192Z Using cached pandas-2.2.3-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (12.7 MB)
+2025-08-18T19:45:59.8497367Z Using cached pandera-0.19.3-py3-none-any.whl (251 kB)
+2025-08-18T19:45:59.8510056Z Using cached billiard-4.2.1-py3-none-any.whl (86 kB)
+2025-08-18T19:45:59.8522339Z Using cached charset_normalizer-3.4.3-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (151 kB)
+2025-08-18T19:45:59.8535036Z Using cached click-8.2.1-py3-none-any.whl (102 kB)
+2025-08-18T19:45:59.8546743Z Using cached databind.core-4.5.2-py3-none-any.whl (1.5 kB)
+2025-08-18T19:45:59.8557862Z Using cached databind-4.5.2-py3-none-any.whl (49 kB)
+2025-08-18T19:45:59.8569491Z Using cached databind.json-4.5.2-py3-none-any.whl (1.5 kB)
+2025-08-18T19:45:59.8580592Z Using cached Deprecated-1.2.18-py2.py3-none-any.whl (10.0 kB)
+2025-08-18T19:45:59.8592313Z Using cached httpcore-1.0.9-py3-none-any.whl (78 kB)
+2025-08-18T19:45:59.8604037Z Using cached idna-3.10-py3-none-any.whl (70 kB)
+2025-08-18T19:45:59.8615387Z Using cached kombu-5.5.4-py3-none-any.whl (210 kB)
+2025-08-18T19:45:59.8627600Z Using cached vine-5.1.0-py3-none-any.whl (9.6 kB)
+2025-08-18T19:45:59.8638684Z Using cached amqp-5.3.1-py3-none-any.whl (50 kB)
+2025-08-18T19:45:59.8649909Z Using cached multimethod-1.10-py3-none-any.whl (9.9 kB)
+2025-08-18T19:45:59.8660869Z Using cached nr_date-2.1.0-py3-none-any.whl (10 kB)
+2025-08-18T19:45:59.8672200Z Using cached nr_stream-1.1.5-py3-none-any.whl (10 kB)
+2025-08-18T19:45:59.8683345Z Using cached nr.util-0.8.12-py3-none-any.whl (90 kB)
+2025-08-18T19:45:59.8694871Z Using cached pytest-8.4.1-py3-none-any.whl (365 kB)
+2025-08-18T19:45:59.8708424Z Using cached pluggy-1.6.0-py3-none-any.whl (20 kB)
+2025-08-18T19:45:59.8719963Z Using cached PyYAML-6.0.2-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (767 kB)
+2025-08-18T19:45:59.8736380Z Using cached starlette-0.47.2-py3-none-any.whl (72 kB)
+2025-08-18T19:45:59.8747788Z Using cached anyio-4.10.0-py3-none-any.whl (107 kB)
+2025-08-18T19:45:59.8759884Z Using cached tomli-2.2.1-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (242 kB)
+2025-08-18T19:45:59.8772552Z Using cached tomli_w-1.2.0-py3-none-any.whl (6.7 kB)
+2025-08-18T19:45:59.8783695Z Using cached typeapi-2.2.4-py3-none-any.whl (26 kB)
+2025-08-18T19:45:59.8795089Z Using cached typing_extensions-4.14.1-py3-none-any.whl (43 kB)
+2025-08-18T19:45:59.8806425Z Using cached urllib3-2.5.0-py3-none-any.whl (129 kB)
+2025-08-18T19:45:59.8818673Z Using cached wrapt-1.17.3-cp312-cp312-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl (88 kB)
+2025-08-18T19:45:59.8893702Z Downloading boto3-1.40.12-py3-none-any.whl (140 kB)
+2025-08-18T19:45:59.9143138Z Downloading botocore-1.40.12-py3-none-any.whl (14.0 MB)
+2025-08-18T19:46:00.2111001Z    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 14.0/14.0 MB 49.4 MB/s  0:00:00
+2025-08-18T19:46:00.2123786Z Using cached jmespath-1.0.1-py3-none-any.whl (20 kB)
+2025-08-18T19:46:00.2135525Z Using cached python_dateutil-2.9.0.post0-py2.py3-none-any.whl (229 kB)
+2025-08-18T19:46:00.2148379Z Using cached s3transfer-0.13.1-py3-none-any.whl (85 kB)
+2025-08-18T19:46:00.2160278Z Using cached itsdangerous-2.2.0-py3-none-any.whl (16 kB)
+2025-08-18T19:46:00.2171785Z Using cached setuptools-80.9.0-py3-none-any.whl (1.2 MB)
+2025-08-18T19:46:00.2191395Z Using cached python_dotenv-1.1.1-py3-none-any.whl (20 kB)
+2025-08-18T19:46:00.2202868Z Using cached python_multipart-0.0.20-py3-none-any.whl (24 kB)
+2025-08-18T19:46:00.2214216Z Using cached annotated_types-0.7.0-py3-none-any.whl (13 kB)
+2025-08-18T19:46:00.2225507Z Using cached certifi-2025.8.3-py3-none-any.whl (161 kB)
+2025-08-18T19:46:00.2237733Z Using cached click_didyoumean-0.3.1-py3-none-any.whl (3.6 kB)
+2025-08-18T19:46:00.2248886Z Using cached click_plugins-1.1.1.2-py2.py3-none-any.whl (11 kB)
+2025-08-18T19:46:00.2260488Z Using cached click_repl-0.3.0-py3-none-any.whl (10 kB)
+2025-08-18T19:46:00.2272165Z Using cached coverage-7.10.4-cp312-cp312-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl (251 kB)
+2025-08-18T19:46:00.2284731Z Using cached email_validator-2.2.0-py3-none-any.whl (33 kB)
+2025-08-18T19:46:00.2296019Z Using cached dnspython-2.7.0-py3-none-any.whl (313 kB)
+2025-08-18T19:46:00.2309165Z Using cached fastapi_cli-0.0.8-py3-none-any.whl (10 kB)
+2025-08-18T19:46:00.2320480Z Using cached fastapi_cloud_cli-0.1.5-py3-none-any.whl (18 kB)
+2025-08-18T19:46:00.2332154Z Using cached greenlet-3.2.4-cp312-cp312-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl (607 kB)
+2025-08-18T19:46:00.2347351Z Using cached h11-0.16.0-py3-none-any.whl (37 kB)
+2025-08-18T19:46:00.2358793Z Using cached iniconfig-2.1.0-py3-none-any.whl (6.0 kB)
+2025-08-18T19:46:00.2370274Z Using cached MarkupSafe-3.0.2-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (23 kB)
+2025-08-18T19:46:00.2381331Z Using cached mirakuru-2.6.1-py3-none-any.whl (26 kB)
+2025-08-18T19:46:00.2393068Z Using cached orjson-3.11.2-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (121 kB)
+2025-08-18T19:46:00.2404770Z Using cached packaging-25.0-py3-none-any.whl (66 kB)
+2025-08-18T19:46:00.2416331Z Using cached pathspec-0.12.1-py3-none-any.whl (31 kB)
+2025-08-18T19:46:00.2427614Z Using cached platformdirs-4.3.8-py3-none-any.whl (18 kB)
+2025-08-18T19:46:00.2438766Z Using cached port_for-0.7.4-py3-none-any.whl (21 kB)
+2025-08-18T19:46:00.2449965Z Using cached prompt_toolkit-3.0.51-py3-none-any.whl (387 kB)
+2025-08-18T19:46:00.2464574Z Using cached psutil-7.0.0-cp36-abi3-manylinux_2_12_x86_64.manylinux2010_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl (277 kB)
+2025-08-18T19:46:00.2477531Z Using cached pydantic_extra_types-2.10.5-py3-none-any.whl (38 kB)
+2025-08-18T19:46:00.2488937Z Using cached pydantic_settings-2.10.1-py3-none-any.whl (45 kB)
+2025-08-18T19:46:00.2500365Z Using cached pygments-2.19.2-py3-none-any.whl (1.2 MB)
+2025-08-18T19:46:00.2520039Z Using cached PyJWT-2.10.1-py3-none-any.whl (22 kB)
+2025-08-18T19:46:00.2531356Z Using cached pytz-2025.2-py2.py3-none-any.whl (509 kB)
+2025-08-18T19:46:00.2546137Z Using cached rich_toolkit-0.15.0-py3-none-any.whl (29 kB)
+2025-08-18T19:46:00.2557580Z Using cached rich-14.1.0-py3-none-any.whl (243 kB)
+2025-08-18T19:46:00.2570291Z Using cached markdown_it_py-4.0.0-py3-none-any.whl (87 kB)
+2025-08-18T19:46:00.2581815Z Using cached mdurl-0.1.2-py3-none-any.whl (10.0 kB)
+2025-08-18T19:46:00.2593457Z Using cached rignore-0.6.4-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (949 kB)
+2025-08-18T19:46:00.2610965Z Using cached sentry_sdk-2.35.0-py2.py3-none-any.whl (363 kB)
+2025-08-18T19:46:00.2624768Z Using cached six-1.17.0-py2.py3-none-any.whl (11 kB)
+2025-08-18T19:46:00.2636377Z Using cached sniffio-1.3.1-py3-none-any.whl (10 kB)
+2025-08-18T19:46:00.2710162Z Downloading typer-0.16.1-py3-none-any.whl (46 kB)
+2025-08-18T19:46:00.2750214Z Using cached shellingham-1.5.4-py2.py3-none-any.whl (9.8 kB)
+2025-08-18T19:46:00.2761440Z Using cached typing_inspect-0.9.0-py3-none-any.whl (8.8 kB)
+2025-08-18T19:46:00.2772934Z Using cached typing_inspection-0.4.1-py3-none-any.whl (14 kB)
+2025-08-18T19:46:00.2784195Z Using cached tzdata-2025.2-py2.py3-none-any.whl (347 kB)
+2025-08-18T19:46:00.2797954Z Using cached tzlocal-5.3.1-py3-none-any.whl (18 kB)
+2025-08-18T19:46:00.2809562Z Using cached ujson-5.10.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (53 kB)
+2025-08-18T19:46:00.2820828Z Using cached uvicorn-0.35.0-py3-none-any.whl (66 kB)
+2025-08-18T19:46:00.2833195Z Using cached httptools-0.6.4-cp312-cp312-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl (510 kB)
+2025-08-18T19:46:00.2847941Z Using cached uvloop-0.21.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (4.7 MB)
+2025-08-18T19:46:00.2892583Z Using cached watchfiles-1.1.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (452 kB)
+2025-08-18T19:46:00.2907139Z Using cached websockets-15.0.1-cp312-cp312-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl (182 kB)
+2025-08-18T19:46:00.2919126Z Using cached yapf-0.43.0-py3-none-any.whl (256 kB)
+2025-08-18T19:46:00.2932078Z Using cached argon2_cffi-25.1.0-py3-none-any.whl (14 kB)
+2025-08-18T19:46:00.2944011Z Using cached argon2_cffi_bindings-25.1.0-cp39-abi3-manylinux_2_26_x86_64.manylinux_2_28_x86_64.whl (87 kB)
+2025-08-18T19:46:00.2955798Z Using cached cffi-1.17.1-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (479 kB)
+2025-08-18T19:46:00.2970157Z Using cached docker-7.1.0-py3-none-any.whl (147 kB)
+2025-08-18T19:46:00.2982267Z Using cached et_xmlfile-2.0.0-py3-none-any.whl (18 kB)
+2025-08-18T19:46:00.2993445Z Using cached mako-1.3.10-py3-none-any.whl (78 kB)
+2025-08-18T19:46:00.3005062Z Using cached pycparser-2.22-py3-none-any.whl (117 kB)
+2025-08-18T19:46:00.3017272Z Using cached pycryptodome-3.23.0-cp37-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (2.3 MB)
+2025-08-18T19:46:00.3044033Z Using cached typeguard-4.4.4-py3-none-any.whl (34 kB)
+2025-08-18T19:46:00.3055716Z Using cached watchdog-6.0.0-py3-none-manylinux2014_x86_64.whl (79 kB)
+2025-08-18T19:46:00.3067101Z Using cached wcwidth-0.2.13-py2.py3-none-any.whl (34 kB)
+2025-08-18T19:46:00.7959786Z Installing collected packages: wcwidth, pytz, wrapt, websockets, watchdog, vine, uvloop, urllib3, ujson, tzlocal, tzdata, typing-extensions, tomli_w, tomli, structlog, sniffio, six, shellingham, setuptools, ruff, rignore, PyYAML, python-multipart, python-dotenv, PyJWT, pygments, pycryptodome, pycparser, psycopg2-binary, psycopg-binary, psutil, prompt-toolkit, port-for, pluggy, platformdirs, pathspec, packaging, orjson, numpy, nr-stream, nr-date, mypy-extensions, multimethod, mdurl, MarkupSafe, jmespath, itsdangerous, iniconfig, imapclient, idna, httptools, h11, greenlet, et-xmlfile, docstring-parser, dnspython, coverage, click, charset_normalizer, certifi, billiard, asyncpg, annotated-types, yapf, uvicorn, typing-inspection, typing-inspect, types-requests, typeguard, typeapi, sqlalchemy, sentry-sdk, requests, redis, python-dateutil, pytest, pydantic-core, psycopg, openpyxl, mypy, mirakuru, markdown-it-py, Mako, Jinja2, httpcore, email-validator, Deprecated, click-repl, click-plugins, click-didyoumean, cffi, black, apscheduler, anyio, amqp, watchfiles, starlette, rich, pytest-postgresql, pytest-cov, pytest-asyncio, pydantic, pandas, nr-util, kombu, httpx, docker, databind, botocore, argon2-cffi-bindings, alembic, typer, testcontainers, s3transfer, rich-toolkit, respx, python-telegram-bot, pydantic-settings, pydantic-extra-types, pandera, fastapi, databind.json, databind.core, celery, asgi-correlation-id, argon2-cffi, minio, fastapi-limiter, fastapi-cloud-cli, fastapi-cli, docspec, boto3, docspec-python, pydoc-markdown
+2025-08-18T19:46:19.3755957Z 
+2025-08-18T19:46:19.3883063Z Successfully installed Deprecated-1.2.18 Jinja2-3.1.6 Mako-1.3.10 MarkupSafe-3.0.2 PyJWT-2.10.1 PyYAML-6.0.2 alembic-1.13.1 amqp-5.3.1 annotated-types-0.7.0 anyio-4.10.0 apscheduler-3.10.4 argon2-cffi-25.1.0 argon2-cffi-bindings-25.1.0 asgi-correlation-id-4.3.1 asyncpg-0.30.0 billiard-4.2.1 black-25.1.0 boto3-1.40.12 botocore-1.40.12 celery-5.4.0 certifi-2025.8.3 cffi-1.17.1 charset_normalizer-3.4.3 click-8.2.1 click-didyoumean-0.3.1 click-plugins-1.1.1.2 click-repl-0.3.0 coverage-7.10.4 databind-4.5.2 databind.core-4.5.2 databind.json-4.5.2 dnspython-2.7.0 docker-7.1.0 docspec-2.2.1 docspec-python-2.2.2 docstring-parser-0.11 email-validator-2.2.0 et-xmlfile-2.0.0 fastapi-0.116.1 fastapi-cli-0.0.8 fastapi-cloud-cli-0.1.5 fastapi-limiter-0.1.6 greenlet-3.2.4 h11-0.16.0 httpcore-1.0.9 httptools-0.6.4 httpx-0.28.1 idna-3.10 imapclient-3.0.1 iniconfig-2.1.0 itsdangerous-2.2.0 jmespath-1.0.1 kombu-5.5.4 markdown-it-py-4.0.0 mdurl-0.1.2 minio-7.2.16 mirakuru-2.6.1 multimethod-1.10 mypy-1.17.1 mypy-extensions-1.1.0 nr-date-2.1.0 nr-stream-1.1.5 nr-util-0.8.12 numpy-1.26.4 openpyxl-3.1.5 orjson-3.11.2 packaging-25.0 pandas-2.2.3 pandera-0.19.3 pathspec-0.12.1 platformdirs-4.3.8 pluggy-1.6.0 port-for-0.7.4 prompt-toolkit-3.0.51 psutil-7.0.0 psycopg-3.2.9 psycopg-binary-3.2.9 psycopg2-binary-2.9.9 pycparser-2.22 pycryptodome-3.23.0 pydantic-2.11.7 pydantic-core-2.33.2 pydantic-extra-types-2.10.5 pydantic-settings-2.10.1 pydoc-markdown-4.8.2 pygments-2.19.2 pytest-8.4.1 pytest-asyncio-0.23.6 pytest-cov-6.2.1 pytest-postgresql-7.0.2 python-dateutil-2.9.0.post0 python-dotenv-1.1.1 python-multipart-0.0.20 python-telegram-bot-22.2 pytz-2025.2 redis-5.3.1 requests-2.32.4 respx-0.22.0 rich-14.1.0 rich-toolkit-0.15.0 rignore-0.6.4 ruff-0.4.4 s3transfer-0.13.1 sentry-sdk-2.35.0 setuptools-80.9.0 shellingham-1.5.4 six-1.17.0 sniffio-1.3.1 sqlalchemy-2.0.29 starlette-0.47.2 structlog-24.1.0 testcontainers-4.10.0 tomli-2.2.1 tomli_w-1.2.0 typeapi-2.2.4 typeguard-4.4.4 typer-0.16.1 types-requests-2.32.0.20240602 typing-extensions-4.14.1 typing-inspect-0.9.0 typing-inspection-0.4.1 tzdata-2025.2 tzlocal-5.3.1 ujson-5.10.0 urllib3-2.5.0 uvicorn-0.35.0 uvloop-0.21.0 vine-5.1.0 watchdog-6.0.0 watchfiles-1.1.0 wcwidth-0.2.13 websockets-15.0.1 wrapt-1.17.3 yapf-0.43.0
+2025-08-18T19:46:20.5968369Z Collecting keepa==1.3.15
+2025-08-18T19:46:20.5981659Z   Using cached keepa-1.3.15-py3-none-any.whl.metadata (11 kB)
+2025-08-18T19:46:20.6307018Z Collecting minio==7.1.15
+2025-08-18T19:46:20.6318952Z   Using cached minio-7.1.15-py3-none-any.whl.metadata (4.2 kB)
+2025-08-18T19:46:20.6345919Z Requirement already satisfied: numpy>=1.9.3 in /opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages (from keepa==1.3.15) (1.26.4)
+2025-08-18T19:46:20.6351464Z Requirement already satisfied: requests>=2.2 in /opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages (from keepa==1.3.15) (2.32.4)
+2025-08-18T19:46:20.6803519Z Collecting tqdm (from keepa==1.3.15)
+2025-08-18T19:46:20.6815620Z   Using cached tqdm-4.67.1-py3-none-any.whl.metadata (57 kB)
+2025-08-18T19:46:21.2203322Z Collecting aiohttp (from keepa==1.3.15)
+2025-08-18T19:46:21.2216821Z   Using cached aiohttp-3.12.15-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (7.7 kB)
+2025-08-18T19:46:21.2252943Z Requirement already satisfied: pandas<=3.0 in /opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages (from keepa==1.3.15) (2.2.3)
+2025-08-18T19:46:21.2257586Z Requirement already satisfied: pydantic in /opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages (from keepa==1.3.15) (2.11.7)
+2025-08-18T19:46:21.2266102Z Requirement already satisfied: certifi in /opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages (from minio==7.1.15) (2025.8.3)
+2025-08-18T19:46:21.2270119Z Requirement already satisfied: urllib3 in /opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages (from minio==7.1.15) (2.5.0)
+2025-08-18T19:46:21.2327231Z Requirement already satisfied: python-dateutil>=2.8.2 in /opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages (from pandas<=3.0->keepa==1.3.15) (2.9.0.post0)
+2025-08-18T19:46:21.2333067Z Requirement already satisfied: pytz>=2020.1 in /opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages (from pandas<=3.0->keepa==1.3.15) (2025.2)
+2025-08-18T19:46:21.2339100Z Requirement already satisfied: tzdata>=2022.7 in /opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages (from pandas<=3.0->keepa==1.3.15) (2025.2)
+2025-08-18T19:46:21.2470745Z Requirement already satisfied: six>=1.5 in /opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages (from python-dateutil>=2.8.2->pandas<=3.0->keepa==1.3.15) (1.17.0)
+2025-08-18T19:46:21.2491166Z Requirement already satisfied: charset_normalizer<4,>=2 in /opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages (from requests>=2.2->keepa==1.3.15) (3.4.3)
+2025-08-18T19:46:21.2498490Z Requirement already satisfied: idna<4,>=2.5 in /opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages (from requests>=2.2->keepa==1.3.15) (3.10)
+2025-08-18T19:46:21.2727653Z Collecting aiohappyeyeballs>=2.5.0 (from aiohttp->keepa==1.3.15)
+2025-08-18T19:46:21.2739391Z   Using cached aiohappyeyeballs-2.6.1-py3-none-any.whl.metadata (5.9 kB)
+2025-08-18T19:46:21.2862742Z Collecting aiosignal>=1.4.0 (from aiohttp->keepa==1.3.15)
+2025-08-18T19:46:21.2874402Z   Using cached aiosignal-1.4.0-py3-none-any.whl.metadata (3.7 kB)
+2025-08-18T19:46:21.3053234Z Collecting attrs>=17.3.0 (from aiohttp->keepa==1.3.15)
+2025-08-18T19:46:21.3064541Z   Using cached attrs-25.3.0-py3-none-any.whl.metadata (10 kB)
+2025-08-18T19:46:21.3762556Z Collecting frozenlist>=1.1.1 (from aiohttp->keepa==1.3.15)
+2025-08-18T19:46:21.3774931Z   Using cached frozenlist-1.7.0-cp312-cp312-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (18 kB)
+2025-08-18T19:46:21.6206735Z Collecting multidict<7.0,>=4.5 (from aiohttp->keepa==1.3.15)
+2025-08-18T19:46:21.6220324Z   Using cached multidict-6.6.4-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl.metadata (5.3 kB)
+2025-08-18T19:46:21.6667254Z Collecting propcache>=0.2.0 (from aiohttp->keepa==1.3.15)
+2025-08-18T19:46:21.6679511Z   Using cached propcache-0.3.2-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (12 kB)
+2025-08-18T19:46:21.9029189Z Collecting yarl<2.0,>=1.17.0 (from aiohttp->keepa==1.3.15)
+2025-08-18T19:46:21.9041719Z   Using cached yarl-1.20.1-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl.metadata (73 kB)
+2025-08-18T19:46:21.9255247Z Requirement already satisfied: typing-extensions>=4.2 in /opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages (from aiosignal>=1.4.0->aiohttp->keepa==1.3.15) (4.14.1)
+2025-08-18T19:46:21.9305590Z Requirement already satisfied: annotated-types>=0.6.0 in /opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages (from pydantic->keepa==1.3.15) (0.7.0)
+2025-08-18T19:46:21.9311320Z Requirement already satisfied: pydantic-core==2.33.2 in /opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages (from pydantic->keepa==1.3.15) (2.33.2)
+2025-08-18T19:46:21.9319473Z Requirement already satisfied: typing-inspection>=0.4.0 in /opt/hostedtoolcache/Python/3.12.11/x64/lib/python3.12/site-packages (from pydantic->keepa==1.3.15) (0.4.1)
+2025-08-18T19:46:21.9379081Z Using cached keepa-1.3.15-py3-none-any.whl (38 kB)
+2025-08-18T19:46:21.9390745Z Using cached minio-7.1.15-py3-none-any.whl (77 kB)
+2025-08-18T19:46:21.9402702Z Using cached aiohttp-3.12.15-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (1.7 MB)
+2025-08-18T19:46:21.9426061Z Using cached multidict-6.6.4-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (256 kB)
+2025-08-18T19:46:21.9438660Z Using cached yarl-1.20.1-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (355 kB)
+2025-08-18T19:46:21.9452101Z Using cached aiohappyeyeballs-2.6.1-py3-none-any.whl (15 kB)
+2025-08-18T19:46:21.9463152Z Using cached aiosignal-1.4.0-py3-none-any.whl (7.5 kB)
+2025-08-18T19:46:21.9473948Z Using cached attrs-25.3.0-py3-none-any.whl (63 kB)
+2025-08-18T19:46:21.9485798Z Using cached frozenlist-1.7.0-cp312-cp312-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_17_x86_64.manylinux2014_x86_64.whl (241 kB)
+2025-08-18T19:46:21.9498315Z Using cached propcache-0.3.2-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (224 kB)
+2025-08-18T19:46:21.9510314Z Using cached tqdm-4.67.1-py3-none-any.whl (78 kB)
+2025-08-18T19:46:22.1401185Z Installing collected packages: tqdm, propcache, multidict, minio, frozenlist, attrs, aiohappyeyeballs, yarl, aiosignal, aiohttp, keepa
+2025-08-18T19:46:22.2170322Z   Attempting uninstall: minio
+2025-08-18T19:46:22.2217662Z     Found existing installation: minio 7.2.16
+2025-08-18T19:46:22.2254455Z     Uninstalling minio-7.2.16:
+2025-08-18T19:46:22.2264869Z       Successfully uninstalled minio-7.2.16
+2025-08-18T19:46:22.5857672Z 
+2025-08-18T19:46:22.5981306Z Successfully installed aiohappyeyeballs-2.6.1 aiohttp-3.12.15 aiosignal-1.4.0 attrs-25.3.0 frozenlist-1.7.0 keepa-1.3.15 minio-7.1.15 multidict-6.6.4 propcache-0.3.2 tqdm-4.67.1 yarl-1.20.1
+2025-08-18T19:46:22.7479566Z ##[group]Run ruff check .
+2025-08-18T19:46:22.7479835Z [36;1mruff check .[0m
+2025-08-18T19:46:22.7480040Z [36;1mruff format --check .[0m
+2025-08-18T19:46:22.7520540Z shell: /usr/bin/bash -e {0}
+2025-08-18T19:46:22.7520762Z env:
+2025-08-18T19:46:22.7520974Z   REDIS_URL: redis://localhost:6379/0
+2025-08-18T19:46:22.7521229Z   RATE_LIMIT_DEFAULT: 100/minute
+2025-08-18T19:46:22.7521455Z   TRUST_X_FORWARDED: 1
+2025-08-18T19:46:22.7521647Z   PG_USER: postgres
+2025-08-18T19:46:22.7521835Z   PG_PASSWORD: pass
+2025-08-18T19:46:22.7522125Z   PG_DATABASE: awa
+2025-08-18T19:46:22.7522304Z   PG_HOST: localhost
+2025-08-18T19:46:22.7522483Z   PG_PORT: 5432
+2025-08-18T19:46:22.7523041Z   PG_SYNC_DSN: ***localhost:5432/awa
+2025-08-18T19:46:22.7523445Z   PG_ASYNC_DSN: ***localhost:5432/awa
+2025-08-18T19:46:22.7523813Z   DATABASE_URL: ***localhost:5432/awa
+2025-08-18T19:46:22.7524041Z   DATA_DIR: /tmp/awa-data
+2025-08-18T19:46:22.7524244Z   ENABLE_LIVE: 0
+2025-08-18T19:46:22.7524442Z   TESTING: 1
+2025-08-18T19:46:22.7524675Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.11/x64
+2025-08-18T19:46:22.7525056Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.11/x64/lib/pkgconfig
+2025-08-18T19:46:22.7525434Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.11/x64
+2025-08-18T19:46:22.7525779Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.11/x64
+2025-08-18T19:46:22.7526112Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.11/x64
+2025-08-18T19:46:22.7526454Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.11/x64/lib
+2025-08-18T19:46:22.7526736Z ##[endgroup]
+2025-08-18T19:46:22.7775565Z All checks passed!
+2025-08-18T19:46:22.7975018Z Would reformat: services/api/main.py
+2025-08-18T19:46:22.7975612Z 1 file would be reformatted, 225 files already formatted
+2025-08-18T19:46:22.7997091Z ##[error]Process completed with exit code 1.
+2025-08-18T19:46:22.8087756Z Post job cleanup.
+2025-08-18T19:46:22.9003943Z [command]/usr/bin/git version
+2025-08-18T19:46:22.9038820Z git version 2.50.1
+2025-08-18T19:46:22.9081762Z Temporarily overriding HOME='/home/runner/work/_temp/68461bc7-f39f-4808-b00a-a46ca671d155' before making global git config changes
+2025-08-18T19:46:22.9083223Z Adding repository directory to the temporary git global config as a safe directory
+2025-08-18T19:46:22.9095471Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/AWA-App/AWA-App
+2025-08-18T19:46:22.9129326Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2025-08-18T19:46:22.9161253Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2025-08-18T19:46:22.9389638Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2025-08-18T19:46:22.9410357Z http.https://github.com/.extraheader
+2025-08-18T19:46:22.9423045Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+2025-08-18T19:46:22.9452823Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2025-08-18T19:46:22.9750722Z Print service container logs: 30a5bd31278a4ca0ae8bf7575bf20b7f_postgres15_f3aaf4
+2025-08-18T19:46:22.9756362Z ##[command]/usr/bin/docker logs --details 03a41e7aa7ae000626158f8e6558db25571d1a70312e21d2b5c19376f5ae457c
+2025-08-18T19:46:22.9874435Z  The files belonging to this database system will be owned by user "postgres".
+2025-08-18T19:46:22.9876019Z  initdb: warning: enabling "trust" authentication for local connections
+2025-08-18T19:46:22.9877061Z  initdb: hint: You can change this by editing pg_hba.conf or using the option -A, or --auth-local and --auth-host, the next time you run initdb.
+2025-08-18T19:46:22.9878401Z  2025-08-18 19:45:39.835 UTC [1] LOG:  starting PostgreSQL 15.14 (Debian 15.14-1.pgdg13+1) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit
+2025-08-18T19:46:22.9879411Z  2025-08-18 19:45:39.836 UTC [1] LOG:  listening on IPv4 address "0.0.0.0", port 5432
+2025-08-18T19:46:22.9880189Z  2025-08-18 19:45:39.836 UTC [1] LOG:  listening on IPv6 address "::", port 5432
+2025-08-18T19:46:22.9880943Z  2025-08-18 19:45:39.837 UTC [1] LOG:  listening on Unix socket "/var/run/postgresql/.s.PGSQL.5432"
+2025-08-18T19:46:22.9881723Z  2025-08-18 19:45:39.841 UTC [64] LOG:  database system was shut down at 2025-08-18 19:45:39 UTC
+2025-08-18T19:46:22.9882582Z  2025-08-18 19:45:39.845 UTC [1] LOG:  database system is ready to accept connections
+2025-08-18T19:46:22.9883150Z  This user must also own the server process.
+2025-08-18T19:46:22.9883553Z  
+2025-08-18T19:46:22.9883957Z  The database cluster will be initialized with locale "en_US.utf8".
+2025-08-18T19:46:22.9884604Z  The default database encoding has accordingly been set to "UTF8".
+2025-08-18T19:46:22.9885234Z  The default text search configuration will be set to "english".
+2025-08-18T19:46:22.9885725Z  
+2025-08-18T19:46:22.9886000Z  Data page checksums are disabled.
+2025-08-18T19:46:22.9886363Z  
+2025-08-18T19:46:22.9886804Z  fixing permissions on existing directory /var/lib/postgresql/data ... ok
+2025-08-18T19:46:22.9887416Z  creating subdirectories ... ok
+2025-08-18T19:46:22.9887897Z  selecting dynamic shared memory implementation ... posix
+2025-08-18T19:46:22.9888410Z  selecting default max_connections ... 100
+2025-08-18T19:46:22.9888857Z  selecting default shared_buffers ... 128MB
+2025-08-18T19:46:22.9889290Z  selecting default time zone ... Etc/UTC
+2025-08-18T19:46:22.9889708Z  creating configuration files ... ok
+2025-08-18T19:46:22.9890319Z  running bootstrap script ... ok
+2025-08-18T19:46:22.9890786Z  performing post-bootstrap initialization ... ok
+2025-08-18T19:46:22.9891241Z  syncing data to disk ... ok
+2025-08-18T19:46:22.9891571Z  
+2025-08-18T19:46:22.9891794Z  
+2025-08-18T19:46:22.9892227Z  Success. You can now start the database server using:
+2025-08-18T19:46:22.9892510Z  
+2025-08-18T19:46:22.9892721Z      pg_ctl -D /var/lib/postgresql/data -l logfile start
+2025-08-18T19:46:22.9892979Z  
+2025-08-18T19:46:22.9893526Z  waiting for server to start....2025-08-18 19:45:39.499 UTC [48] LOG:  starting PostgreSQL 15.14 (Debian 15.14-1.pgdg13+1) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit
+2025-08-18T19:46:22.9894486Z  2025-08-18 19:45:39.500 UTC [48] LOG:  listening on Unix socket "/var/run/postgresql/.s.PGSQL.5432"
+2025-08-18T19:46:22.9894975Z  2025-08-18 19:45:39.536 UTC [51] LOG:  database system was shut down at 2025-08-18 19:45:39 UTC
+2025-08-18T19:46:22.9895412Z  2025-08-18 19:45:39.542 UTC [48] LOG:  database system is ready to accept connections
+2025-08-18T19:46:22.9895724Z   done
+2025-08-18T19:46:22.9895884Z  server started
+2025-08-18T19:46:22.9896062Z  CREATE DATABASE
+2025-08-18T19:46:22.9896228Z  
+2025-08-18T19:46:22.9896368Z  
+2025-08-18T19:46:22.9896656Z  /usr/local/bin/docker-entrypoint.sh: ignoring /docker-entrypoint-initdb.d/*
+2025-08-18T19:46:22.9897004Z  
+2025-08-18T19:46:22.9897307Z  waiting for server to shut down...2025-08-18 19:45:39.715 UTC [48] LOG:  received fast shutdown request
+2025-08-18T19:46:22.9897932Z  .2025-08-18 19:45:39.716 UTC [48] LOG:  aborting any active transactions
+2025-08-18T19:46:22.9898436Z  2025-08-18 19:45:39.717 UTC [48] LOG:  background worker "logical replication launcher" (PID 54) exited with exit code 1
+2025-08-18T19:46:22.9898890Z  2025-08-18 19:45:39.717 UTC [49] LOG:  shutting down
+2025-08-18T19:46:22.9899224Z  2025-08-18 19:45:39.718 UTC [49] LOG:  checkpoint starting: shutdown immediate
+2025-08-18T19:46:22.9900036Z  2025-08-18 19:45:39.743 UTC [49] LOG:  checkpoint complete: wrote 922 buffers (5.6%); 0 WAL file(s) added, 0 removed, 0 recycled; write=0.021 s, sync=0.003 s, total=0.026 s; sync files=301, longest=0.001 s, average=0.001 s; distance=4239 kB, estimate=4239 kB
+2025-08-18T19:46:22.9900834Z  2025-08-18 19:45:39.751 UTC [48] LOG:  database system is shut down
+2025-08-18T19:46:22.9901110Z   done
+2025-08-18T19:46:22.9901267Z  server stopped
+2025-08-18T19:46:22.9901436Z  
+2025-08-18T19:46:22.9901640Z  PostgreSQL init process complete; ready for start up.
+2025-08-18T19:46:22.9902088Z  
+2025-08-18T19:46:22.9907430Z Stop and remove container: 30a5bd31278a4ca0ae8bf7575bf20b7f_postgres15_f3aaf4
+2025-08-18T19:46:22.9911632Z ##[command]/usr/bin/docker rm --force 03a41e7aa7ae000626158f8e6558db25571d1a70312e21d2b5c19376f5ae457c
+2025-08-18T19:46:24.1059498Z 03a41e7aa7ae000626158f8e6558db25571d1a70312e21d2b5c19376f5ae457c
+2025-08-18T19:46:24.1081514Z Print service container logs: ce19a6bd3bb947d6871e2ce93c26996d_redis7alpine_56b323
+2025-08-18T19:46:24.1083078Z ##[command]/usr/bin/docker logs --details 6f88983203f20996d20245820ca488c3d8f857994999d5d121c48b747f3c968c
+2025-08-18T19:46:24.1202560Z  1:C 18 Aug 2025 19:45:40.011 # WARNING Memory overcommit must be enabled! Without it, a background save or replication may fail under low memory condition. Being disabled, it can also cause failures without low memory condition, see https://github.com/jemalloc/jemalloc/issues/1328. To fix this issue add 'vm.overcommit_memory = 1' to /etc/sysctl.conf and then reboot or run the command 'sysctl vm.overcommit_memory=1' for this to take effect.
+2025-08-18T19:46:24.1205058Z  1:C 18 Aug 2025 19:45:40.011 * oO0OoO0OoO0Oo Redis is starting oO0OoO0OoO0Oo
+2025-08-18T19:46:24.1205823Z  1:C 18 Aug 2025 19:45:40.011 * Redis version=7.4.5, bits=64, commit=00000000, modified=0, pid=1, just started
+2025-08-18T19:46:24.1207001Z  1:C 18 Aug 2025 19:45:40.011 # Warning: no config file specified, using the default config. In order to specify a config file use redis-server /path/to/redis.conf
+2025-08-18T19:46:24.1207991Z  1:M 18 Aug 2025 19:45:40.011 * monotonic clock: POSIX clock_gettime
+2025-08-18T19:46:24.1208558Z  1:M 18 Aug 2025 19:45:40.012 * Running mode=standalone, port=6379.
+2025-08-18T19:46:24.1209059Z  1:M 18 Aug 2025 19:45:40.012 * Server initialized
+2025-08-18T19:46:24.1209554Z  1:M 18 Aug 2025 19:45:40.012 * Ready to accept connections tcp
+2025-08-18T19:46:24.1216455Z Stop and remove container: ce19a6bd3bb947d6871e2ce93c26996d_redis7alpine_56b323
+2025-08-18T19:46:24.1217158Z ##[command]/usr/bin/docker rm --force 6f88983203f20996d20245820ca488c3d8f857994999d5d121c48b747f3c968c
+2025-08-18T19:46:24.2287628Z 6f88983203f20996d20245820ca488c3d8f857994999d5d121c48b747f3c968c
+2025-08-18T19:46:24.2309553Z Remove container network: github_network_1126bc916a3f4a2b8513ed9e2c627d73
+2025-08-18T19:46:24.2313936Z ##[command]/usr/bin/docker network rm github_network_1126bc916a3f4a2b8513ed9e2c627d73
+2025-08-18T19:46:24.3494252Z github_network_1126bc916a3f4a2b8513ed9e2c627d73
+2025-08-18T19:46:24.3549618Z Cleaning up orphan processes
