@@ -11,7 +11,7 @@ def detect_format(path: str | Path) -> str:
     return "csv"
 
 
-def _read_csv_flex(path: str | Path):
+def _read_csv_flex(path: str | Path) -> Any:
     import pandas as pd
 
     for enc in ("utf-8", "utf-8-sig", "cp1252"):

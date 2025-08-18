@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import pandas as pd
 import pandera as pa
 from pandera import Check, Column, DataFrameSchema
 
@@ -97,7 +98,7 @@ SETTLEMENTS_TXN_SCHEMA = DataFrameSchema(
 )
 
 
-def validate(df, dialect: str):
+def validate(df: pd.DataFrame, dialect: str) -> pd.DataFrame:
     if dialect == "returns_report":
         schema = RETURNS_SCHEMA
     elif dialect == "reimbursements_report":

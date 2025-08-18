@@ -78,7 +78,10 @@ async def lifespan(app: FastAPI):
         decode_responses=True,
     )
     await FastAPILimiter.init(r)
-    yield
+    try:
+        yield
+    finally:
+        await FastAPILimiter.close()
 
 
 app = FastAPI(lifespan=lifespan)

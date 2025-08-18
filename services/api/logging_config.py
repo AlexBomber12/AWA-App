@@ -1,12 +1,15 @@
 import logging
 import os
 import sys
+from typing import Any, Mapping, MutableMapping
 
 import structlog
 from asgi_correlation_id import correlation_id
 
 
-def _request_id_injector(logger, method_name, event_dict):
+def _request_id_injector(
+    logger: Any, method_name: str, event_dict: MutableMapping[str, Any]
+) -> Mapping[str, Any]:
     request_id = correlation_id.get()
     if request_id:
         event_dict["request_id"] = request_id

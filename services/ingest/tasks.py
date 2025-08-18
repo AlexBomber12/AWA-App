@@ -44,9 +44,9 @@ def _resolve_uri_to_path(uri: str) -> Path:
     return Path(uri)
 
 
-@celery_app.task(name="ingest.import_file", bind=True)
+@celery_app.task(name="ingest.import_file", bind=True)  # type: ignore[misc]
 def task_import_file(
-    self, uri: str, report_type: Optional[str] = None, force: bool = False
+    self: Any, uri: str, report_type: Optional[str] = None, force: bool = False
 ) -> Dict[str, Any]:
     """Import a file into Postgres using existing ETL pipeline."""
 
@@ -82,7 +82,7 @@ def task_import_file(
             shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
-@celery_app.task(name="ingest.rebuild_views", bind=True)
-def task_rebuild_views(self) -> Dict[str, Any]:
+@celery_app.task(name="ingest.rebuild_views", bind=True)  # type: ignore[misc]
+def task_rebuild_views(self: Any) -> Dict[str, Any]:
     logger.info("Rebuild views placeholder executed")
     return {"status": "success", "message": "noop"}
