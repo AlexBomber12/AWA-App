@@ -6,6 +6,10 @@ import os
 from celery import Celery
 from celery.schedules import crontab
 
+from services.api.sentry_config import init_sentry_if_configured as _init_sentry
+
+_init_sentry()
+
 
 def make_celery() -> Celery:
     broker = os.getenv("CELERY_BROKER_URL", "redis://redis:6379/0")
