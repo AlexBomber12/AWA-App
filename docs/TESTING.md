@@ -42,3 +42,15 @@ pytest -m integration tests/etl
 ```
 
 The test_generic dialect and test_generic_raw table are for tests only and are enabled when TESTING=1.
+
+### API integration tests for ROI and /score
+To run locally:
+```bash
+export TESTING=1
+export API_BASIC_USER=u
+export API_BASIC_PASS=p
+export ROI_VIEW_NAME=test_roi_view
+pytest -m integration services/api/tests
+```
+
+The tests create a local test_roi_view table and point queries to it via ROI_VIEW_NAME, leaving production views untouched.

@@ -1,7 +1,6 @@
 import asyncio
 import os
 from contextlib import asynccontextmanager
-from typing import List
 
 import httpx
 import redis.asyncio as aioredis
@@ -10,7 +9,7 @@ from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi_limiter import FastAPILimiter
 from fastapi_limiter.depends import RateLimiter
-from sqlalchemy import bindparam, text
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.requests import Request
 
@@ -26,6 +25,7 @@ from services.ingest.upload_router import router as upload_router
 from .db import get_session
 from .routes import health as health_router
 from .routes.roi import router as roi_router
+from .routes.score import router as score_router
 from .routes.stats import router as stats_router
 
 configure_logging()
@@ -137,6 +137,7 @@ app.include_router(upload_router, prefix="/upload")
 app.include_router(ingest_router)
 app.include_router(roi_router)
 app.include_router(stats_router)
+app.include_router(score_router)
 app.include_router(health_router.router)
 
 
@@ -177,19 +178,3 @@ async def _check_llm() -> None:
         os.environ["LLM_PROVIDER"] = LLM_PROVIDER_FALLBACK
 
 
-@app.post("/score")
-async def score(
-    asins: List[str], session: AsyncSession = Depends(get_session)
-) -> list[dict[str, float | str]]:
-    query = text(
-        """
-        SELECT p.asin, (p.price - o.cost) / o.cost AS roi
-        FROM products p
-        JOIN offers o ON p.asin = o.asin
-        WHERE p.asin IN :asins
-        ORDER BY roi DESC
-        """
-    ).bindparams(bindparam("asins", expanding=True))
-    result = await session.execute(query, {"asins": tuple(asins)})
-    rows = result.fetchall()
-    return [{"asin": r[0], "roi": r[1]} for r in rows]

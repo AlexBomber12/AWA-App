@@ -8,14 +8,34 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import String, bindparam, create_engine, text
+from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.types import Numeric
 from starlette import status
 
 from services.common.dsn import build_dsn
+from .. import roi_repository
+from ..db import get_session
+
+try:
+    from ..security import require_basic_auth
+except Exception:  # pragma: no cover - fallback if security missing
+    require_basic_auth = lambda: None
+
 
 router = APIRouter()
 security = HTTPBasic()
 templates = Jinja2Templates(directory="templates")
+
+
+@router.get("/roi", dependencies=[Depends(require_basic_auth)])
+async def roi(
+    roi_min: float = 0,
+    vendor: int | None = None,
+    category: str | None = None,
+    session: AsyncSession = Depends(get_session),
+):
+    rows = await roi_repository.fetch_roi_rows(session, roi_min, vendor, category)
+    return [dict(row) for row in rows]
 
 
 def _check_basic_auth(credentials: HTTPBasicCredentials = Depends(security)) -> str:
