@@ -1,4 +1,7 @@
-import os, types, importlib, asyncio
+import importlib
+import os
+import types
+
 import pytest
 
 pytestmark = pytest.mark.unit
@@ -17,7 +20,11 @@ async def test_timeout_on_lan_falls_back_to_stub(monkeypatch):
     llm = _reload_llm()
 
     async def fake_post(*a, **kw):
-        raise llm.httpx.TimeoutException("timeout") if hasattr(llm.httpx, "TimeoutException") else TimeoutError("timeout")
+        raise (
+            llm.httpx.TimeoutException("timeout")
+            if hasattr(llm.httpx, "TimeoutException")
+            else TimeoutError("timeout")
+        )
 
     class FakeClient:
         def __init__(self, *a, **kw):
@@ -164,4 +171,3 @@ async def test_env_switch_effective_without_restart(monkeypatch):
         types.SimpleNamespace(AsyncClient=TClient, TimeoutException=TimeoutError),
     )
     assert (await llm.generate("2")).startswith("[stub]")
-
