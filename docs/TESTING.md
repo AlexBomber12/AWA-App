@@ -32,6 +32,17 @@ slow — long-running / large datasets.
 Coverage is enforced at 65% with --cov=services --cov-report=xml.
 CI uploads coverage.xml for external tooling.
 
+### LLM module tests
+By default, unit tests mock transports and providers. Useful envs:
+- `LLM_PROVIDER` — `lan`, `local`, `openai`, `stub` (default `lan`)
+- `LLM_TIMEOUT_SECS` — request timeout (seconds)
+- `LLM_REMOTE_URL` — override remote HTTP endpoint in tests
+
+Run locally:
+```bash
+pytest tests/llm -q
+```
+
 ### Ingest/ETL integration tests
 These tests are marked `@pytest.mark.integration` and rely on Postgres.
 
