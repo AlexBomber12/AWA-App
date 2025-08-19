@@ -11,7 +11,7 @@ try:
     from services.api.sentry_config import init_sentry_if_configured as _init_sentry
 except ModuleNotFoundError:  # pragma: no cover - optional dependency
 
-    def _init_sentry() -> None:  # type: ignore[return-value]
+    def _init_sentry() -> None:
         """Initialize Sentry when the shared config is unavailable."""
         return None
 

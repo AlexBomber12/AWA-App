@@ -4,7 +4,7 @@ import os
 import shutil
 import tempfile
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from celery import states
 from celery.exceptions import Ignore
@@ -46,12 +46,12 @@ def _resolve_uri_to_path(uri: str) -> Path:
 
 @celery_app.task(name="ingest.import_file", bind=True)  # type: ignore[misc]
 def task_import_file(
-    self: Any, uri: str, report_type: Optional[str] = None, force: bool = False
-) -> Dict[str, Any]:
+    self: Any, uri: str, report_type: str | None = None, force: bool = False
+) -> dict[str, Any]:
     """Import a file into Postgres using existing ETL pipeline."""
 
     self.update_state(state=states.STARTED, meta={"stage": "resolve_uri"})
-    tmp_dir: Optional[Path] = None
+    tmp_dir: Path | None = None
     try:
         local_path = _resolve_uri_to_path(uri)
         if "ingest_" in str(local_path.parent):
@@ -66,7 +66,7 @@ def task_import_file(
             celery_update=lambda m: self.update_state(state=states.STARTED, meta=m),
             force=force,
         )
-        summary: Dict[str, Any] = {}
+        summary: dict[str, Any] = {}
         if isinstance(result, dict):
             summary.update(result)
         summary.setdefault("status", "success")
@@ -83,7 +83,7 @@ def task_import_file(
 
 
 @celery_app.task(name="ingest.rebuild_views", bind=True)  # type: ignore[misc]
-def task_rebuild_views(self: Any) -> Dict[str, Any]:
+def task_rebuild_views(self: Any) -> dict[str, Any]:
     logger.info("Rebuild views placeholder executed")
     return {"status": "success", "message": "noop"}
 
@@ -91,7 +91,7 @@ def task_rebuild_views(self: Any) -> Dict[str, Any]:
 if os.getenv("TESTING") == "1":
 
     @celery_app.task(name="ingest.enqueue_import", bind=True)  # type: ignore[misc]
-    def enqueue_import(self: Any, *, uri: str, dialect: str):
-        from services.etl import load_csv
+    def enqueue_import(self: Any, *, uri: str, dialect: str) -> dict[str, Any]:
+        from etl.load_csv import import_file as run_ingest
 
-        return load_csv.import_file(uri, dialect=dialect)
+        return run_ingest(uri, dialect=dialect)

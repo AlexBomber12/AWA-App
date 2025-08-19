@@ -5,7 +5,7 @@ import json
 import os
 import tempfile
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional, cast
+from typing import Any, Callable, cast
 
 import boto3
 import pandas as pd
@@ -85,37 +85,37 @@ def _open_uri(uri: str) -> Path:
 
 def import_file(
     path: str,
-    report_type: Optional[str] = None,
-    celery_update: Optional[Callable[[Dict[str, Any]], None]] = None,
+    report_type: str | None = None,
+    celery_update: Callable[[dict[str, Any]], None] | None = None,
     *,
     force: bool = False,
     **kwargs: Any,
-) -> Dict[str, Any]:
-    _dialect_override = kwargs.pop('dialect', None)
+) -> dict[str, Any]:
+    _dialect_override = kwargs.pop("dialect", None)
     if kwargs:
         raise TypeError(f"Unexpected kwargs: {', '.join(kwargs)}")
-    TESTING = os.getenv('TESTING') == '1'
+    TESTING = os.getenv("TESTING") == "1"
     file_path = Path(path)
     if file_path.exists() and file_path.stat().st_size == 0:
-        raise ValueError('empty file')
+        raise ValueError("empty file")
     file_hash = _sha256_file(file_path)
 
-    if file_path.suffix in {'.xlsx', '.xls'}:
+    if file_path.suffix in {".xlsx", ".xls"}:
         df = pd.read_excel(file_path)
     else:
         df = _read_csv_flex(file_path)
-    if df is None or (hasattr(df, 'empty') and df.empty):
-        raise ValueError('empty file')
+    if df is None or (hasattr(df, "empty") and df.empty):
+        raise ValueError("empty file")
     if celery_update:
-        celery_update({'stage': 'read', 'rows': len(df)})
+        celery_update({"stage": "read", "rows": len(df)})
 
-    if TESTING and _dialect_override == 'test_generic':
+    if TESTING and _dialect_override == "test_generic":
         from services.etl.dialects import test_generic as td
 
         df = td.normalize_df(df)
         engine = create_engine(build_dsn(sync=True))
         with engine.begin() as conn:
-            for row in df.to_dict(orient='records'):
+            for row in df.to_dict(orient="records"):
                 conn.execute(
                     text(
                         'INSERT INTO test_generic_raw("ASIN", qty, price) VALUES (:ASIN,:qty,:price) '
@@ -124,11 +124,11 @@ def import_file(
                     row,
                 )
         return {
-            'status': 'success',
-            'rows': len(df),
-            'dialect': td.NAME,
-            'target_table': td.TABLE,
-            'warnings': [],
+            "status": "success",
+            "rows": len(df),
+            "dialect": td.NAME,
+            "target_table": td.TABLE,
+            "warnings": [],
         }
 
     cols = normalise_headers(df.columns)
@@ -288,7 +288,7 @@ def import_file(
         engine.dispose()
 
 
-def import_uri(uri: str, **kwargs: Any) -> Dict[str, Any]:
+def import_uri(uri: str, **kwargs: Any) -> dict[str, Any]:
     path = _open_uri(uri) if _is_s3_uri(uri) else Path(uri)
     return import_file(str(path), **kwargs)
 
