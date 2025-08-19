@@ -12,15 +12,20 @@ from sqlalchemy.orm import Session
 try:
     from services.api.dependencies import get_db  # sync
 except Exception:  # pragma: no cover - fallback if dependencies missing
+
     def get_db():
         return None
+
+
 try:
     from services.api.security import (
         require_basic_auth,  # dependency that raises on bad creds
     )
 except Exception:
+
     def require_basic_auth() -> None:  # no-op if project already handles auth globally
         return None
+
 
 # Fallback to repository helper if available
 try:
@@ -30,7 +35,9 @@ except Exception:
 
 
 class ScoreRequest(BaseModel):
-    asins: List[constr(strip_whitespace=True, min_length=1)] = Field(..., description="List of ASINs")
+    asins: List[constr(strip_whitespace=True, min_length=1)] = Field(
+        ..., description="List of ASINs"
+    )
 
 
 class ScoreItem(BaseModel):
@@ -54,18 +61,35 @@ def _roi_view_name() -> str:
     return os.getenv("ROI_VIEW_NAME", "v_roi_full")
 
 
-@router.post("", response_model=ScoreResponse, dependencies=[Depends(require_basic_auth)])
+@router.post(
+    "", response_model=ScoreResponse, dependencies=[Depends(require_basic_auth)]
+)
 def score(body: ScoreRequest, db: Session | None = Depends(get_db)) -> ScoreResponse:
     if not body.asins:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="asins must be a non-empty list")
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="asins must be a non-empty list",
+        )
 
     view = _roi_view_name()
     found = {}
     if db is not None:
         for asin in body.asins:
-            row = db.execute(text(f"SELECT asin, vendor, category, roi FROM {view} WHERE asin = :asin"), {"asin": asin}).fetchone()
+            row = db.execute(
+                text(
+                    f"SELECT asin, vendor, category, roi FROM {view} WHERE asin = :asin"
+                ),
+                {"asin": asin},
+            ).fetchone()
             if row:
-                found[row.asin] = {"asin": row.asin, "vendor": getattr(row, "vendor", None), "category": getattr(row, "category", None), "roi": float(row.roi) if getattr(row, "roi", None) is not None else None}
+                found[row.asin] = {
+                    "asin": row.asin,
+                    "vendor": getattr(row, "vendor", None),
+                    "category": getattr(row, "category", None),
+                    "roi": float(row.roi)
+                    if getattr(row, "roi", None) is not None
+                    else None,
+                }
     items = []
     for asin in body.asins:
         if asin in found:

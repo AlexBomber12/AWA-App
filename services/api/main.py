@@ -179,5 +179,3 @@ async def _check_llm() -> None:
             await cli.get(f"{LAN_BASE}/health")
     except Exception:
         os.environ["LLM_PROVIDER"] = LLM_PROVIDER_FALLBACK
-
-
