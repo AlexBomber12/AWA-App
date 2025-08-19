@@ -10,10 +10,7 @@ def _fees_table() -> str:
 
 
 def upsert_fees_raw(
-    engine: Engine,
-    rows: Iterable[Mapping[str, Any]],
-    *,
-    testing: bool = False,
+    engine: Engine, rows: Iterable[Mapping[str, Any]], *, testing: bool = False
 ) -> Optional[Dict[str, int]]:
     """Idempotent upsert for fees.
 
@@ -40,9 +37,9 @@ def upsert_fees_raw(
             params[f"{c}{i}"] = r.get(c)
 
     insert_sql = f"""
-    INSERT INTO {tbl} ({', '.join(cols)})
+    INSERT INTO {tbl} ({", ".join(cols)})
     VALUES {values_sql}
-    ON CONFLICT ({', '.join(keys)}) DO NOTHING;
+    ON CONFLICT ({", ".join(keys)}) DO NOTHING;
     """
 
     values_cols = ", ".join([f"{c}" for c in cols])
