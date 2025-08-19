@@ -35,7 +35,7 @@ def ensure_test_generic_table(pg_engine):
             """
             )
         )
-        conn.execute(text('TRUNCATE TABLE test_generic_raw;'))
+        conn.execute(text("TRUNCATE TABLE test_generic_raw;"))
     yield
     with pg_engine.begin() as conn:
-        conn.execute(text('TRUNCATE TABLE test_generic_raw;'))
+        conn.execute(text("TRUNCATE TABLE test_generic_raw;"))
