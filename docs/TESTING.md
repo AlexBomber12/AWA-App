@@ -77,3 +77,26 @@ pytest -m integration tests/fees
 ```
 
 The repository performs two-phase writes (INSERT .. DO NOTHING + UPDATE with IS DISTINCT FROM) so unchanged rows are not updated.
+
+### Logistics ETL and /stats SQL mode
+
+**Logistics upsert_many (integration)**
+```bash
+export TESTING=1
+pytest -m integration tests/logistics -q
+```
+
+The helper `repository._upsert_many_with_keys()` exists only when TESTING=1 and lets tests assert conflict/update semantics.
+
+**/stats with real SQL aggregates (integration)**
+
+```bash
+export TESTING=1
+export STATS_USE_SQL=1
+export ROI_VIEW_NAME=test_roi_view
+export API_BASIC_USER=u
+export API_BASIC_PASS=p
+pytest -m integration services/api/tests/test_stats_sql.py -q
+```
+
+With `STATS_USE_SQL=0` (default) the API returns the stable placeholder contracts added in PR#3.
