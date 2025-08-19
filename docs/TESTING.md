@@ -54,3 +54,15 @@ pytest -m integration services/api/tests
 ```
 
 The tests create a local test_roi_view table and point queries to it via ROI_VIEW_NAME, leaving production views untouched.
+
+### Fees integrators (Helium10 / SP) — integration tests
+These tests use a dedicated table under `FEES_RAW_TABLE` to avoid touching production tables.
+
+Run locally:
+```bash
+export TESTING=1
+export FEES_RAW_TABLE=test_fees_raw
+pytest -m integration tests/fees
+```
+
+The repository performs two-phase writes (INSERT .. DO NOTHING + UPDATE with IS DISTINCT FROM) so unchanged rows are not updated.

@@ -1,6 +1,9 @@
 import asyncio
+import json
+import logging
 import os
 
+import httpx
 from celery import Celery, shared_task
 from sqlalchemy import create_engine, text
 
@@ -16,8 +19,8 @@ except ModuleNotFoundError:  # pragma: no cover - optional dependency
         return None
 
 
+from . import repository as repo
 from .client import fetch_fees
-from .repository import upsert
 
 _init_sentry()
 
@@ -50,6 +53,29 @@ def refresh_fees() -> None:
 
 
 async def _bulk(asins: list[str]) -> None:
+    rows = []
     for a in asins:
-        row = await fetch_fees(a)
-        await upsert(row)
+        try:
+            row = await fetch_fees(a)
+            rows.append(row)
+        except (
+            httpx.TimeoutException,
+            httpx.RequestError,
+            json.JSONDecodeError,
+            ValueError,
+        ) as exc:
+            logging.error("h10 fetch failed for %s: %s", a, exc)
+    if not rows:
+        return
+    url = os.getenv("DATABASE_URL")
+    if not url:
+        return
+    engine = create_engine(url.replace("+asyncpg", "+psycopg"), future=True)
+    summary = repo.upsert_fees_raw(
+        engine,
+        rows,
+        testing=os.getenv("TESTING") == "1",
+    )
+    if summary and os.getenv("TESTING") == "1":
+        logging.info("h10 upsert summary %s", summary)
+    engine.dispose()
