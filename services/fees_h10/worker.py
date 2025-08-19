@@ -71,11 +71,7 @@ async def _bulk(asins: list[str]) -> None:
     if not url:
         return
     engine = create_engine(url.replace("+asyncpg", "+psycopg"), future=True)
-    summary = repo.upsert_fees_raw(
-        engine,
-        rows,
-        testing=os.getenv("TESTING") == "1",
-    )
+    summary = repo.upsert_fees_raw(engine, rows, testing=os.getenv("TESTING") == "1")
     if summary and os.getenv("TESTING") == "1":
         logging.info("h10 upsert summary %s", summary)
     engine.dispose()

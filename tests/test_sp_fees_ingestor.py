@@ -39,7 +39,8 @@ sys.modules["pg_utils"] = types.SimpleNamespace(connect=fake_connect)  # type: i
 sp_fees_ingestor.connect = fake_connect
 
 
-def test_offline(monkeypatch, tmp_path):
+def test_offline(monkeypatch, tmp_path, pg_engine, ensure_test_fees_raw_table) -> None:
+    os.environ["FEES_RAW_TABLE"] = "test_fees_raw"
     os.environ["ENABLE_LIVE"] = "0"
     os.environ["SP_REFRESH_TOKEN"] = "t"
     os.environ["SP_CLIENT_ID"] = "i"
@@ -47,5 +48,6 @@ def test_offline(monkeypatch, tmp_path):
     os.environ["SELLER_ID"] = "seller"
     os.environ["REGION"] = "EU"
     os.environ["DATABASE_URL"] = build_dsn(sync=True)
+    _ = pg_engine, ensure_test_fees_raw_table
     res = sp_fees_ingestor.main()
     assert res == 0
