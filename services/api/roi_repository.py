@@ -14,6 +14,7 @@ def _roi_view_name() -> str:
     # Used for SELECTs; production keeps default "v_roi_full"
     return ROI_VIEW_NAME
 
+
 ROI_SQL = text(
     f"""
     SELECT p.asin, p.title, p.category,

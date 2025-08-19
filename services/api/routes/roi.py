@@ -20,6 +20,7 @@ from ..db import get_session
 try:
     from ..security import require_basic_auth
 except Exception:  # pragma: no cover - fallback if security missing
+
     def require_basic_auth() -> None:
         return None
 
