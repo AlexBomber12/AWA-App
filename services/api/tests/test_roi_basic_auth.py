@@ -1,8 +1,8 @@
 import base64
 import os
+from contextlib import contextmanager
 
 import pytest
-from contextlib import contextmanager
 from fastapi.testclient import TestClient
 
 pytestmark = pytest.mark.unit
@@ -24,9 +24,10 @@ def _client(monkeypatch):
         "DATABASE_URL", "postgresql+asyncpg://postgres:pass@localhost:5432/awa"
     )
 
+    from fastapi_limiter import FastAPILimiter
+
     import services.api.main as main
     from services.api import db
-    from fastapi_limiter import FastAPILimiter
 
     class _DummyRedis:
         async def evalsha(self, *args, **kwargs):  # pragma: no cover - simple stub
