@@ -28,8 +28,12 @@ def upsert_fees_raw(
     mutable = ("amount", "currency", "source", "effective_date")
 
     cols = keys + mutable
+
+    def _param(c: str, i: int) -> str:
+        return f":{c}{i}::DATE" if c == "effective_date" else f":{c}{i}"
+
     values_sql = ", ".join(
-        [f"({', '.join([f':{c}{i}' for c in cols])})" for i in range(len(rows))]
+        [f"({', '.join([_param(c, i) for c in cols])})" for i in range(len(rows))]
     )
     params: Dict[str, Any] = {}
     for i, r in enumerate(rows):
@@ -44,7 +48,7 @@ def upsert_fees_raw(
 
     values_cols = ", ".join([f"{c}" for c in cols])
     values_pairs = ", ".join(
-        [f"({', '.join([f':{c}{i}' for c in cols])})" for i in range(len(rows))]
+        [f"({', '.join([_param(c, i) for c in cols])})" for i in range(len(rows))]
     )
     set_assign = ", ".join([f"{m} = v.{m}" for m in mutable])
     is_changed = " OR ".join([f"t.{m} IS DISTINCT FROM v.{m}" for m in mutable])
