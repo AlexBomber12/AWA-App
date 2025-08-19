@@ -1,20 +1,23 @@
 import os
+
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import text
-import pytest
 
 pytestmark = pytest.mark.integration
 
 
 def _auth_headers():
     import base64
+
     token = base64.b64encode(b"u:p").decode()
     return {"Authorization": f"Basic {token}"}
 
 
 def setup_test_view(pg_engine):
     with pg_engine.begin() as c:
-        c.execute(text("""
+        c.execute(
+            text("""
             CREATE TABLE IF NOT EXISTS test_roi_view(
                 asin text,
                 vendor text,
@@ -22,19 +25,23 @@ def setup_test_view(pg_engine):
                 roi numeric,
                 dt date
             );
-        """))
+        """)
+        )
         c.execute(text("TRUNCATE test_roi_view;"))
-        c.execute(text("""
+        c.execute(
+            text("""
             INSERT INTO test_roi_view(asin,vendor,category,roi,dt) VALUES
             ('A1','V1','Beauty', 50.0, '2024-01-15'),
             ('A2','V1','Beauty', 10.0, '2024-02-10'),
             ('A3','V2','Sports', 70.0, '2024-02-20'),
             ('A4','V2','Sports', 30.0, '2024-03-05');
-        """))
+        """)
+        )
 
 
 def client():
     from services.api.main import app
+
     return TestClient(app)
 
 

@@ -1,8 +1,10 @@
 import os
-from sqlalchemy import text
+
 import pytest
+from sqlalchemy import text
 
 pytestmark = pytest.mark.integration
+
 
 def test_updates_only_whitelisted_columns(pg_engine, ensure_test_logistics_table):
     os.environ["TESTING"] = "1"
@@ -45,7 +47,9 @@ def test_updates_only_whitelisted_columns(pg_engine, ensure_test_logistics_table
                 text(
                     "SELECT lane_id, carrier, eur_per_kg FROM test_logistics_routes WHERE lane_id='L1'"
                 )
-            ).mappings().first()
+            )
+            .mappings()
+            .first()
         )
         assert res["carrier"] == "DHL"
         assert float(res["eur_per_kg"]) == 3.90

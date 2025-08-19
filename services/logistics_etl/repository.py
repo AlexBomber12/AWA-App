@@ -35,6 +35,7 @@ async def upsert_many(rows: Iterable[dict]) -> None:
 
 
 if os.getenv("TESTING") == "1":
+
     def _upsert_many_with_keys(
         engine: Engine,
         *,
@@ -76,8 +77,10 @@ if os.getenv("TESTING") == "1":
         ON CONFLICT ({", ".join(keys)}) DO NOTHING;
         """
 
-        set_assign = ", ".join([f'{c} = v.{c}' for c in upd])
-        is_changed = " OR ".join([f"t.{c} IS DISTINCT FROM v.{c}" for c in upd]) or "FALSE"
+        set_assign = ", ".join([f"{c} = v.{c}" for c in upd])
+        is_changed = (
+            " OR ".join([f"t.{c} IS DISTINCT FROM v.{c}" for c in upd]) or "FALSE"
+        )
         values_cols = ", ".join(cols)
         update_sql = f"""
         WITH v({values_cols}) AS (VALUES {values_sql})

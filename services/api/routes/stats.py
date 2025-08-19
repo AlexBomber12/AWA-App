@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+
 from fastapi import APIRouter, Depends
 from sqlalchemy import text
 
@@ -11,7 +12,11 @@ except Exception:
 try:
     from services.api.security import require_basic_auth
 except Exception:
-    require_basic_auth = lambda: None
+
+    def require_basic_auth():
+        return None
+
+
 try:
     from services.api import roi_repository as repo
 except Exception:
@@ -30,11 +35,15 @@ def _roi_view_name():
 def kpi(db=Depends(get_db) if get_db else None):
     if os.getenv("STATS_USE_SQL") == "1" and db is not None:
         view = _roi_view_name()
-        row = db.execute(
-            text(
-                f"SELECT AVG(roi) AS roi_avg, COUNT(DISTINCT asin) AS products, COUNT(DISTINCT vendor) AS vendors FROM {view}"
+        row = (
+            db.execute(
+                text(
+                    f"SELECT AVG(roi) AS roi_avg, COUNT(DISTINCT asin) AS products, COUNT(DISTINCT vendor) AS vendors FROM {view}"
+                )
             )
-        ).mappings().first()
+            .mappings()
+            .first()
+        )
         return {
             "kpi": {
                 "roi_avg": float(row.get("roi_avg") or 0.0),
@@ -49,11 +58,15 @@ def kpi(db=Depends(get_db) if get_db else None):
 def roi_by_vendor(db=Depends(get_db) if get_db else None):
     if os.getenv("STATS_USE_SQL") == "1" and db is not None:
         view = _roi_view_name()
-        rows = db.execute(
-            text(
-                f"SELECT vendor, AVG(roi) AS roi_avg, COUNT(*) AS items FROM {view} GROUP BY vendor ORDER BY vendor"
+        rows = (
+            db.execute(
+                text(
+                    f"SELECT vendor, AVG(roi) AS roi_avg, COUNT(*) AS items FROM {view} GROUP BY vendor ORDER BY vendor"
+                )
             )
-        ).mappings().all()
+            .mappings()
+            .all()
+        )
         return {
             "items": [
                 {
@@ -74,11 +87,15 @@ def roi_trend(db=Depends(get_db) if get_db else None):
         view = _roi_view_name()
         for date_col in ("dt", "date", "snapshot_date", "created_at"):
             try:
-                rows = db.execute(
-                    text(
-                        f"SELECT date_trunc('month', {date_col})::date AS month, AVG(roi) AS roi_avg, COUNT(*) AS items FROM {view} GROUP BY 1 ORDER BY 1"
+                rows = (
+                    db.execute(
+                        text(
+                            f"SELECT date_trunc('month', {date_col})::date AS month, AVG(roi) AS roi_avg, COUNT(*) AS items FROM {view} GROUP BY 1 ORDER BY 1"
+                        )
                     )
-                ).mappings().all()
+                    .mappings()
+                    .all()
+                )
                 if rows:
                     return {
                         "points": [
