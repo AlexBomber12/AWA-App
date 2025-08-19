@@ -31,3 +31,14 @@ slow — long-running / large datasets.
 
 Coverage is enforced at 65% with --cov=services --cov-report=xml.
 CI uploads coverage.xml for external tooling.
+
+### Ingest/ETL integration tests
+These tests are marked `@pytest.mark.integration` and rely on Postgres.
+
+Run them locally:
+```bash
+export TESTING=1
+pytest -m integration tests/etl
+```
+
+The test_generic dialect and test_generic_raw table are for tests only and are enabled when TESTING=1.
