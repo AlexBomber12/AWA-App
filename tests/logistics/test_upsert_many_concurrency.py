@@ -1,8 +1,11 @@
-import os, threading
-from sqlalchemy import text
+import os
+import threading
+
 import pytest
+from sqlalchemy import text
 
 pytestmark = [pytest.mark.integration, pytest.mark.slow]
+
 
 def test_concurrent_upserts_no_deadlock(pg_engine, ensure_test_logistics_table):
     os.environ["TESTING"] = "1"
@@ -24,8 +27,13 @@ def test_concurrent_upserts_no_deadlock(pg_engine, ensure_test_logistics_table):
     done1, done2 = [], []
     t1 = threading.Thread(target=worker, args=(5.00, barrier, done1))
     t2 = threading.Thread(target=worker, args=(5.20, barrier, done2))
-    t1.start(); t2.start(); t1.join(timeout=10); t2.join(timeout=10)
-    assert not t1.is_alive() and not t2.is_alive(), "Deadlock or hang in concurrent upserts"
+    t1.start()
+    t2.start()
+    t1.join(timeout=10)
+    t2.join(timeout=10)
+    assert (
+        not t1.is_alive() and not t2.is_alive()
+    ), "Deadlock or hang in concurrent upserts"
 
     with pg_engine.connect() as c:
         val = float(
