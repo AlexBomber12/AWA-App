@@ -13,13 +13,15 @@ from sqlalchemy.types import Numeric
 from starlette import status
 
 from services.common.dsn import build_dsn
+
 from .. import roi_repository
 from ..db import get_session
 
 try:
     from ..security import require_basic_auth
 except Exception:  # pragma: no cover - fallback if security missing
-    require_basic_auth = lambda: None
+    def require_basic_auth() -> None:
+        return None
 
 
 router = APIRouter()

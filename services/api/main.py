@@ -83,7 +83,10 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
-        await FastAPILimiter.close()
+        try:
+            await FastAPILimiter.close()
+        except RuntimeError:
+            pass
 
 
 app = FastAPI(lifespan=lifespan)
