@@ -1,6 +1,8 @@
 import os
-from fastapi.testclient import TestClient
+
 import pytest
+from fastapi.testclient import TestClient
+
 pytestmark = pytest.mark.unit
 
 def client_with_auth():

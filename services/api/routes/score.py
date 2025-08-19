@@ -1,10 +1,12 @@
 from __future__ import annotations
+
+import os
 from typing import List, Optional
-from pydantic import BaseModel, Field, constr
+
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, Field, constr
 from sqlalchemy import text
 from sqlalchemy.orm import Session
-import os
 
 # Reuse existing dependencies if present:
 try:
@@ -13,9 +15,12 @@ except Exception:  # pragma: no cover - fallback if dependencies missing
     def get_db():
         return None
 try:
-    from services.api.security import require_basic_auth  # dependency that raises on bad creds
+    from services.api.security import (
+        require_basic_auth,  # dependency that raises on bad creds
+    )
 except Exception:
-    require_basic_auth = lambda: None  # no-op if project already handles auth globally
+    def require_basic_auth() -> None:  # no-op if project already handles auth globally
+        return None
 
 # Fallback to repository helper if available
 try:

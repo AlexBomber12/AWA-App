@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends
+
 try:
     from services.api.security import require_basic_auth
 except Exception:
-    require_basic_auth = lambda: None
+    def require_basic_auth() -> None:
+        return None
 
 router = APIRouter(prefix="/stats", tags=["stats"])
 

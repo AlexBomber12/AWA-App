@@ -1,7 +1,9 @@
 import os
+
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import text
-import pytest
+
 pytestmark = pytest.mark.integration
 
 
