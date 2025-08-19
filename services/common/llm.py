@@ -13,6 +13,8 @@ OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 
 _LLM_PROVIDER_ENV = "LLM_PROVIDER"
+LLM_PROVIDER = os.getenv(_LLM_PROVIDER_ENV, "lan").strip().lower()
+LLM_PROVIDER_FALLBACK = os.getenv("LLM_PROVIDER_FALLBACK", "stub").strip().lower()
 _LLM_TIMEOUT_ENV = "LLM_TIMEOUT_SECS"
 _REMOTE_URL_ENV = "LLM_REMOTE_URL"
 
@@ -32,12 +34,16 @@ async def _local_llm(prompt: str, temp: float, max_toks: int, timeout: float) ->
     url = os.getenv(_REMOTE_URL_ENV) or LOCAL_URL
     async with httpx.AsyncClient(timeout=timeout) as cli:
         r = await cli.post(
-            url,
-            json={"prompt": prompt, "temperature": temp, "max_tokens": max_toks},
+            url, json={"prompt": prompt, "temperature": temp, "max_tokens": max_toks}
         )
         r.raise_for_status()
-        data = r.json() if "application/json" in r.headers.get("content-type", "") else {}
-        return cast(str, data.get("completion") or data.get("text") or data.get("content") or r.text).strip()
+        data = (
+            r.json() if "application/json" in r.headers.get("content-type", "") else {}
+        )
+        return cast(
+            str,
+            data.get("completion") or data.get("text") or data.get("content") or r.text,
+        ).strip()
 
 
 async def _openai_llm(prompt: str, temp: float, max_toks: int, timeout: float) -> str:
@@ -66,8 +72,10 @@ async def _remote_generate(
     async with httpx.AsyncClient(timeout=timeout) as cli:
         resp = await cli.post(url, json=payload, headers=headers)
         resp.raise_for_status()  # pragma: no cover - network error path
-        ctype = getattr(resp, "headers", {}).get("content-type", "")
-        data = resp.json() if "application/json" in ctype else {}
+        try:
+            data = resp.json()
+        except Exception:  # pragma: no cover - non-json response
+            data = {}
         text = getattr(resp, "text", "")
         return cast(
             str,
@@ -120,7 +128,7 @@ async def generate(
     timeout: Optional[float] = None,
 ) -> str:
     providers = ["lan", "local", "openai", "stub"]
-    first = (provider or _selected_provider())
+    first = provider or _selected_provider()
     if first in providers:
         providers.remove(first)
         providers.insert(0, first)
@@ -136,6 +144,8 @@ async def generate(
             )
         except Exception as e:
             last_exc = e
-    raise last_exc if last_exc else RuntimeError(
-        "LLM generation failed with no providers available"
+    raise (
+        last_exc
+        if last_exc
+        else RuntimeError("LLM generation failed with no providers available")
     )  # pragma: no cover

@@ -1,4 +1,8 @@
-import os, types, importlib, pytest
+import importlib
+import os
+import types
+
+import pytest
 
 
 @pytest.mark.asyncio
@@ -38,9 +42,10 @@ async def test_timeout_env_changes_timeout_used(monkeypatch):
             return R()
 
     monkeypatch.setattr(
-        llm, "httpx", types.SimpleNamespace(AsyncClient=FakeClient, TimeoutException=TimeoutError)
+        llm,
+        "httpx",
+        types.SimpleNamespace(AsyncClient=FakeClient, TimeoutException=TimeoutError),
     )
     out = await llm.generate("hi")
     assert out == "ok"
     assert captured.get("timeout") == 0.1
-
