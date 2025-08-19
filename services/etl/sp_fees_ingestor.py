@@ -1,8 +1,13 @@
 import json
+import logging
 import os
+from typing import Any, List, Mapping
 
-from pg_utils import connect
+import httpx
+from sqlalchemy import create_engine
+
 from services.common.dsn import build_dsn
+from services.fees_h10 import repository as repo
 
 
 def main() -> int:
@@ -13,52 +18,66 @@ def main() -> int:
     region = os.getenv("REGION", "")
     dsn = build_dsn()
     skus = ["DUMMY1", "DUMMY2"]
-    if live:
-        from typing import Any, cast
+    rows: List[Mapping[str, Any]] = []
+    try:
+        if live:
+            from typing import cast
 
-        from sp_api.api import SellingPartnerAPI
+            from sp_api.api import SellingPartnerAPI
 
-        api = cast(
-            Any,
-            cast(Any, SellingPartnerAPI)(
-                refresh_token=refresh_token,
-                client_id=client_id,
-                client_secret=client_secret,
-                region=region,
-            ),
-        )
-        results = []
-        for asin in skus:
-            r = api.get_my_fees_estimate_for_sku(asin)
-            amt = r["payload"]["FeesEstimateResult"]["FeesEstimate"][
-                "TotalFeesEstimate"
-            ]["Amount"]
-            results.append((asin, amt))
-    else:
-        with open("tests/fixtures/spapi_fees_sample.json") as f:
-            data = json.load(f)
-        results = [
-            (
-                r["asin"],
-                r["payload"]["FeesEstimateResult"]["FeesEstimate"]["TotalFeesEstimate"][
-                    "Amount"
-                ],
+            api = cast(
+                Any,
+                cast(Any, SellingPartnerAPI)(
+                    refresh_token=refresh_token,
+                    client_id=client_id,
+                    client_secret=client_secret,
+                    region=region,
+                ),
             )
-            for r in data
-        ]
-    conn = connect(dsn)
-    cur = conn.cursor()
-    cur.execute(
-        "CREATE TABLE IF NOT EXISTS fees_raw(asin text primary key, fee numeric, captured_at timestamptz default now())"
-    )
-    for asin, fee in results:
-        cur.execute(
-            "INSERT INTO fees_raw(asin, fee) VALUES (%s, %s) ON CONFLICT (asin) DO UPDATE SET fee = EXCLUDED.fee",
-            (asin, fee),
-        )
-    conn.commit()
-    cur.close()
-    conn.close()
+            for asin in skus:
+                r = api.get_my_fees_estimate_for_sku(asin)
+                amt = r["payload"]["FeesEstimateResult"]["FeesEstimate"][
+                    "TotalFeesEstimate"
+                ]["Amount"]
+                rows.append(
+                    {
+                        "asin": asin,
+                        "marketplace": region or "US",
+                        "fee_type": "fba_pick_pack",
+                        "amount": amt,
+                        "currency": "USD",
+                        "source": "sp",
+                        "effective_date": os.getenv("SP_FEES_DATE"),
+                    }
+                )
+        else:
+            with open("tests/fixtures/spapi_fees_sample.json") as f:
+                data = json.load(f)
+            for r in data:
+                rows.append(
+                    {
+                        "asin": r["asin"],
+                        "marketplace": "US",
+                        "fee_type": "fba_pick_pack",
+                        "amount": r["payload"]["FeesEstimateResult"]["FeesEstimate"][
+                            "TotalFeesEstimate"
+                        ]["Amount"],
+                        "currency": "USD",
+                        "source": "sp",
+                        "effective_date": r.get("date"),
+                    }
+                )
+    except (
+        httpx.TimeoutException,
+        httpx.RequestError,
+        json.JSONDecodeError,
+        ValueError,
+    ) as exc:
+        logging.error("sp fees fetch failed: %s", exc)
+        return 1
+    engine = create_engine(dsn)
+    repo.upsert_fees_raw(engine, rows, testing=os.getenv("TESTING") == "1")
+    engine.dispose()
     return 0
 
 
