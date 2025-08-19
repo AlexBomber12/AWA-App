@@ -86,3 +86,12 @@ def task_import_file(
 def task_rebuild_views(self: Any) -> Dict[str, Any]:
     logger.info("Rebuild views placeholder executed")
     return {"status": "success", "message": "noop"}
+
+
+if os.getenv("TESTING") == "1":
+
+    @celery_app.task(name="ingest.enqueue_import", bind=True)  # type: ignore[misc]
+    def enqueue_import(self: Any, *, uri: str, dialect: str):
+        from services.etl import load_csv
+
+        return load_csv.import_file(uri, dialect=dialect)
