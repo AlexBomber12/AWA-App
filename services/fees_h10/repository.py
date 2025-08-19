@@ -30,7 +30,13 @@ def upsert_fees_raw(
     cols = keys + mutable
 
     def _param(c: str, i: int) -> str:
-        return f":{c}{i}::DATE" if c == "effective_date" else f":{c}{i}"
+        if c == "effective_date":
+            # SQLAlchemy's text parser does not recognize the ``:param::TYPE``
+            # syntax when compiling for psycopg, leaving ``:param::DATE`` in the
+            # rendered SQL and causing a syntax error. Use an explicit CAST so
+            # the parameter can be bound normally.
+            return f"CAST(:{c}{i} AS DATE)"
+        return f":{c}{i}"
 
     values_sql = ", ".join(
         [f"({', '.join([_param(c, i) for c in cols])})" for i in range(len(rows))]
