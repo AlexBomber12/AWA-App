@@ -1,9 +1,12 @@
 from __future__ import annotations
-from pathlib import Path
-from typing import Iterable, Mapping, Sequence, Callable
+
 import csv
+from pathlib import Path
+from typing import Callable, Iterable, Mapping, Sequence
+
 import pandas as pd
 import pytest
+
 
 @pytest.fixture
 def csv_file_factory(tmp_path: Path) -> Callable[..., Path]:
@@ -18,6 +21,7 @@ def csv_file_factory(tmp_path: Path) -> Callable[..., Path]:
           name="sample.csv",
       )
     """
+
     def _make_csv(
         *,
         headers: Sequence[str],
@@ -33,13 +37,16 @@ def csv_file_factory(tmp_path: Path) -> Callable[..., Path]:
             for r in rows:
                 writer.writerow({k: r.get(k, "") for k in headers})
         return p
+
     return _make_csv
+
 
 @pytest.fixture
 def xlsx_file_factory(tmp_path: Path) -> Callable[..., Path]:
     """
     Create an Excel file with the provided headers and rows.
     """
+
     def _make_xlsx(
         *,
         headers: Sequence[str],
@@ -50,7 +57,9 @@ def xlsx_file_factory(tmp_path: Path) -> Callable[..., Path]:
         df = pd.DataFrame(list(rows), columns=list(headers))
         df.to_excel(p, index=False)
         return p
+
     return _make_xlsx
+
 
 @pytest.fixture
 def large_csv_factory(csv_file_factory) -> Callable[..., Path]:
@@ -58,6 +67,7 @@ def large_csv_factory(csv_file_factory) -> Callable[..., Path]:
     Quickly generate a large CSV for performance/dedup tests.
     Fields: ASIN, qty, price
     """
+
     def _make_large_csv(
         n: int,
         *,
@@ -77,4 +87,5 @@ def large_csv_factory(csv_file_factory) -> Callable[..., Path]:
             encoding=encoding,
             name=name,
         )
+
     return _make_large_csv
