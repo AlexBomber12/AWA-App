@@ -4,7 +4,7 @@ import os
 import shutil
 import tempfile
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 from celery import states
 from celery.exceptions import Ignore
@@ -91,7 +91,9 @@ def task_rebuild_views(self: Any) -> dict[str, Any]:
 if os.getenv("TESTING") == "1":
 
     @celery_app.task(name="ingest.enqueue_import", bind=True)  # type: ignore[misc]
-    def enqueue_import(self: Any, *, uri: str, dialect: str) -> dict[str, Any]:
+    def enqueue_import(
+        self: Any, *, uri: str, dialect: str
+    ) -> dict[str, Any]:  # pragma: no cover - helper for tests
         from etl.load_csv import import_file as run_ingest
 
         return run_ingest(uri, dialect=dialect)
