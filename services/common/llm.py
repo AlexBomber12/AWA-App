@@ -12,6 +12,7 @@ LAN_KEY = os.getenv("LLM_API_KEY", "")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 
+
 _LLM_PROVIDER_ENV = "LLM_PROVIDER"
 LLM_PROVIDER = os.getenv(_LLM_PROVIDER_ENV, "lan").strip().lower()
 LLM_PROVIDER_FALLBACK = os.getenv("LLM_PROVIDER_FALLBACK", "stub").strip().lower()
@@ -20,8 +21,7 @@ _REMOTE_URL_ENV = "LLM_REMOTE_URL"
 
 
 def _selected_provider() -> str:
-    # default provider is 'lan' unless overridden via LLM_PROVIDER
-    return (os.getenv(_LLM_PROVIDER_ENV) or "lan").strip().lower()
+    return (os.getenv("LLM_PROVIDER") or "lan").strip().lower()
 
 
 def _timeout_seconds(default: float = 60.0) -> float:
@@ -128,11 +128,11 @@ async def generate(
     *,
     timeout: Optional[float] = None,
 ) -> str:
+    prov = (provider or _selected_provider()).lower()
     providers = ["lan", "local", "openai", "stub"]
-    first = provider or _selected_provider()
-    if first in providers:
-        providers.remove(first)
-        providers.insert(0, first)
+    if prov in providers:
+        providers.remove(prov)
+        providers.insert(0, prov)
     last_exc: Exception | None = None
     for p in providers:
         try:
