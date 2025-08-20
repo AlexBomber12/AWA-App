@@ -25,7 +25,6 @@ try:
         require_basic_auth,  # dependency that raises on bad creds
     )
 except Exception:
-
     _security = HTTPBasic()
 
     def require_basic_auth(
@@ -46,9 +45,7 @@ Asin = Annotated[str, Field(min_length=1, strip_whitespace=True)]
 
 
 class ScoreRequest(BaseModel):
-    asins: List[Asin] = Field(
-        ..., description="List of ASINs"
-    )
+    asins: List[Asin] = Field(..., description="List of ASINs")
 
 
 class ScoreItem(BaseModel):
@@ -97,9 +94,11 @@ def score(body: ScoreRequest, db: Session | None = Depends(get_db)) -> ScoreResp
                     "asin": row.asin,
                     "vendor": getattr(row, "vendor", None),
                     "category": getattr(row, "category", None),
-                    "roi": float(row.roi)
-                    if getattr(row, "roi", None) is not None
-                    else None,
+                    "roi": (
+                        float(row.roi)
+                        if getattr(row, "roi", None) is not None
+                        else None
+                    ),
                 }
     items = []
     for asin in body.asins:
