@@ -21,3 +21,13 @@ Before pushing changes, run the full pre-commit suite and tests:
 pre-commit run --all-files && pytest -q --cov
 ```
 This ensures formatting, linting, and coverage remain consistent with CI.
+
+### Regenerating API docs
+Install `pydoc-markdown` and run it from the repo root to update the Markdown files under `docs/api`:
+
+```bash
+pip install pydoc-markdown
+pydoc-markdown
+```
+
+The rendered pages are published at <https://your-org.github.io/AWA-App/> when pushed to `main`.
