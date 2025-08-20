@@ -14,3 +14,20 @@ Docker compose health checks failed because the Redis service exited immediately
 - `ci-logs/latest/CI/compose-health/6_Run export COMPOSE_DOCKER_CLI_BUILD=1 DOCKER_BUILDKIT=1.txt`
 - `ci-logs/latest/test/health-checks/5_Run export COMPOSE_DOCKER_CLI_BUILD=1.txt`
 
+---
+
+## Failing workflows
+- **test** workflow (health-checks job)
+
+## Summary
+`docker compose` reported `container awa-app-etl-1 is unhealthy`. The ETL image lacked the
+`services.common` package and used an invalid `timeout` parameter in the healthcheck,
+causing the script to crash.
+
+## Fix
+- Include the `services` package in the ETL image and set `PYTHONPATH`.
+- Use `connect_timeout` when opening the database connection in `healthcheck.py`.
+
+## Logs
+- `ci-logs/latest/test/2_health-checks.txt`
+

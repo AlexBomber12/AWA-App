@@ -11,7 +11,10 @@ from services.common.dsn import build_dsn
 
 def check_db() -> None:
     dsn = build_dsn(sync=True).replace("+psycopg", "")
-    with psycopg.connect(dsn, timeout=2) as conn:
+    # ``psycopg.connect`` expects ``connect_timeout`` instead of ``timeout``.
+    # Using the wrong parameter causes "invalid connection option" errors and
+    # makes the container healthcheck fail.
+    with psycopg.connect(dsn, connect_timeout=2) as conn:
         with conn.cursor() as cur:
             cur.execute("SELECT 1")
 
