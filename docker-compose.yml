@@ -1,3 +1,8 @@
+x-database-env: &db-env
+  PG_SYNC_DSN: ${PG_SYNC_DSN}
+  PG_ASYNC_DSN: ${PG_ASYNC_DSN}
+  DATABASE_URL: ${DATABASE_URL}
+
 services:
   postgres:
     build:
@@ -11,9 +16,10 @@ services:
       PGPASSWORD: pass # for healthcheck
       TZ: UTC
       LANG: en_US.UTF-8
-    
       POSTGRES_CONFIG_FILE: /etc/postgresql/postgresql.conf
     command: ["postgres", "-c", "config_file=/etc/postgresql/postgresql.conf"]
+    volumes:
+      - ./docker/postgres/postgresql.conf:/etc/postgresql/postgresql.conf:ro
     healthcheck:
       test: ["CMD", "pg_isready", "-U", "postgres"]
       start_period: 60s
@@ -38,6 +44,7 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
+    command: ["sh", "-c", "sysctl -w vm.overcommit_memory=1 && redis-server"]
     ports:
       - "6379:6379"
     healthcheck:
@@ -69,14 +76,9 @@ services:
       args:
         TZ_CACHE_BUST: ${GITHUB_SHA:-dev}
     environment:
+      <<: *db-env
       TZ: UTC
       PYTHONPATH: /app:/app/services
-      PG_USER: postgres
-      PG_PASSWORD: pass
-      PG_DATABASE: awa
-      PG_HOST: postgres
-      PG_PORT: 5432
-      DATABASE_URL: postgresql+asyncpg://postgres:pass@postgres:5432/awa
       ENABLE_LIVE: 0
       LLM_PROVIDER: stub
       ALEMBIC_CONFIG: /app/alembic.ini
@@ -112,13 +114,8 @@ services:
       args:
         TZ_CACHE_BUST: ${GITHUB_SHA:-dev}
     environment:
+      <<: *db-env
       TZ: UTC
-      PG_USER: postgres
-      PG_PASSWORD: pass
-      PG_DATABASE: awa
-      PG_HOST: postgres
-      PG_PORT: 5432
-      DATABASE_URL: postgresql+asyncpg://postgres:pass@postgres:5432/awa
       ENABLE_LIVE: 0
     depends_on:
       postgres:
@@ -141,16 +138,11 @@ services:
         TZ_CACHE_BUST: ${GITHUB_SHA:-dev}
     command: ["celery", "-A", "services.ingest.celery_app:celery_app", "worker", "-Q", "ingest", "-l", "INFO"]
     environment:
+      <<: *db-env
       TZ: UTC
       PYTHONPATH: /app:/app/services
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/1
-      PG_USER: postgres
-      PG_PASSWORD: pass
-      PG_DATABASE: awa
-      PG_HOST: postgres
-      PG_PORT: 5432
-      DATABASE_URL: postgresql+asyncpg://postgres:pass@postgres:5432/awa
       ENABLE_LIVE: 0
       SENTRY_DSN: ${SENTRY_DSN:-}
       SENTRY_ENV: ${SENTRY_ENV:-local}
@@ -220,13 +212,8 @@ services:
       interval: 10s
       retries: 5
     environment:
+      <<: *db-env
       TZ: UTC
-      PG_USER: postgres
-      PG_PASSWORD: pass
-      PG_DATABASE: awa
-      PG_HOST: postgres
-      PG_PORT: 5432
-      DATABASE_URL: postgresql+asyncpg://postgres:pass@postgres:5432/awa
       ENABLE_LIVE: 0
     depends_on:
       api:
@@ -243,12 +230,7 @@ services:
     build:
       context: ./services/fees_h10
     environment:
-      PG_USER: postgres
-      PG_PASSWORD: pass
-      PG_DATABASE: awa
-      PG_HOST: postgres
-      PG_PORT: 5432
-      DATABASE_URL: postgresql+asyncpg://postgres:pass@postgres:5432/awa
+      <<: *db-env
       PYTHONPATH: /app:/app/services
       SENTRY_DSN: ${SENTRY_DSN:-}
       SENTRY_ENV: ${SENTRY_ENV:-local}
@@ -270,12 +252,7 @@ services:
     build:
       context: ./services/logistics_etl
     environment:
-      PG_USER: postgres
-      PG_PASSWORD: pass
-      PG_DATABASE: awa
-      PG_HOST: postgres
-      PG_PORT: 5432
-      DATABASE_URL: postgresql+asyncpg://postgres:pass@postgres:5432/awa
+      <<: *db-env
       PYTHONPATH: /app:/app/services
     command: ["python", "-m", "logistics_etl"]
     depends_on:
@@ -289,8 +266,7 @@ services:
     build:
       context: ./services/alert_bot
     environment:
-      PG_ASYNC_DSN: postgresql://postgres:pass@postgres:5432/awa
-      PG_HOST: postgres
+      <<: *db-env
       TZ: UTC
       TELEGRAM_TOKEN: ${TELEGRAM_TOKEN:-}
       TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}

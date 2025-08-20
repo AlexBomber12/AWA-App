@@ -38,8 +38,9 @@ need different accounts.
 
 ### Database config – env matrix
 
-`build_dsn(sync=True|False)` derives a DSN from `DATABASE_URL` or the `PG_*`
-variables.  CI exports both a synchronous URL and an async-friendly variant:
+`build_dsn(sync=True|False)` reads `PG_SYNC_DSN`, `PG_ASYNC_DSN` or
+`DATABASE_URL` directly. CI exports both a synchronous URL and an
+async-friendly variant:
 
 ```
 PG_SYNC_DSN=postgresql+psycopg://postgres:pass@localhost:5432/awa  # pragma: allowlist secret
