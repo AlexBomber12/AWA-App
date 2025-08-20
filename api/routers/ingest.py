@@ -3,7 +3,7 @@ from __future__ import annotations
 import shutil
 import tempfile
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from celery import states
 from fastapi import APIRouter, File, HTTPException, Request, UploadFile
@@ -18,8 +18,8 @@ router = APIRouter(prefix="", tags=["ingest"])
 async def submit_ingest(
     request: Request,
     file: UploadFile | None = File(None),
-    uri: Optional[str] = None,
-    report_type: Optional[str] = None,
+    uri: str | None = None,
+    report_type: str | None = None,
     force: bool = False,
 ) -> Dict[str, Any]:
     if not file and uri is None:

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from typing import Any, Dict, Iterable, Mapping, Optional, Sequence
+from typing import Any, Dict, Iterable, Mapping, Sequence
 
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
@@ -42,9 +42,9 @@ if os.getenv("TESTING") == "1":
         table: str,
         key_cols: Sequence[str],
         rows: Iterable[Mapping[str, Any]],
-        update_columns: Optional[Sequence[str]] = None,
+        update_columns: Sequence[str] | None = None,
         testing: bool = False,
-    ) -> Optional[Dict[str, int]]:
+    ) -> dict[str, int] | None:
         """
         TESTING-only helper: generic UPSERT into `table` with explicit `key_cols`.
         Updates only columns listed in `update_columns` (if provided), using IS DISTINCT FROM

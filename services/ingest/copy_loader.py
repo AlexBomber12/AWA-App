@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import io
-from typing import Any, Optional, Sequence, cast
+from typing import Any, Sequence, cast
 
 import pandas as pd
 from psycopg2 import sql
@@ -13,7 +13,7 @@ def _ensure_ident(name: str) -> sql.Identifier:
     return sql.Identifier(name)
 
 
-def _fq_ident(schema: Optional[str], table: str) -> sql.SQL:
+def _fq_ident(schema: str | None, table: str) -> sql.SQL:
     if schema:
         return sql.SQL(".").join([_ensure_ident(schema), _ensure_ident(table)])
     return _ensure_ident(table)
@@ -24,9 +24,9 @@ def copy_df_via_temp(
     df: pd.DataFrame,
     target_table: str,
     *,
-    target_schema: Optional[str] = None,
+    target_schema: str | None = None,
     columns: Sequence[str],
-    conflict_cols: Optional[Sequence[str]] = None,
+    conflict_cols: Sequence[str] | None = None,
     analyze_after: bool = False,
     connection: Any | None = None,
 ) -> int:
