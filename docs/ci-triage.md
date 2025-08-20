@@ -1,15 +1,16 @@
 # CI Triage
 
 ## Failing workflows
-- **CI** workflow
-- **test** workflow
+- **CI** workflow (compose-health job)
+- **test** workflow (health-checks job)
 
 ## Summary
-Both workflows invoked pytest with `--cov-fail-under=75`, overriding the project's `fail_under = 45` coverage setting and causing failures at ~65% coverage.
+Docker compose health checks failed because the Redis service exited immediately. The startup command attempted to run `sysctl -w vm.overcommit_memory=1`, which is not permitted in the execution environment, so `redis-server` never started and downstream services reported the container as unhealthy.
 
 ## Fix
-Removed the explicit `--cov-fail-under=75` flag from `.github/workflows/ci.yml`, `.github/workflows/test.yml`, and `pytest.ini` so pytest uses the configured threshold.
+- Updated `docker-compose.yml` to ignore failures from the `sysctl` command so the Redis server starts even when kernel parameters cannot be modified.
 
 ## Logs
-- `ci-logs/latest/CI/0_unit.txt`
-- `ci-logs/latest/test/2_test.txt`
+- `ci-logs/latest/CI/compose-health/6_Run export COMPOSE_DOCKER_CLI_BUILD=1 DOCKER_BUILDKIT=1.txt`
+- `ci-logs/latest/test/health-checks/5_Run export COMPOSE_DOCKER_CLI_BUILD=1.txt`
+
