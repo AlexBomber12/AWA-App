@@ -1,5 +1,5 @@
 import os
-from typing import Any, Dict, Iterable, Mapping, Optional
+from typing import Any, Dict, Iterable, Mapping
 
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
@@ -11,7 +11,7 @@ def _fees_table() -> str:
 
 def upsert_fees_raw(
     engine: Engine, rows: Iterable[Mapping[str, Any]], *, testing: bool = False
-) -> Optional[Dict[str, int]]:
+) -> dict[str, int] | None:
     """Idempotent upsert for fees.
 
     TESTING-only: returns counts for inserted/updated/skipped rows.

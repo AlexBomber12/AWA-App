@@ -3,7 +3,7 @@ from __future__ import annotations
 import importlib
 import os
 from types import ModuleType
-from typing import Annotated, List, Optional, cast
+from typing import Annotated, List, cast
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
@@ -50,10 +50,10 @@ class ScoreRequest(BaseModel):
 
 class ScoreItem(BaseModel):
     asin: str
-    roi: Optional[float] = None
-    vendor: Optional[str] = None
-    category: Optional[str] = None
-    error: Optional[str] = None
+    roi: float | None = None
+    vendor: str | None = None
+    category: str | None = None
+    error: str | None = None
 
 
 class ScoreResponse(BaseModel):

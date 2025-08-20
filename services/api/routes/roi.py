@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import os
 import secrets
-from typing import List, Optional
+from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
@@ -85,8 +85,8 @@ def build_pending_sql(include_vendor: bool, include_category: bool):
 def roi_review(
     request: Request,
     roi_min: int = 0,
-    vendor: Optional[int] = None,
-    category: Optional[str] = None,
+    vendor: int | None = None,
+    category: str | None = None,
     _: str = Depends(_check_basic_auth),
 ):
     url = build_dsn(sync=True)

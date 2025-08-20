@@ -1,6 +1,6 @@
 import importlib
 import os
-from typing import Any, Optional, cast
+from typing import Any, cast
 
 try:
     import httpx
@@ -97,7 +97,7 @@ async def _generate_with_provider(
     *,
     temperature: float,
     max_tokens: int,
-    timeout: Optional[float] = None,
+    timeout: float | None = None,
 ) -> str:
     to = timeout or _timeout_seconds()
     if provider == "lan":
@@ -126,7 +126,7 @@ async def generate(
     max_tokens: int = 256,
     provider: str | None = None,
     *,
-    timeout: Optional[float] = None,
+    timeout: float | None = None,
 ) -> str:
     env_prov = _selected_provider()
     prov = (provider or env_prov).lower()
