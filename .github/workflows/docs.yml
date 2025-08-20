@@ -1,27 +1,57 @@
-name: Docs
+name: docs
+
 on:
-  push:
-    branches: [main]
-    paths-ignore: ['ci-logs/**']
-  pull_request:
-    branches: [main]
-    paths-ignore: ['ci-logs/**']
+  workflow_run:
+    workflows: ["test"]
+    types: [completed]
 
 jobs:
-  publish:
+  build:
+    if: >-
+      ${{ github.event.workflow_run.conclusion == 'success' &&
+      (github.event.workflow_run.head_branch == 'main' ||
+       github.event.workflow_run.head_branch == '') }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Install deps
-        run: pip install --break-system-packages pydoc-markdown
-      - name: Generate docs
+      - name: Install dependencies
+        run: |
+          pip install --break-system-packages -r services/etl/requirements.txt
+          pip install --break-system-packages -r services/api/requirements.txt
+          pip install --break-system-packages -r services/repricer/requirements.txt
+          pip install --break-system-packages -r services/fees_h10/requirements.txt
+          pip install --break-system-packages -r services/alert_bot/requirements.txt
+          pip install --break-system-packages -r requirements-dev.txt
+          pip install --break-system-packages pydoc-markdown
+      - name: Build API docs
         run: pydoc-markdown
-      - name: Publish Docs
-        uses: peaceiris/actions-gh-pages@v3
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_branch: gh-pages
-          publish_dir: docs/api
+          path: docs/api
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+

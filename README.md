@@ -2,10 +2,22 @@
 [![CI](https://github.com/your-org/AWA-App/actions/workflows/ci.yml/badge.svg)](https://github.com/your-org/AWA-App/actions/workflows/ci.yml)
 [![coverage](https://codecov.io/gh/your-org/AWA-App/branch/main/graph/badge.svg)](https://codecov.io/gh/your-org/AWA-App)
 [![docker](https://img.shields.io/badge/docker-build-blue)](https://hub.docker.com/r/your-org/awa-app)
+[![docs](https://img.shields.io/badge/docs-latest-blue)](https://your-org.github.io/AWA-App/)
 
 ## Quick Start
 Repricer API → http://localhost:8100/health
 The API exposes `/health` for readiness checks.
+
+## API documentation
+The generated API reference lives at <https://your-org.github.io/AWA-App/>.
+Regenerate it locally with Python 3.11+ and `pydoc-markdown`:
+
+```bash
+pip install pydoc-markdown
+pydoc-markdown
+```
+
+Markdown files are written to `docs/api` and published on pushes to `main`.
 
 ## Development setup
 
