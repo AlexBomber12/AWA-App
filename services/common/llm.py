@@ -128,7 +128,8 @@ async def generate(
     *,
     timeout: Optional[float] = None,
 ) -> str:
-    prov = (provider or _selected_provider()).lower()
+    env_prov = _selected_provider()
+    prov = (provider or env_prov).lower()
     providers = ["lan", "local", "openai", "stub"]
     if prov in providers:
         providers.remove(prov)
