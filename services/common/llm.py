@@ -20,6 +20,7 @@ _REMOTE_URL_ENV = "LLM_REMOTE_URL"
 
 
 def _selected_provider() -> str:
+    # default provider is 'lan' unless overridden via LLM_PROVIDER
     return (os.getenv(_LLM_PROVIDER_ENV) or "lan").strip().lower()
 
 
