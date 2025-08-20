@@ -14,27 +14,31 @@ def build_dsn(sync: bool = True) -> str:
     url = os.getenv("PG_SYNC_DSN" if sync else "PG_ASYNC_DSN")
     if url:
         return url.replace(
-            "postgresql://", "postgresql+psycopg://" if sync else "postgresql+asyncpg://"
+            "postgresql://",
+            "postgresql+psycopg://" if sync else "postgresql+asyncpg://",
         )
     if not url:
         other = os.getenv("PG_ASYNC_DSN" if sync else "PG_SYNC_DSN")
         if other:
             if sync:
-                return (
-                    other.replace("+asyncpg", "+psycopg")
-                    .replace("postgresql://", "postgresql+psycopg://")
+                return other.replace("+asyncpg", "+psycopg").replace(
+                    "postgresql://", "postgresql+psycopg://"
                 )
-            return (
-                other.replace("+psycopg", "+asyncpg")
-                .replace("postgresql://", "postgresql+asyncpg://")
+            return other.replace("+psycopg", "+asyncpg").replace(
+                "postgresql://", "postgresql+asyncpg://"
             )
 
     url = os.getenv("DATABASE_URL")
     if url:
-        return (
-            url.replace("+asyncpg", "+psycopg")
-            if sync
-            else url.replace("+psycopg", "+asyncpg")
+        if "+asyncpg" in url or "+psycopg" in url:
+            return (
+                url.replace("+asyncpg", "+psycopg")
+                if sync
+                else url.replace("+psycopg", "+asyncpg")
+            )
+        return url.replace(
+            "postgresql://",
+            "postgresql+psycopg://" if sync else "postgresql+asyncpg://",
         )
 
     required = ["PG_USER", "PG_PASSWORD", "PG_DATABASE", "PG_HOST", "PG_PORT"]

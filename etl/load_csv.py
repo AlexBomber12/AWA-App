@@ -5,7 +5,7 @@ import json
 import os
 import tempfile
 from pathlib import Path
-from typing import Any, Callable, cast
+from typing import Any, Callable
 
 import boto3
 import pandas as pd
@@ -114,9 +114,9 @@ def import_file(
 
         df = td.normalize_df(df)
         engine = create_engine(build_dsn(sync=True))
-        with engine.begin() as conn:
+        with engine.begin() as db_conn:
             for row in df.to_dict(orient="records"):
-                conn.execute(
+                db_conn.execute(
                     text(
                         'INSERT INTO test_generic_raw("ASIN", qty, price) VALUES (:ASIN,:qty,:price) '
                         'ON CONFLICT ("ASIN") DO UPDATE SET qty=EXCLUDED.qty, price=EXCLUDED.price'
@@ -190,7 +190,7 @@ def import_file(
     warnings: list[str] = []
 
     engine = create_engine(build_dsn(sync=True))
-    conn = cast(Any, engine.raw_connection())
+    conn: Any = engine.raw_connection()
     try:
         conn.autocommit = False
         with conn.cursor() as cur:
