@@ -148,13 +148,7 @@ async def _wait_for_db() -> None:
     """Block application startup until the database becomes available."""
     from sqlalchemy import create_engine
 
-    # Use DATABASE_URL if set, otherwise build sync DSN
-    database_url = os.getenv("DATABASE_URL")
-    if database_url:
-        # Convert async URL to sync URL using psycopg driver
-        url = database_url.replace("postgresql+asyncpg://", "postgresql+psycopg://")
-    else:
-        url = build_dsn(sync=True)
+    url = build_dsn(sync=True)
 
     delay = 0.2
     for _ in range(10):

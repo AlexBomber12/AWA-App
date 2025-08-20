@@ -7,7 +7,8 @@ from sqlalchemy import create_engine, text
 def _db_url() -> str:
     return (
         os.getenv("DATABASE_URL")
-        or os.getenv("ASYNC_DATABASE_URL")
+        or os.getenv("PG_ASYNC_DSN")
+        or os.getenv("PG_SYNC_DSN")
         or "postgresql://postgres:postgres@localhost:5432/postgres"
     )
 

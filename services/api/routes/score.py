@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import importlib
 import os
-from typing import List, Optional
+from types import ModuleType
+from typing import Annotated, List, Optional, cast
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field, constr
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -13,7 +16,7 @@ try:
     from services.api.dependencies import get_db  # sync
 except Exception:  # pragma: no cover - fallback if dependencies missing
 
-    def get_db():
+    def get_db() -> Session | None:
         return None
 
 
@@ -23,19 +26,27 @@ try:
     )
 except Exception:
 
-    def require_basic_auth() -> None:  # no-op if project already handles auth globally
+    _security = HTTPBasic()
+
+    def require_basic_auth(
+        credentials: HTTPBasicCredentials = Depends(_security),
+    ) -> None:  # no-op if project already handles auth globally
         return None
 
 
 # Fallback to repository helper if available
+repo: ModuleType | None
 try:
-    from services.api import roi_repository as repo
+    repo = importlib.import_module("services.api.roi_repository")
 except Exception:
     repo = None
 
 
+Asin = Annotated[str, Field(min_length=1, strip_whitespace=True)]
+
+
 class ScoreRequest(BaseModel):
-    asins: List[constr(strip_whitespace=True, min_length=1)] = Field(
+    asins: List[Asin] = Field(
         ..., description="List of ASINs"
     )
 
@@ -57,7 +68,7 @@ router = APIRouter(prefix="/score", tags=["score"])
 
 def _roi_view_name() -> str:
     if repo and hasattr(repo, "_roi_view_name"):
-        return repo._roi_view_name()
+        return cast(str, repo._roi_view_name())
     return os.getenv("ROI_VIEW_NAME", "v_roi_full")
 
 

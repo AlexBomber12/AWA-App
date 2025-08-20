@@ -16,7 +16,21 @@ def build_dsn(sync: bool = True) -> str:
 
     url = os.getenv("PG_SYNC_DSN" if sync else "PG_ASYNC_DSN")
     if url:
-        return url
+        return url.replace(
+            "postgresql://", "postgresql+psycopg://" if sync else "postgresql+asyncpg://"
+        )
+    if not url:
+        other = os.getenv("PG_ASYNC_DSN" if sync else "PG_SYNC_DSN")
+        if other:
+            if sync:
+                return (
+                    other.replace("+asyncpg", "+psycopg")
+                    .replace("postgresql://", "postgresql+psycopg://")
+                )
+            return (
+                other.replace("+psycopg", "+asyncpg")
+                .replace("postgresql://", "postgresql+asyncpg://")
+            )
 
     url = os.getenv("DATABASE_URL")
     if url:
