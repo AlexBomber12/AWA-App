@@ -89,7 +89,7 @@ services:
       SENTRY_ENV: ${SENTRY_ENV:-local}
       SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE:-0.05}
       SENTRY_PROFILES_SAMPLE_RATE: ${SENTRY_PROFILES_SAMPLE_RATE:-0.0}
-      SENTRY_RELEASE: ${SENTRY_RELEASE:-}
+      SENTRY_RELEASE: ${GITHUB_SHA:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -107,6 +107,9 @@ services:
       - awa-data:/data
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    labels:
+      org.opencontainers.image.revision: ${GITHUB_SHA:-dev}
+      org.opencontainers.image.source: https://github.com/<org>/AWA-App
   etl:
     build:
       context: .
@@ -117,19 +120,31 @@ services:
       <<: *db-env
       TZ: UTC
       ENABLE_LIVE: 0
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      SENTRY_ENV: ${SENTRY_ENV:-local}
+      SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE:-0.05}
+      SENTRY_PROFILES_SAMPLE_RATE: ${SENTRY_PROFILES_SAMPLE_RATE:-0.0}
+      SENTRY_RELEASE: ${GITHUB_SHA:-}
     depends_on:
       postgres:
         condition: service_healthy
       minio:
         condition: service_started
     healthcheck:
-      test: ["CMD", "true"]
+      test: ["CMD", "python", "-m", "services.etl.healthcheck"]
+      start_period: 60s
+      interval: 15s
+      timeout: 5s
+      retries: 5
     networks:
       - awa-net
     volumes:
       - awa-data:/data
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    labels:
+      org.opencontainers.image.revision: ${GITHUB_SHA:-dev}
+      org.opencontainers.image.source: https://github.com/<org>/AWA-App
   celery_worker:
     build:
       context: .
@@ -148,7 +163,7 @@ services:
       SENTRY_ENV: ${SENTRY_ENV:-local}
       SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE:-0.05}
       SENTRY_PROFILES_SAMPLE_RATE: ${SENTRY_PROFILES_SAMPLE_RATE:-0.0}
-      SENTRY_RELEASE: ${SENTRY_RELEASE:-}
+      SENTRY_RELEASE: ${GITHUB_SHA:-}
     depends_on:
       redis:
         condition: service_started
@@ -159,6 +174,15 @@ services:
     volumes:
       - awa-data:/data
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-m", "services.ingest.healthcheck", "worker"]
+      start_period: 60s
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    labels:
+      org.opencontainers.image.revision: ${GITHUB_SHA:-dev}
+      org.opencontainers.image.source: https://github.com/<org>/AWA-App
   celery_beat:
     build:
       context: .
@@ -178,7 +202,7 @@ services:
       SENTRY_ENV: ${SENTRY_ENV:-local}
       SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE:-0.05}
       SENTRY_PROFILES_SAMPLE_RATE: ${SENTRY_PROFILES_SAMPLE_RATE:-0.0}
-      SENTRY_RELEASE: ${SENTRY_RELEASE:-}
+      SENTRY_RELEASE: ${GITHUB_SHA:-}
     depends_on:
       redis:
         condition: service_started
@@ -186,6 +210,15 @@ services:
       - awa-net
     restart: unless-stopped
     profiles: ["beat"]
+    healthcheck:
+      test: ["CMD", "python", "-m", "services.ingest.healthcheck", "beat"]
+      start_period: 60s
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    labels:
+      org.opencontainers.image.revision: ${GITHUB_SHA:-dev}
+      org.opencontainers.image.source: https://github.com/<org>/AWA-App
   web:
     build: ./web
     environment:
