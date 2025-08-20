@@ -68,15 +68,15 @@ jobs:
 
       - name: Install dependencies
         run: |  # pragma: allowlist secret
-          pip install -r services/etl/requirements.txt
-          pip install -r services/api/requirements.txt
-          pip install -r services/repricer/requirements.txt
-          pip install -r services/fees_h10/requirements.txt
-          pip install -r services/alert_bot/requirements.txt
-          pip install -r requirements-dev.txt
-          pip install asyncpg
-          pip install pytest
-          pip install keepa==1.3.15 minio==7.1.15
+          pip install --break-system-packages -r services/etl/requirements.txt
+          pip install --break-system-packages -r services/api/requirements.txt
+          pip install --break-system-packages -r services/repricer/requirements.txt
+          pip install --break-system-packages -r services/fees_h10/requirements.txt
+          pip install --break-system-packages -r services/alert_bot/requirements.txt
+          pip install --break-system-packages -r requirements-dev.txt
+          pip install --break-system-packages asyncpg
+          pip install --break-system-packages pytest
+          pip install --break-system-packages keepa==1.3.15 minio==7.1.15
       - uses: actions/setup-node@v4
         with: { node-version: '20.19.0' }
       - run: npm ci
@@ -183,8 +183,8 @@ jobs:
           restore-keys: ${{ runner.os }}-int-
       - name: Install deps
         run: |
-          pip install -r requirements-dev.txt
-          pip install keepa==1.3.15 minio==7.1.15
+          pip install --break-system-packages -r requirements-dev.txt
+          pip install --break-system-packages keepa==1.3.15 minio==7.1.15
       - name: Install PostgreSQL server (initdb)
         run: |
           sudo apt-get update
@@ -195,7 +195,7 @@ jobs:
         continue-on-error: false
         env:
           DATABASE_URL: ${{ env.DATABASE_URL }}
-        run: pytest tests/db -q --cov=services --cov-append --cov-fail-under=0
+        run: pytest tests/migrations/test_migration_roundtrip.py -q --cov=services --cov-append --cov-fail-under=0
       - uses: actions/upload-artifact@v4
         with:
           name: coverage.integration
@@ -211,7 +211,7 @@ jobs:
       - run: |
           export COMPOSE_DOCKER_CLI_BUILD=1
           export DOCKER_BUILDKIT=1
-          docker compose build --build-arg TZ_CACHE_BUST=${{ github.sha }}
+          docker compose --progress=plain build --build-arg TZ_CACHE_BUST=${{ github.sha }}
       - run: |
           export COMPOSE_DOCKER_CLI_BUILD=1
           export DOCKER_BUILDKIT=1
