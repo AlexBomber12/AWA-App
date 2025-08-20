@@ -157,7 +157,27 @@ dedicated tables.
 Run `./scripts/pin_constraints.sh` whenever you update service requirements to refresh an optional `constraints.txt` for reproducible installs.
 
 ### Health checks
-Services with an HTTP API expose `/health` and use `curl -f` in their Dockerfiles. Worker containers without an API use `HEALTHCHECK CMD ["true"]` so Compose marks them as healthy as soon as the process starts.
+Each container exposes a simple probe:
+
+- `api` – HTTP `GET /health`.
+- `etl` – connects to Postgres and optionally `MINIO_ENDPOINT`.
+- `celery_worker` – connects to Redis and Postgres and pings active workers.
+- `celery_beat` – connects to Redis and Postgres and ensures a beat schedule is loaded.
+
+Start the stack and inspect status:
+
+```bash
+docker compose up -d --wait
+docker compose ps
+```
+
+All services should show `healthy`. The checks can be run directly:
+
+```bash
+docker compose exec etl python -m services.etl.healthcheck
+docker compose exec celery_worker python -m services.ingest.healthcheck worker
+docker compose exec celery_beat python -m services.ingest.healthcheck beat
+```
 
 ## Local QA checklist
 
