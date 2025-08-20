@@ -29,12 +29,13 @@ cd "$APP_DIR"
 
 write_env() {
     cat > .env.postgres <<'ENV'
-PG_USER=postgres
-PG_PASSWORD=pass # pragma: allowlist secret
-PG_DATABASE=awa
-PG_HOST=postgres
-PG_PORT=5432
-DATABASE_URL=postgresql+asyncpg://postgres:pass@postgres:5432/awa # pragma: allowlist secret
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=pass # pragma: allowlist secret
+POSTGRES_DB=awa
+POSTGRES_HOST=postgres
+PG_SYNC_DSN=postgresql+psycopg://postgres:pass@postgres:5432/awa
+PG_ASYNC_DSN=postgresql+asyncpg://postgres:pass@postgres:5432/awa
+DATABASE_URL=postgresql+asyncpg://postgres:pass@postgres:5432/awa
 NEXT_PUBLIC_API_URL=https://awapricer.lan/api
 LLM_PROVIDER=lan
 LLM_BASE_URL=http://localhost:8000
