@@ -5,91 +5,60 @@
 pytest
 ```
 
-By default, only unit tests run (integration and live are excluded to keep CI fast).
+By default only unit tests run (integration and live are excluded to keep CI fast).
 
 ## Markers
 
 unit — fast, pure unit tests (default).
 
-integration — require services (Postgres/Redis/S3/etc.). Run with:
-
+integration — require services (Postgres/MinIO/etc.). Run explicitly:
 ```bash
 pytest -m integration
 ```
 
-live — talk to real external services. Run explicitly:
-
+live — real external calls; always opt-in:
 ```bash
 pytest -m live
 ```
 
-future — tests that pin the future API/behavior, may be xfail.
+future — pins future behavior; often xfail.
 
-slow — long-running / large datasets.
+slow — long-running or large datasets.
 
-## Coverage
+## Coverage policy
 
-Coverage is enforced at 65% with --cov=services --cov-report=xml.
-CI uploads coverage.xml for external tooling.
-
-### LLM module tests
-By default, unit tests mock transports and providers. Useful envs:
-- `LLM_PROVIDER` — `lan`, `local`, `openai`, `stub` (default `lan`)
-- `LLM_TIMEOUT_SECS` — request timeout (seconds)
-- `LLM_REMOTE_URL` — override remote HTTP endpoint in tests
-
-Run locally:
+Coverage is measured on the services package and enforced at 75%:
 ```bash
-pytest tests/llm -q
+pytest -q --cov=services --cov-report=xml --cov-fail-under=75
 ```
 
-### Ingest/ETL integration tests
-These tests are marked `@pytest.mark.integration` and rely on Postgres.
+CI publishes coverage.xml for external tooling.
 
-Run them locally:
+## Ingest / ETL integration tests
+
+These require Postgres and TESTING=1.
 ```bash
 export TESTING=1
-pytest -m integration tests/etl
+pytest -m integration tests/etl -q
 ```
 
-The test_generic dialect and test_generic_raw table are for tests only and are enabled when TESTING=1.
+Tests use a test-only dialect test_generic and a staging table created by fixtures; production data is untouched.
 
-### API integration tests for ROI and /score
-To run locally:
+## API integration tests (ROI filters and /score)
+
+Point the API to a test ROI view/table via env.
 ```bash
 export TESTING=1
 export API_BASIC_USER=u
 export API_BASIC_PASS=p
 export ROI_VIEW_NAME=test_roi_view
-pytest -m integration services/api/tests
+pytest -m integration services/api/tests/test_roi_filters.py -q
+pytest -m integration services/api/tests/test_score.py -q
 ```
 
-The tests create a local test_roi_view table and point queries to it via ROI_VIEW_NAME, leaving production views untouched.
+## /stats in SQL mode
 
-### Fees integrators (Helium10 / SP) — integration tests
-These tests use a dedicated table under `FEES_RAW_TABLE` to avoid touching production tables.
-
-Run locally:
-```bash
-export TESTING=1
-export FEES_RAW_TABLE=test_fees_raw
-pytest -m integration tests/fees
-```
-
-The repository performs two-phase writes (INSERT .. DO NOTHING + UPDATE with IS DISTINCT FROM) so unchanged rows are not updated.
-
-### Logistics ETL and /stats SQL mode
-
-**Logistics upsert_many (integration)**
-```bash
-export TESTING=1
-pytest -m integration tests/logistics -q
-```
-
-The helper `repository._upsert_many_with_keys()` exists only when TESTING=1 and lets tests assert conflict/update semantics.
-
-**/stats with real SQL aggregates (integration)**
-
+Enable real aggregates with STATS_USE_SQL=1.
 ```bash
 export TESTING=1
 export STATS_USE_SQL=1
@@ -99,4 +68,36 @@ export API_BASIC_PASS=p
 pytest -m integration services/api/tests/test_stats_sql.py -q
 ```
 
-With `STATS_USE_SQL=0` (default) the API returns the stable placeholder contracts added in PR#3.
+With STATS_USE_SQL unset/0, /stats returns stable placeholder contracts.
+
+## Fees integrators (Helium10 / SP)
+
+Write to a dedicated test table chosen via FEES_RAW_TABLE.
+```bash
+export TESTING=1
+export FEES_RAW_TABLE=test_fees_raw
+pytest -m integration tests/fees -q
+```
+
+## Logistics ETL
+
+Generic upsert helper exists only when TESTING=1.
+```bash
+export TESTING=1
+pytest -m integration tests/logistics -q
+```
+
+## LLM module tests and defaults
+
+Provider is selected at call time via LLM_PROVIDER; default provider is lan. Useful envs:
+
+LLM_PROVIDER — lan | local | openai | stub (default: lan)
+
+LLM_TIMEOUT_SECS — request timeout (seconds), default 60
+
+LLM_REMOTE_URL — override remote HTTP endpoint in tests
+
+Run:
+```bash
+pytest tests/llm -q
+```
