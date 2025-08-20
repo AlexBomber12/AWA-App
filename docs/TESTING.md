@@ -27,9 +27,10 @@ slow — long-running or large datasets.
 
 Coverage policy
 
-Coverage is measured on the services package and enforced at 75%:
+Coverage is measured on the services package and enforced via the configuration in
+`pyproject.toml` (default 45%):
 
-pytest -q --cov=services --cov-report=xml --cov-fail-under=75
+pytest -q --cov=services --cov-report=xml
 
 
 CI publishes coverage.xml for external tooling.
