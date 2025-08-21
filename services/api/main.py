@@ -148,7 +148,7 @@ async def _wait_for_db() -> None:
     url = build_dsn(sync=True)
 
     delay = 0.2
-    for _ in range(10):
+    for _ in range(50):
         try:
             engine = create_engine(url)
             with engine.connect() as conn:
@@ -162,7 +162,7 @@ async def _wait_for_db() -> None:
 
 async def _wait_for_redis(url: str) -> aioredis.Redis:
     delay = 0.2
-    for _ in range(10):
+    for _ in range(50):
         try:
             r = aioredis.from_url(url, encoding="utf-8", decode_responses=True)
             await r.ping()
