@@ -14,7 +14,7 @@ from .celery_app import celery_app
 
 def check_db() -> None:
     dsn = build_dsn(sync=True).replace("+psycopg", "")
-    with psycopg.connect(dsn, timeout=2) as conn:
+    with psycopg.connect(dsn, connect_timeout=2) as conn:
         with conn.cursor() as cur:
             cur.execute("SELECT 1")
 
