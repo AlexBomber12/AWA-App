@@ -7,6 +7,9 @@
 : "${PG_PASSWORD:=pass}"
 : "${PG_DATABASE:=awa}"
 
+# ensure these variables are available to subprocesses such as alembic
+export PG_HOST PG_PORT PG_USER PG_PASSWORD PG_DATABASE
+
 set -euo pipefail
 
 # If the first argument looks like a command, run it directly.
