@@ -76,3 +76,16 @@ report ready.
 
 ## Logs
 - `ci-logs/latest/CI/3_compose-health.txt`
+---
+
+## Failing workflows
+- **CI** workflow (install-deps job)
+
+## Summary
+`pip install` failed because `constraints.txt` pinned versions that conflicted with `requirements-dev.txt` (`httpx==0.26.0`, `pandas==2.3.1`, `ruff==0.4.4`, `testcontainers==4.10.0`).
+
+## Fix
+- Update the pinned versions in `constraints.txt` to align with development requirements.
+
+## Logs
+- `ci-logs/latest/CI/install-deps.txt`
