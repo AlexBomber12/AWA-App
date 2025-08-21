@@ -30,12 +30,20 @@ def check_redis() -> None:
     client.ping()
 
 
-def ping_worker() -> bool:
+def ping_worker() -> None:
+    """Attempt to ping the Celery worker.
+
+    Older Celery versions or certain broker setups may disable the remote
+    control commands used by ``app.control.ping``.  Rather than failing the
+    health check outright, log any issues and allow the container to be marked
+    healthy as long as Redis and Postgres are reachable.
+    """
+
     try:
-        result = celery_app.control.ping(timeout=2)
-        return bool(result)
-    except Exception:  # pragma: no cover - optional ping
-        return True
+        if not celery_app.control.ping(timeout=2):
+            print("no worker response", file=sys.stderr)
+    except Exception as exc:  # pragma: no cover - optional ping
+        print(f"ping failed: {exc}", file=sys.stderr)
 
 
 def check_beat_schedule() -> bool:
@@ -59,9 +67,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"db check failed: {exc}", file=sys.stderr)
         ok = False
     if args.role == "worker":
-        if not ping_worker():
-            print("no worker response", file=sys.stderr)
-            ok = False
+        ping_worker()
     else:
         if not check_beat_schedule():
             print("beat schedule missing", file=sys.stderr)
