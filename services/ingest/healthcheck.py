@@ -5,9 +5,9 @@ Ensures the worker can reach Redis and PostgreSQL before reporting healthy.
 
 from __future__ import annotations
 
+import argparse
 import os
 import sys
-import argparse
 
 import psycopg
 import redis
@@ -71,4 +71,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
