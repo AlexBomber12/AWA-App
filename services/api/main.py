@@ -74,11 +74,8 @@ def _parse_rate_limit(s: str) -> tuple[int, int]:
 async def lifespan(app: FastAPI):
     await _wait_for_db()
     await _check_llm()
-    r = aioredis.from_url(
-        os.getenv("REDIS_URL", "redis://redis:6379/0"),
-        encoding="utf-8",
-        decode_responses=True,
-    )
+    redis_url = os.getenv("REDIS_URL", "redis://redis:6379/0")
+    r = await _wait_for_redis(redis_url)
     await FastAPILimiter.init(r)
     try:
         yield
@@ -161,6 +158,18 @@ async def _wait_for_db() -> None:
         except Exception:
             await asyncio.sleep(delay)
     raise RuntimeError("Database not available")
+
+
+async def _wait_for_redis(url: str) -> aioredis.Redis:
+    delay = 0.2
+    for _ in range(10):
+        try:
+            r = aioredis.from_url(url, encoding="utf-8", decode_responses=True)
+            await r.ping()
+            return r
+        except Exception:
+            await asyncio.sleep(delay)
+    raise RuntimeError("Redis not available")
 
 
 async def _check_llm() -> None:
