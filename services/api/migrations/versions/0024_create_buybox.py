@@ -9,16 +9,20 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.create_table(
-        "buybox",
-        sa.Column("asin", sa.String(10), primary_key=True),
-        sa.Column("price", sa.Numeric(10, 2), nullable=False),
-        sa.Column("currency", sa.String(3), nullable=False),
-        sa.Column("captured_at", sa.TIMESTAMP(timezone=True), nullable=False),
-    )
-    # TODO: confirm restored content
+    bind = op.get_bind()
+    insp = sa.inspect(bind)
+    if not insp.has_table("buybox"):
+        op.create_table(
+            "buybox",
+            sa.Column("asin", sa.String(10), primary_key=True),
+            sa.Column("price", sa.Numeric(10, 2), nullable=False),
+            sa.Column("currency", sa.String(3), nullable=False),
+            sa.Column("captured_at", sa.TIMESTAMP(timezone=True), nullable=False),
+        )
 
 
 def downgrade() -> None:
-    op.drop_table("buybox")
-    # TODO: confirm restored content
+    bind = op.get_bind()
+    insp = sa.inspect(bind)
+    if insp.has_table("buybox"):
+        op.drop_table("buybox")
