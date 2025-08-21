@@ -105,3 +105,18 @@ report ready.
 ## Logs
 - `ci-logs/latest/CI/3_compose-health.txt`
 - `ci-logs/latest/test/2_health-checks.txt`
+---
+
+## Failing workflows
+- **CI** workflow (unit job)
+- **test** workflow (test job)
+
+## Summary
+`alembic upgrade head` failed because two migrations shared the same parent revision, producing multiple heads (`0026_amazon_new_reports` and `0026_fix_refund_views`).
+
+## Fix
+- Add a merge migration `0027_merge_reports_and_refund_heads` to unify the heads.
+
+## Logs
+- `ci-logs/latest/CI/unit/10_Run migrations.txt`
+- `ci-logs/latest/test/test/13_Run Alembic migrations.txt`
