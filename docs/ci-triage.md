@@ -31,3 +31,17 @@ causing the script to crash.
 ## Logs
 - `ci-logs/latest/test/2_health-checks.txt`
 
+---
+
+## Failing workflows
+- **test** workflow (health-checks job)
+
+## Summary
+`docker compose` reported `container awa-app-celery_worker-1 is unhealthy` because the ETL entrypoint always executed `keepa_ingestor.py`, ignoring the Celery command so the worker never started.
+
+## Fix
+- Allow `services/etl/entrypoint.sh` to execute the provided command after waiting for PostgreSQL, falling back to `keepa_ingestor.py` when none is supplied.
+
+## Logs
+- `ci-logs/latest/test/0_health-checks.txt`
+- `ci-logs/latest/test/health-checks/5_Run export COMPOSE_DOCKER_CLI_BUILD=1.txt`
