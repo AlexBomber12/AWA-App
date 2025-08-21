@@ -3,9 +3,7 @@ from __future__ import annotations
 from textwrap import dedent
 
 from alembic import op
-
 from services.db.utils.views import replace_view
-
 
 revision = "0026_fix_refund_views"
 down_revision = "0025_pr4_indexes_loadlog"
@@ -42,7 +40,7 @@ def upgrade() -> None:
                 reimb_date::timestamp AS refunded_at,
                 'reimbursement'::text AS source
             FROM reimbursements_raw;
-            """,
+            """
         ),
     )
 
@@ -57,7 +55,7 @@ def upgrade() -> None:
                 SUM(refund_amount) AS refund_amount
             FROM v_refunds_txn
             GROUP BY asin, DATE(refunded_at);
-            """,
+            """
         ),
     )
 
@@ -98,7 +96,7 @@ def upgrade() -> None:
                 FROM v_refunds_txn
                 GROUP BY asin
             ) rf ON rf.asin = p.asin;
-            """,
+            """
         )
     )
 
@@ -114,7 +112,7 @@ def downgrade() -> None:
             CREATE OR REPLACE VIEW v_refund_totals AS
               SELECT asin, SUM(qty) AS refunds
                 FROM returns_raw GROUP BY asin;
-            """,
+            """
         )
     )
     op.execute(
@@ -123,7 +121,7 @@ def downgrade() -> None:
             CREATE OR REPLACE VIEW v_reimb_totals AS
               SELECT asin, SUM(amount) AS reimbursements
                 FROM reimbursements_raw GROUP BY asin;
-            """,
+            """
         )
     )
     op.execute(
@@ -161,7 +159,6 @@ def downgrade() -> None:
             JOIN keepa_offers k ON k.asin = p.asin
             LEFT JOIN v_refund_totals rt ON rt.asin = p.asin
             LEFT JOIN v_reimb_totals rbt ON rbt.asin = p.asin;
-            """,
+            """
         )
     )
-
