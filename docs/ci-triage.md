@@ -89,3 +89,19 @@ report ready.
 
 ## Logs
 - `ci-logs/latest/CI/install-deps.txt`
+
+---
+
+## Failing workflows
+- **CI** workflow (compose-health job)
+- **test** workflow (health-checks job)
+
+## Summary
+`docker compose` reported `container awa-app-celery_worker-1 is unhealthy` and `container awa-app-etl-1 is unhealthy`. The healthcheck scripts built a DSN that still pointed to `localhost`, preventing services from reaching the PostgreSQL container.
+
+## Fix
+- Expose `PG_HOST` and `PG_PORT` to services in `docker-compose.yml` so the DSN resolves to the `postgres` service.
+
+## Logs
+- `ci-logs/latest/CI/3_compose-health.txt`
+- `ci-logs/latest/test/2_health-checks.txt`
