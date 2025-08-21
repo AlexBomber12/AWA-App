@@ -120,3 +120,16 @@ report ready.
 ## Logs
 - `ci-logs/latest/CI/unit/10_Run migrations.txt`
 - `ci-logs/latest/test/test/13_Run Alembic migrations.txt`
+---
+
+## Failing workflows
+- **CI** workflow (migrations-check job)
+
+## Summary
+`alembic heads` failed with `ModuleNotFoundError: No module named 'services'` while loading migration `0023_add_storage_fee.py`. The revision imported project utilities without ensuring the repository root was on `sys.path`.
+
+## Fix
+- Append the repository root to `sys.path` in migrations before importing project modules.
+
+## Logs
+- `ci-logs/latest/CI/1_migrations-check.txt`

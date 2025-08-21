@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+from pathlib import Path
+import sys
 from textwrap import dedent
 
 from alembic import op
+
+sys.path.append(str(Path(__file__).resolve().parents[4]))
 from services.db.utils.views import replace_view
 
 revision = "0026_fix_refund_views"
