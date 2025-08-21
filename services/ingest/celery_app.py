@@ -6,7 +6,24 @@ import os
 from celery import Celery
 from celery.schedules import crontab
 
-from services.api.sentry_config import init_sentry_if_configured as _init_sentry
+
+def _init_sentry() -> None:
+    dsn = os.getenv("SENTRY_DSN", "").strip()
+    if not dsn:
+        return
+    try:
+        import sentry_sdk
+        from sentry_sdk.integrations.celery import CeleryIntegration
+    except Exception:  # pragma: no cover - optional telemetry
+        return
+    sentry_sdk.init(
+        dsn=dsn,
+        environment=os.getenv("SENTRY_ENV", "local"),
+        release=os.getenv("SENTRY_RELEASE") or os.getenv("COMMIT_SHA"),
+        send_default_pii=False,
+        integrations=[CeleryIntegration()],
+    )
+
 
 _init_sentry()
 
