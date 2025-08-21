@@ -1,6 +1,6 @@
-from textwrap import dedent
 import sys
 from pathlib import Path
+from textwrap import dedent
 
 import sqlalchemy as sa
 from sqlalchemy import inspect
