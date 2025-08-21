@@ -4,7 +4,6 @@ import sqlalchemy as sa
 from sqlalchemy import inspect
 
 from alembic import op  # type: ignore[attr-defined]
-
 from services.db.utils.views import replace_view
 
 revision = "0023_add_storage_fee"
