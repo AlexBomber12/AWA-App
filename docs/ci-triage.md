@@ -45,3 +45,17 @@ causing the script to crash.
 ## Logs
 - `ci-logs/latest/test/0_health-checks.txt`
 - `ci-logs/latest/test/health-checks/5_Run export COMPOSE_DOCKER_CLI_BUILD=1.txt`
+
+---
+
+## Failing workflows
+- **CI** workflow (compose-health job)
+
+## Summary
+The API container failed its health check because it was configured to reach PostgreSQL at `localhost`, which is inaccessible from within the container network.
+
+## Fix
+- Use the `postgres` service hostname for `DATABASE_URL` and `PG_HOST` in the compose-health job.
+
+## Logs
+- `ci-logs/latest/CI/3_compose-health.txt`
