@@ -59,3 +59,20 @@ The API container failed its health check because it was configured to reach Pos
 
 ## Logs
 - `ci-logs/latest/CI/3_compose-health.txt`
+
+---
+
+## Failing workflows
+- **CI** workflow (compose-health job)
+
+## Summary
+`docker compose` reported `container awa-app-celery_worker-1 is unhealthy`. The
+`services.ingest.healthcheck` module referenced `os` and `argparse` without
+importing them, causing the health check process to exit before Celery could
+report ready.
+
+## Fix
+- Import `os` and `argparse` in `services/ingest/healthcheck.py`.
+
+## Logs
+- `ci-logs/latest/CI/3_compose-health.txt`
