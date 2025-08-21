@@ -11,8 +11,25 @@ def build_dsn(sync: bool = True) -> str:
     missing.
     """
 
+    def _swap_localhost(u: str) -> str:
+        host = os.getenv("PG_HOST")
+        port = os.getenv("PG_PORT")
+        if host and host not in {"localhost", "127.0.0.1"}:
+            parsed = _u.urlparse(u)
+            if parsed.hostname in {"localhost", "127.0.0.1"}:
+                auth = ""
+                if parsed.username:
+                    auth = parsed.username
+                    if parsed.password:
+                        auth += f":{parsed.password}"
+                    auth += "@"
+                netloc = f"{auth}{host}:{port or parsed.port or ''}".rstrip(":")
+                u = parsed._replace(netloc=netloc).geturl()
+        return u
+
     url = os.getenv("PG_SYNC_DSN" if sync else "PG_ASYNC_DSN")
     if url:
+        url = _swap_localhost(url)
         return url.replace(
             "postgresql://",
             "postgresql+psycopg://" if sync else "postgresql+asyncpg://",
@@ -20,6 +37,7 @@ def build_dsn(sync: bool = True) -> str:
     if not url:
         other = os.getenv("PG_ASYNC_DSN" if sync else "PG_SYNC_DSN")
         if other:
+            other = _swap_localhost(other)
             if sync:
                 return other.replace("+asyncpg", "+psycopg").replace(
                     "postgresql://", "postgresql+psycopg://"
@@ -30,6 +48,7 @@ def build_dsn(sync: bool = True) -> str:
 
     url = os.getenv("DATABASE_URL")
     if url:
+        url = _swap_localhost(url)
         if "+asyncpg" in url or "+psycopg" in url:
             return (
                 url.replace("+asyncpg", "+psycopg")
