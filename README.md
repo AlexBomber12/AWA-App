@@ -153,6 +153,11 @@ dedicated tables.
 | `ads_sp_cost_daily_report` | `ads_sp_cost_daily_raw` |
 | `settlements_txn_report` | `settlements_txn_raw` |
 
+### Refund views
+`v_refunds_txn` combines rows from `returns_raw` and `reimbursements_raw` into a
+single refund model. The companion `v_refunds_summary` view aggregates those
+refund amounts by ASIN and day for simplified analysis.
+
 ### Dependency pinning
 Run `./scripts/pin_constraints.sh` whenever you update service requirements to refresh an optional `constraints.txt` for reproducible installs.
 

@@ -4,6 +4,7 @@
 - unify DSN handling and build custom Postgres image
 - fix(ci): pipeline passes with updated env defaults
 - drop and recreate refund views to prevent InvalidTableDefinition errors
+- remove temporary TODO comments from migrations
 - add migration regression test and coverage gate
 - integrate vulture and extended ruff config
 - enable Dependabot updates and docs publishing
