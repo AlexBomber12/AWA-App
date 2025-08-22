@@ -6,7 +6,9 @@ from sqlalchemy.pool import NullPool
 
 from services.common.dsn import build_dsn
 
-DATABASE_URL = os.getenv("DATABASE_URL") or build_dsn(sync=False)
+# Always derive the database URL via build_dsn so it uses the async driver
+# even if a synchronous DATABASE_URL is provided in the environment.
+DATABASE_URL = build_dsn(sync=False)
 
 pool_kwargs = {}
 if os.getenv("TESTING") == "1":
