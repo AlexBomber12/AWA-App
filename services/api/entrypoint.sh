@@ -20,10 +20,14 @@ if [[ $# -gt 0 ]]; then
 fi
 
 echo "⏳ Waiting for Postgres..."
-export PGPASSWORD="${PG_PASSWORD}"
-until pg_isready -h "$PG_HOST" -p "$PG_PORT" -U "$PG_USER" -d "$PG_DATABASE"; do
-  sleep 1
-done
+if command -v pg_isready >/dev/null 2>&1; then
+  export PGPASSWORD="${PG_PASSWORD}"
+  until pg_isready -h "$PG_HOST" -p "$PG_PORT" -U "$PG_USER" -d "$PG_DATABASE"; do
+    sleep 1
+  done
+else
+  echo "pg_isready not found; skipping DB readiness check"
+fi
 
 alembic -c "${ALEMBIC_CONFIG:-alembic.ini}" upgrade head
 exec uvicorn services.api.main:app --host 0.0.0.0 --port 8000
