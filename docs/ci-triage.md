@@ -133,3 +133,15 @@ report ready.
 
 ## Logs
 - `ci-logs/latest/CI/1_migrations-check.txt`
+---
+## Failing workflows
+- **CI** workflow (unit job)
+
+## Summary
+`ruff check` reported an unsorted import block in `services/api/main.py`, causing the lint step to fail.
+
+## Fix
+- Consolidated the LLM imports into a single ordered line in `_check_llm`.
+
+## Logs
+- `ci-logs/latest/CI/unit/7_Check code formatting.txt`
