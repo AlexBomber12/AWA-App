@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 
 import httpx
 import redis.asyncio as aioredis
+import structlog
 from asgi_correlation_id import CorrelationIdMiddleware
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -83,7 +84,8 @@ async def lifespan(app: FastAPI):
     try:
         r = await _wait_for_redis(redis_url)
         await FastAPILimiter.init(r)
-    except Exception:
+    except Exception as exc:
+        structlog.get_logger().warning("redis_unavailable", error=str(exc))
         r = None
     try:
         yield
