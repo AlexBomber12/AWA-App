@@ -78,15 +78,22 @@ async def lifespan(app: FastAPI):
     await _wait_for_db()
     await _check_llm()
     redis_url = os.getenv("REDIS_URL", "redis://redis:6379/0")
-    r = await _wait_for_redis(redis_url)
-    await FastAPILimiter.init(r)
+    r = None
+    try:
+        r = await _wait_for_redis(redis_url)
+        await FastAPILimiter.init(r)
+    except Exception:
+        if _rate_limiter_dep in app.router.dependencies:
+            app.router.dependencies.remove(_rate_limiter_dep)
+        r = None
     try:
         yield
     finally:
-        try:
-            await FastAPILimiter.close()
-        except RuntimeError:
-            pass
+        if r is not None:
+            try:
+                await FastAPILimiter.close()
+            except RuntimeError:
+                pass
 
 
 app = FastAPI(lifespan=lifespan)
@@ -116,11 +123,10 @@ if origins or origin_regex:
 
 _default = os.getenv("RATE_LIMIT_DEFAULT", "100/minute")
 _times, _seconds = _parse_rate_limit(_default)
-app.router.dependencies.append(
-    Depends(
-        RateLimiter(times=_times, seconds=_seconds, identifier=client_ip_identifier)
-    )
+_rate_limiter_dep = Depends(
+    RateLimiter(times=_times, seconds=_seconds, identifier=client_ip_identifier)
 )
+app.router.dependencies.append(_rate_limiter_dep)
 
 
 @app.get("/ready", status_code=status.HTTP_200_OK, include_in_schema=False)
