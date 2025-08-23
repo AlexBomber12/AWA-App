@@ -22,7 +22,10 @@ fi
 echo "⏳ Waiting for Postgres..."
 if command -v pg_isready >/dev/null 2>&1; then
   export PGPASSWORD="${PG_PASSWORD}"
-  until pg_isready -h "$PG_HOST" -p "$PG_PORT" -U "$PG_USER" -d "$PG_DATABASE"; do
+  # pg_isready exits with a non-zero status while the server is
+  # unavailable.  Under `set -e` this would normally terminate the
+  # script, so explicitly ignore the exit code inside the loop.
+  until pg_isready -h "$PG_HOST" -p "$PG_PORT" -U "$PG_USER" -d "$PG_DATABASE" >/dev/null 2>&1; do
     sleep 1
   done
 else
