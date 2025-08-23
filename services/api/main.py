@@ -12,6 +12,7 @@ from fastapi_limiter.depends import RateLimiter
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.requests import Request
+from starlette.responses import Response
 
 from alembic.config import Config
 from alembic.script import ScriptDirectory
@@ -83,8 +84,6 @@ async def lifespan(app: FastAPI):
         r = await _wait_for_redis(redis_url)
         await FastAPILimiter.init(r)
     except Exception:
-        if _rate_limiter_dep in app.router.dependencies:
-            app.router.dependencies.remove(_rate_limiter_dep)
         r = None
     try:
         yield
@@ -123,9 +122,15 @@ if origins or origin_regex:
 
 _default = os.getenv("RATE_LIMIT_DEFAULT", "100/minute")
 _times, _seconds = _parse_rate_limit(_default)
-_rate_limiter_dep = Depends(
-    RateLimiter(times=_times, seconds=_seconds, identifier=client_ip_identifier)
-)
+
+
+async def _rate_limit_dependency(request: Request, response: Response) -> None:
+    if FastAPILimiter.redis:
+        limiter = RateLimiter(times=_times, seconds=_seconds, identifier=client_ip_identifier)
+        await limiter(request, response)
+
+
+_rate_limiter_dep = Depends(_rate_limit_dependency)
 app.router.dependencies.append(_rate_limiter_dep)
 
 
