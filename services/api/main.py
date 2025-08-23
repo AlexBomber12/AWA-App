@@ -128,7 +128,9 @@ _times, _seconds = _parse_rate_limit(_default)
 
 async def _rate_limit_dependency(request: Request, response: Response) -> None:
     if FastAPILimiter.redis:
-        limiter = RateLimiter(times=_times, seconds=_seconds, identifier=client_ip_identifier)
+        limiter = RateLimiter(
+            times=_times, seconds=_seconds, identifier=client_ip_identifier
+        )
         await limiter(request, response)
 
 
@@ -207,3 +209,6 @@ async def _check_llm() -> None:
             await cli.get(f"{LAN_BASE}/health")
     except Exception:
         os.environ["LLM_PROVIDER"] = LLM_PROVIDER_FALLBACK
+
+
+__all__ = ["app", "ready"]

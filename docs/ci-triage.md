@@ -160,3 +160,20 @@ email watcher, preventing migrations from running during startup.
 
 ## Logs
 - `ci-logs/latest/test/1_health-checks.txt`
+---
+## Failing workflows
+- **CI** workflow (unit job)
+
+## Summary
+`ruff format --check` reported misformatted code in `services/api/main.py`.
+
+## Fix
+- Reformat `services/api/main.py` with `ruff format`.
+
+## Logs
+- `ci-logs/latest/CI/0_unit.txt`
+
+```text
+Would reformat: services/api/main.py
+1 file would be reformatted, 258 files already formatted
+```
