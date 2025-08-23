@@ -145,3 +145,18 @@ report ready.
 
 ## Logs
 - `ci-logs/latest/CI/unit/7_Check code formatting.txt`
+---
+## Failing workflows
+- **test** workflow (health-checks job)
+
+## Summary
+`docker compose` reported `container awa-app-api-1 exited (1)` because the API image
+lacked the shared database utilities and the `imapclient` package required by the
+email watcher, preventing migrations from running during startup.
+
+## Fix
+- Copy `services/db` into the API image.
+- Declare `imapclient` in API requirements and constraints.
+
+## Logs
+- `ci-logs/latest/test/1_health-checks.txt`
