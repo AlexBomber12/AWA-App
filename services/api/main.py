@@ -47,7 +47,10 @@ async def client_ip_identifier(request: Request) -> str:
         xri = request.headers.get("x-real-ip")
         if xri:
             return xri.strip()
-    return request.client.host or "unknown"
+    client = request.client
+    if not client or not getattr(client, "host", None):
+        return "unknown"
+    return client.host
 
 
 def _parse_rate_limit(s: str) -> tuple[int, int]:
