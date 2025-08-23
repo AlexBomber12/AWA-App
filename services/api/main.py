@@ -183,11 +183,7 @@ async def _check_llm() -> None:
     """
 
     try:
-        from services.common.llm import (
-            LAN_BASE,
-            LLM_PROVIDER,
-            LLM_PROVIDER_FALLBACK,
-        )
+        from services.common.llm import LAN_BASE, LLM_PROVIDER, LLM_PROVIDER_FALLBACK
     except Exception:
         return
 
