@@ -11,6 +11,7 @@ COPY services/api/ ./services/api
 COPY services/common/ ./services/common
 COPY services/ingest/ ./services/ingest
 COPY services/etl/ ./services/etl
+COPY services/db/ ./services/db
 # copy shared API routers
 COPY api/ ./api
 # configuration files for migrations

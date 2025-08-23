@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 
 import httpx
 import redis.asyncio as aioredis
+import structlog
 from asgi_correlation_id import CorrelationIdMiddleware
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -12,6 +13,7 @@ from fastapi_limiter.depends import RateLimiter
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.requests import Request
+from starlette.responses import Response
 
 from alembic.config import Config
 from alembic.script import ScriptDirectory
@@ -78,15 +80,21 @@ async def lifespan(app: FastAPI):
     await _wait_for_db()
     await _check_llm()
     redis_url = os.getenv("REDIS_URL", "redis://redis:6379/0")
-    r = await _wait_for_redis(redis_url)
-    await FastAPILimiter.init(r)
+    r = None
+    try:
+        r = await _wait_for_redis(redis_url)
+        await FastAPILimiter.init(r)
+    except Exception as exc:
+        structlog.get_logger().warning("redis_unavailable", error=str(exc))
+        r = None
     try:
         yield
     finally:
-        try:
-            await FastAPILimiter.close()
-        except RuntimeError:
-            pass
+        if r is not None:
+            try:
+                await FastAPILimiter.close()
+            except RuntimeError:
+                pass
 
 
 app = FastAPI(lifespan=lifespan)
@@ -116,11 +124,16 @@ if origins or origin_regex:
 
 _default = os.getenv("RATE_LIMIT_DEFAULT", "100/minute")
 _times, _seconds = _parse_rate_limit(_default)
-app.router.dependencies.append(
-    Depends(
-        RateLimiter(times=_times, seconds=_seconds, identifier=client_ip_identifier)
-    )
-)
+
+
+async def _rate_limit_dependency(request: Request, response: Response) -> None:
+    if FastAPILimiter.redis:
+        limiter = RateLimiter(times=_times, seconds=_seconds, identifier=client_ip_identifier)
+        await limiter(request, response)
+
+
+_rate_limiter_dep = Depends(_rate_limit_dependency)
+app.router.dependencies.append(_rate_limiter_dep)
 
 
 @app.get("/ready", status_code=status.HTTP_200_OK, include_in_schema=False)
@@ -183,11 +196,7 @@ async def _check_llm() -> None:
     """
 
     try:
-        from services.common.llm import (
-            LAN_BASE,
-            LLM_PROVIDER,
-            LLM_PROVIDER_FALLBACK,
-        )
+        from services.common.llm import LAN_BASE, LLM_PROVIDER, LLM_PROVIDER_FALLBACK
     except Exception:
         return
 
