@@ -176,7 +176,20 @@ async def _wait_for_redis(url: str) -> aioredis.Redis:
 
 
 async def _check_llm() -> None:
-    from services.common.llm import LAN_BASE, LLM_PROVIDER, LLM_PROVIDER_FALLBACK
+    """Verify the configured LLM provider is reachable.
+
+    Any import or network failure should not block application startup; instead
+    we fall back to the stub provider so the service can continue running.
+    """
+
+    try:
+        from services.common.llm import (
+            LAN_BASE,
+            LLM_PROVIDER,
+            LLM_PROVIDER_FALLBACK,
+        )
+    except Exception:
+        return
 
     if LLM_PROVIDER != "lan":
         return
