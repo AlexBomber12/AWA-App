@@ -172,3 +172,8 @@ email watcher, preventing migrations from running during startup.
 
 ## Logs
 - `ci-logs/latest/CI/0_unit.txt`
+
+```text
+Would reformat: services/api/main.py
+1 file would be reformatted, 258 files already formatted
+```
