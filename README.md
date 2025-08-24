@@ -55,8 +55,8 @@ need different accounts.
 async-friendly variant:
 
 ```
-PG_SYNC_DSN=postgresql+psycopg://postgres:pass@localhost:5432/awa  # pragma: allowlist secret
-PG_ASYNC_DSN=postgresql+asyncpg://postgres:pass@localhost:5432/awa  # pragma: allowlist secret
+PG_SYNC_DSN=postgresql+psycopg://postgres:pass@postgres:5432/awa  # pragma: allowlist secret
+PG_ASYNC_DSN=postgresql+asyncpg://postgres:pass@postgres:5432/awa  # pragma: allowlist secret
 DATABASE_URL=$PG_ASYNC_DSN  # pragma: allowlist secret
 ```
 Services and tests read these values automatically.
@@ -64,11 +64,13 @@ Services and tests read these values automatically.
 The `.env.example` file also defines `PG_USER`, `PG_PASSWORD`, `PG_DATABASE`,
 `PG_HOST` and `PG_PORT`. These mirror the `POSTGRES_*` variables and are
 exported by `docker-compose.yml` so a valid DSN can be constructed even when
-`PG_SYNC_DSN` or `PG_ASYNC_DSN` are not provided.
+`PG_SYNC_DSN` or `PG_ASYNC_DSN` are not provided. Containers address each
+other by service name (`postgres:5432`, `redis:6379`, `minio:9000`,
+`api:8000`) rather than `localhost`.
 
 ### Running tests
 
-Start Postgres, Redis and MinIO before executing the test suite:
+Before running tests, start the stack and wait for services to become healthy:
 
 ```bash
 docker compose up -d --wait
@@ -97,7 +99,7 @@ make db-downgrade  # roll back to base
 make db-reset      # rebuild schema from scratch
 ```
 
-CI and local development both connect to Postgres at `localhost:5432` using a
+CI and local development connect to Postgres at `postgres:5432` using a
 synchronous DSN for Alembic and an async variant for the application layer.
 
 
