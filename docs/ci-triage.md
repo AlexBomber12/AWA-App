@@ -177,3 +177,20 @@ email watcher, preventing migrations from running during startup.
 Would reformat: services/api/main.py
 1 file would be reformatted, 258 files already formatted
 ```
+
+---
+
+## Failing workflows
+- **CI** workflow (compose-health job)
+
+## Summary
+`docker compose` reported `container awa-app-celery_worker-1 is unhealthy`. The
+healthcheck scripts now retry failed probes, which can take longer than the
+5 s timeout, causing Docker to mark the service unhealthy before the checks finish.
+
+## Fix
+- Widen healthcheck `timeout` to 25 s for ETL, Celery worker, and Celery beat so
+  internal retries can complete.
+
+## Logs
+- `ci-logs/latest/CI/3_compose-health.txt`
