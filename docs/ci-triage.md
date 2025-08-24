@@ -194,3 +194,17 @@ healthcheck scripts now retry failed probes, which can take longer than the
 
 ## Logs
 - `ci-logs/latest/CI/3_compose-health.txt`
+
+---
+
+## Failing workflows
+- **logs-after-ci** workflow (gather-and-commit job)
+
+## Summary
+GitHub Actions reported `Invalid workflow file` because line 22 in `.github/workflows/logs-after-ci.yml` was outside the multi-line `if` block, leaving an orphaned `&&` expression.
+
+## Fix
+- Move the explanatory comment above the `if` block so the entire condition remains within the YAML scalar.
+
+## Logs
+- No log file was generated; the workflow failed before execution.
