@@ -38,25 +38,25 @@ jobs:
           DOCKER_BUILDKIT: "1"
           GITHUB_SHA: ${{ github.sha }}
         run: |
-          docker compose --progress=plain build --build-arg TZ_CACHE_BUST=${GITHUB_SHA}
+          docker compose --env-file .env.ci --progress=plain build --build-arg TZ_CACHE_BUST=${GITHUB_SHA}
 
       - name: Up stack and wait
         env:
           COMPOSE_DOCKER_CLI_BUILD: "1"
           DOCKER_BUILDKIT: "1"
         run: |
-          docker compose up -d --wait
+          docker compose --env-file .env.ci up -d --wait
 
       - name: Check health
         run: |
-          docker compose ps --format 'table {{.Name}}\t{{.State}}\t{{.Health}}' | tee ps.txt
+          docker compose --env-file .env.ci ps --format 'table {{.Name}}\t{{.State}}\t{{.Health}}' | tee ps.txt
           if grep -E '\b(unhealthy|starting|exited)\b' ps.txt; then
             echo "::group::docker compose logs"
-            docker compose logs --no-color --since=30m || true
+            docker compose --env-file .env.ci logs --no-color --since=30m || true
             echo "::endgroup::"
             exit 1
           fi
 
       - name: Tear down (always)
         if: always()
-        run: docker compose down -v --remove-orphans
+        run: docker compose --env-file .env.ci down -v --remove-orphans
