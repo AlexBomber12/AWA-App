@@ -1,0 +1,67 @@
+# Logs for run on branch main
+- Workflow run: CI
+- Run ID: 17194580942
+- Conclusion: failure
+- SHA: d9c0ea4555f3357533b0ce604011ad24a70e2478
+
+## Files
+- ci-logs/latest/README.md
+- ci-logs/latest/run.txt
+- ci-logs/latest/CI/0_unit.txt
+- ci-logs/latest/CI/unit/6_Install deps.txt
+- ci-logs/latest/CI/unit/1_Set up job.txt
+- ci-logs/latest/CI/unit/26_Stop containers.txt
+- ci-logs/latest/CI/unit/5_Run actions_setup-python@v5.txt
+- ci-logs/latest/CI/unit/27_Complete job.txt
+- ci-logs/latest/CI/unit/4_Load env.txt
+- ci-logs/latest/CI/unit/3_Run actions_checkout@v5.txt
+- ci-logs/latest/CI/unit/25_Post Run actions_checkout@v5.txt
+- ci-logs/latest/CI/unit/2_Initialize containers.txt
+- ci-logs/latest/CI/unit/7_Check code formatting.txt
+- ci-logs/latest/test/2_test.txt
+- ci-logs/latest/test/health-checks/7_Tear down.txt
+- ci-logs/latest/test/health-checks/1_Set up job.txt
+- ci-logs/latest/test/health-checks/15_Complete job.txt
+- ci-logs/latest/test/health-checks/14_Post Run actions_checkout@v5.txt
+- ci-logs/latest/test/health-checks/2_Run actions_checkout@v5.txt
+- ci-logs/latest/test/health-checks/5_Run export COMPOSE_DOCKER_CLI_BUILD=1.txt
+- ci-logs/latest/test/health-checks/4_Run export COMPOSE_DOCKER_CLI_BUILD=1.txt
+- ci-logs/latest/test/health-checks/3_Run if [ ! -f .env ]; then cp .env.postgres .env; fi.txt
+- ci-logs/latest/test/1_integration-db.txt
+- ci-logs/latest/test/0_health-checks.txt
+- ci-logs/latest/test/test/9_Run npm ci.txt
+- ci-logs/latest/test/test/12_Wait for DB.txt
+- ci-logs/latest/test/test/13_Run Alembic migrations.txt
+- ci-logs/latest/test/test/32_Stop containers.txt
+- ci-logs/latest/test/test/1_Set up job.txt
+- ci-logs/latest/test/test/5_Run actions_setup-python@v5.txt
+- ci-logs/latest/test/test/31_Post Run actions_checkout@v5.txt
+- ci-logs/latest/test/test/7_Install dependencies.txt
+- ci-logs/latest/test/test/4_Load env.txt
+- ci-logs/latest/test/test/30_Post Run actions_setup-python@v5.txt
+- ci-logs/latest/test/test/3_Run actions_checkout@v5.txt
+- ci-logs/latest/test/test/28_Post Run actions_setup-node@v4.txt
+- ci-logs/latest/test/test/10_Run npm run build --if-present.txt
+- ci-logs/latest/test/test/6_Cache tools.txt
+- ci-logs/latest/test/test/33_Complete job.txt
+- ci-logs/latest/test/test/11_Install PostgreSQL server (initdb).txt
+- ci-logs/latest/test/test/2_Initialize containers.txt
+- ci-logs/latest/test/test/8_Run actions_setup-node@v4.txt
+- ci-logs/latest/test/test/29_Post Cache tools.txt
+- ci-logs/latest/test/test/16_Dump Postgres logs.txt
+- ci-logs/latest/test/test/14_pytest.txt
+- ci-logs/latest/test/integration-db/20_Stop containers.txt
+- ci-logs/latest/test/integration-db/1_Set up job.txt
+- ci-logs/latest/test/integration-db/5_Run actions_setup-python@v5.txt
+- ci-logs/latest/test/integration-db/7_Install deps.txt
+- ci-logs/latest/test/integration-db/9_Run migration regression test.txt
+- ci-logs/latest/test/integration-db/4_Load env.txt
+- ci-logs/latest/test/integration-db/3_Run actions_checkout@v5.txt
+- ci-logs/latest/test/integration-db/10_Run actions_upload-artifact@v4.txt
+- ci-logs/latest/test/integration-db/21_Complete job.txt
+- ci-logs/latest/test/integration-db/8_Install PostgreSQL server (initdb).txt
+- ci-logs/latest/test/integration-db/6_Cache tools.txt
+- ci-logs/latest/test/integration-db/2_Initialize containers.txt
+- ci-logs/latest/test/integration-db/17_Post Cache tools.txt
+- ci-logs/latest/test/integration-db/19_Post Run actions_checkout@v5.txt
+- ci-logs/latest/test/integration-db/18_Post Run actions_setup-python@v5.txt
