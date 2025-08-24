@@ -61,6 +61,20 @@ DATABASE_URL=$PG_ASYNC_DSN  # pragma: allowlist secret
 ```
 Services and tests read these values automatically.
 
+The `.env.example` file also defines `PG_USER`, `PG_PASSWORD`, `PG_DATABASE`,
+`PG_HOST` and `PG_PORT`. These mirror the `POSTGRES_*` variables and are
+exported by `docker-compose.yml` so a valid DSN can be constructed even when
+`PG_SYNC_DSN` or `PG_ASYNC_DSN` are not provided.
+
+### Running tests
+
+Start Postgres, Redis and MinIO before executing the test suite:
+
+```bash
+docker compose up -d --wait
+pytest -q
+```
+
 ### Continuous Integration
 
 The GitHub Actions test workflow uses a Postgres service container. It waits

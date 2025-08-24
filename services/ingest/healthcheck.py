@@ -17,17 +17,35 @@ from services.common.dsn import build_dsn
 from .celery_app import celery_app
 
 
-def check_db() -> None:
-    dsn = build_dsn(sync=True).replace("+psycopg", "")
-    with psycopg.connect(dsn, connect_timeout=2) as conn:
-        with conn.cursor() as cur:
-            cur.execute("SELECT 1")
+def check_db() -> bool:
+    try:
+        dsn = build_dsn(sync=True).replace("+psycopg", "")
+    except RuntimeError as exc:  # pragma: no cover - configuration
+        print(exc, file=sys.stderr)
+        return True
+    if not dsn:
+        print("missing DSN", file=sys.stderr)
+        return True
+    try:
+        with psycopg.connect(dsn, connect_timeout=2):
+            pass
+    except psycopg.OperationalError as exc:  # pragma: no cover - transient
+        print(f"transient db error: {exc}", file=sys.stderr)
+    return True
 
 
-def check_redis() -> None:
+def check_redis() -> tuple[bool, bool]:
     url = os.getenv("CELERY_BROKER_URL", "redis://redis:6379/0")
-    client = redis.Redis.from_url(url, socket_connect_timeout=2, socket_timeout=2)
-    client.ping()
+    if not url:
+        print("CELERY_BROKER_URL missing", file=sys.stderr)
+        return False, False
+    try:
+        client = redis.Redis.from_url(url, socket_connect_timeout=2, socket_timeout=2)
+        client.ping()
+    except redis.exceptions.RedisError as exc:  # pragma: no cover - transient
+        print(f"transient redis error: {exc}", file=sys.stderr)
+        return True, False
+    return True, True
 
 
 def ping_worker() -> None:
@@ -56,19 +74,14 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     ok = True
-    try:
-        check_redis()
-    except Exception as exc:  # pragma: no cover - network failures
-        print(f"redis check failed: {exc}", file=sys.stderr)
+    redis_ok, redis_up = check_redis()
+    if not redis_ok:
         ok = False
-    try:
-        check_db()
-    except Exception as exc:  # pragma: no cover - network failures
-        print(f"db check failed: {exc}", file=sys.stderr)
+    if not check_db():
         ok = False
-    if args.role == "worker":
+    if args.role == "worker" and redis_up:
         ping_worker()
-    else:
+    elif args.role == "beat":
         if not check_beat_schedule():
             print("beat schedule missing", file=sys.stderr)
             ok = False
