@@ -34,17 +34,18 @@ def check_db() -> bool:
     return True
 
 
-def check_redis() -> bool:
+def check_redis() -> tuple[bool, bool]:
     url = os.getenv("CELERY_BROKER_URL", "redis://redis:6379/0")
     if not url:
         print("CELERY_BROKER_URL missing", file=sys.stderr)
-        return False
+        return False, False
     try:
         client = redis.Redis.from_url(url, socket_connect_timeout=2, socket_timeout=2)
         client.ping()
     except redis.exceptions.RedisError as exc:  # pragma: no cover - transient
         print(f"transient redis error: {exc}", file=sys.stderr)
-    return True
+        return True, False
+    return True, True
 
 
 def ping_worker() -> None:
@@ -73,13 +74,14 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     ok = True
-    if not check_redis():
+    redis_ok, redis_up = check_redis()
+    if not redis_ok:
         ok = False
     if not check_db():
         ok = False
-    if args.role == "worker":
+    if args.role == "worker" and redis_up:
         ping_worker()
-    else:
+    elif args.role == "beat":
         if not check_beat_schedule():
             print("beat schedule missing", file=sys.stderr)
             ok = False

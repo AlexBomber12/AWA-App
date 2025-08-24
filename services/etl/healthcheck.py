@@ -1,3 +1,8 @@
+"""ETL service health checks.
+
+Ensures the process can reach PostgreSQL and MinIO before reporting healthy.
+"""
+
 from __future__ import annotations
 
 import os
