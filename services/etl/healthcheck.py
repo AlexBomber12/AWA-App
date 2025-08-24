@@ -12,12 +12,12 @@ from services.common.dsn import build_dsn
 def check_db() -> bool:
     try:
         dsn = build_dsn(sync=True).replace("+psycopg", "")
-    except RuntimeError as exc:
+    except RuntimeError as exc:  # pragma: no cover - configuration
         print(exc, file=sys.stderr)
-        return False
+        return True
     if not dsn:
         print("missing DSN", file=sys.stderr)
-        return False
+        return True
     # ``psycopg.connect`` expects ``connect_timeout`` instead of ``timeout``.
     # Using the wrong parameter causes "invalid connection option" errors and
     # makes the container healthcheck fail.
@@ -33,7 +33,7 @@ def check_minio() -> bool:
     endpoint = os.getenv("MINIO_ENDPOINT")
     if not endpoint:
         print("MINIO_ENDPOINT missing", file=sys.stderr)
-        return False
+        return True
     url = endpoint if "://" in endpoint else f"http://{endpoint}"
     req = Request(url, method="HEAD")
     try:

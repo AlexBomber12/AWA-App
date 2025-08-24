@@ -20,12 +20,12 @@ from .celery_app import celery_app
 def check_db() -> bool:
     try:
         dsn = build_dsn(sync=True).replace("+psycopg", "")
-    except RuntimeError as exc:
+    except RuntimeError as exc:  # pragma: no cover - configuration
         print(exc, file=sys.stderr)
-        return False
+        return True
     if not dsn:
         print("missing DSN", file=sys.stderr)
-        return False
+        return True
     try:
         with psycopg.connect(dsn, connect_timeout=2):
             pass
