@@ -1,0 +1,62 @@
+name: compose-e2e
+on:
+  push:
+    branches: [dev, main]
+  pull_request:
+
+jobs:
+  compose-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt') }}
+
+      - name: Write CI env
+        run: |
+          cat > .env.ci << 'ENV'
+          PG_HOST=postgres
+          PG_PORT=5432
+          PG_USER=postgres
+          PG_PASSWORD=pass
+          PG_DATABASE=awa
+          PG_SYNC_DSN=postgresql+psycopg://postgres:pass@postgres:5432/awa
+          PG_ASYNC_DSN=postgresql+asyncpg://postgres:pass@postgres:5432/awa
+          DATABASE_URL=${PG_ASYNC_DSN}
+          REDIS_URL=redis://redis:6379/0
+          CELERY_BROKER_URL=redis://redis:6379/0
+          CELERY_RESULT_BACKEND=redis://redis:6379/1
+          MINIO_ENDPOINT=minio:9000
+          ENV
+
+      - name: Build images
+        env:
+          COMPOSE_DOCKER_CLI_BUILD: "1"
+          DOCKER_BUILDKIT: "1"
+          GITHUB_SHA: ${{ github.sha }}
+        run: |
+          docker compose --progress=plain build --build-arg TZ_CACHE_BUST=${GITHUB_SHA}
+
+      - name: Up stack and wait
+        env:
+          COMPOSE_DOCKER_CLI_BUILD: "1"
+          DOCKER_BUILDKIT: "1"
+        run: |
+          docker compose up -d --wait
+
+      - name: Check health
+        run: |
+          docker compose ps --format 'table {{.Name}}\t{{.State}}\t{{.Health}}' | tee ps.txt
+          if grep -E '\b(unhealthy|starting|exited)\b' ps.txt; then
+            echo "::group::docker compose logs"
+            docker compose logs --no-color --since=30m || true
+            echo "::endgroup::"
+            exit 1
+          fi
+
+      - name: Tear down (always)
+        if: always()
+        run: docker compose down -v --remove-orphans

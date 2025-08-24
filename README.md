@@ -68,12 +68,15 @@ exported by `docker-compose.yml` so a valid DSN can be constructed even when
 
 ### Running tests
 
-Start Postgres, Redis and MinIO before executing the test suite:
+Before running tests, start the stack with:
 
 ```bash
 docker compose up -d --wait
 pytest -q
 ```
+
+Services address each other by service name (`postgres:5432`, `redis:6379`,
+`minio:9000`, `api:8000`) rather than `localhost`.
 
 ### Continuous Integration
 
