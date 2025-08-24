@@ -18,7 +18,11 @@ from .celery_app import celery_app
 
 
 def check_db() -> bool:
-    dsn = build_dsn(sync=True).replace("+psycopg", "")
+    try:
+        dsn = build_dsn(sync=True).replace("+psycopg", "")
+    except RuntimeError as exc:
+        print(exc, file=sys.stderr)
+        return False
     if not dsn:
         print("missing DSN", file=sys.stderr)
         return False
