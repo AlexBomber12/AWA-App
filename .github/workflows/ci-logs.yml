@@ -1,0 +1,110 @@
+name: ci-logs
+on:
+  workflow_run:
+    workflows: ["CI", "compose-e2e", "test"]  # include your main workflows
+    types: [completed]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  collect-and-commit:
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event.workflow_run.conclusion == 'failure' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout target repo at the triggering SHA (or main)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_branch || 'main' }}
+          fetch-depth: 0
+
+      - name: Prepare directories
+        run: |
+          set -Eeuo pipefail
+          mkdir -p ci-logs/latest/CI
+          mkdir -p ci-logs/latest/CI/unit
+          mkdir -p ci-logs/latest/CI/migrations-check
+          mkdir -p ci-logs/latest/CI/compose-health
+          mkdir -p ci-logs/latest/test
+          mkdir -p ci-logs/latest/Docs/publish
+
+      # Option A: download artifacts produced by the main workflows (preferred)
+      - name: Download artifacts from triggering workflow
+        uses: actions/download-artifact@v4
+        with:
+          # If you name artifacts in CI jobs ("coverage", "docker-logs", etc.), list them here
+          pattern: '*'
+          path: ci-logs/latest/_artifacts
+        continue-on-error: true
+
+      # Option B: re-run summary commands to reconstruct logs (fallback)
+      # (only if your CI didn't upload artifacts)
+      - name: Reconstruct minimal logs (fallback)
+        run: |
+          echo "Run ID: ${{ github.event.workflow_run.id }}" > ci-logs/latest/CI/0_run.txt
+          echo "Conclusion: ${{ github.event.workflow_run.conclusion }}" >> ci-logs/latest/CI/0_run.txt
+          # Add any API calls or GH CLI summary if needed
+        shell: bash
+        continue-on-error: true
+
+      - name: Normalize filenames for git (no NUL/CRLF)
+        run: |
+          set -Eeuo pipefail
+          find ci-logs/latest -type f -print0 | xargs -0 -I{} bash -lc 'iconv -f UTF-8 -t UTF-8 "{}" -o "{}" || true'
+
+      - name: Write triage index
+        run: |
+          set -Eeuo pipefail
+          {
+            echo "# Latest CI logs"
+            echo ""
+            echo "- Run: ${{ github.event.workflow_run.id }}"
+            echo "- Workflow: ${{ github.event.workflow_run.name }}"
+            echo "- Conclusion: ${{ github.event.workflow_run.conclusion }}"
+            echo "- SHA: ${{ github.event.workflow_run.head_sha }}"
+            echo ""
+            echo "## Folders"
+            find ci-logs/latest -maxdepth 2 -type d | sed 's#^#- #'
+            echo ""
+            echo "## Files"
+            find ci-logs/latest -type f | sed 's#^#- #'
+          } > ci-logs/latest/README.md
+
+      - name: Git commit logs tree
+        env:
+          GH_USER_NAME: "ci-logs-bot"
+          GH_USER_EMAIL: "ci-logs-bot@users.noreply.github.com"
+        run: |
+          set -Eeuo pipefail
+          git config user.name  "${GH_USER_NAME}"
+          git config user.email "${GH_USER_EMAIL}"
+
+          # Choose strategy:
+          # 1) Commit to a dedicated branch/PR (recommended)
+          BR="ci-logs/${{ github.run_id }}"
+          git checkout -B "$BR"
+
+          # Avoid huge diffs by resetting previous latest logs (optional):
+          # rm -rf ci-logs/latest/*
+
+          git add -A ci-logs/latest
+          if git diff --cached --quiet; then
+            echo "No log changes to commit."
+            exit 0
+          fi
+          git commit -m "ci-logs: update latest logs for run ${{ github.event.workflow_run.id }}"
+
+          # push and open/update PR
+          git push -f origin "$BR"
+
+      - name: Open or update PR for logs
+        uses: peter-evans/create-pull-request@v6
+        with:
+          branch: ci-logs/${{ github.run_id }}
+          title: "ci-logs: update latest logs (run ${{ github.run_id }})"
+          body: "Automated logs update from workflow_run `${{ github.event.workflow_run.name }}`"
+          commit-message: "ci-logs: update"
+          labels: ci-logs
+          base: ${{ github.event.workflow_run.head_branch || 'main' }}
