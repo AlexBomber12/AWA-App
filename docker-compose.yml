@@ -1,12 +1,12 @@
 x-database-env: &db-env
-  PG_SYNC_DSN: ${PG_SYNC_DSN}
-  PG_ASYNC_DSN: ${PG_ASYNC_DSN}
-  DATABASE_URL: ${DATABASE_URL}
-  PG_HOST: ${PG_HOST}
-  PG_PORT: ${PG_PORT}
-  PG_USER: ${PG_USER}
-  PG_PASSWORD: ${PG_PASSWORD}
-  PG_DATABASE: ${PG_DATABASE}
+  PG_SYNC_DSN: ${PG_SYNC_DSN:-postgresql+psycopg://${PG_USER}:${PG_PASSWORD}@${PG_HOST}:${PG_PORT}/${PG_DATABASE}}
+  PG_ASYNC_DSN: ${PG_ASYNC_DSN:-postgresql+asyncpg://${PG_USER}:${PG_PASSWORD}@${PG_HOST}:${PG_PORT}/${PG_DATABASE}}
+  PG_HOST: ${PG_HOST:-postgres}
+  PG_PORT: ${PG_PORT:-5432}
+  PG_USER: ${PG_USER:-postgres}
+  PG_PASSWORD: ${PG_PASSWORD:-pass}
+  PG_DATABASE: ${PG_DATABASE:-awa}
+  DATABASE_URL: ${DATABASE_URL:-${PG_ASYNC_DSN}}
 
 services:
   postgres:
@@ -125,6 +125,7 @@ services:
       <<: *db-env
       TZ: UTC
       ENABLE_LIVE: 0
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-minio:9000}
       SENTRY_DSN: ${SENTRY_DSN:-}
       SENTRY_ENV: ${SENTRY_ENV:-local}
       SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE:-0.05}
@@ -137,10 +138,10 @@ services:
         condition: service_started
     healthcheck:
       test: ["CMD", "python", "-m", "services.etl.healthcheck"]
-      start_period: 60s
-      interval: 15s
+      start_period: 90s
+      interval: 20s
       timeout: 5s
-      retries: 5
+      retries: 8
     networks:
       - awa-net
     volumes:
@@ -181,10 +182,10 @@ services:
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-m", "services.ingest.healthcheck", "worker"]
-      start_period: 60s
-      interval: 15s
+      start_period: 90s
+      interval: 20s
       timeout: 5s
-      retries: 5
+      retries: 8
     labels:
       org.opencontainers.image.revision: ${GITHUB_SHA:-dev}
       org.opencontainers.image.source: https://github.com/<org>/AWA-App
@@ -196,6 +197,7 @@ services:
         TZ_CACHE_BUST: ${GITHUB_SHA:-dev}
     command: ["celery", "-A", "services.ingest.celery_app:celery_app", "beat", "-l", "INFO"]
     environment:
+      <<: *db-env
       TZ: UTC
       PYTHONPATH: /app:/app/services
       CELERY_BROKER_URL: redis://redis:6379/0

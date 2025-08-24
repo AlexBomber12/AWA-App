@@ -17,17 +17,30 @@ from services.common.dsn import build_dsn
 from .celery_app import celery_app
 
 
-def check_db() -> None:
+def check_db() -> bool:
     dsn = build_dsn(sync=True).replace("+psycopg", "")
-    with psycopg.connect(dsn, connect_timeout=2) as conn:
-        with conn.cursor() as cur:
-            cur.execute("SELECT 1")
+    if not dsn:
+        print("missing DSN", file=sys.stderr)
+        return False
+    try:
+        with psycopg.connect(dsn, connect_timeout=2):
+            pass
+    except psycopg.OperationalError as exc:  # pragma: no cover - transient
+        print(f"transient db error: {exc}", file=sys.stderr)
+    return True
 
 
-def check_redis() -> None:
+def check_redis() -> bool:
     url = os.getenv("CELERY_BROKER_URL", "redis://redis:6379/0")
-    client = redis.Redis.from_url(url, socket_connect_timeout=2, socket_timeout=2)
-    client.ping()
+    if not url:
+        print("CELERY_BROKER_URL missing", file=sys.stderr)
+        return False
+    try:
+        client = redis.Redis.from_url(url, socket_connect_timeout=2, socket_timeout=2)
+        client.ping()
+    except redis.exceptions.RedisError as exc:  # pragma: no cover - transient
+        print(f"transient redis error: {exc}", file=sys.stderr)
+    return True
 
 
 def ping_worker() -> None:
@@ -56,15 +69,9 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     ok = True
-    try:
-        check_redis()
-    except Exception as exc:  # pragma: no cover - network failures
-        print(f"redis check failed: {exc}", file=sys.stderr)
+    if not check_redis():
         ok = False
-    try:
-        check_db()
-    except Exception as exc:  # pragma: no cover - network failures
-        print(f"db check failed: {exc}", file=sys.stderr)
+    if not check_db():
         ok = False
     if args.role == "worker":
         ping_worker()

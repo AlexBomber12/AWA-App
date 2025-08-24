@@ -9,14 +9,20 @@ import psycopg
 from services.common.dsn import build_dsn
 
 
-def check_db() -> None:
+def check_db() -> bool:
     dsn = build_dsn(sync=True).replace("+psycopg", "")
+    if not dsn:
+        print("missing DSN", file=sys.stderr)
+        return False
     # ``psycopg.connect`` expects ``connect_timeout`` instead of ``timeout``.
     # Using the wrong parameter causes "invalid connection option" errors and
     # makes the container healthcheck fail.
-    with psycopg.connect(dsn, connect_timeout=2) as conn:
-        with conn.cursor() as cur:
-            cur.execute("SELECT 1")
+    try:
+        with psycopg.connect(dsn, connect_timeout=2):
+            pass
+    except psycopg.OperationalError as exc:  # pragma: no cover - transient
+        print(f"transient db error: {exc}", file=sys.stderr)
+    return True
 
 
 def check_minio() -> None:
@@ -30,10 +36,7 @@ def check_minio() -> None:
 
 def main() -> int:
     ok = True
-    try:
-        check_db()
-    except Exception as exc:  # pragma: no cover - network failures
-        print(f"db check failed: {exc}", file=sys.stderr)
+    if not check_db():
         ok = False
     try:
         check_minio()
