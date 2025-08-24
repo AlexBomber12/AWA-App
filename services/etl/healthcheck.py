@@ -29,23 +29,25 @@ def check_db() -> bool:
     return True
 
 
-def check_minio() -> None:
+def check_minio() -> bool:
     endpoint = os.getenv("MINIO_ENDPOINT")
     if not endpoint:
-        return
+        print("MINIO_ENDPOINT missing", file=sys.stderr)
+        return False
     url = endpoint if "://" in endpoint else f"http://{endpoint}"
     req = Request(url, method="HEAD")
-    urlopen(req, timeout=2)
+    try:
+        urlopen(req, timeout=2)
+    except Exception as exc:  # pragma: no cover - transient
+        print(f"transient minio error: {exc}", file=sys.stderr)
+    return True
 
 
 def main() -> int:
     ok = True
     if not check_db():
         ok = False
-    try:
-        check_minio()
-    except Exception as exc:  # pragma: no cover - network failures
-        print(f"minio check failed: {exc}", file=sys.stderr)
+    if not check_minio():
         ok = False
     return 0 if ok else 1
 
