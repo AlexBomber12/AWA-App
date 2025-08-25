@@ -38,10 +38,13 @@ jobs:
         id: targets
         run: |
           python3 - <<'PY'
-          import os, json
-          it=os.environ.get("INPUT_TARGETS","").strip()
-          envt=os.environ.get("TARGETS","[]").strip()
-          print(f"::set-output name=list::{it if it else envt}")
+          import os
+
+          it = os.environ.get("INPUT_TARGETS", "").strip()
+          envt = os.environ.get("TARGETS", "[]").strip()
+          value = it if it else envt
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write(f"list={value}\n")
           PY
       - name: Wait for all workflows to finish for this SHA (only on workflow_run)
         if: ${{ github.event_name == 'workflow_run' }}
