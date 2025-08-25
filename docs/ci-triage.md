@@ -259,8 +259,6 @@ which now errors out and stops the job before collecting logs.
 ## Logs
 - No log file was generated; the workflow failed before execution.
 
----
-
 ## Failing workflows
 - **collect-logs** workflow (collect job)
 
@@ -274,4 +272,3 @@ remote branch contained new commits, making the push non-fast-forward.
 
 ## Logs
 - No log file was generated; the workflow failed before execution.
-
