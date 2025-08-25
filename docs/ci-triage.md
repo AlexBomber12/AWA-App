@@ -225,3 +225,20 @@ Python script in the "Wait for all workflows to finish for this SHA" step raised
 
 ## Logs
 - No log file was generated; the workflow failed before execution.
+
+---
+
+## Failing workflows
+- **collect-logs** workflow (collect job)
+
+## Summary
+The "Resolve targets" step invoked the deprecated `set-output` command,
+which now errors out and stops the job before collecting logs.
+
+## Fix
+- Write the resolved target list to `$GITHUB_OUTPUT` instead of using the
+  deprecated command.
+
+## Logs
+- No log file was generated; the workflow failed before execution.
+
