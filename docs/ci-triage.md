@@ -208,3 +208,20 @@ GitHub Actions reported `Invalid workflow file` because line 22 in `.github/work
 
 ## Logs
 - No log file was generated; the workflow failed before execution.
+
+---
+
+## Failing workflows
+- **collect-logs** workflow (collect job)
+
+## Summary
+Python script in the "Wait for all workflows to finish for this SHA" step raised
+`IndentationError: expected an indented block after function definition` on line
+9, stopping the job before log collection could begin.
+
+## Fix
+- Indent the body of the `api` function and subsequent loop so the script runs
+  without syntax errors.
+
+## Logs
+- No log file was generated; the workflow failed before execution.
