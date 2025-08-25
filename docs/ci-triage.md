@@ -215,6 +215,23 @@ GitHub Actions reported `Invalid workflow file` because line 22 in `.github/work
 - **collect-logs** workflow (collect job)
 
 ## Summary
+Python script in the "Download and unpack logs" step raised
+`IndentationError: expected an indented block after function definition` on
+line 9, preventing the job from fetching workflow logs.
+
+## Fix
+- Indent the helper functions and loop in the script so Python executes
+  without syntax errors.
+
+## Logs
+- No log file was generated; the workflow failed before execution.
+
+---
+
+## Failing workflows
+- **collect-logs** workflow (collect job)
+
+## Summary
 Python script in the "Wait for all workflows to finish for this SHA" step raised
 `IndentationError: expected an indented block after function definition` on line
 9, stopping the job before log collection could begin.
@@ -225,3 +242,36 @@ Python script in the "Wait for all workflows to finish for this SHA" step raised
 
 ## Logs
 - No log file was generated; the workflow failed before execution.
+
+---
+
+## Failing workflows
+- **collect-logs** workflow (collect job)
+
+## Summary
+The "Resolve targets" step invoked the deprecated `set-output` command,
+which now errors out and stops the job before collecting logs.
+
+## Fix
+- Write the resolved target list to `$GITHUB_OUTPUT` instead of using the
+  deprecated command.
+
+## Logs
+- No log file was generated; the workflow failed before execution.
+
+---
+
+## Failing workflows
+- **collect-logs** workflow (collect job)
+
+## Summary
+The "Commit and push" step failed with `failed to push some refs` because the
+remote branch contained new commits, making the push non-fast-forward.
+
+## Fix
+- Rebase onto the latest `$HEAD_BRANCH` before pushing to ensure the commit
+  fast-forwards even when the branch moves.
+
+## Logs
+- No log file was generated; the workflow failed before execution.
+

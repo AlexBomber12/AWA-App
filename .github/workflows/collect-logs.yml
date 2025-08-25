@@ -38,10 +38,13 @@ jobs:
         id: targets
         run: |
           python3 - <<'PY'
-          import os, json
-          it=os.environ.get("INPUT_TARGETS","").strip()
-          envt=os.environ.get("TARGETS","[]").strip()
-          print(f"::set-output name=list::{it if it else envt}")
+          import os
+
+          it = os.environ.get("INPUT_TARGETS", "").strip()
+          envt = os.environ.get("TARGETS", "[]").strip()
+          value = it if it else envt
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write(f"list={value}\n")
           PY
       - name: Wait for all workflows to finish for this SHA (only on workflow_run)
         if: ${{ github.event_name == 'workflow_run' }}
@@ -88,33 +91,57 @@ jobs:
           "X-GitHub-Api-Version": "2022-11-28",
           "User-Agent": "gha-log-collector"}
           def api_json(path, params=None):
-          url="https://api.github.com/"+path
-          if params: url += "?"+urllib.parse.urlencode(params)
-          req=urllib.request.Request(url, headers=headers)
-          with urllib.request.urlopen(req) as r:
-          import json as _j; return _j.load(r)
+              url = "https://api.github.com/" + path
+              if params:
+                  url += "?" + urllib.parse.urlencode(params)
+              req = urllib.request.Request(url, headers=headers)
+              with urllib.request.urlopen(req) as r:
+                  import json as _j
+                  return _j.load(r)
+
           def api_bytes(path):
-          url="https://api.github.com/"+path
-          req=urllib.request.Request(url, headers=headers)
-          with urllib.request.urlopen(req) as r:
-          return r.read()
-          runs=api_json(f"repos/{repo}/actions/runs", {"head_sha": sha, "per_page": 100}).get("workflow_runs",[])
-          tmp="ci-logs/_tmp"
+              url = "https://api.github.com/" + path
+              req = urllib.request.Request(url, headers=headers)
+              with urllib.request.urlopen(req) as r:
+                  return r.read()
+
+          runs = api_json(
+              f"repos/{repo}/actions/runs",
+              {"head_sha": sha, "per_page": 100},
+          ).get("workflow_runs", [])
+          tmp = "ci-logs/_tmp"
           shutil.rmtree("ci-logs/latest", ignore_errors=True)
           shutil.rmtree(tmp, ignore_errors=True)
           os.makedirs(tmp, exist_ok=True)
           for t in targets:
-          cand=[r for r in runs if r["name"]==t and r["conclusion"] in ("success","failure","cancelled","timed_out","action_required","neutral","skipped")]
-          if not cand: continue
-          cand.sort(key=lambda r: r["run_number"], reverse=True)
-          rid=cand[0]["id"]
-          zbytes=api_bytes(f"repos/{repo}/actions/runs/{rid}/logs")
-          zpath=os.path.join(tmp, f"{t}-{rid}.zip")
-          with open(zpath,"wb") as f: f.write(zbytes)
-          outdir=os.path.join(tmp, t)
-          os.makedirs(outdir, exist_ok=True)
-          with zipfile.ZipFile(zpath) as z: z.extractall(outdir)
-          os.remove(zpath)
+              cand = [
+                  r
+                  for r in runs
+                  if r["name"] == t
+                  and r["conclusion"]
+                  in (
+                      "success",
+                      "failure",
+                      "cancelled",
+                      "timed_out",
+                      "action_required",
+                      "neutral",
+                      "skipped",
+                  )
+              ]
+              if not cand:
+                  continue
+              cand.sort(key=lambda r: r["run_number"], reverse=True)
+              rid = cand[0]["id"]
+              zbytes = api_bytes(f"repos/{repo}/actions/runs/{rid}/logs")
+              zpath = os.path.join(tmp, f"{t}-{rid}.zip")
+              with open(zpath, "wb") as f:
+                  f.write(zbytes)
+              outdir = os.path.join(tmp, t)
+              os.makedirs(outdir, exist_ok=True)
+              with zipfile.ZipFile(zpath) as z:
+                  z.extractall(outdir)
+              os.remove(zpath)
           shutil.move(tmp, "ci-logs/latest")
           PY
       - name: Commit and push
@@ -129,4 +156,5 @@ jobs:
           exit 0
           fi
           git commit -m "ci: persist all workflow logs for $HEAD_SHA [skip ci]"
+          git pull --rebase -X ours origin "${HEAD_BRANCH}"
           git push origin HEAD:${HEAD_BRANCH}
