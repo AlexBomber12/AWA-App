@@ -215,6 +215,23 @@ GitHub Actions reported `Invalid workflow file` because line 22 in `.github/work
 - **collect-logs** workflow (collect job)
 
 ## Summary
+Python script in the "Download and unpack logs" step raised
+`IndentationError: expected an indented block after function definition` on
+line 9, preventing the job from fetching workflow logs.
+
+## Fix
+- Indent the helper functions and loop in the script so Python executes
+  without syntax errors.
+
+## Logs
+- No log file was generated; the workflow failed before execution.
+
+---
+
+## Failing workflows
+- **collect-logs** workflow (collect job)
+
+## Summary
 Python script in the "Wait for all workflows to finish for this SHA" step raised
 `IndentationError: expected an indented block after function definition` on line
 9, stopping the job before log collection could begin.
