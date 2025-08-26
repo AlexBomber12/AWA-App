@@ -259,3 +259,16 @@ which now errors out and stops the job before collecting logs.
 ## Logs
 - No log file was generated; the workflow failed before execution.
 
+## Failing workflows
+- **collect-logs** workflow (collect job)
+
+## Summary
+The "Commit and push" step failed with `failed to push some refs` because the
+remote branch contained new commits, making the push non-fast-forward.
+
+## Fix
+- Rebase onto the latest `$HEAD_BRANCH` before pushing to ensure the commit
+  fast-forwards even when the branch moves.
+
+## Logs
+- No log file was generated; the workflow failed before execution.

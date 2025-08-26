@@ -1,7 +1,7 @@
 name: Collect all workflow logs
 on:
   workflow_run:
-    workflows: ["CI", "test", "docs"]
+    workflows: ["CI", "test", "docs", "compose-e2e"]
     types: [completed]
   workflow_dispatch:
     inputs:
@@ -27,7 +27,7 @@ jobs:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       OWNER_REPO: ${{ github.repository }}
       HEAD_SHA: ${{ github.event.workflow_run.head_sha || inputs.sha || github.sha }}
-      HEAD_BRANCH: ${{ github.event.repository.default_branch }}
+      HEAD_BRANCH: ${{ github.event.repository.default_branch || 'main' }}
       TARGETS: '["CI","test","docs"]'
     steps:
       - uses: actions/checkout@v4
@@ -51,13 +51,15 @@ jobs:
         run: |
           python3 - <<'PY'
           import os, json, urllib.request, urllib.parse, time
-          repo=os.environ["OWNER_REPO"]
-          sha=os.environ["HEAD_SHA"]
-          targets=json.loads(os.environ["TARGETS"])
-          headers={"Authorization": f"Bearer {os.environ['GH_TOKEN']}",
-          "Accept": "application/vnd.github+json",
-          "X-GitHub-Api-Version": "2022-11-28",
-          "User-Agent": "gha-log-collector"}
+          repo = os.environ["OWNER_REPO"]
+          sha = os.environ["HEAD_SHA"]
+          targets = json.loads(os.environ["TARGETS"])
+          headers = {
+              "Authorization": f"Bearer {os.environ['GH_TOKEN']}",
+              "Accept": "application/vnd.github+json",
+              "X-GitHub-Api-Version": "2022-11-28",
+              "User-Agent": "gha-log-collector",
+          }
           def api(path, params=None):
               url = "https://api.github.com/" + path
               if params:
@@ -83,13 +85,15 @@ jobs:
         run: |
           python3 - <<'PY'
           import os, json, urllib.request, urllib.parse, zipfile, shutil
-          repo=os.environ["OWNER_REPO"]
-          sha=os.environ["HEAD_SHA"]
-          targets=json.loads(os.environ["TARGETS"])
-          headers={"Authorization": f"Bearer {os.environ['GH_TOKEN']}",
-          "Accept": "application/vnd.github+json",
-          "X-GitHub-Api-Version": "2022-11-28",
-          "User-Agent": "gha-log-collector"}
+          repo = os.environ["OWNER_REPO"]
+          sha = os.environ["HEAD_SHA"]
+          targets = json.loads(os.environ["TARGETS"])
+          headers = {
+              "Authorization": f"Bearer {os.environ['GH_TOKEN']}",
+              "Accept": "application/vnd.github+json",
+              "X-GitHub-Api-Version": "2022-11-28",
+              "User-Agent": "gha-log-collector",
+          }
           def api_json(path, params=None):
               url = "https://api.github.com/" + path
               if params:
@@ -153,7 +157,9 @@ jobs:
         run: |
           git add ci-logs
           if git diff --staged --quiet; then
-          exit 0
+            echo "No changes to commit"
+          else
+            git commit -m "ci: persist all workflow logs for $HEAD_SHA [skip ci]"
+            git pull --rebase -X ours origin "$HEAD_BRANCH"
+            git push origin HEAD:$HEAD_BRANCH
           fi
-          git commit -m "ci: persist all workflow logs for $HEAD_SHA [skip ci]"
-          git push origin HEAD:${HEAD_BRANCH}
