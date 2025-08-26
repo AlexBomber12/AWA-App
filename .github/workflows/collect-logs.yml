@@ -1,175 +1,118 @@
 name: Collect all workflow logs
+
 on:
   push:
-    branches: [dev, main]
-    paths-ignore: ['ci-logs/**']
+    branches: [main, dev]
+    paths-ignore:
+      - 'ci-logs/**'
   workflow_dispatch:
     inputs:
       sha:
-        description: SHA to collect (optional)
+        description: 'Commit SHA to collect (optional; default=this workflow SHA)'
         required: false
         type: string
+
 permissions:
   actions: read
   contents: write
+
 concurrency:
   group: collect-logs-${{ github.ref_name }}-${{ inputs.sha || github.sha }}
   cancel-in-progress: true
+
 jobs:
   collect:
+    # Avoid running in PRs from forks (no push perms).
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       OWNER_REPO: ${{ github.repository }}
       HEAD_SHA: ${{ inputs.sha || github.sha }}
       HEAD_BRANCH: ${{ github.ref_name }}
+
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
           ref: ${{ env.HEAD_BRANCH }}
-      - name: Resolve targets
-        id: targets
+
+      # Robust wait: query all runs for this SHA, exclude this workflow by name, wait until all others are completed (or timeout).
+      - name: Wait for all other workflows on this SHA to finish
         run: |
           python3 - <<'PY'
-          import os, json, urllib.request
-
-          token = os.environ['GH_TOKEN']
+          import os, json, urllib.request, urllib.parse, time
           repo = os.environ['OWNER_REPO']
+          sha = os.environ['HEAD_SHA']
+          self_name = os.environ['GITHUB_WORKFLOW']  # "Collect all workflow logs"
           headers = {
-              'Authorization': f'Bearer {token}',
+              'Authorization': f"Bearer {os.environ['GH_TOKEN']}",
               'Accept': 'application/vnd.github+json',
               'X-GitHub-Api-Version': '2022-11-28',
               'User-Agent': 'gha-log-collector',
           }
-
-          def api(path):
+          def api(path, params=None):
+              if params:
+                  path = f"{path}?{urllib.parse.urlencode(params)}"
               req = urllib.request.Request(f'https://api.github.com/{path}', headers=headers)
               with urllib.request.urlopen(req) as r:
-                  import json as _j
-                  return _j.load(r)
-
-          workflows = api(f'repos/{repo}/actions/workflows').get('workflows', [])
-          names = [w['name'] for w in workflows if w.get('state') == 'active' and w.get('path') != '.github/workflows/collect-logs.yml']
-          output_path = os.environ['GITHUB_OUTPUT']
-          with open(output_path, 'a') as f:
-              f.write(f"list={json.dumps(names)}\n")
-          PY
-      - name: Export target list to env
-        run: echo "TARGETS=${{ steps.targets.outputs.list }}" >> "$GITHUB_ENV"
-      - name: Wait for all workflows to finish
-        run: |
-          python3 - <<'PY'
-          import os, json, urllib.request, urllib.parse, time
-
-          repo = os.environ["OWNER_REPO"]
-          sha = os.environ["HEAD_SHA"]
-          targets = json.loads(os.environ["TARGETS"])
-
-          headers = {
-              "Authorization": f"Bearer {os.environ['GH_TOKEN']}",
-              "Accept": "application/vnd.github+json",
-              "X-GitHub-Api-Version": "2022-11-28",
-              "User-Agent": "gha-log-collector",
-          }
-
-          def api(path, params=None):
-              url = "https://api.github.com/" + path
-              if params:
-                  url += "?" + urllib.parse.urlencode(params)
-              req = urllib.request.Request(url, headers=headers)
-              with urllib.request.urlopen(req) as r:
-                  import json as _j
-                  return _j.load(r)
-
-          deadline = time.time() + 1200
+                  return json.load(r)
+          deadline = time.time() + 20*60  # 20 minutes
           while True:
-              runs = api(
-                  f"repos/{repo}/actions/runs",
-                  {"head_sha": sha, "per_page": 100},
-              ).get("workflow_runs", [])
-              pending = False
-              for t in targets:
-                  st = [r["status"] for r in runs if r["name"] == t]
-                  if any(s in ("queued", "in_progress", "requested", "waiting") for s in st):
-                      pending = True
-                      break
+              runs = api(f'repos/{repo}/actions/runs', {'head_sha': sha, 'per_page': 100}).get('workflow_runs', [])
+              pending = []
+              for r in runs:
+                  if r.get('name') == self_name:
+                      continue  # exclude self
+                  status = r.get('status')        # queued | in_progress | completed | ...
+                  if status in ('queued','in_progress','requested','waiting') or (status != 'completed'):
+                      pending.append((r['name'], r['id'], status))
               if not pending or time.time() > deadline:
                   break
               time.sleep(15)
           PY
-      - name: Download and unpack logs
+
+      - name: Fetch and unpack workflow logs
         run: |
           python3 - <<'PY'
-          import os, json, urllib.request, urllib.parse, zipfile, shutil
-
-          repo = os.environ["OWNER_REPO"]
-          sha = os.environ["HEAD_SHA"]
-          targets = json.loads(os.environ["TARGETS"])
-
+          import os, json, urllib.request, urllib.parse, io, zipfile, pathlib, shutil
+          repo = os.environ['OWNER_REPO']
+          sha  = os.environ['HEAD_SHA']
+          branch = os.environ['HEAD_BRANCH']
           headers = {
-              "Authorization": f"Bearer {os.environ['GH_TOKEN']}",
-              "Accept": "application/vnd.github+json",
-              "X-GitHub-Api-Version": "2022-11-28",
-              "User-Agent": "gha-log-collector",
+              'Authorization': f"Bearer {os.environ['GH_TOKEN']}
+",
+              'Accept': 'application/vnd.github+json',
+              'X-GitHub-Api-Version': '2022-11-28',
+              'User-Agent': 'gha-log-collector',
           }
-
-          def api_json(path, params=None):
-              url = "https://api.github.com/" + path
+          def api(path, params=None, raw=False):
               if params:
-                  url += "?" + urllib.parse.urlencode(params)
-              req = urllib.request.Request(url, headers=headers)
+                  path = f"{path}?{urllib.parse.urlencode(params)}"
+              req = urllib.request.Request(f'https://api.github.com/{path}', headers=headers)
               with urllib.request.urlopen(req) as r:
-                  import json as _j
-                  return _j.load(r)
-
-          def api_bytes(path):
-              url = "https://api.github.com/" + path
-              req = urllib.request.Request(url, headers=headers)
-              with urllib.request.urlopen(req) as r:
-                  return r.read()
-
-          runs = api_json(
-              f"repos/{repo}/actions/runs",
-              {"head_sha": sha, "per_page": 100},
-          ).get("workflow_runs", [])
-          tmp = "ci-logs/_tmp"
-          shutil.rmtree("ci-logs/latest", ignore_errors=True)
-          shutil.rmtree(tmp, ignore_errors=True)
-          os.makedirs(tmp, exist_ok=True)
-          for t in targets:
-              cand = [
-                  r
-                  for r in runs
-                  if r["name"] == t
-                  and r["conclusion"]
-                  in (
-                      "success",
-                      "failure",
-                      "cancelled",
-                      "timed_out",
-                      "action_required",
-                      "neutral",
-                      "skipped",
-                  )
-              ]
-              if not cand:
-                  continue
-              cand.sort(key=lambda r: r["run_number"], reverse=True)
-              rid = cand[0]["id"]
-              zbytes = api_bytes(f"repos/{repo}/actions/runs/{rid}/logs")
-              zpath = os.path.join(tmp, f"{t}-{rid}.zip")
-              with open(zpath, "wb") as f:
-                  f.write(zbytes)
-              outdir = os.path.join(tmp, t)
-              os.makedirs(outdir, exist_ok=True)
-              with zipfile.ZipFile(zpath) as z:
-                  z.extractall(outdir)
-              os.remove(zpath)
-          shutil.move(tmp, "ci-logs/latest")
+                  return r.read() if raw else json.load(r)
+          runs = api(f'repos/{repo}/actions/runs', {'head_sha': sha, 'per_page': 100})['workflow_runs']
+          root = pathlib.Path('ci-logs') / branch / sha
+          root.mkdir(parents=True, exist_ok=True)
+          for r in runs:
+              rid = r['id']
+              name = (r.get('name') or 'run').replace(' ', '_').lower()
+              rn = r.get('run_number') or 0
+              data = api(f'repos/{repo}/actions/runs/{rid}/logs', raw=True)
+              with zipfile.ZipFile(io.BytesIO(data)) as zf:
+                  dest = root / f'{rn:08d}_{name}'
+                  dest.mkdir(parents=True, exist_ok=True)
+                  zf.extractall(dest)
+          # Refresh "latest" directory by copying (avoid symlinks for portability)
+          latest = root.parent / 'latest'
+          if latest.exists():
+              shutil.rmtree(latest)
+          shutil.copytree(root, latest)
           PY
+
       - name: Commit and push
-        if: github.event_name != 'pull_request' && github.repository_owner == github.actor
+        if: github.repository_owner == github.actor
         env:
           GIT_AUTHOR_NAME: github-actions[bot]
           GIT_AUTHOR_EMAIL: github-actions[bot]@users.noreply.github.com
@@ -180,7 +123,8 @@ jobs:
           if git diff --staged --quiet; then
             echo "No changes to commit"
           else
-            git commit -m "ci: persist all workflow logs for $HEAD_SHA [skip ci]"
+            git commit -m "ci(logs): persist workflow logs for $HEAD_SHA [skip ci]"
             git pull --rebase -X ours origin "$HEAD_BRANCH"
-            git push origin HEAD:$HEAD_BRANCH
+            git push origin HEAD:"$HEAD_BRANCH"
           fi
+
