@@ -80,16 +80,21 @@ jobs:
         run: |
           set -Eeuo pipefail
           python3 - <<'PY'
-          import os, json, urllib.request, urllib.parse, io, zipfile, pathlib, shutil
-          repo   = os.environ['OWNER_REPO']
-          sha    = os.environ['HEAD_SHA']
-          branch = os.environ['HEAD_BRANCH']
+          import os, json, urllib.request, urllib.parse, io, zipfile, pathlib, shutil, time
+          from urllib.error import HTTPError
+
+          repo        = os.environ['OWNER_REPO']
+          sha         = os.environ['HEAD_SHA']
+          branch      = os.environ['HEAD_BRANCH']
+          self_run_id = os.environ.get('GITHUB_RUN_ID')  # exclude current run by ID
+
           headers = {
               'Authorization': f"Bearer {os.environ['GH_TOKEN']}",
               'Accept': 'application/vnd.github+json',
               'X-GitHub-Api-Version': '2022-11-28',
               'User-Agent': 'gha-log-collector',
           }
+
           def api(path, params=None, raw=False):
               if params:
                   path = f"{path}?{urllib.parse.urlencode(params)}"
@@ -102,16 +107,38 @@ jobs:
           root.mkdir(parents=True, exist_ok=True)
 
           for r in runs:
-              rid = r['id']
-              name = (r.get('name') or 'run').replace(' ', '_').lower()
-              rn   = r.get('run_number') or 0
-              data = api(f'repos/{repo}/actions/runs/{rid}/logs', raw=True)
+              rid    = str(r['id'])
+              name   = (r.get('name') or 'run').replace(' ', '_').lower()
+              rn     = r.get('run_number') or 0
+              status = (r.get('status') or '').lower()
+
+              # Skip our own running run and any run not yet completed (prevents 404)
+              if rid == str(self_run_id) or status != 'completed':
+                  continue
+
+              url = f"repos/{repo}/actions/runs/{rid}/logs"
+              # Small retry window for GitHub to finish zipping logs
+              attempts = 8
+              while attempts > 0:
+                  try:
+                      data = api(url, raw=True)
+                      break
+                  except HTTPError as e:
+                      if e.code == 404:
+                          attempts -= 1
+                          time.sleep(5)
+                          continue
+                      raise
+              else:
+                  print(f"skip: logs not available for run {rid} ({name})")
+                  continue
+
               with zipfile.ZipFile(io.BytesIO(data)) as zf:
                   dest = root / f'{rn:08d}_{name}'
                   dest.mkdir(parents=True, exist_ok=True)
                   zf.extractall(dest)
 
-          # Refresh "latest" by copying (no symlinks to avoid platform quirks)
+          # Refresh "latest" by copying (no symlinks for portability)
           latest = root.parent / 'latest'
           if latest.exists():
               shutil.rmtree(latest)
