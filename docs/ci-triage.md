@@ -272,3 +272,20 @@ remote branch contained new commits, making the push non-fast-forward.
 
 ## Logs
 - No log file was generated; the workflow failed before execution.
+
+---
+
+## Failing workflows
+- **collect-logs** workflow (collect job)
+
+## Summary
+The workflow referenced `inputs.sha` in the concurrency group and job environment.
+On push events, the `inputs` context is unavailable, producing `Invalid workflow file`
+errors before execution.
+
+## Fix
+- Use `github.event.inputs.sha` with a fallback to `github.sha` for the concurrency
+  group and `HEAD_SHA` environment variable.
+
+## Logs
+- No log file was generated; the workflow failed before execution.
