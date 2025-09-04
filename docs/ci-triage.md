@@ -1,6 +1,19 @@
 # CI Triage
 
 ## Failing workflows
+
+---
+
+- **CI** workflow (unit job)
+
+## Summary
+`alembic upgrade head` failed with `sqlalchemy.exc.OperationalError: (psycopg.OperationalError) [Errno -3] Temporary failure in name resolution` in the unit job. The Alembic env uses `services.common.dsn.build_dsn(sync=True)`, which preferred `PG_SYNC_DSN`. In CI, that DSN points at the Docker hostname `postgres`, while the services run outside Docker with `PG_HOST=localhost`, so the hostname could not be resolved.
+
+## Fix
+- Update `services/common/dsn.py` to honor `PG_HOST` as an override for any provided DSN (PG_SYNC_DSN/PG_ASYNC_DSN/DATABASE_URL) by replacing the DSN hostname with `PG_HOST` when they differ. This yields a localhost DSN during CI while remaining a no-op when already inside Docker.
+
+## Logs
+- `ci-logs/main/latest/00001047_ci/unit/10_Run migrations.txt`
 - **CI** workflow (compose-health job)
 - **test** workflow (health-checks job)
 

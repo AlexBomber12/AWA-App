@@ -11,25 +11,36 @@ def build_dsn(sync: bool = True) -> str:
     missing.
     """
 
-    def _swap_localhost(u: str) -> str:
+    def _apply_host_override(u: str) -> str:
+        """If PG_HOST is set, force the DSN host to match it.
+
+        This makes DSN values portable between Docker (host 'postgres') and CI/
+        local runs (host 'localhost'). If the DSN already matches PG_HOST, it is
+        left unchanged. When overriding, prefer PG_PORT if set, otherwise keep
+        the port from the DSN.
+        """
         host = os.getenv("PG_HOST")
         port = os.getenv("PG_PORT")
-        if host and host not in {"localhost", "127.0.0.1"}:
-            parsed = _u.urlparse(u)
-            if parsed.hostname in {"localhost", "127.0.0.1"}:
-                auth = ""
-                if parsed.username:
-                    auth = parsed.username
-                    if parsed.password:
-                        auth += f":{parsed.password}"
-                    auth += "@"
-                netloc = f"{auth}{host}:{port or parsed.port or ''}".rstrip(":")
-                u = parsed._replace(netloc=netloc).geturl()
+        if not host:
+            return u
+
+        parsed = _u.urlparse(u)
+        # Only override when the DSN has a hostname and it differs from PG_HOST
+        if parsed.hostname and parsed.hostname != host:
+            auth = ""
+            if parsed.username:
+                auth = parsed.username
+                if parsed.password:
+                    auth += f":{parsed.password}"
+                auth += "@"
+            effective_port = port or (str(parsed.port) if parsed.port else "")
+            netloc = f"{auth}{host}{":" + effective_port if effective_port else ''}"
+            u = parsed._replace(netloc=netloc).geturl()
         return u
 
     url = os.getenv("PG_SYNC_DSN" if sync else "PG_ASYNC_DSN")
     if url:
-        url = _swap_localhost(url)
+        url = _apply_host_override(url)
         return url.replace(
             "postgresql://",
             "postgresql+psycopg://" if sync else "postgresql+asyncpg://",
@@ -37,7 +48,7 @@ def build_dsn(sync: bool = True) -> str:
     if not url:
         other = os.getenv("PG_ASYNC_DSN" if sync else "PG_SYNC_DSN")
         if other:
-            other = _swap_localhost(other)
+            other = _apply_host_override(other)
             if sync:
                 return other.replace("+asyncpg", "+psycopg").replace(
                     "postgresql://", "postgresql+psycopg://"
@@ -48,7 +59,7 @@ def build_dsn(sync: bool = True) -> str:
 
     url = os.getenv("DATABASE_URL")
     if url:
-        url = _swap_localhost(url)
+        url = _apply_host_override(url)
         if "+asyncpg" in url or "+psycopg" in url:
             return (
                 url.replace("+asyncpg", "+psycopg")
