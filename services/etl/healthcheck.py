@@ -4,6 +4,7 @@ import os
 import sys
 import time
 from urllib.request import Request, urlopen
+from urllib.parse import urlparse, urlunparse
 
 import psycopg
 
@@ -21,8 +22,18 @@ def check_minio() -> None:
     endpoint = os.getenv("MINIO_ENDPOINT")
     if not endpoint:
         return
+    # Normalize to include scheme
     url = endpoint if "://" in endpoint else f"http://{endpoint}"
-    req = Request(url, method="HEAD")
+    # Prefer MinIO's readiness endpoint which doesn't require auth
+    try:
+        parsed = urlparse(url)
+        path = parsed.path or "/"
+        if path in {"", "/"}:
+            parsed = parsed._replace(path="/minio/health/ready")
+            url = urlunparse(parsed)
+    except Exception:
+        pass
+    req = Request(url, method="GET")
     urlopen(req, timeout=2)
 
 
