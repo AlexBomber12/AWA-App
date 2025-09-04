@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       sha:
-        description: 'Commit SHA to collect (optional; default=this workflow SHA)'
+        description: 'Commit SHA to collect (optional; defaults to this workflow SHA)'
         required: false
         type: string
 
@@ -17,23 +17,23 @@ permissions:
   contents: write
 
 concurrency:
-  group: collect-logs-${{ github.ref_name }}-${{ github.event.inputs.sha || github.sha }}
+  group: collect-logs-${{ github.ref_name }}-${{ inputs.sha || github.sha }}
   cancel-in-progress: true
 
 jobs:
   collect:
-    # Skip PRs from forks (no push permissions)
+    # Skip PRs from forks (no write perms)
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       OWNER_REPO: ${{ github.repository }}
-      HEAD_SHA: ${{ github.event.inputs.sha || github.sha }}
+      HEAD_SHA: ${{ inputs.sha || github.sha }}
       HEAD_BRANCH: ${{ github.ref_name }}
 
     steps:
       - name: Checkout branch
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
           ref: ${{ env.HEAD_BRANCH }}
@@ -46,7 +46,7 @@ jobs:
           import os, json, urllib.request, urllib.parse, time
           repo = os.environ['OWNER_REPO']
           sha = os.environ['HEAD_SHA']
-          self_name = os.environ['GITHUB_WORKFLOW']  # "Collect all workflow logs"
+          self_name = os.environ['GITHUB_WORKFLOW']  # this workflow name
           headers = {
               'Authorization': f"Bearer {os.environ['GH_TOKEN']}",
               'Accept': 'application/vnd.github+json',
@@ -59,17 +59,15 @@ jobs:
               req = urllib.request.Request(f'https://api.github.com/{path}', headers=headers)
               with urllib.request.urlopen(req) as r:
                   return json.load(r)
-
           deadline = time.time() + 20*60  # 20 minutes
           while True:
               runs = api(f'repos/{repo}/actions/runs', {'head_sha': sha, 'per_page': 100}).get('workflow_runs', [])
               pending = []
               for r in runs:
                   if (r.get('name') or '') == self_name:
-                      continue  # exclude self
-                  status = r.get('status')  # queued|in_progress|completed|...
-                  if status in ('queued','in_progress','requested','waiting') or (status != 'completed'):
-                      pending.append((r['name'], r['id'], status))
+                      continue  # exclude self by name
+                  if (r.get('status') or '').lower() != 'completed':
+                      pending.append((r.get('name'), r.get('id'), r.get('status')))
               if not pending or time.time() > deadline:
                   break
               time.sleep(15)
@@ -111,13 +109,11 @@ jobs:
               name   = (r.get('name') or 'run').replace(' ', '_').lower()
               rn     = r.get('run_number') or 0
               status = (r.get('status') or '').lower()
-
-              # Skip our own running run and any run not yet completed (prevents 404)
               if rid == str(self_run_id) or status != 'completed':
+                  # Skip our own run and any run not yet archived — prevents 404
                   continue
 
               url = f"repos/{repo}/actions/runs/{rid}/logs"
-              # Small retry window for GitHub to finish zipping logs
               attempts = 8
               while attempts > 0:
                   try:
@@ -130,7 +126,7 @@ jobs:
                           continue
                       raise
               else:
-                  print(f"skip: logs not available for run {rid} ({name})")
+                  print(f"skip: logs not yet available for run {rid} ({name})")
                   continue
 
               with zipfile.ZipFile(io.BytesIO(data)) as zf:
@@ -146,17 +142,19 @@ jobs:
           PY
 
       - name: Commit and push logs
-        if: github.repository_owner == github.actor
+        # We already skip forks at the job level; push from any actor with write token
         shell: bash
         run: |
           set -Eeuo pipefail
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add ci-logs
+          # Force add in case .gitignore matches a broad *logs* rule
+          git add -f ci-logs
           if git diff --staged --quiet; then
             echo "No changes to commit"
           else
             git commit -m "ci(logs): persist workflow logs for $HEAD_SHA [skip ci]"
-            git pull --rebase -X ours origin "$HEAD_BRANCH"
+            git pull --rebase -X ours origin "$HEAD_BRANCH" || true
             git push origin HEAD:"$HEAD_BRANCH"
           fi
+
