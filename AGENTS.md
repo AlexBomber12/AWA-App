@@ -97,6 +97,7 @@ Optional heuristics
 ## Cloud-only workflow
 - edit in Cursor/Codex, push, open PR.
 - Python 3.12 and Node LTS.
+- Webapp build requires TypeScript types: @types/react and @types/node. CI runs npm ci before build.
 - CI runs unit then integration; Docker/Compose runs only in CI.
 - integration marker policy: tests needing DB or external services use `@pytest.mark.integration`.
 - On failure read the PR failure comment and Run Summary; download artifact `ci-logs-<run_id>` if deeper inspection is needed.

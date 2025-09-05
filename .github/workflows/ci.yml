@@ -14,6 +14,8 @@ jobs:
   unit:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    permissions:
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -24,7 +26,7 @@ jobs:
       - name: Install Python deps
         run: pip install --break-system-packages -r requirements-dev.txt
       - name: Python unit tests
-        run: pytest -m "not integration"
+        run: pytest -q -m "not integration" 2>&1 | tee unit-pytest.log; exit ${PIPESTATUS[0]}
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -32,14 +34,65 @@ jobs:
         run: npm ci
         working-directory: web
       - name: Web tests
-        run: npm test
+        run: npm test 2>&1 | tee web-vitest.log; exit ${PIPESTATUS[0]}
         working-directory: web
-      - name: Install webapp deps
-        run: npm ci
-        working-directory: webapp
-      - name: Webapp build
-        run: npm run build
-        working-directory: webapp
+      - name: Frontend webapp build
+        run: |
+          cd webapp
+          npm ci
+          npm run build 2>&1 | tee webapp-build.log
+          exit ${PIPESTATUS[0]}
+      - name: Collect logs
+        if: always()
+        run: |
+          tail_file=""
+          if [ -f webapp/webapp-build.log ]; then tail_file=webapp/webapp-build.log; elif [ -f unit-pytest.log ]; then tail_file=unit-pytest.log; elif [ -f web/web-vitest.log ]; then tail_file=web/web-vitest.log; fi
+          tail -n 200 "$tail_file" > unit-tail.log
+          {
+            echo "### $(basename \"$tail_file\") (tail)"
+            echo '```'
+            cat unit-tail.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "TAIL_LOG_PATH=unit-tail.log" >> "$GITHUB_ENV"
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-logs-${{ github.run_id }}
+          path: |
+            unit-pytest.log
+            web/web-vitest.log
+            webapp/webapp-build.log
+      - name: Upsert failure comment
+        if: failure() && github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const tail = fs.readFileSync(process.env.TAIL_LOG_PATH, 'utf8');
+            const body = `### Unit logs (tail)\n\n\`\`\`text\n${tail}\n\`\`\`\nComment \`@codex review\` to request an AI review.`;
+            const {data: comments} = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.find(c => c.user.login === 'github-actions[bot]' && c.body.includes('Unit logs (tail)'));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body
+              });
+            }
 
   integration:
     needs: unit
