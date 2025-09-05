@@ -5,7 +5,7 @@ from contextlib import contextmanager
 import pytest
 from fastapi.testclient import TestClient
 
-pytestmark = pytest.mark.future
+pytestmark = [pytest.mark.future, pytest.mark.integration]
 
 
 @contextmanager

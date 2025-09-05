@@ -1,6 +1,9 @@
 import os
 
+import pytest
 from fastapi.testclient import TestClient
+
+pytestmark = pytest.mark.integration
 
 # Set env BEFORE importing app so the limiter initializes properly in this process.
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")

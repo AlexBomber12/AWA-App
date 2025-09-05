@@ -1,10 +1,13 @@
 import importlib
 
+import pytest
 from sqlalchemy import create_engine
 
 from services.price_importer.repository import Repository
 
 importer = importlib.import_module("services.price_importer.import")
+
+pytestmark = pytest.mark.integration
 
 
 def test_import_cli(tmp_path, monkeypatch):

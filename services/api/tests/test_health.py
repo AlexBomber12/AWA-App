@@ -1,7 +1,10 @@
+import pytest
 from fastapi.testclient import TestClient
 
 from services.api import db
 from services.api.main import app
+
+pytestmark = pytest.mark.integration
 
 
 def test_health_route() -> None:

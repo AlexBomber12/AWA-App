@@ -2,8 +2,11 @@ import os
 import sys
 import types
 
+import pytest
 from services.common.dsn import build_dsn
 from services.etl import sp_fees_ingestor
+
+pytestmark = pytest.mark.integration
 
 
 class FakeCursor:
