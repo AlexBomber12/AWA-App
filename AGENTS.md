@@ -93,3 +93,15 @@ Optional heuristics
 1) Prefer the newest timestamped log if multiple versions of the same tool exist.
 2) For test suites, extract the first failing test case name and only address that failure initially.
 3) For compiler or linter errors, jump to the highest-level message that points to a source file and line; ignore cascading duplicates.
+
+## Cloud-only workflow
+- edit in Cursor/Codex, push, open PR.
+- CI runs unit then integration; Docker/Compose runs only in CI.
+- On failure read the PR failure comment and Run Summary; download artifact `ci-logs-<run_id>` if deeper inspection is needed.
+- Never lower coverage thresholds; add tests first.
+
+### CI commands
+- Unit: `pytest -m "not integration"`
+- Web: `npm test` (web)
+- Webapp: `npm run build` (webapp)
+- Integration: `pytest -m integration`
