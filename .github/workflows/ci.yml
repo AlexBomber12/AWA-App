@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+  pull-requests: write
+
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -14,8 +18,6 @@ jobs:
   unit:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    permissions:
-      pull-requests: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -42,64 +44,79 @@ jobs:
           npm ci
           npm run build 2>&1 | tee webapp-build.log
           exit ${PIPESTATUS[0]}
-      - name: Collect logs
+      - id: picktail
         if: always()
         run: |
-          tail_file=""
-          if [ -f webapp/webapp-build.log ]; then tail_file=webapp/webapp-build.log; elif [ -f unit-pytest.log ]; then tail_file=unit-pytest.log; elif [ -f web/web-vitest.log ]; then tail_file=web/web-vitest.log; fi
-          tail -n 200 "$tail_file" > unit-tail.log
+          touch compose-ps.txt compose-logs.txt compose-up.txt compose-build.txt unit-pytest.log web-vitest.log webapp-build.log
+          TAIL=""
+          for f in webapp-build.log unit-pytest.log web-vitest.log; do
+            if [ -s "$f" ]; then TAIL="$f"; break; fi
+          done
+          if [ -z "$TAIL" ]; then echo "no logs captured" > none.txt; TAIL=none.txt; fi
           {
-            echo "### $(basename \"$tail_file\") (tail)"
+            echo "### $(basename \"$TAIL\") (tail)"
             echo '```'
-            cat unit-tail.log
+            tail -n 200 "$TAIL"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
-          echo "TAIL_LOG_PATH=unit-tail.log" >> "$GITHUB_ENV"
-      - name: Upload logs
+          echo "tail_path=$TAIL" >> "$GITHUB_OUTPUT"
+      - name: Upload artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: ci-logs-${{ github.run_id }}
           path: |
+            compose-ps.txt
+            compose-logs.txt
+            compose-up.txt
+            compose-build.txt
             unit-pytest.log
-            web/web-vitest.log
-            webapp/webapp-build.log
-      - name: Upsert failure comment
-        if: failure() && github.event_name == 'pull_request'
+            web-vitest.log
+            webapp-build.log
+          if-no-files-found: ignore
+      - name: PR comment
+        if: always()
         uses: actions/github-script@v7
+        env:
+          CI_JOB_NAME: CI / unit
+          TAIL_PATH: ${{ steps.picktail.outputs.tail_path }}
         with:
           script: |
             const fs = require('fs');
-            const tail = fs.readFileSync(process.env.TAIL_LOG_PATH, 'utf8');
-            const body = `### Unit logs (tail)\n\n\`\`\`text\n${tail}\n\`\`\`\nComment \`@codex review\` to request an AI review.`;
-            const {data: comments} = await github.rest.issues.listComments({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-            });
-            const existing = comments.find(c => c.user.login === 'github-actions[bot]' && c.body.includes('Unit logs (tail)'));
-            if (existing) {
-              await github.rest.issues.updateComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                comment_id: existing.id,
-                body
-              });
+            const {owner, repo} = context.repo;
+            if (context.eventName !== 'pull_request') { return; }
+            const issue_number = context.issue.number;
+            const marker = '<!-- CI_FAILURE_SUMMARY -->';
+            let tail = '';
+            try { tail = fs.readFileSync(process.env.TAIL_PATH, 'utf8'); } catch(e) { tail = 'no logs'; }
+            const jobName = process.env.CI_JOB_NAME || '';
+            const title = jobName.includes('integration') ? 'Integration logs (tail)' :
+                          jobName.includes('unit') ? 'Unit logs (tail)' :
+                          jobName || 'CI logs (tail)';
+            const bodyFail = `${marker}
+${title}
+
+```
+${tail.split('\n').slice(-200).join('\n')}
+```
+
+Comment "@codex review" to request an AI review.`;
+            const comments = await github.rest.issues.listComments({owner, repo, issue_number, per_page: 100});
+            const existing = comments.data.find(c => c.user.type === 'Bot' && c.body && c.body.includes(marker));
+            if ("${{ job.status }}".toLowerCase() === "failure") {
+              if (existing) {
+                await github.rest.issues.updateComment({owner, repo, comment_id: existing.id, body: bodyFail});
+              } else {
+                await github.rest.issues.createComment({owner, repo, issue_number, body: bodyFail});
+              }
             } else {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.issue.number,
-                body
-              });
+              if (existing) { await github.rest.issues.deleteComment({owner, repo, comment_id: existing.id}); }
             }
 
   integration:
     needs: unit
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    permissions:
-      pull-requests: write
     steps:
       - uses: actions/checkout@v4
       - name: Write CI env file
@@ -138,61 +155,75 @@ jobs:
           PG_PASSWORD: ${{ secrets.PG_PASSWORD || 'postgres' }}
           PG_DATABASE: ${{ secrets.PG_DATABASE || 'awa' }}
         run: pytest -m integration
-      - name: Gather logs
+      - id: picktail
         if: always()
         run: |
+          touch compose-ps.txt compose-logs.txt compose-up.txt compose-build.txt unit-pytest.log web-vitest.log webapp-build.log
           docker compose -f docker-compose.yml -f docker-compose.ci.yml -f docker-compose.postgres.yml --env-file .env.ci logs --no-color > compose-logs.txt || true
           docker compose -f docker-compose.yml -f docker-compose.ci.yml -f docker-compose.postgres.yml --env-file .env.ci ps > compose-ps.txt || true
-          tail_file=""
+          TAIL=""
           for f in compose-logs.txt compose-up.txt compose-build.txt; do
-            if [ -s "$f" ]; then tail_file="$f"; break; fi
+            if [ -s "$f" ]; then TAIL="$f"; break; fi
           done
-          tail -n 200 "$tail_file" > compose-tail.log
+          if [ -z "$TAIL" ]; then echo "no logs captured" > none.txt; TAIL=none.txt; fi
           {
-            echo "### $(basename \"$tail_file\") (tail)"
+            echo "### $(basename \"$TAIL\") (tail)"
             echo '```'
-            cat compose-tail.log
+            tail -n 200 "$TAIL"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
-          echo "TAIL_LOG_PATH=compose-tail.log" >> "$GITHUB_ENV"
-      - name: Upload logs
+          echo "tail_path=$TAIL" >> "$GITHUB_OUTPUT"
+      - name: Upload artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: ci-logs-${{ github.run_id }}
           path: |
-            compose-build.txt
-            compose-up.txt
-            compose-logs.txt
             compose-ps.txt
-      - name: Upsert failure comment
-        if: failure() && github.event_name == 'pull_request'
+            compose-logs.txt
+            compose-up.txt
+            compose-build.txt
+            unit-pytest.log
+            web-vitest.log
+            webapp-build.log
+          if-no-files-found: ignore
+      - name: PR comment
+        if: always()
         uses: actions/github-script@v7
+        env:
+          CI_JOB_NAME: CI / integration
+          TAIL_PATH: ${{ steps.picktail.outputs.tail_path }}
         with:
           script: |
             const fs = require('fs');
-            const tail = fs.readFileSync(process.env.TAIL_LOG_PATH,'utf8');
-            const body = `### Integration logs (tail)\n\n\`\`\`text\n${tail}\n\`\`\`\nComment \`@codex review\` to request an AI review.`;
-            const {data: comments} = await github.rest.issues.listComments({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-            });
-            const existing = comments.find(c => c.user.login === 'github-actions[bot]' && c.body.includes('Integration logs (tail)'));
-            if (existing) {
-              await github.rest.issues.updateComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                comment_id: existing.id,
-                body
-              });
+            const {owner, repo} = context.repo;
+            if (context.eventName !== 'pull_request') { return; }
+            const issue_number = context.issue.number;
+            const marker = '<!-- CI_FAILURE_SUMMARY -->';
+            let tail = '';
+            try { tail = fs.readFileSync(process.env.TAIL_PATH, 'utf8'); } catch(e) { tail = 'no logs'; }
+            const jobName = process.env.CI_JOB_NAME || '';
+            const title = jobName.includes('integration') ? 'Integration logs (tail)' :
+                          jobName.includes('unit') ? 'Unit logs (tail)' :
+                          jobName || 'CI logs (tail)';
+            const bodyFail = `${marker}
+${title}
+
+```
+${tail.split('\n').slice(-200).join('\n')}
+```
+
+Comment "@codex review" to request an AI review.`;
+            const comments = await github.rest.issues.listComments({owner, repo, issue_number, per_page: 100});
+            const existing = comments.data.find(c => c.user.type === 'Bot' && c.body && c.body.includes(marker));
+            if ("${{ job.status }}".toLowerCase() === "failure") {
+              if (existing) {
+                await github.rest.issues.updateComment({owner, repo, comment_id: existing.id, body: bodyFail});
+              } else {
+                await github.rest.issues.createComment({owner, repo, issue_number, body: bodyFail});
+              }
             } else {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: context.issue.number,
-                body
-              });
+              if (existing) { await github.rest.issues.deleteComment({owner, repo, comment_id: existing.id}); }
             }
       - name: Tear down
         if: always()
