@@ -1,8 +1,11 @@
 import os
 import uuid
 
+import pytest
 import sentry_sdk
 from fastapi.testclient import TestClient
+
+pytestmark = pytest.mark.integration
 
 # set env before importing app so init runs
 os.environ["SENTRY_DSN"] = "http://public@selfhosted.invalid/1"

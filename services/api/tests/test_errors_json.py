@@ -1,11 +1,14 @@
 import base64
 import os
 
+import pytest
 import psycopg
 from fastapi.testclient import TestClient
 
 from services.api import db as api_db
 from services.api.main import app
+
+pytestmark = pytest.mark.integration
 
 
 def test_validation_error_json() -> None:

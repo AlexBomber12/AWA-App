@@ -1,4 +1,8 @@
+import pytest
+
 from services.api.sentry_config import before_send
+
+pytestmark = pytest.mark.integration
 
 
 def test_before_send_scrubs_pii():

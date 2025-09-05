@@ -1,11 +1,14 @@
 from importlib import import_module
 from pathlib import Path
 
+import pytest
 from sqlalchemy import text
 
 from services.price_importer.repository import Repository
 
 imp = import_module("services.price_importer.import")
+
+pytestmark = pytest.mark.integration
 
 
 def test_price_importer_cli(tmp_path, monkeypatch):

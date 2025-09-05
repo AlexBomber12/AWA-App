@@ -49,10 +49,13 @@ def _db_available() -> bool:
 
 
 def pytest_collection_modifyitems(config, items):
+    markexpr = config.getoption("-m")
+    if markexpr and "integration" not in markexpr:
+        return
     if _db_available():
         return
     skip_integration = pytest.mark.skip(
-        reason="Postgres not running – integration tests skipped"
+        reason="Postgres not running – integration tests skipped",
     )
     for item in items:
         if "integration" in item.keywords:
@@ -89,8 +92,11 @@ def _set_db_url():
 
 
 @pytest.fixture(scope="session", autouse=True)
-def migrate_db(_set_db_url):
+def migrate_db(_set_db_url, request):
     """Ensure the database schema is present for tests."""
+    markexpr = request.config.getoption("-m")
+    if markexpr and "integration" not in markexpr:
+        return
     if os.getenv("TESTING") != "1" or not _db_available():
         return
 
