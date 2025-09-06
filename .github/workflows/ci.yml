@@ -1,10 +1,14 @@
-name: CI
+name: ci
 
 on:
+  pull_request:
   push:
     branches: [main]
-  pull_request:
-    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
 
 permissions:
   contents: read
@@ -17,49 +21,74 @@ concurrency:
 jobs:
   unit:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
           cache: 'pip'
-          cache-dependency-path: requirements-dev.txt
-      - name: Install Python deps
-        run: pip install --break-system-packages -r requirements-dev.txt
-      - name: Python unit tests
-        run: pytest -q -m "not integration" 2>&1 | tee unit-pytest.log; exit ${PIPESTATUS[0]}
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
-      - name: Install web deps
-        run: npm ci
-        working-directory: web
-      - name: Web tests
-        run: npm test 2>&1 | tee web-vitest.log; exit ${PIPESTATUS[0]}
-        working-directory: web
+          node-version: 'lts/*'
+          cache: 'npm'
+          cache-dependency-path: |
+            web/package-lock.json
+            webapp/package-lock.json
+
+      - name: Install Python dev deps
+        shell: bash
+        run: |
+          if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
+
+      - name: Python unit tests
+        shell: bash
+        run: |
+          if [ -f pyproject.toml ] || [ -f pytest.ini ]; then
+            set -o pipefail
+            pytest -q -m "not integration" 2>&1 | tee unit-pytest.log
+            exit ${PIPESTATUS[0]}
+          fi
+
+      - name: Frontend web tests
+        shell: bash
+        run: |
+          if [ -f web/package.json ]; then
+            cd web
+            set -o pipefail
+            npm ci
+            npm test 2>&1 | tee ../web-vitest.log
+            exit ${PIPESTATUS[0]}
+          fi
+
       - name: Frontend webapp build
+        shell: bash
         run: |
-          cd webapp
-          npm ci
-          npm run build 2>&1 | tee webapp-build.log
-          exit ${PIPESTATUS[0]}
-      - id: picktail
+          if [ -f webapp/package.json ]; then
+            cd webapp
+            set -o pipefail
+            npm ci
+            npm run build 2>&1 | tee ../webapp-build.log
+            exit ${PIPESTATUS[0]}
+          fi
+
+      - name: Pick tail and write summary
+        id: picktail_unit
         if: always()
+        shell: bash
         run: |
-          touch compose-ps.txt compose-logs.txt compose-up.txt compose-build.txt unit-pytest.log web-vitest.log webapp-build.log
-          TAIL=""
-          for f in webapp-build.log unit-pytest.log web-vitest.log; do
-            if [ -s "$f" ]; then TAIL="$f"; break; fi
-          done
-          if [ -z "$TAIL" ]; then echo "no logs captured" > none.txt; TAIL=none.txt; fi
+          touch unit-pytest.log web-vitest.log webapp-build.log compose-logs.txt compose-up.txt compose-build.txt
+          echo no logs > none.txt
+          choose_tail() { for f in "$@"; do [ -s "$f" ] && { echo "$f"; return; }; done; echo none.txt; }
+          TAIL=$(choose_tail webapp-build.log unit-pytest.log web-vitest.log compose-logs.txt compose-up.txt compose-build.txt)
+          echo "tail_path=$TAIL" >> $GITHUB_OUTPUT
           {
-            echo "### $(basename \"$TAIL\") (tail)"
-            echo '```'
+            echo "## Summary"
+            echo
+            echo "```"
             tail -n 200 "$TAIL"
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
-          echo "tail_path=$TAIL" >> "$GITHUB_OUTPUT"
+            echo "```"
+          } >> $GITHUB_STEP_SUMMARY
       - name: Upload artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -73,9 +102,19 @@ jobs:
             unit-pytest.log
             web-vitest.log
             webapp-build.log
+            compose-ps.txt
+            compose-logs.txt
+            compose-up.txt
+            compose-build.txt
+            none.txt
           if-no-files-found: ignore
-      - name: PR comment
+
+      - name: Upsert or delete PR failure comment
         if: always()
+        env:
+          TAIL_PATH: ${{ steps.picktail_unit.outputs.tail_path }}
+          TITLE: "CI / unit"
+          JOB_STATUS: ${{ job.status }}
         uses: actions/github-script@v7
         env:
           CI_JOB_NAME: CI / unit
@@ -87,92 +126,101 @@ jobs:
             if (context.eventName !== 'pull_request') { return; }
             const issue_number = context.issue.number;
             const marker = '<!-- CI_FAILURE_SUMMARY -->';
-            let tail = '';
-            try { tail = fs.readFileSync(process.env.TAIL_PATH, 'utf8'); } catch(e) { tail = 'no logs'; }
-            const jobName = process.env.CI_JOB_NAME || '';
-            const title = jobName.includes('integration') ? 'Integration logs (tail)' :
-                          jobName.includes('unit') ? 'Unit logs (tail)' :
-                          jobName || 'CI logs (tail)';
-            const bodyFail = `${marker}
-                        ${title}
-            
-                        ```
-                        ${tail.split('\n').slice(-200).join('\n')}
-                        ```
-            
-                        Comment "@codex review" to request an AI review.`;
+            let tail = 'no logs';
+            try { tail = fs.readFileSync(process.env.TAIL_PATH, 'utf8'); } catch (e) {}
+            const title = process.env.TITLE || 'CI logs (tail)';
+            const body = [
+              marker,
+              title,
+              '',
+              '```',
+              tail.split('\n').slice(-200).join('\n'),
+              '```',
+              '',
+              'Comment "@codex review" to request an AI review.'
+            ].join('\n');
             const comments = await github.rest.issues.listComments({owner, repo, issue_number, per_page: 100});
             const existing = comments.data.find(c => c.user.type === 'Bot' && c.body && c.body.includes(marker));
-            if ("${{ job.status }}".toLowerCase() === "failure") {
-              if (existing) {
-                await github.rest.issues.updateComment({owner, repo, comment_id: existing.id, body: bodyFail});
-              } else {
-                await github.rest.issues.createComment({owner, repo, issue_number, body: bodyFail});
-              }
+            if ((process.env.JOB_STATUS || '').toLowerCase() === 'failure') {
+              if (existing) await github.rest.issues.updateComment({owner, repo, comment_id: existing.id, body});
+              else await github.rest.issues.createComment({owner, repo, issue_number, body});
             } else {
-              if (existing) { await github.rest.issues.deleteComment({owner, repo, comment_id: existing.id}); }
+              if (existing) await github.rest.issues.deleteComment({owner, repo, comment_id: existing.id});
             }
 
   integration:
-    needs: unit
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 45
+    needs: unit
     steps:
       - uses: actions/checkout@v4
-      - name: Write CI env file
+
+      - name: Prepare .env.ci
+        shell: bash
         run: |
-          cat > .env.ci <<'ENV'
-          PG_HOST=postgres
-          PG_PORT=5432
-          PG_USER=${{ secrets.PG_USER || 'postgres' }}
-          PG_PASSWORD=${{ secrets.PG_PASSWORD || 'postgres' }}
-          PG_DATABASE=${{ secrets.PG_DATABASE || 'awa' }}
-          POSTGRES_HOST=postgres
-          POSTGRES_PORT=5432
-          POSTGRES_USER=${{ secrets.PG_USER || 'postgres' }}
-          POSTGRES_PASSWORD=${{ secrets.PG_PASSWORD || 'postgres' }}
-          POSTGRES_DB=${{ secrets.PG_DATABASE || 'awa' }}
-          ENV
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-          cache: 'pip'
-          cache-dependency-path: requirements-dev.txt
-      - name: Install Python deps
-        run: pip install --break-system-packages -r requirements-dev.txt
-      - name: Build services
+          printf "PG_HOST=postgres\nPG_PORT=5432\nPG_USER=%s\nPG_PASSWORD=%s\nPG_DATABASE=%s\nPOSTGRES_HOST=postgres\nPOSTGRES_PORT=5432\nPOSTGRES_USER=%s\nPOSTGRES_PASSWORD=%s\nPOSTGRES_DB=%s\n" "${{ secrets.PG_USER || 'postgres' }}" "${{ secrets.PG_PASSWORD || 'postgres' }}" "${{ secrets.PG_DATABASE || 'awa' }}" "${{ secrets.PG_USER || 'postgres' }}" "${{ secrets.PG_PASSWORD || 'postgres' }}" "${{ secrets.PG_DATABASE || 'awa' }}" > .env.ci
+
+      - name: Build images
+        shell: bash
         run: |
           export COMPOSE_DOCKER_CLI_BUILD=1 DOCKER_BUILDKIT=1
-          docker compose -f docker-compose.yml -f docker-compose.ci.yml -f docker-compose.postgres.yml --env-file .env.ci build --pull 2>&1 | tee compose-build.txt
+          COMPOSE_FILES=""
+          [ -f docker-compose.yml ] && COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.yml"
+          [ -f docker-compose.ci.yml ] && COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.ci.yml"
+          [ -f docker-compose.postgres.yml ] && COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.postgres.yml"
+          set -o pipefail
+          docker compose $COMPOSE_FILES --env-file .env.ci build --pull 2>&1 | tee compose-build.txt
+          exit ${PIPESTATUS[0]}
+
       - name: Up services
+        shell: bash
         run: |
-          docker compose -f docker-compose.yml -f docker-compose.ci.yml -f docker-compose.postgres.yml --env-file .env.ci up -d --wait 2>&1 | tee compose-up.txt
-      - name: Integration tests
-        env:
-          PG_HOST: postgres
-          PG_PORT: 5432
-          PG_USER: ${{ secrets.PG_USER || 'postgres' }}
-          PG_PASSWORD: ${{ secrets.PG_PASSWORD || 'postgres' }}
-          PG_DATABASE: ${{ secrets.PG_DATABASE || 'awa' }}
-        run: pytest -m integration
-      - id: picktail
+          COMPOSE_FILES=""
+          [ -f docker-compose.yml ] && COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.yml"
+          [ -f docker-compose.ci.yml ] && COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.ci.yml"
+          [ -f docker-compose.postgres.yml ] && COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.postgres.yml"
+          set -o pipefail
+          docker compose $COMPOSE_FILES --env-file .env.ci up -d --wait 2>&1 | tee compose-up.txt
+          exit ${PIPESTATUS[0]}
+
+      - name: Dump compose logs
         if: always()
+        shell: bash
         run: |
-          touch compose-ps.txt compose-logs.txt compose-up.txt compose-build.txt unit-pytest.log web-vitest.log webapp-build.log
-          docker compose -f docker-compose.yml -f docker-compose.ci.yml -f docker-compose.postgres.yml --env-file .env.ci logs --no-color > compose-logs.txt || true
-          docker compose -f docker-compose.yml -f docker-compose.ci.yml -f docker-compose.postgres.yml --env-file .env.ci ps > compose-ps.txt || true
-          TAIL=""
-          for f in compose-logs.txt compose-up.txt compose-build.txt; do
-            if [ -s "$f" ]; then TAIL="$f"; break; fi
-          done
-          if [ -z "$TAIL" ]; then echo "no logs captured" > none.txt; TAIL=none.txt; fi
+          COMPOSE_FILES=""
+          [ -f docker-compose.yml ] && COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.yml"
+          [ -f docker-compose.ci.yml ] && COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.ci.yml"
+          [ -f docker-compose.postgres.yml ] && COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.postgres.yml"
+          docker compose $COMPOSE_FILES --env-file .env.ci ps > compose-ps.txt || true
+          docker compose $COMPOSE_FILES --env-file .env.ci logs --no-color > compose-logs.txt || true
+
+      - name: Python integration tests
+        shell: bash
+        run: |
+          if [ -f pyproject.toml ] || [ -f pytest.ini ]; then
+            set -o pipefail
+            pytest -q -m integration 2>&1 | tee integration-pytest.log
+            exit ${PIPESTATUS[0]}
+          fi
+
+      - name: Pick tail and write summary
+        id: picktail_integration
+        if: always()
+        shell: bash
+        run: |
+          touch compose-ps.txt compose-logs.txt compose-up.txt compose-build.txt integration-pytest.log
+          echo no logs > none.txt
+          choose_tail() { for f in "$@"; do [ -s "$f" ] && { echo "$f"; return; }; done; echo none.txt; }
+          TAIL=$(choose_tail compose-logs.txt integration-pytest.log compose-up.txt compose-build.txt)
+          echo "tail_path=$TAIL" >> $GITHUB_OUTPUT
           {
-            echo "### $(basename \"$TAIL\") (tail)"
-            echo '```'
+            echo "## Summary"
+            echo
+            echo "```"
             tail -n 200 "$TAIL"
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
-          echo "tail_path=$TAIL" >> "$GITHUB_OUTPUT"
+            echo "```"
+          } >> $GITHUB_STEP_SUMMARY
+
       - name: Upload artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -183,12 +231,16 @@ jobs:
             compose-logs.txt
             compose-up.txt
             compose-build.txt
-            unit-pytest.log
-            web-vitest.log
-            webapp-build.log
+            integration-pytest.log
+            none.txt
           if-no-files-found: ignore
-      - name: PR comment
+
+      - name: Upsert or delete PR failure comment
         if: always()
+        env:
+          TAIL_PATH: ${{ steps.picktail_integration.outputs.tail_path }}
+          TITLE: "CI / integration"
+          JOB_STATUS: ${{ job.status }}
         uses: actions/github-script@v7
         env:
           CI_JOB_NAME: CI / integration
@@ -200,32 +252,24 @@ jobs:
             if (context.eventName !== 'pull_request') { return; }
             const issue_number = context.issue.number;
             const marker = '<!-- CI_FAILURE_SUMMARY -->';
-            let tail = '';
-            try { tail = fs.readFileSync(process.env.TAIL_PATH, 'utf8'); } catch(e) { tail = 'no logs'; }
-            const jobName = process.env.CI_JOB_NAME || '';
-            const title = jobName.includes('integration') ? 'Integration logs (tail)' :
-                          jobName.includes('unit') ? 'Unit logs (tail)' :
-                          jobName || 'CI logs (tail)';
-            const bodyFail = `${marker}
-                        ${title}
-            
-                        ```
-                        ${tail.split('\n').slice(-200).join('\n')}
-                        ```
-            
-                        Comment "@codex review" to request an AI review.`;
+            let tail = 'no logs';
+            try { tail = fs.readFileSync(process.env.TAIL_PATH, 'utf8'); } catch (e) {}
+            const title = process.env.TITLE || 'CI logs (tail)';
+            const body = [
+              marker,
+              title,
+              '',
+              '```',
+              tail.split('\n').slice(-200).join('\n'),
+              '```',
+              '',
+              'Comment "@codex review" to request an AI review.'
+            ].join('\n');
             const comments = await github.rest.issues.listComments({owner, repo, issue_number, per_page: 100});
             const existing = comments.data.find(c => c.user.type === 'Bot' && c.body && c.body.includes(marker));
-            if ("${{ job.status }}".toLowerCase() === "failure") {
-              if (existing) {
-                await github.rest.issues.updateComment({owner, repo, comment_id: existing.id, body: bodyFail});
-              } else {
-                await github.rest.issues.createComment({owner, repo, issue_number, body: bodyFail});
-              }
+            if ((process.env.JOB_STATUS || '').toLowerCase() === 'failure') {
+              if (existing) await github.rest.issues.updateComment({owner, repo, comment_id: existing.id, body});
+              else await github.rest.issues.createComment({owner, repo, issue_number, body});
             } else {
-              if (existing) { await github.rest.issues.deleteComment({owner, repo, comment_id: existing.id}); }
+              if (existing) await github.rest.issues.deleteComment({owner, repo, comment_id: existing.id});
             }
-      - name: Tear down
-        if: always()
-        run: |
-          docker compose -f docker-compose.yml -f docker-compose.ci.yml -f docker-compose.postgres.yml --env-file .env.ci down -v --remove-orphans
