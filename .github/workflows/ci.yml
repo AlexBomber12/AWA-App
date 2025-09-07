@@ -86,6 +86,25 @@ jobs:
             echo "```"
           } >> $GITHUB_STEP_SUMMARY
 
+      - name: Extract AI hints (unit)
+        if: always()
+        shell: bash
+        run: |
+          : > ai-hints.txt
+          for f in unit-pytest.log web-vitest.log webapp-build.log; do
+            if [ -f "$f" ]; then
+              grep -E "(Traceback|ERROR|CRITICAL|Exception|AssertionError|TypeError|ReferenceError|TS[0-9]+:|not found|exit code [1-9])" "$f" | awk '{print strftime("%H:%M:%S"), $0}' >> ai-hints.txt
+            fi
+          done
+          if [ ! -s ai-hints.txt ]; then echo 'no obvious errors found' > ai-hints.txt; fi
+          {
+            echo '## AI hints (unit)'
+            echo
+            echo '```'
+            tail -n 40 ai-hints.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Upload artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -99,6 +118,7 @@ jobs:
             compose-logs.txt
             compose-up.txt
             compose-build.txt
+            ai-hints.txt
             none.txt
           if-no-files-found: ignore
 
@@ -117,25 +137,48 @@ jobs:
             const issue_number = context.issue.number;
             const marker = '<!-- CI_FAILURE_SUMMARY -->';
             let tail = 'no logs';
+            let hints = 'no logs';
             try { tail = fs.readFileSync(process.env.TAIL_PATH, 'utf8'); } catch (e) {}
-            const title = process.env.TITLE || 'CI logs (tail)';
+            try { hints = fs.readFileSync('ai-hints.txt', 'utf8'); } catch (e) {}
+            const tail_snippet = tail.split('\n').slice(-200).join('\n');
+            const hints_snippet = hints.split('\n').slice(-40).join('\n');
+            const jobTitle = process.env.TITLE || 'CI job';
+            const task = `@codex review
+ROLE: Senior CI+Docker engineer. You may edit files beyond this diff if required for CI only. Do not change runtime product behavior. Never lower coverage thresholds.
+
+Objective:
+- Fix failing ${jobTitle} by reading AI hints and the log tail. Make docker-compose stack healthy and tests pass in GitHub Actions.
+
+Constraints:
+- Keep unit job green; only integration may touch compose/healthcheck/test plumbing.
+- No .env commits; CI writes .env.ci at runtime.
+- Prefer minimal diffs.
+
+Success:
+- Next run: ${jobTitle} green or fails with a different, more specific error.`;
             const body = [
               marker,
-              title,
+              jobTitle,
               '',
               '```',
-              tail.split('\n').slice(-200).join('\n'),
+              tail_snippet || 'no logs',
               '```',
               '',
-              'Comment "@codex review" to request an AI review.'
+              '## AI hints',
+              '',
+              '```',
+              hints_snippet || 'no logs',
+              '```',
+              '',
+              task
             ].join('\n');
             const comments = await github.rest.issues.listComments({owner, repo, issue_number, per_page: 100});
             const existing = comments.data.find(c => c.user.type === 'Bot' && c.body && c.body.includes(marker));
             if ((process.env.JOB_STATUS || '').toLowerCase() === 'failure') {
               if (existing) await github.rest.issues.updateComment({owner, repo, comment_id: existing.id, body});
               else await github.rest.issues.createComment({owner, repo, issue_number, body});
-            } else {
-              if (existing) await github.rest.issues.deleteComment({owner, repo, comment_id: existing.id});
+            } else if (existing) {
+              await github.rest.issues.deleteComment({owner, repo, comment_id: existing.id});
             }
 
   integration:
@@ -211,6 +254,25 @@ jobs:
             echo "```"
           } >> $GITHUB_STEP_SUMMARY
 
+      - name: Extract AI hints (integration)
+        if: always()
+        shell: bash
+        run: |
+          : > ai-hints.txt
+          for f in compose-logs.txt integration-pytest.log compose-up.txt compose-build.txt; do
+            if [ -f "$f" ]; then
+              grep -E "(Traceback|ERROR|CRITICAL|Exception|ValueError|not enough values to unpack|connection refused|pg_isready|curl:|panic|segmentation|Address already in use)" "$f" | awk '{print strftime("%H:%M:%S"), $0}' >> ai-hints.txt
+            fi
+          done
+          if [ ! -s ai-hints.txt ]; then echo 'no obvious errors found' > ai-hints.txt; fi
+          {
+            echo '## AI hints (integration)'
+            echo
+            echo '```'
+            tail -n 40 ai-hints.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Upload artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -222,6 +284,7 @@ jobs:
             compose-up.txt
             compose-build.txt
             integration-pytest.log
+            ai-hints.txt
             none.txt
           if-no-files-found: ignore
 
@@ -240,23 +303,46 @@ jobs:
             const issue_number = context.issue.number;
             const marker = '<!-- CI_FAILURE_SUMMARY -->';
             let tail = 'no logs';
+            let hints = 'no logs';
             try { tail = fs.readFileSync(process.env.TAIL_PATH, 'utf8'); } catch (e) {}
-            const title = process.env.TITLE || 'CI logs (tail)';
+            try { hints = fs.readFileSync('ai-hints.txt', 'utf8'); } catch (e) {}
+            const tail_snippet = tail.split('\n').slice(-200).join('\n');
+            const hints_snippet = hints.split('\n').slice(-40).join('\n');
+            const jobTitle = process.env.TITLE || 'CI job';
+            const task = `@codex review
+ROLE: Senior CI+Docker engineer. You may edit files beyond this diff if required for CI only. Do not change runtime product behavior. Never lower coverage thresholds.
+
+Objective:
+- Fix failing ${jobTitle} by reading AI hints and the log tail. Make docker-compose stack healthy and tests pass in GitHub Actions.
+
+Constraints:
+- Keep unit job green; only integration may touch compose/healthcheck/test plumbing.
+- No .env commits; CI writes .env.ci at runtime.
+- Prefer minimal diffs.
+
+Success:
+- Next run: ${jobTitle} green or fails with a different, more specific error.`;
             const body = [
               marker,
-              title,
+              jobTitle,
               '',
               '```',
-              tail.split('\n').slice(-200).join('\n'),
+              tail_snippet || 'no logs',
               '```',
               '',
-              'Comment "@codex review" to request an AI review.'
+              '## AI hints',
+              '',
+              '```',
+              hints_snippet || 'no logs',
+              '```',
+              '',
+              task
             ].join('\n');
             const comments = await github.rest.issues.listComments({owner, repo, issue_number, per_page: 100});
             const existing = comments.data.find(c => c.user.type === 'Bot' && c.body && c.body.includes(marker));
             if ((process.env.JOB_STATUS || '').toLowerCase() === 'failure') {
               if (existing) await github.rest.issues.updateComment({owner, repo, comment_id: existing.id, body});
               else await github.rest.issues.createComment({owner, repo, issue_number, body});
-            } else {
-              if (existing) await github.rest.issues.deleteComment({owner, repo, comment_id: existing.id});
+            } else if (existing) {
+              await github.rest.issues.deleteComment({owner, repo, comment_id: existing.id});
             }

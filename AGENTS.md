@@ -103,6 +103,7 @@ Optional heuristics
 - On failure read the PR failure comment and Run Summary; download artifact `ci-logs-<run_id>` if deeper inspection is needed.
 - Never lower coverage thresholds; add tests first.
 - Codex reviewers: read the PR failure comment, then propose the minimal patch.
+- CI posts an actionable failure comment with AI hints and a log tail; you can simply reply `@codex review` to request an automated patch. The comment disappears when the job is green.
 
 ### CI commands
 - Unit: `pytest -q -m "not integration"`
