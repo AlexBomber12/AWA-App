@@ -73,16 +73,28 @@ jobs:
         if: always()
         shell: bash
         run: |
-          touch unit-pytest.log web-vitest.log webapp-build.log compose-logs.txt compose-up.txt compose-build.txt
-          echo no logs > none.txt
-          choose_tail() { for f in "$@"; do [ -s "$f" ] && { echo "$f"; return; }; done; echo none.txt; }
-          TAIL=$(choose_tail webapp-build.log unit-pytest.log web-vitest.log compose-logs.txt compose-up.txt compose-build.txt)
-          echo "tail_path=$TAIL" >> $GITHUB_OUTPUT
+          PATTERN='Traceback|ERROR|CRITICAL|Exception|AssertionError|TypeError|ReferenceError|TS[0-9]+:|not found|exit code [1-9]'
+          candidates=()
+          [ -s unit-pytest.log ] && candidates+=("unit-pytest.log")
+          [ -s web-vitest.log ] && candidates+=("web-vitest.log")
+          [ -s webapp-build.log ] && candidates+=("webapp-build.log")
+          pick=""
+          for f in "${candidates[@]}"; do
+            if grep -Eq "$PATTERN" "$f"; then pick="$f"; break; fi
+          done
+          if [ -z "$pick" ] && [ ${#candidates[@]} -gt 0 ]; then
+            pick="$(ls -t "${candidates[@]}" | head -n1)"
+          fi
+          if [ -z "$pick" ]; then
+            echo "no logs" > none.txt
+            pick=none.txt
+          fi
+          echo "tail_path=$pick" >> $GITHUB_OUTPUT
           {
             echo "## Summary"
             echo
             echo "```"
-            tail -n 200 "$TAIL"
+            tail -n 200 "$pick"
             echo "```"
           } >> $GITHUB_STEP_SUMMARY
 
@@ -243,16 +255,29 @@ jobs:
         if: always()
         shell: bash
         run: |
-          touch compose-ps.txt compose-logs.txt compose-up.txt compose-build.txt integration-pytest.log
-          echo no logs > none.txt
-          choose_tail() { for f in "$@"; do [ -s "$f" ] && { echo "$f"; return; }; done; echo none.txt; }
-          TAIL=$(choose_tail compose-logs.txt integration-pytest.log compose-up.txt compose-build.txt)
-          echo "tail_path=$TAIL" >> $GITHUB_OUTPUT
+          PATTERN='Traceback|ERROR|CRITICAL|Exception|ValueError|not enough values to unpack|connection refused|pg_isready|curl:|panic|segmentation|Address already in use'
+          candidates=()
+          [ -s compose-logs.txt ] && candidates+=("compose-logs.txt")
+          [ -s integration-pytest.log ] && candidates+=("integration-pytest.log")
+          [ -s compose-up.txt ] && candidates+=("compose-up.txt")
+          [ -s compose-build.txt ] && candidates+=("compose-build.txt")
+          pick=""
+          for f in "${candidates[@]}"; do
+            if grep -Eq "$PATTERN" "$f"; then pick="$f"; break; fi
+          done
+          if [ -z "$pick" ] && [ ${#candidates[@]} -gt 0 ]; then
+            pick="$(ls -t "${candidates[@]}" | head -n1)"
+          fi
+          if [ -z "$pick" ]; then
+            echo "no logs" > none.txt
+            pick=none.txt
+          fi
+          echo "tail_path=$pick" >> $GITHUB_OUTPUT
           {
             echo "## Summary"
             echo
             echo "```"
-            tail -n 200 "$TAIL"
+            tail -n 200 "$pick"
             echo "```"
           } >> $GITHUB_STEP_SUMMARY
 
