@@ -9,6 +9,7 @@ on:
 permissions:
   contents: read
   pull-requests: write
+  issues: write
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -134,18 +135,17 @@ jobs:
             none.txt
           if-no-files-found: ignore
 
-      - name: Upsert or delete PR failure comment
-        if: always()
+      - name: Upsert failure comment (unit)
+        if: failure() && github.event_name == 'pull_request'
+        continue-on-error: true
         env:
           TAIL_PATH: ${{ steps.picktail_unit.outputs.tail_path }}
           TITLE: "CI / unit"
-          JOB_STATUS: ${{ job.status }}
         uses: actions/github-script@v7
         with:
           script: |
             const fs = require('fs');
             const {owner, repo} = context.repo;
-            if (context.eventName !== 'pull_request') { return; }
             const issue_number = context.issue.number;
             const marker = '<!-- CI_FAILURE_SUMMARY -->';
             let tail = 'no logs';
@@ -154,25 +154,9 @@ jobs:
             try { hints = fs.readFileSync('ai-hints.txt', 'utf8'); } catch (e) {}
             const tail_snippet = tail.split('\n').slice(-200).join('\n');
             const hints_snippet = hints.split('\n').slice(-40).join('\n');
-            const jobTitle = process.env.TITLE || 'CI job';
-            const task = [
-              '@codex review',
-              'ROLE: Senior CI+Docker engineer. You may edit files beyond this diff if required for CI only. Do not change runtime product behavior. Never lower coverage thresholds.',
-              '',
-              'Objective:',
-              `- Fix failing ${jobTitle} by reading AI hints and the log tail. Make docker-compose stack healthy and tests pass in GitHub Actions.`,
-              '',
-              'Constraints:',
-              '- Keep unit job green; only integration may touch compose/healthcheck/test plumbing.',
-              '- No .env commits; CI writes .env.ci at runtime.',
-              '- Prefer minimal diffs.',
-              '',
-              'Success:',
-              `- Next run: ${jobTitle} green or fails with a different, more specific error.`
-            ].join('\n');
             const body = [
               marker,
-              jobTitle,
+              process.env.TITLE,
               '',
               '```',
               tail_snippet || 'no logs',
@@ -184,14 +168,28 @@ jobs:
               hints_snippet || 'no logs',
               '```',
               '',
-              task
+              'Reply with `@codex review` to request an AI patch.'
             ].join('\n');
             const comments = await github.rest.issues.listComments({owner, repo, issue_number, per_page: 100});
             const existing = comments.data.find(c => c.user.type === 'Bot' && c.body && c.body.includes(marker));
-            if ((process.env.JOB_STATUS || '').toLowerCase() === 'failure') {
-              if (existing) await github.rest.issues.updateComment({owner, repo, comment_id: existing.id, body});
-              else await github.rest.issues.createComment({owner, repo, issue_number, body});
-            } else if (existing) {
+            if (existing) {
+              await github.rest.issues.updateComment({owner, repo, comment_id: existing.id, body});
+            } else {
+              await github.rest.issues.createComment({owner, repo, issue_number, body});
+            }
+
+      - name: Delete failure comment on success (unit)
+        if: success() && github.event_name == 'pull_request'
+        continue-on-error: true
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const {owner, repo} = context.repo;
+            const issue_number = context.issue.number;
+            const marker = '<!-- CI_FAILURE_SUMMARY -->';
+            const comments = await github.rest.issues.listComments({owner, repo, issue_number, per_page: 100});
+            const existing = comments.data.find(c => c.user.type === 'Bot' && c.body && c.body.includes(marker));
+            if (existing) {
               await github.rest.issues.deleteComment({owner, repo, comment_id: existing.id});
             }
 
@@ -315,18 +313,17 @@ jobs:
             none.txt
           if-no-files-found: ignore
 
-      - name: Upsert or delete PR failure comment
-        if: always()
+      - name: Upsert failure comment (integration)
+        if: failure() && github.event_name == 'pull_request'
+        continue-on-error: true
         env:
           TAIL_PATH: ${{ steps.picktail_integration.outputs.tail_path }}
           TITLE: "CI / integration"
-          JOB_STATUS: ${{ job.status }}
         uses: actions/github-script@v7
         with:
           script: |
             const fs = require('fs');
             const {owner, repo} = context.repo;
-            if (context.eventName !== 'pull_request') { return; }
             const issue_number = context.issue.number;
             const marker = '<!-- CI_FAILURE_SUMMARY -->';
             let tail = 'no logs';
@@ -335,25 +332,9 @@ jobs:
             try { hints = fs.readFileSync('ai-hints.txt', 'utf8'); } catch (e) {}
             const tail_snippet = tail.split('\n').slice(-200).join('\n');
             const hints_snippet = hints.split('\n').slice(-40).join('\n');
-            const jobTitle = process.env.TITLE || 'CI job';
-            const task = [
-              '@codex review',
-              'ROLE: Senior CI+Docker engineer. You may edit files beyond this diff if required for CI only. Do not change runtime product behavior. Never lower coverage thresholds.',
-              '',
-              'Objective:',
-              `- Fix failing ${jobTitle} by reading AI hints and the log tail. Make docker-compose stack healthy and tests pass in GitHub Actions.`,
-              '',
-              'Constraints:',
-              '- Keep unit job green; only integration may touch compose/healthcheck/test plumbing.',
-              '- No .env commits; CI writes .env.ci at runtime.',
-              '- Prefer minimal diffs.',
-              '',
-              'Success:',
-              `- Next run: ${jobTitle} green or fails with a different, more specific error.`
-            ].join('\n');
             const body = [
               marker,
-              jobTitle,
+              process.env.TITLE,
               '',
               '```',
               tail_snippet || 'no logs',
@@ -365,13 +346,27 @@ jobs:
               hints_snippet || 'no logs',
               '```',
               '',
-              task
+              'Reply with `@codex review` to request an AI patch.'
             ].join('\n');
             const comments = await github.rest.issues.listComments({owner, repo, issue_number, per_page: 100});
             const existing = comments.data.find(c => c.user.type === 'Bot' && c.body && c.body.includes(marker));
-            if ((process.env.JOB_STATUS || '').toLowerCase() === 'failure') {
-              if (existing) await github.rest.issues.updateComment({owner, repo, comment_id: existing.id, body});
-              else await github.rest.issues.createComment({owner, repo, issue_number, body});
-            } else if (existing) {
+            if (existing) {
+              await github.rest.issues.updateComment({owner, repo, comment_id: existing.id, body});
+            } else {
+              await github.rest.issues.createComment({owner, repo, issue_number, body});
+            }
+
+      - name: Delete failure comment on success (integration)
+        if: success() && github.event_name == 'pull_request'
+        continue-on-error: true
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const {owner, repo} = context.repo;
+            const issue_number = context.issue.number;
+            const marker = '<!-- CI_FAILURE_SUMMARY -->';
+            const comments = await github.rest.issues.listComments({owner, repo, issue_number, per_page: 100});
+            const existing = comments.data.find(c => c.user.type === 'Bot' && c.body && c.body.includes(marker));
+            if (existing) {
               await github.rest.issues.deleteComment({owner, repo, comment_id: existing.id});
             }
