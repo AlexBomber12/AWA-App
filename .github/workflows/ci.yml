@@ -104,10 +104,10 @@ jobs:
         shell: bash
         run: |
           : > ai-hints.txt
+          ts="$(date +%H:%M:%S)"
           for f in unit-pytest.log web-vitest.log webapp-build.log; do
-            if [ -f "$f" ]; then
-              grep -E "(Traceback|ERROR|CRITICAL|Exception|AssertionError|TypeError|ReferenceError|TS[0-9]+:|not found|exit code [1-9])" "$f" | awk '{print strftime("%H:%M:%S"), $0}' >> ai-hints.txt
-            fi
+            [ -f "$f" ] || continue
+            grep -E '(Traceback|ERROR|CRITICAL|Exception|AssertionError|TypeError|ReferenceError|TS[0-9]+:|not found|exit code [1-9])' "$f" | sed "s/^/$ts /" >> ai-hints.txt || true
           done
           if [ ! -s ai-hints.txt ]; then echo 'no obvious errors found' > ai-hints.txt; fi
           {
@@ -284,10 +284,10 @@ jobs:
         shell: bash
         run: |
           : > ai-hints.txt
+          ts="$(date +%H:%M:%S)"
           for f in compose-logs.txt integration-pytest.log compose-up.txt compose-build.txt; do
-            if [ -f "$f" ]; then
-              grep -E "(Traceback|ERROR|CRITICAL|Exception|ValueError|not enough values to unpack|connection refused|pg_isready|curl:|panic|segmentation|Address already in use)" "$f" | awk '{print strftime("%H:%M:%S"), $0}' >> ai-hints.txt
-            fi
+            [ -f "$f" ] || continue
+            grep -E '(Traceback|ERROR|CRITICAL|Exception|ValueError|not enough values to unpack|connection refused|pg_isready|curl:|panic|segmentation|Address already in use)' "$f" | sed "s/^/$ts /" >> ai-hints.txt || true
           done
           if [ ! -s ai-hints.txt ]; then echo 'no obvious errors found' > ai-hints.txt; fi
           {
