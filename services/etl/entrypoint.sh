@@ -3,7 +3,7 @@ set -euo pipefail
 
 : "${PG_HOST:=postgres}"
 
-./wait-for-it.sh --timeout=30 "$PG_HOST:5432"
+./wait-for-it.sh "${PG_HOST}:5432" --timeout=30
 
 if [ "$#" -gt 0 ]; then
   exec "$@"
