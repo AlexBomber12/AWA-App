@@ -6,10 +6,10 @@ services:
     env_file:
       - .env.postgres
     environment:
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      PGPASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_USER: ${POSTGRES_USER:-${PG_USER}}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-${PG_PASSWORD}}
+      POSTGRES_DB: ${POSTGRES_DB:-${PG_DATABASE}}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-${PG_PASSWORD}}
       TZ: UTC
       LANG: en_US.UTF-8
       POSTGRES_CONFIG_FILE: /etc/postgresql/postgresql.conf
@@ -49,6 +49,12 @@ services:
       args:
         TZ_CACHE_BUST: ${GITHUB_SHA:-dev}
     environment:
+      PG_HOST: ${PG_HOST}
+      PG_PORT: ${PG_PORT}
+      PG_USER: ${PG_USER}
+      PG_PASSWORD: ${PG_PASSWORD}
+      PG_DATABASE: ${PG_DATABASE}
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://${PG_USER}:${PG_PASSWORD}@${PG_HOST}:${PG_PORT}/${PG_DATABASE}}
       TZ: UTC
     env_file:
       - .env.postgres
@@ -76,6 +82,13 @@ services:
       dockerfile: services/etl/Dockerfile
       args:
         TZ_CACHE_BUST: ${GITHUB_SHA:-dev}
+    environment:
+      PG_HOST: ${PG_HOST}
+      PG_PORT: ${PG_PORT}
+      PG_USER: ${PG_USER}
+      PG_PASSWORD: ${PG_PASSWORD}
+      PG_DATABASE: ${PG_DATABASE}
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://${PG_USER}:${PG_PASSWORD}@${PG_HOST}:${PG_PORT}/${PG_DATABASE}}
     env_file:
       - .env.postgres
     depends_on:
