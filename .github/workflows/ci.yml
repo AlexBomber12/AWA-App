@@ -406,21 +406,27 @@ jobs:
           PY
           echo "dir=logs_sanitized" >> $GITHUB_OUTPUT
 
+      - name: Remove raw logs to avoid accidental use
+        shell: bash
+        run: |
+          SAN="${{ steps.sanitize.outputs.dir }}"
+          find . -maxdepth 1 -type f \( -name "*.log" -o -name "*.txt" \) -not -path "./$SAN/*" -delete || true
+
       - name: Build PR comment body
         id: body
         shell: bash
+        env:
+          SAN_DIR: ${{ steps.sanitize.outputs.dir }}
         run: |
-          DIR="${{ steps.sanitize.outputs.dir }}"
           marker="<!-- CI_LOG_MIRROR -->"
           title="CI last run logs (sanitized)"
-          # Compose collapsible sections for the most relevant files if they exist
           section () {
             f="$1"; label="$2"
             [ -s "$f" ] || return 0
             echo "<details><summary>${label} — $(wc -l < "$f") lines</summary>"
             echo
             echo '```'
-            cat "$f"
+            sed -e 's/\r$//' "$f"
             echo '```'
             echo
             echo '</details>'
@@ -430,13 +436,13 @@ jobs:
             echo "$marker"
             echo "### ${title}"
             echo
-            section "compose-logs.txt" "compose-logs.txt"
-            section "integration-pytest.log" "integration-pytest.log"
-            section "compose-up.txt" "compose-up.txt"
-            section "compose-build.txt" "compose-build.txt"
-            section "unit-pytest.log" "unit-pytest.log"
-            section "web-vitest.log" "web-vitest.log"
-            section "webapp-build.log" "webapp-build.log"
+            section "$SAN_DIR/compose-logs.txt"        "compose-logs.txt"
+            section "$SAN_DIR/integration-pytest.log"  "integration-pytest.log"
+            section "$SAN_DIR/compose-up.txt"          "compose-up.txt"
+            section "$SAN_DIR/compose-build.txt"       "compose-build.txt"
+            section "$SAN_DIR/unit-pytest.log"         "unit-pytest.log"
+            section "$SAN_DIR/web-vitest.log"          "web-vitest.log"
+            section "$SAN_DIR/webapp-build.log"        "webapp-build.log"
             echo "> Reply with \`@codex review\` to request an AI patch."
           } > pr_comment.md
           echo "path=pr_comment.md" >> $GITHUB_OUTPUT
