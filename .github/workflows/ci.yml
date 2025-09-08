@@ -2,12 +2,8 @@ name: ci
 
 on:
   pull_request:
-    paths-ignore:
-      - '.codex/**'
   push:
     branches: [main]
-    paths-ignore:
-      - '.codex/**'
   workflow_dispatch:
 
 permissions:
@@ -134,64 +130,6 @@ jobs:
             ai-hints-unit.txt
             none.txt
           if-no-files-found: ignore
-
-      - name: Upsert failure comment (unit)
-        if: failure() && github.event_name == 'pull_request'
-        continue-on-error: true
-        env:
-          TAIL_PATH: ${{ steps.picktail_unit.outputs.tail_path }}
-          TITLE: "CI / unit"
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-            const {owner, repo} = context.repo;
-            const issue_number = context.issue.number;
-            const marker = '<!-- CI_FAILURE_SUMMARY -->';
-            let tail = 'no logs';
-            let hints = 'no logs';
-            try { tail = fs.readFileSync(process.env.TAIL_PATH, 'utf8'); } catch (e) {}
-            try { hints = fs.readFileSync('ai-hints-unit.txt', 'utf8'); } catch (e) {}
-            const tail_snippet = tail.split('\n').slice(-200).join('\n');
-            const hints_snippet = hints.split('\n').slice(-40).join('\n');
-            const body = [
-              marker,
-              process.env.TITLE,
-              '',
-              '```',
-              tail_snippet || 'no logs',
-              '```',
-              '',
-              '## AI hints',
-              '',
-              '```',
-              hints_snippet || 'no logs',
-              '```',
-              '',
-              'Reply with `@codex review` to request an AI patch.'
-            ].join('\n');
-            const comments = await github.rest.issues.listComments({owner, repo, issue_number, per_page: 100});
-            const existing = comments.data.find(c => c.user.type === 'Bot' && c.body && c.body.includes(marker));
-            if (existing) {
-              await github.rest.issues.updateComment({owner, repo, comment_id: existing.id, body});
-            } else {
-              await github.rest.issues.createComment({owner, repo, issue_number, body});
-            }
-
-      - name: Delete failure comment on success (unit)
-        if: success() && github.event_name == 'pull_request'
-        continue-on-error: true
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const {owner, repo} = context.repo;
-            const issue_number = context.issue.number;
-            const marker = '<!-- CI_FAILURE_SUMMARY -->';
-            const comments = await github.rest.issues.listComments({owner, repo, issue_number, per_page: 100});
-            const existing = comments.data.find(c => c.user.type === 'Bot' && c.body && c.body.includes(marker));
-            if (existing) {
-              await github.rest.issues.deleteComment({owner, repo, comment_id: existing.id});
-            }
   integration:
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -226,19 +164,6 @@ jobs:
           set -o pipefail
           docker compose $COMPOSE_FILES --env-file .env.ci up -d --wait 2>&1 | tee compose-up.txt
           exit ${PIPESTATUS[0]}
-
-      - name: Debug container env
-        if: always()
-        shell: bash
-        run: |
-          COMPOSE_FILES=""
-          [ -f docker-compose.yml ] && COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.yml"
-          [ -f docker-compose.ci.yml ] && COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.ci.yml"
-          [ -f docker-compose.postgres.yml ] && COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.postgres.yml"
-          for svc in api etl celery_worker; do
-            echo "=== $svc ==="
-            docker compose $COMPOSE_FILES --env-file .env.ci exec -T "$svc" env | grep -E 'PG_|DATABASE_URL' || true
-          done
 
       - name: Dump compose logs
         if: always()
@@ -324,70 +249,10 @@ jobs:
             ai-hints-integration.txt
             none.txt
           if-no-files-found: ignore
-
-      - name: Upsert failure comment (integration)
-        if: failure() && github.event_name == 'pull_request'
-        continue-on-error: true
-        env:
-          TAIL_PATH: ${{ steps.picktail_integration.outputs.tail_path }}
-          TITLE: "CI / integration"
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-            const {owner, repo} = context.repo;
-            const issue_number = context.issue.number;
-            const marker = '<!-- CI_FAILURE_SUMMARY -->';
-            let tail = 'no logs';
-            let hints = 'no logs';
-            try { tail = fs.readFileSync(process.env.TAIL_PATH, 'utf8'); } catch (e) {}
-            try { hints = fs.readFileSync('ai-hints-integration.txt', 'utf8'); } catch (e) {}
-            const tail_snippet = tail.split('\n').slice(-200).join('\n');
-            const hints_snippet = hints.split('\n').slice(-40).join('\n');
-            const body = [
-              marker,
-              process.env.TITLE,
-              '',
-              '```',
-              tail_snippet || 'no logs',
-              '```',
-              '',
-              '## AI hints',
-              '',
-              '```',
-              hints_snippet || 'no logs',
-              '```',
-              '',
-              'Reply with `@codex review` to request an AI patch.'
-            ].join('\n');
-            const comments = await github.rest.issues.listComments({owner, repo, issue_number, per_page: 100});
-            const existing = comments.data.find(c => c.user.type === 'Bot' && c.body && c.body.includes(marker));
-            if (existing) {
-              await github.rest.issues.updateComment({owner, repo, comment_id: existing.id, body});
-            } else {
-              await github.rest.issues.createComment({owner, repo, issue_number, body});
-            }
-
-      - name: Delete failure comment on success (integration)
-        if: success() && github.event_name == 'pull_request'
-        continue-on-error: true
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const {owner, repo} = context.repo;
-            const issue_number = context.issue.number;
-            const marker = '<!-- CI_FAILURE_SUMMARY -->';
-            const comments = await github.rest.issues.listComments({owner, repo, issue_number, per_page: 100});
-            const existing = comments.data.find(c => c.user.type === 'Bot' && c.body && c.body.includes(marker));
-            if (existing) {
-              await github.rest.issues.deleteComment({owner, repo, comment_id: existing.id});
-            }
-  publish_logs:
+  mirror_logs:
     needs: [unit, integration]
     if: ${{ always() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
       - uses: actions/checkout@v5
         with:
@@ -398,29 +263,165 @@ jobs:
           pattern: ci-logs-*
           merge-multiple: true
 
-      - name: Prepare .codex/last-run with FULL logs
+      - name: Sanitize logs to tmp directory
+        id: sanitize
         shell: bash
         run: |
-          rm -rf .codex/last-run
-          mkdir -p .codex/last-run
-          cp -f *.txt *.log .codex/last-run/ 2>/dev/null || true
-          cat > .codex/last-run/meta.json <<EOF
-          {
-            "run_id": "${{ github.run_id }}",
-            "run_attempt": "${{ github.run_attempt }}",
-            "sha": "${{ github.sha }}",
-            "ref": "${{ github.ref }}",
-            "pr": ${{ github.event.pull_request.number }},
-            "unit_result": "${{ needs.unit.result || 'skipped' }}",
-            "integration_result": "${{ needs.integration.result || 'skipped' }}"
-          }
-          EOF
-          printf "# CI last run\n\n- unit: %s\n- integration: %s\n\nFiles:\n" "${{ needs.unit.result || 'skipped' }}" "${{ needs.integration.result || 'skipped' }}" > .codex/last-run/README.md
-          ls -1 .codex/last-run >> .codex/last-run/README.md
+          rm -rf logs_sanitized && mkdir -p logs_sanitized
+          python - <<'PY'
+          import os,re,glob,io,sys,shutil,json
+          os.makedirs("logs_sanitized", exist_ok=True)
+          files = sorted(glob.glob("*.log")+glob.glob("*.txt"))
+          rules = [
+            (re.compile(r'(?i)\b(PG_PASSWORD|POSTGRES_PASSWORD|REDIS_PASSWORD|MINIO_SECRET_KEY|AWS_SECRET_ACCESS_KEY|OPENAI_API_KEY|API_KEY|SECRET|TOKEN|PASSWORD)\s*=\s*[^\s]+'), r'\1=<redacted>'),
+            (re.compile(r'(?i)\bDATABASE_URL\s*=\s*\S+'), 'DATABASE_URL=<redacted>'),
+            (re.compile(r'postgres(?:ql|\+psycopg)?://([^:@/]+):([^@/]+)@'), r'postgresql://\1:<redacted>@'),
+            (re.compile(r'://([^:@/]+):([^@/]+)@'), r'://\1:<redacted>@'),
+            (re.compile(r'Bearer\s+[A-Za-z0-9\-._~+/]+=*'), 'Bearer <redacted>'),
+            (re.compile(r'(?i)(Authorization:\s*)\S+'), r'\1<redacted>')
+          ]
+          for src in files:
+            try:
+              data = open(src,'r',errors='ignore').read()
+            except Exception:
+              continue
+            red = data
+            for pat, sub in rules:
+              red = pat.sub(sub, red)
+            with open(os.path.join("logs_sanitized", os.path.basename(src)), "w", encoding="utf-8") as f:
+              f.write(red)
+          PY
+          echo "dir=logs_sanitized" >> $GITHUB_OUTPUT
 
-      - name: Commit last-run logs into PR branch (no CI loop)
-        uses: stefanzweifel/git-auto-commit-action@v5
+      - name: Remove raw logs to avoid accidental use
+        shell: bash
+        run: |
+          SAN="${{ steps.sanitize.outputs.dir }}"
+          find . -maxdepth 1 -type f \( -name "*.log" -o -name "*.txt" \) -not -path "./$SAN/*" -delete || true
+
+      - name: Build sanitized digest (pass 1)
+        id: digest1
+        shell: bash
+        env:
+          SAN_DIR: ${{ steps.sanitize.outputs.dir }}
+        run: |
+          python - <<'PY'
+          import os,re,glob,io,sys,json,math
+          san=os.environ.get("SAN_DIR","logs_sanitized")
+          files=[("compose-logs.txt","compose-logs.txt"),
+                 ("integration-pytest.log","integration-pytest.log"),
+                 ("compose-up.txt","compose-up.txt"),
+                 ("compose-build.txt","compose-build.txt"),
+                 ("unit-pytest.log","unit-pytest.log"),
+                 ("web-vitest.log","web-vitest.log"),
+                 ("webapp-build.log","webapp-build.log")]
+          err_pat=re.compile(r"(Traceback \(most recent call last\):|ERROR|FATAL|authentication failed|Exception|ImportError|ModuleNotFoundError|OperationalError|Connection refused|ValueError|TypeError)",re.I)
+
+          def load(name):
+              p=os.path.join(san,name)
+              if not os.path.exists(p): return name,None
+              with open(p,"r",errors="ignore") as f: return name,f.read()
+
+          def last_traceback(txt):
+              if not txt: return ""
+              idx=[m.start() for m in re.finditer(r"Traceback \(most recent call last\):",txt)]
+              if idx: return txt[idx[-1]:].splitlines()[:200]
+              lines=[l for l in txt.splitlines() if err_pat.search(l)]
+              return lines[-60:] if lines else []
+
+          def section(title,lines):
+              if not lines: return ""
+              b=["<details><summary>%s — %d lines</summary>"% (title,len(lines)),"","```"]
+              b.extend(lines); b.extend(["```","","</details>",""])
+              return "\n".join(b)
+
+          TAIL=300
+          def render(max_total=60000, tail=TAIL):
+              parts=["<!-- CI_LOG_MIRROR -->","### CI last run logs (sanitized)",""]
+              for fname,label in files:
+                  name,txt=load(fname)
+                  if txt is None: continue
+                  err=last_traceback(txt)
+                  if err: parts.append(section(label+" — Errors",err))
+                  tail_lines=txt.splitlines()[-tail:] if tail>0 else []
+                  if tail_lines: parts.append(section(label+" — Tail",tail_lines))
+              body="\n".join(parts)
+              return body
+
+          body=render()
+          open("pr_comment.md","w",encoding="utf-8").write(body)
+          open("pr_len.txt","w").write(str(len(body)))
+          PY
+          echo "len=$(cat pr_len.txt)" >> $GITHUB_OUTPUT
+
+      - name: Shrink digest if needed (pass 2)
+        if: ${{ steps.digest1.outputs.len && fromJSON(steps.digest1.outputs.len) > 60000 }}
+        id: digest2
+        shell: bash
+        env:
+          SAN_DIR: ${{ steps.sanitize.outputs.dir }}
+        run: |
+          python - <<'PY'
+          import os,re
+          san=os.environ.get("SAN_DIR","logs_sanitized")
+          with open("pr_comment.md","r",errors="ignore") as f: body=f.read()
+          if len(body)<=60000:
+              raise SystemExit
+          def rebuild(tail):
+              files=[("compose-logs.txt","compose-logs.txt"),
+                     ("integration-pytest.log","integration-pytest.log"),
+                     ("compose-up.txt","compose-up.txt"),
+                     ("compose-build.txt","compose-build.txt"),
+                     ("unit-pytest.log","unit-pytest.log"),
+                     ("web-vitest.log","web-vitest.log"),
+                     ("webapp-build.log","webapp-build.log")]
+              err_pat=re.compile(r"(Traceback \(most recent call last\):|ERROR|FATAL|authentication failed|Exception|ImportError|ModuleNotFoundError|OperationalError|Connection refused|ValueError|TypeError)",re.I)
+              def load(name):
+                  p=os.path.join(san,name)
+                  if not os.path.exists(p): return name,None
+                  return name,open(p,"r",errors="ignore").read()
+              def last_tb(txt):
+                  if not txt: return []
+                  idx=[m.start() for m in re.finditer(r"Traceback \(most recent call last\):",txt)]
+                  if idx: return txt[idx[-1]:].splitlines()[:200]
+                  lines=[l for l in txt.splitlines() if err_pat.search(l)]
+                  return lines[-60:] if lines else []
+              def section(title,lines):
+                  if not lines: return ""
+                  b=["<details><summary>%s — %d lines</summary>"% (title,len(lines)),"","```"]
+                  b.extend(lines); b.extend(["```","","</details>",""])
+                  return "\n".join(b)
+              parts=["<!-- CI_LOG_MIRROR -->","### CI last run logs (sanitized)",""]
+              for fname,label in files:
+                  name,txt=load(fname)
+                  if txt is None: continue
+                  err=last_tb(txt)
+                  if err: parts.append(section(label+" — Errors",err))
+                  tl=txt.splitlines()[-tail:] if tail>0 else []
+                  if tl: parts.append(section(label+" — Tail",tl))
+              return "\n".join(parts)
+          for tail in (200,120,80,0):
+              b=rebuild(tail)
+              if len(b)<=60000:
+                  open("pr_comment.md","w",encoding="utf-8").write(b)
+                  break
+          else:
+              idx=["<!-- CI_LOG_MIRROR -->","### CI last run logs (sanitized)","","Logs are too large; showing Errors only."]
+              open("pr_comment.md","w",encoding="utf-8").write("\n".join(idx))
+          PY
+
+      - name: Upsert PR comment (sanitized digest)
+        uses: actions/github-script@v7
+        env:
+          BODY_PATH: pr_comment.md
         with:
-          commit_message: "[ci-logs] update last-run (no-ci)"
-          file_pattern: ".codex/last-run/**"
-          add_options: "--all"
+          script: |
+            const fs=require('fs'); const {owner,repo}=context.repo;
+            const issue_number=context.issue.number; const marker='<!-- CI_LOG_MIRROR -->';
+            const body=fs.readFileSync(process.env.BODY_PATH,'utf8');
+            const len=body.length;
+            const comments=await github.rest.issues.listComments({owner,repo,issue_number,per_page:100});
+            const existing=comments.data.find(c=>c.user.type==='Bot' && c.body && c.body.includes(marker));
+            if (existing) await github.rest.issues.updateComment({owner,repo,comment_id:existing.id,body});
+            else await github.rest.issues.createComment({owner,repo,issue_number,body});
+            core.info(`Posted sanitized digest (${len} chars).`)
