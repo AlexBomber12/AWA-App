@@ -2,28 +2,12 @@ name: ci
 
 on:
   pull_request:
-    paths:
-      - 'services/**'
-      - 'web/**'
-      - 'webapp/**'
-      - 'docker-compose*.yml'
-      - '.github/workflows/**'
-      - 'pyproject.toml'
-      - 'poetry.lock'
-      - 'requirements*.txt'
-      - 'package*.json'
+    paths-ignore:
+      - '.codex/**'
   push:
     branches: [main]
-    paths:
-      - 'services/**'
-      - 'web/**'
-      - 'webapp/**'
-      - 'docker-compose*.yml'
-      - '.github/workflows/**'
-      - 'pyproject.toml'
-      - 'poetry.lock'
-      - 'requirements*.txt'
-      - 'package*.json'
+    paths-ignore:
+      - '.codex/**'
   workflow_dispatch:
 
 permissions:
@@ -400,18 +384,16 @@ jobs:
             }
   publish_logs:
     needs: [unit, integration]
-    if: always() && github.event_name == 'pull_request'
+    if: ${{ always() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - name: Checkout PR branch
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           ref: ${{ github.head_ref }}
 
-      - name: Download all CI logs artifacts
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
           pattern: ci-logs-*
           merge-multiple: true
