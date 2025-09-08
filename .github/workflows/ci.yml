@@ -2,8 +2,12 @@ name: ci
 
 on:
   pull_request:
+    paths-ignore:
+      - '.codex/**'
   push:
     branches: [main]
+    paths-ignore:
+      - '.codex/**'
   workflow_dispatch:
 
 permissions:
@@ -103,35 +107,31 @@ jobs:
         if: always()
         shell: bash
         run: |
-          : > ai-hints.txt
+          : > ai-hints-unit.txt
           ts="$(date +%H:%M:%S)"
           for f in unit-pytest.log web-vitest.log webapp-build.log; do
             [ -f "$f" ] || continue
-            grep -E '(Traceback|ERROR|CRITICAL|Exception|AssertionError|TypeError|ReferenceError|TS[0-9]+:|not found|exit code [1-9])' "$f" | sed "s/^/$ts /" >> ai-hints.txt || true
+            grep -E '(Traceback|ERROR|CRITICAL|Exception|AssertionError|TypeError|ReferenceError|TS[0-9]+:|not found|exit code [1-9])' "$f" | sed "s/^/$ts /" >> ai-hints-unit.txt || true
           done
-          if [ ! -s ai-hints.txt ]; then echo 'no obvious errors found' > ai-hints.txt; fi
+          if [ ! -s ai-hints-unit.txt ]; then echo 'no obvious errors found' > ai-hints-unit.txt; fi
           {
             echo '## AI hints (unit)'
             echo
             echo '```'
-            tail -n 40 ai-hints.txt
+            tail -n 40 ai-hints-unit.txt
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Upload artifacts
+      - name: Upload artifacts (unit)
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ci-logs-${{ github.run_id }}-unit
+          name: ci-logs-${{ github.run_id }}-${{ github.run_attempt }}-unit
           path: |
             unit-pytest.log
             web-vitest.log
             webapp-build.log
-            compose-ps.txt
-            compose-logs.txt
-            compose-up.txt
-            compose-build.txt
-            ai-hints.txt
+            ai-hints-unit.txt
             none.txt
           if-no-files-found: ignore
 
@@ -151,7 +151,7 @@ jobs:
             let tail = 'no logs';
             let hints = 'no logs';
             try { tail = fs.readFileSync(process.env.TAIL_PATH, 'utf8'); } catch (e) {}
-            try { hints = fs.readFileSync('ai-hints.txt', 'utf8'); } catch (e) {}
+            try { hints = fs.readFileSync('ai-hints-unit.txt', 'utf8'); } catch (e) {}
             const tail_snippet = tail.split('\n').slice(-200).join('\n');
             const hints_snippet = hints.split('\n').slice(-40).join('\n');
             const body = [
@@ -192,7 +192,6 @@ jobs:
             if (existing) {
               await github.rest.issues.deleteComment({owner, repo, comment_id: existing.id});
             }
-
   integration:
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -296,33 +295,33 @@ jobs:
         if: always()
         shell: bash
         run: |
-          : > ai-hints.txt
+          : > ai-hints-integration.txt
           ts="$(date +%H:%M:%S)"
           for f in compose-logs.txt integration-pytest.log compose-up.txt compose-build.txt; do
             [ -f "$f" ] || continue
-            grep -E '(Traceback|ERROR|CRITICAL|Exception|ValueError|not enough values to unpack|connection refused|pg_isready|curl:|panic|segmentation|Address already in use)' "$f" | sed "s/^/$ts /" >> ai-hints.txt || true
+            grep -E '(Traceback|ERROR|CRITICAL|Exception|ValueError|not enough values to unpack|connection refused|pg_isready|curl:|panic|segmentation|Address already in use)' "$f" | sed "s/^/$ts /" >> ai-hints-integration.txt || true
           done
-          if [ ! -s ai-hints.txt ]; then echo 'no obvious errors found' > ai-hints.txt; fi
+          if [ ! -s ai-hints-integration.txt ]; then echo 'no obvious errors found' > ai-hints-integration.txt; fi
           {
             echo '## AI hints (integration)'
             echo
             echo '```'
-            tail -n 40 ai-hints.txt
+            tail -n 40 ai-hints-integration.txt
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Upload artifacts
+      - name: Upload artifacts (integration)
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ci-logs-${{ github.run_id }}-integration
+          name: ci-logs-${{ github.run_id }}-${{ github.run_attempt }}-integration
           path: |
             compose-ps.txt
             compose-logs.txt
             compose-up.txt
             compose-build.txt
             integration-pytest.log
-            ai-hints.txt
+            ai-hints-integration.txt
             none.txt
           if-no-files-found: ignore
 
@@ -342,7 +341,7 @@ jobs:
             let tail = 'no logs';
             let hints = 'no logs';
             try { tail = fs.readFileSync(process.env.TAIL_PATH, 'utf8'); } catch (e) {}
-            try { hints = fs.readFileSync('ai-hints.txt', 'utf8'); } catch (e) {}
+            try { hints = fs.readFileSync('ai-hints-integration.txt', 'utf8'); } catch (e) {}
             const tail_snippet = tail.split('\n').slice(-200).join('\n');
             const hints_snippet = hints.split('\n').slice(-40).join('\n');
             const body = [
@@ -383,3 +382,45 @@ jobs:
             if (existing) {
               await github.rest.issues.deleteComment({owner, repo, comment_id: existing.id});
             }
+  publish_logs:
+    needs: [unit, integration]
+    if: ${{ always() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: ci-logs-*
+          merge-multiple: true
+
+      - name: Prepare .codex/last-run with FULL logs
+        shell: bash
+        run: |
+          rm -rf .codex/last-run
+          mkdir -p .codex/last-run
+          cp -f *.txt *.log .codex/last-run/ 2>/dev/null || true
+          cat > .codex/last-run/meta.json <<EOF
+          {
+            "run_id": "${{ github.run_id }}",
+            "run_attempt": "${{ github.run_attempt }}",
+            "sha": "${{ github.sha }}",
+            "ref": "${{ github.ref }}",
+            "pr": ${{ github.event.pull_request.number }},
+            "unit_result": "${{ needs.unit.result || 'skipped' }}",
+            "integration_result": "${{ needs.integration.result || 'skipped' }}"
+          }
+          EOF
+          printf "# CI last run\n\n- unit: %s\n- integration: %s\n\nFiles:\n" "${{ needs.unit.result || 'skipped' }}" "${{ needs.integration.result || 'skipped' }}" > .codex/last-run/README.md
+          ls -1 .codex/last-run >> .codex/last-run/README.md
+
+      - name: Commit last-run logs into PR branch (no CI loop)
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "[ci-logs] update last-run (no-ci)"
+          file_pattern: ".codex/last-run/**"
+          add_options: "--all"
