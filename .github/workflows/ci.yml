@@ -2,8 +2,10 @@ name: ci
 
 on:
   pull_request:
+    paths-ignore: ['.codex/**']
   push:
     branches: [main]
+    paths-ignore: ['.codex/**']
   workflow_dispatch:
 
 permissions:
@@ -103,35 +105,31 @@ jobs:
         if: always()
         shell: bash
         run: |
-          : > ai-hints.txt
+          : > ai-hints-unit.txt
           ts="$(date +%H:%M:%S)"
           for f in unit-pytest.log web-vitest.log webapp-build.log; do
             [ -f "$f" ] || continue
-            grep -E '(Traceback|ERROR|CRITICAL|Exception|AssertionError|TypeError|ReferenceError|TS[0-9]+:|not found|exit code [1-9])' "$f" | sed "s/^/$ts /" >> ai-hints.txt || true
+            grep -E '(Traceback|ERROR|CRITICAL|Exception|AssertionError|TypeError|ReferenceError|TS[0-9]+:|not found|exit code [1-9])' "$f" | sed "s/^/$ts /" >> ai-hints-unit.txt || true
           done
-          if [ ! -s ai-hints.txt ]; then echo 'no obvious errors found' > ai-hints.txt; fi
+          if [ ! -s ai-hints-unit.txt ]; then echo 'no obvious errors found' > ai-hints-unit.txt; fi
           {
             echo '## AI hints (unit)'
             echo
             echo '```'
-            tail -n 40 ai-hints.txt
+            tail -n 40 ai-hints-unit.txt
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Upload artifacts
+      - name: Upload artifacts (unit)
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ci-logs-${{ github.run_id }}-unit
+          name: ci-logs-${{ github.run_id }}-${{ github.run_attempt }}-unit
           path: |
             unit-pytest.log
             web-vitest.log
             webapp-build.log
-            compose-ps.txt
-            compose-logs.txt
-            compose-up.txt
-            compose-build.txt
-            ai-hints.txt
+            ai-hints-unit.txt
             none.txt
           if-no-files-found: ignore
 
@@ -151,7 +149,7 @@ jobs:
             let tail = 'no logs';
             let hints = 'no logs';
             try { tail = fs.readFileSync(process.env.TAIL_PATH, 'utf8'); } catch (e) {}
-            try { hints = fs.readFileSync('ai-hints.txt', 'utf8'); } catch (e) {}
+            try { hints = fs.readFileSync('ai-hints-unit.txt', 'utf8'); } catch (e) {}
             const tail_snippet = tail.split('\n').slice(-200).join('\n');
             const hints_snippet = hints.split('\n').slice(-40).join('\n');
             const body = [
@@ -192,7 +190,6 @@ jobs:
             if (existing) {
               await github.rest.issues.deleteComment({owner, repo, comment_id: existing.id});
             }
-
   integration:
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -227,19 +224,6 @@ jobs:
           set -o pipefail
           docker compose $COMPOSE_FILES --env-file .env.ci up -d --wait 2>&1 | tee compose-up.txt
           exit ${PIPESTATUS[0]}
-
-      - name: Debug container env
-        if: always()
-        shell: bash
-        run: |
-          COMPOSE_FILES=""
-          [ -f docker-compose.yml ] && COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.yml"
-          [ -f docker-compose.ci.yml ] && COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.ci.yml"
-          [ -f docker-compose.postgres.yml ] && COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.postgres.yml"
-          for svc in api etl celery_worker; do
-            echo "=== $svc ==="
-            docker compose $COMPOSE_FILES --env-file .env.ci exec -T "$svc" env | grep -E 'PG_|DATABASE_URL' || true
-          done
 
       - name: Dump compose logs
         if: always()
@@ -296,33 +280,33 @@ jobs:
         if: always()
         shell: bash
         run: |
-          : > ai-hints.txt
+          : > ai-hints-integration.txt
           ts="$(date +%H:%M:%S)"
           for f in compose-logs.txt integration-pytest.log compose-up.txt compose-build.txt; do
             [ -f "$f" ] || continue
-            grep -E '(Traceback|ERROR|CRITICAL|Exception|ValueError|not enough values to unpack|connection refused|pg_isready|curl:|panic|segmentation|Address already in use)' "$f" | sed "s/^/$ts /" >> ai-hints.txt || true
+            grep -E '(Traceback|ERROR|CRITICAL|Exception|ValueError|not enough values to unpack|connection refused|pg_isready|curl:|panic|segmentation|Address already in use)' "$f" | sed "s/^/$ts /" >> ai-hints-integration.txt || true
           done
-          if [ ! -s ai-hints.txt ]; then echo 'no obvious errors found' > ai-hints.txt; fi
+          if [ ! -s ai-hints-integration.txt ]; then echo 'no obvious errors found' > ai-hints-integration.txt; fi
           {
             echo '## AI hints (integration)'
             echo
             echo '```'
-            tail -n 40 ai-hints.txt
+            tail -n 40 ai-hints-integration.txt
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Upload artifacts
+      - name: Upload artifacts (integration)
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ci-logs-${{ github.run_id }}-integration
+          name: ci-logs-${{ github.run_id }}-${{ github.run_attempt }}-integration
           path: |
             compose-ps.txt
             compose-logs.txt
             compose-up.txt
             compose-build.txt
             integration-pytest.log
-            ai-hints.txt
+            ai-hints-integration.txt
             none.txt
           if-no-files-found: ignore
 
@@ -342,7 +326,7 @@ jobs:
             let tail = 'no logs';
             let hints = 'no logs';
             try { tail = fs.readFileSync(process.env.TAIL_PATH, 'utf8'); } catch (e) {}
-            try { hints = fs.readFileSync('ai-hints.txt', 'utf8'); } catch (e) {}
+            try { hints = fs.readFileSync('ai-hints-integration.txt', 'utf8'); } catch (e) {}
             const tail_snippet = tail.split('\n').slice(-200).join('\n');
             const hints_snippet = hints.split('\n').slice(-40).join('\n');
             const body = [
@@ -383,3 +367,83 @@ jobs:
             if (existing) {
               await github.rest.issues.deleteComment({owner, repo, comment_id: existing.id});
             }
+  publish_logs:
+    needs: [unit, integration]
+    if: ${{ always() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+
+      - name: Download all CI logs artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: ci-logs-*
+          merge-multiple: true
+
+      - name: Sanitize logs into .codex/last-run
+        shell: bash
+        run: |
+          rm -rf .codex/last-run
+          mkdir -p .codex/last-run
+          python - <<'PY'
+          import os,re,glob,io,sys,shutil,json
+          out_dir = ".codex/last-run"
+          os.makedirs(out_dir, exist_ok=True)
+          files = sorted(glob.glob("*.log")+glob.glob("*.txt"))
+          # Redaction rules
+          rules = [
+            (re.compile(r'(?i)\b(PG_PASSWORD|POSTGRES_PASSWORD|REDIS_PASSWORD|MINIO_SECRET_KEY|AWS_SECRET_ACCESS_KEY|OPENAI_API_KEY|API_KEY|SECRET|TOKEN|PASSWORD)\s*=\s*[^\s]+'), r'\1=<redacted>'),
+            (re.compile(r'(?i)\bDATABASE_URL\s*=\s*\S+'), 'DATABASE_URL=<redacted>'),
+            (re.compile(r'postgres(?:ql|\+psycopg)?://([^:@/]+):([^@/]+)@'), r'postgresql://\1:<redacted>@'),
+            (re.compile(r'://([^:@/]+):([^@/]+)@'), r'://\1:<redacted>@'),
+            (re.compile(r'Bearer\s+[A-Za-z0-9\-._~+/]+=*'), 'Bearer <redacted>'),
+            (re.compile(r'(?i)(Authorization:\s*)\S+'), r'\1<redacted>')
+          ]
+          for src in files:
+            try:
+              data = open(src,'r',errors='ignore').read()
+            except Exception:
+              continue
+            red = data
+            for pat, sub in rules:
+              red = pat.sub(sub, red)
+            with open(os.path.join(out_dir, os.path.basename(src)), 'w', encoding='utf-8') as f:
+              f.write(red)
+          meta = {
+            "run_id": os.getenv("GITHUB_RUN_ID"),
+            "run_attempt": os.getenv("GITHUB_RUN_ATTEMPT"),
+            "sha": os.getenv("GITHUB_SHA"),
+            "ref": os.getenv("GITHUB_REF")
+          }
+          with open(os.path.join(out_dir, "meta.json"), "w") as jf:
+            json.dump(meta, jf, indent=2)
+          PY
+
+      - name: Secret quick scan (sanitized copies)
+        id: leakscan
+        shell: bash
+        run: |
+          set +e
+          hits_file=".codex/last-run/_secret_hits.txt"
+          # Grep a compact set of high-signal patterns
+          egrep -RIn "(?i)(password=|postgres_password=|secret=|api[_-]?key=|authorization:|Bearer\s+[A-Za-z0-9\-._~+/]+=*)" .codex/last-run > "$hits_file" || true
+          if [ -s "$hits_file" ]; then
+            echo "found=1" >> $GITHUB_OUTPUT
+            echo "Secrets-like patterns still present after redaction:"
+            tail -n 50 "$hits_file"
+          else
+            rm -f "$hits_file"
+            echo "found=0" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Commit last-run logs into PR branch (no CI loop)
+        if: steps.leakscan.outputs.found == '0'
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "[ci-logs] update last-run (sanitized, no-ci)"
+          file_pattern: ".codex/last-run/**"
+          add_options: "--all"
