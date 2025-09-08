@@ -203,7 +203,7 @@ jobs:
       - name: Prepare .env.ci
         shell: bash
         run: |
-          printf "PG_HOST=postgres\nPG_PORT=5432\nPG_USER=%s\nPG_PASSWORD=%s\nPG_DATABASE=%s\nPOSTGRES_HOST=postgres\nPOSTGRES_PORT=5432\nPOSTGRES_USER=%s\nPOSTGRES_PASSWORD=%s\nPOSTGRES_DB=%s\n" "${{ secrets.PG_USER || 'postgres' }}" "${{ secrets.PG_PASSWORD || 'postgres' }}" "${{ secrets.PG_DATABASE || 'awa' }}" "${{ secrets.PG_USER || 'postgres' }}" "${{ secrets.PG_PASSWORD || 'postgres' }}" "${{ secrets.PG_DATABASE || 'awa' }}" > .env.ci
+          printf "PG_HOST=postgres\nPG_PORT=5432\nPG_USER=%s\nPG_PASSWORD=%s\nPG_DATABASE=%s\nPOSTGRES_HOST=postgres\nPOSTGRES_PORT=5432\nPOSTGRES_USER=%s\nPOSTGRES_PASSWORD=%s\nPOSTGRES_DB=%s\nDATABASE_URL=postgresql://%s:%s@postgres:5432/%s\n" "${{ secrets.PG_USER || 'postgres' }}" "${{ secrets.PG_PASSWORD || 'pass' }}" "${{ secrets.PG_DATABASE || 'awa' }}" "${{ secrets.PG_USER || 'postgres' }}" "${{ secrets.PG_PASSWORD || 'pass' }}" "${{ secrets.PG_DATABASE || 'awa' }}" "${{ secrets.PG_USER || 'postgres' }}" "${{ secrets.PG_PASSWORD || 'pass' }}" "${{ secrets.PG_DATABASE || 'awa' }}" > .env.ci
 
       - name: Build images
         shell: bash
@@ -227,6 +227,19 @@ jobs:
           set -o pipefail
           docker compose $COMPOSE_FILES --env-file .env.ci up -d --wait 2>&1 | tee compose-up.txt
           exit ${PIPESTATUS[0]}
+
+      - name: Debug container env
+        if: always()
+        shell: bash
+        run: |
+          COMPOSE_FILES=""
+          [ -f docker-compose.yml ] && COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.yml"
+          [ -f docker-compose.ci.yml ] && COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.ci.yml"
+          [ -f docker-compose.postgres.yml ] && COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.postgres.yml"
+          for svc in api etl celery_worker; do
+            echo "=== $svc ==="
+            docker compose $COMPOSE_FILES --env-file .env.ci exec -T "$svc" env | grep -E 'PG_|DATABASE_URL' || true
+          done
 
       - name: Dump compose logs
         if: always()
