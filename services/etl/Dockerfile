@@ -13,6 +13,7 @@ RUN if [ -n "$CONSTRAINTS" ] && [ -f "$CONSTRAINTS" ]; then \
 # copy shared modules under /app/services
 COPY services/common/ ./services/common
 COPY services/ingest/ ./services/ingest
+COPY pg_utils/ ./pg_utils
 COPY services/etl/ ./services/etl
 RUN chmod +x services/etl/wait-for-it.sh services/etl/entrypoint.sh
 
