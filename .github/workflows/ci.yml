@@ -9,6 +9,7 @@ on:
 permissions:
   contents: read
   pull-requests: write
+  issues: write
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -73,24 +74,55 @@ jobs:
         if: always()
         shell: bash
         run: |
-          touch unit-pytest.log web-vitest.log webapp-build.log compose-logs.txt compose-up.txt compose-build.txt
-          echo no logs > none.txt
-          choose_tail() { for f in "$@"; do [ -s "$f" ] && { echo "$f"; return; }; done; echo none.txt; }
-          TAIL=$(choose_tail webapp-build.log unit-pytest.log web-vitest.log compose-logs.txt compose-up.txt compose-build.txt)
-          echo "tail_path=$TAIL" >> $GITHUB_OUTPUT
+          PATTERN='Traceback|ERROR|CRITICAL|Exception|AssertionError|TypeError|ReferenceError|TS[0-9]+:|not found|exit code [1-9]'
+          candidates=()
+          [ -s unit-pytest.log ] && candidates+=("unit-pytest.log")
+          [ -s web-vitest.log ] && candidates+=("web-vitest.log")
+          [ -s webapp-build.log ] && candidates+=("webapp-build.log")
+          pick=""
+          for f in "${candidates[@]}"; do
+            if grep -Eq "$PATTERN" "$f"; then pick="$f"; break; fi
+          done
+          if [ -z "$pick" ] && [ ${#candidates[@]} -gt 0 ]; then
+            pick="$(ls -t "${candidates[@]}" | head -n1)"
+          fi
+          if [ -z "$pick" ]; then
+            echo "no logs" > none.txt
+            pick=none.txt
+          fi
+          echo "tail_path=$pick" >> $GITHUB_OUTPUT
           {
             echo "## Summary"
             echo
             echo "```"
-            tail -n 200 "$TAIL"
+            tail -n 200 "$pick"
             echo "```"
           } >> $GITHUB_STEP_SUMMARY
+
+      - name: Extract AI hints (unit)
+        if: always()
+        shell: bash
+        run: |
+          : > ai-hints.txt
+          ts="$(date +%H:%M:%S)"
+          for f in unit-pytest.log web-vitest.log webapp-build.log; do
+            [ -f "$f" ] || continue
+            grep -E '(Traceback|ERROR|CRITICAL|Exception|AssertionError|TypeError|ReferenceError|TS[0-9]+:|not found|exit code [1-9])' "$f" | sed "s/^/$ts /" >> ai-hints.txt || true
+          done
+          if [ ! -s ai-hints.txt ]; then echo 'no obvious errors found' > ai-hints.txt; fi
+          {
+            echo '## AI hints (unit)'
+            echo
+            echo '```'
+            tail -n 40 ai-hints.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ci-logs-${{ github.run_id }}
+          name: ci-logs-${{ github.run_id }}-unit
           path: |
             unit-pytest.log
             web-vitest.log
@@ -99,43 +131,66 @@ jobs:
             compose-logs.txt
             compose-up.txt
             compose-build.txt
+            ai-hints.txt
             none.txt
           if-no-files-found: ignore
 
-      - name: Upsert or delete PR failure comment
-        if: always()
+      - name: Upsert failure comment (unit)
+        if: failure() && github.event_name == 'pull_request'
+        continue-on-error: true
         env:
           TAIL_PATH: ${{ steps.picktail_unit.outputs.tail_path }}
           TITLE: "CI / unit"
-          JOB_STATUS: ${{ job.status }}
         uses: actions/github-script@v7
         with:
           script: |
             const fs = require('fs');
             const {owner, repo} = context.repo;
-            if (context.eventName !== 'pull_request') { return; }
             const issue_number = context.issue.number;
             const marker = '<!-- CI_FAILURE_SUMMARY -->';
             let tail = 'no logs';
+            let hints = 'no logs';
             try { tail = fs.readFileSync(process.env.TAIL_PATH, 'utf8'); } catch (e) {}
-            const title = process.env.TITLE || 'CI logs (tail)';
+            try { hints = fs.readFileSync('ai-hints.txt', 'utf8'); } catch (e) {}
+            const tail_snippet = tail.split('\n').slice(-200).join('\n');
+            const hints_snippet = hints.split('\n').slice(-40).join('\n');
             const body = [
               marker,
-              title,
+              process.env.TITLE,
               '',
               '```',
-              tail.split('\n').slice(-200).join('\n'),
+              tail_snippet || 'no logs',
               '```',
               '',
-              'Comment "@codex review" to request an AI review.'
+              '## AI hints',
+              '',
+              '```',
+              hints_snippet || 'no logs',
+              '```',
+              '',
+              'Reply with `@codex review` to request an AI patch.'
             ].join('\n');
             const comments = await github.rest.issues.listComments({owner, repo, issue_number, per_page: 100});
             const existing = comments.data.find(c => c.user.type === 'Bot' && c.body && c.body.includes(marker));
-            if ((process.env.JOB_STATUS || '').toLowerCase() === 'failure') {
-              if (existing) await github.rest.issues.updateComment({owner, repo, comment_id: existing.id, body});
-              else await github.rest.issues.createComment({owner, repo, issue_number, body});
+            if (existing) {
+              await github.rest.issues.updateComment({owner, repo, comment_id: existing.id, body});
             } else {
-              if (existing) await github.rest.issues.deleteComment({owner, repo, comment_id: existing.id});
+              await github.rest.issues.createComment({owner, repo, issue_number, body});
+            }
+
+      - name: Delete failure comment on success (unit)
+        if: success() && github.event_name == 'pull_request'
+        continue-on-error: true
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const {owner, repo} = context.repo;
+            const issue_number = context.issue.number;
+            const marker = '<!-- CI_FAILURE_SUMMARY -->';
+            const comments = await github.rest.issues.listComments({owner, repo, issue_number, per_page: 100});
+            const existing = comments.data.find(c => c.user.type === 'Bot' && c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.deleteComment({owner, repo, comment_id: existing.id});
             }
 
   integration:
@@ -198,65 +253,120 @@ jobs:
         if: always()
         shell: bash
         run: |
-          touch compose-ps.txt compose-logs.txt compose-up.txt compose-build.txt integration-pytest.log
-          echo no logs > none.txt
-          choose_tail() { for f in "$@"; do [ -s "$f" ] && { echo "$f"; return; }; done; echo none.txt; }
-          TAIL=$(choose_tail compose-logs.txt integration-pytest.log compose-up.txt compose-build.txt)
-          echo "tail_path=$TAIL" >> $GITHUB_OUTPUT
+          PATTERN='Traceback|ERROR|CRITICAL|Exception|ValueError|not enough values to unpack|connection refused|pg_isready|curl:|panic|segmentation|Address already in use'
+          candidates=()
+          [ -s compose-logs.txt ] && candidates+=("compose-logs.txt")
+          [ -s integration-pytest.log ] && candidates+=("integration-pytest.log")
+          [ -s compose-up.txt ] && candidates+=("compose-up.txt")
+          [ -s compose-build.txt ] && candidates+=("compose-build.txt")
+          pick=""
+          for f in "${candidates[@]}"; do
+            if grep -Eq "$PATTERN" "$f"; then pick="$f"; break; fi
+          done
+          if [ -z "$pick" ] && [ ${#candidates[@]} -gt 0 ]; then
+            pick="$(ls -t "${candidates[@]}" | head -n1)"
+          fi
+          if [ -z "$pick" ]; then
+            echo "no logs" > none.txt
+            pick=none.txt
+          fi
+          echo "tail_path=$pick" >> $GITHUB_OUTPUT
           {
             echo "## Summary"
             echo
             echo "```"
-            tail -n 200 "$TAIL"
+            tail -n 200 "$pick"
             echo "```"
           } >> $GITHUB_STEP_SUMMARY
+
+      - name: Extract AI hints (integration)
+        if: always()
+        shell: bash
+        run: |
+          : > ai-hints.txt
+          ts="$(date +%H:%M:%S)"
+          for f in compose-logs.txt integration-pytest.log compose-up.txt compose-build.txt; do
+            [ -f "$f" ] || continue
+            grep -E '(Traceback|ERROR|CRITICAL|Exception|ValueError|not enough values to unpack|connection refused|pg_isready|curl:|panic|segmentation|Address already in use)' "$f" | sed "s/^/$ts /" >> ai-hints.txt || true
+          done
+          if [ ! -s ai-hints.txt ]; then echo 'no obvious errors found' > ai-hints.txt; fi
+          {
+            echo '## AI hints (integration)'
+            echo
+            echo '```'
+            tail -n 40 ai-hints.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ci-logs-${{ github.run_id }}
+          name: ci-logs-${{ github.run_id }}-integration
           path: |
             compose-ps.txt
             compose-logs.txt
             compose-up.txt
             compose-build.txt
             integration-pytest.log
+            ai-hints.txt
             none.txt
           if-no-files-found: ignore
 
-      - name: Upsert or delete PR failure comment
-        if: always()
+      - name: Upsert failure comment (integration)
+        if: failure() && github.event_name == 'pull_request'
+        continue-on-error: true
         env:
           TAIL_PATH: ${{ steps.picktail_integration.outputs.tail_path }}
           TITLE: "CI / integration"
-          JOB_STATUS: ${{ job.status }}
         uses: actions/github-script@v7
         with:
           script: |
             const fs = require('fs');
             const {owner, repo} = context.repo;
-            if (context.eventName !== 'pull_request') { return; }
             const issue_number = context.issue.number;
             const marker = '<!-- CI_FAILURE_SUMMARY -->';
             let tail = 'no logs';
+            let hints = 'no logs';
             try { tail = fs.readFileSync(process.env.TAIL_PATH, 'utf8'); } catch (e) {}
-            const title = process.env.TITLE || 'CI logs (tail)';
+            try { hints = fs.readFileSync('ai-hints.txt', 'utf8'); } catch (e) {}
+            const tail_snippet = tail.split('\n').slice(-200).join('\n');
+            const hints_snippet = hints.split('\n').slice(-40).join('\n');
             const body = [
               marker,
-              title,
+              process.env.TITLE,
               '',
               '```',
-              tail.split('\n').slice(-200).join('\n'),
+              tail_snippet || 'no logs',
               '```',
               '',
-              'Comment "@codex review" to request an AI review.'
+              '## AI hints',
+              '',
+              '```',
+              hints_snippet || 'no logs',
+              '```',
+              '',
+              'Reply with `@codex review` to request an AI patch.'
             ].join('\n');
             const comments = await github.rest.issues.listComments({owner, repo, issue_number, per_page: 100});
             const existing = comments.data.find(c => c.user.type === 'Bot' && c.body && c.body.includes(marker));
-            if ((process.env.JOB_STATUS || '').toLowerCase() === 'failure') {
-              if (existing) await github.rest.issues.updateComment({owner, repo, comment_id: existing.id, body});
-              else await github.rest.issues.createComment({owner, repo, issue_number, body});
+            if (existing) {
+              await github.rest.issues.updateComment({owner, repo, comment_id: existing.id, body});
             } else {
-              if (existing) await github.rest.issues.deleteComment({owner, repo, comment_id: existing.id});
+              await github.rest.issues.createComment({owner, repo, issue_number, body});
+            }
+
+      - name: Delete failure comment on success (integration)
+        if: success() && github.event_name == 'pull_request'
+        continue-on-error: true
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const {owner, repo} = context.repo;
+            const issue_number = context.issue.number;
+            const marker = '<!-- CI_FAILURE_SUMMARY -->';
+            const comments = await github.rest.issues.listComments({owner, repo, issue_number, per_page: 100});
+            const existing = comments.data.find(c => c.user.type === 'Bot' && c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.deleteComment({owner, repo, comment_id: existing.id});
             }

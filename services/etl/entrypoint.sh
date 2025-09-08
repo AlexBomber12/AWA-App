@@ -1,9 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-: "${PG_HOST:=postgres}"
-
-./wait-for-it.sh "${PG_HOST}:5432" --timeout=30
+./wait-for-it.sh "${PG_HOST:-postgres}:${PG_PORT:-5432}" --timeout=30
 
 if [ "$#" -gt 0 ]; then
   exec "$@"

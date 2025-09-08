@@ -3,6 +3,7 @@
 - [ ] artifacts reviewed (compose-logs.txt, compose-ps.txt)
 - [ ] Run Summary checked
 - [ ] coverage thresholds not lowered
+- [ ] If CI failed, read the AI hints in the failure comment and reply `@codex review`.
 
 ## Test Plan
 - [ ] `pytest -m "not integration"`

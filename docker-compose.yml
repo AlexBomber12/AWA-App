@@ -15,10 +15,10 @@ services:
       dockerfile: docker/postgres/Dockerfile
     restart: always
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: pass # pragma: allowlist secret
-      POSTGRES_DB: awa
-      PGPASSWORD: pass # for healthcheck
+      POSTGRES_USER: ${POSTGRES_USER:-${PG_USER}}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-${PG_PASSWORD}}
+      POSTGRES_DB: ${POSTGRES_DB:-${PG_DATABASE}}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-${PG_PASSWORD}} # for healthcheck
       TZ: UTC
       LANG: en_US.UTF-8
       POSTGRES_CONFIG_FILE: /etc/postgresql/postgresql.conf
@@ -81,7 +81,12 @@ services:
       args:
         TZ_CACHE_BUST: ${GITHUB_SHA:-dev}
     environment:
-      <<: *db-env
+      PG_HOST: ${PG_HOST}
+      PG_PORT: ${PG_PORT}
+      PG_USER: ${PG_USER}
+      PG_PASSWORD: ${PG_PASSWORD}
+      PG_DATABASE: ${PG_DATABASE}
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://${PG_USER}:${PG_PASSWORD}@${PG_HOST}:${PG_PORT}/${PG_DATABASE}}
       TZ: UTC
       PYTHONPATH: /app:/app/services
       ENABLE_LIVE: 0
@@ -122,7 +127,12 @@ services:
       args:
         TZ_CACHE_BUST: ${GITHUB_SHA:-dev}
     environment:
-      <<: *db-env
+      PG_HOST: ${PG_HOST}
+      PG_PORT: ${PG_PORT}
+      PG_USER: ${PG_USER}
+      PG_PASSWORD: ${PG_PASSWORD}
+      PG_DATABASE: ${PG_DATABASE}
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://${PG_USER}:${PG_PASSWORD}@${PG_HOST}:${PG_PORT}/${PG_DATABASE}}
       TZ: UTC
       ENABLE_LIVE: 0
       MINIO_ENDPOINT: ${MINIO_ENDPOINT:-minio:9000}
@@ -159,7 +169,12 @@ services:
         TZ_CACHE_BUST: ${GITHUB_SHA:-dev}
     command: ["celery", "-A", "services.ingest.celery_app:celery_app", "worker", "-Q", "ingest", "-l", "INFO"]
     environment:
-      <<: *db-env
+      PG_HOST: ${PG_HOST}
+      PG_PORT: ${PG_PORT}
+      PG_USER: ${PG_USER}
+      PG_PASSWORD: ${PG_PASSWORD}
+      PG_DATABASE: ${PG_DATABASE}
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://${PG_USER}:${PG_PASSWORD}@${PG_HOST}:${PG_PORT}/${PG_DATABASE}}
       TZ: UTC
       PYTHONPATH: /app:/app/services
       CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
