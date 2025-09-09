@@ -316,3 +316,17 @@ Starting the ETL container crashed with `ModuleNotFoundError: No module named 's
 
 ## Logs
 - `ci-logs/latest/CI/compose-logs.txt`
+
+---
+
+## Failing workflows
+- **CI** workflow (unit job)
+
+## Summary
+`npm run build` in the webapp failed with `Error: <Html> should not be imported outside of pages/_document.` because the build ran with `NODE_ENV=development`, triggering Next.js development-only checks.
+
+## Fix
+- Force `NODE_ENV=production` for the webapp build step in `.github/workflows/ci.yml`.
+
+## Logs
+- `ci-logs/latest/CI/webapp-build.log`
