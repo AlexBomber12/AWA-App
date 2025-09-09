@@ -302,3 +302,17 @@ errors before execution.
 
 ## Logs
 - No log file was generated; the workflow failed before execution.
+
+---
+
+## Failing workflows
+- **CI** workflow (compose-logs job)
+
+## Summary
+Starting the ETL container crashed with `ModuleNotFoundError: No module named 'sqlalchemy'` from `services/common/base.py`.
+
+## Fix
+- Add `sqlalchemy` to `services/etl/requirements.txt` so the ETL image includes SQLAlchemy.
+
+## Logs
+- `ci-logs/latest/CI/compose-logs.txt`
