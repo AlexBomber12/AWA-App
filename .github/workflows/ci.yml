@@ -259,10 +259,25 @@ jobs:
         with:
           ref: ${{ github.head_ref }}
 
+      - name: Resolve PR number
+        id: pr
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const {owner, repo} = context.repo;
+            let number = context.payload.pull_request?.number || null;
+            if (!number) {
+              const res = await github.rest.repos.listPullRequestsAssociatedWithCommit({owner, repo, commit_sha: context.sha});
+              number = res.data?.[0]?.number || null;
+            }
+            if (!number) core.setFailed('No PR found for this run');
+            core.setOutput('number', number.toString());
+
       - uses: actions/download-artifact@v4
         with:
           pattern: ci-logs-*
           merge-multiple: true
+          if-no-files-found: warn
 
       - name: Sanitize logs to tmp directory
         id: sanitize
@@ -300,14 +315,13 @@ jobs:
           SAN="${{ steps.sanitize.outputs.dir }}"
           find . -maxdepth 1 -type f \( -name "*.log" -o -name "*.txt" \) -not -path "./$SAN/*" -delete || true
 
-      - name: Build sanitized digest (pass 1)
-        id: digest1
+      - name: Build sanitized digest
         shell: bash
         env:
           SAN_DIR: ${{ steps.sanitize.outputs.dir }}
         run: |
           python - <<'PY'
-          import os,re,glob,io,sys,json,math
+          import os,re
           san=os.environ.get("SAN_DIR","logs_sanitized")
           files=[("compose-logs.txt","compose-logs.txt"),
                  ("integration-pytest.log","integration-pytest.log"),
@@ -317,112 +331,81 @@ jobs:
                  ("web-vitest.log","web-vitest.log"),
                  ("webapp-build.log","webapp-build.log")]
           err_pat=re.compile(r"(Traceback \(most recent call last\):|ERROR|FATAL|authentication failed|Exception|ImportError|ModuleNotFoundError|OperationalError|Connection refused|ValueError|TypeError)",re.I)
-
           def load(name):
               p=os.path.join(san,name)
               if not os.path.exists(p): return name,None
               with open(p,"r",errors="ignore") as f: return name,f.read()
-
           def last_traceback(txt):
               if not txt: return ""
               idx=[m.start() for m in re.finditer(r"Traceback \(most recent call last\):",txt)]
               if idx: return txt[idx[-1]:].splitlines()[:200]
               lines=[l for l in txt.splitlines() if err_pat.search(l)]
               return lines[-60:] if lines else []
-
           def section(title,lines):
               if not lines: return ""
-              b=["<details><summary>%s — %d lines</summary>"% (title,len(lines)),"","```"]
+              b=[f"<details><summary>{title} — {len(lines)} lines</summary>","","```"]
               b.extend(lines); b.extend(["```","","</details>",""])
               return "\n".join(b)
-
-          TAIL=300
-          def render(max_total=60000, tail=TAIL):
-              parts=["<!-- CI_LOG_MIRROR -->","### CI last run logs (sanitized)",""]
-              for fname,label in files:
-                  name,txt=load(fname)
-                  if txt is None: continue
-                  err=last_traceback(txt)
-                  if err: parts.append(section(label+" — Errors",err))
-                  tail_lines=txt.splitlines()[-tail:] if tail>0 else []
-                  if tail_lines: parts.append(section(label+" — Tail",tail_lines))
-              body="\n".join(parts)
-              return body
-
-          body=render()
+          parts=["<!-- CI_LOG_MIRROR -->","### CI last run logs (sanitized)",""]
+          found=False
+          for fname,label in files:
+              name,txt=load(fname)
+              if txt is None: continue
+              found=True
+              err=last_traceback(txt)
+              if err: parts.append(section(label+" — Errors",err))
+              tail_lines=txt.splitlines()[-300:]
+              if tail_lines: parts.append(section(label+" — Tail",tail_lines))
+          if not found:
+              parts.append("No artifacts found.")
+          body="\n".join(parts)
           open("pr_comment.md","w",encoding="utf-8").write(body)
-          open("pr_len.txt","w").write(str(len(body)))
           PY
-          echo "len=$(cat pr_len.txt)" >> $GITHUB_OUTPUT
 
-      - name: Shrink digest if needed (pass 2)
-        if: ${{ steps.digest1.outputs.len && fromJSON(steps.digest1.outputs.len) > 60000 }}
-        id: digest2
+      - name: Cap body to 60000 chars
+        id: cap
         shell: bash
-        env:
-          SAN_DIR: ${{ steps.sanitize.outputs.dir }}
         run: |
-          python - <<'PY'
-          import os,re
-          san=os.environ.get("SAN_DIR","logs_sanitized")
-          with open("pr_comment.md","r",errors="ignore") as f: body=f.read()
-          if len(body)<=60000:
-              raise SystemExit
-          def rebuild(tail):
-              files=[("compose-logs.txt","compose-logs.txt"),
-                     ("integration-pytest.log","integration-pytest.log"),
-                     ("compose-up.txt","compose-up.txt"),
-                     ("compose-build.txt","compose-build.txt"),
-                     ("unit-pytest.log","unit-pytest.log"),
-                     ("web-vitest.log","web-vitest.log"),
-                     ("webapp-build.log","webapp-build.log")]
-              err_pat=re.compile(r"(Traceback \(most recent call last\):|ERROR|FATAL|authentication failed|Exception|ImportError|ModuleNotFoundError|OperationalError|Connection refused|ValueError|TypeError)",re.I)
-              def load(name):
-                  p=os.path.join(san,name)
-                  if not os.path.exists(p): return name,None
-                  return name,open(p,"r",errors="ignore").read()
-              def last_tb(txt):
-                  if not txt: return []
-                  idx=[m.start() for m in re.finditer(r"Traceback \(most recent call last\):",txt)]
-                  if idx: return txt[idx[-1]:].splitlines()[:200]
-                  lines=[l for l in txt.splitlines() if err_pat.search(l)]
-                  return lines[-60:] if lines else []
-              def section(title,lines):
-                  if not lines: return ""
-                  b=["<details><summary>%s — %d lines</summary>"% (title,len(lines)),"","```"]
-                  b.extend(lines); b.extend(["```","","</details>",""])
-                  return "\n".join(b)
-              parts=["<!-- CI_LOG_MIRROR -->","### CI last run logs (sanitized)",""]
-              for fname,label in files:
-                  name,txt=load(fname)
-                  if txt is None: continue
-                  err=last_tb(txt)
-                  if err: parts.append(section(label+" — Errors",err))
-                  tl=txt.splitlines()[-tail:] if tail>0 else []
-                  if tl: parts.append(section(label+" — Tail",tl))
-              return "\n".join(parts)
-          for tail in (200,120,80,0):
-              b=rebuild(tail)
-              if len(b)<=60000:
-                  open("pr_comment.md","w",encoding="utf-8").write(b)
-                  break
-          else:
-              idx=["<!-- CI_LOG_MIRROR -->","### CI last run logs (sanitized)","","Logs are too large; showing Errors only."]
-              open("pr_comment.md","w",encoding="utf-8").write("\n".join(idx))
-          PY
+          BODY=pr_comment.md
+          LEN=$(wc -c < "$BODY" || echo 0)
+          if [ "$LEN" -gt 60000 ]; then
+            head -c 60000 "$BODY" > pr_comment.capped.md
+            mv pr_comment.capped.md "$BODY"
+          fi
+          echo "len=$(wc -c < "$BODY")" >> $GITHUB_OUTPUT
 
       - name: Upsert PR comment (sanitized digest)
         uses: actions/github-script@v7
         env:
           BODY_PATH: pr_comment.md
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
         with:
           script: |
-            const fs=require('fs'); const {owner,repo}=context.repo;
-            const issue_number=context.issue.number; const marker='<!-- CI_LOG_MIRROR -->';
-            const body=fs.readFileSync(process.env.BODY_PATH,'utf8');
-            const len=body.length;
-            const comments=await github.rest.issues.listComments({owner,repo,issue_number,per_page:100});
-            const existing=comments.data.find(c=>c.user.type==='Bot' && c.body && c.body.includes(marker));
-            if (existing) await github.rest.issues.updateComment({owner,repo,comment_id:existing.id,body});
-            else await github.rest.issues.createComment({owner,repo,issue_number,body});
-            core.info(`Posted sanitized digest (${len} chars).`)
+            const fs = require('fs');
+            const {owner, repo} = context.repo;
+            const issue_number = Number(process.env.PR_NUMBER);
+            const marker = '<!-- CI_LOG_MIRROR -->';
+            let body = fs.readFileSync(process.env.BODY_PATH, 'utf8');
+            const list = await github.rest.issues.listComments({owner, repo, issue_number, per_page: 100});
+            const existing = list.data.find(c => c.body && c.body.includes(marker));
+            async function postOrUpdate(b) {
+              try {
+                if (existing) {
+                  await github.rest.issues.updateComment({owner, repo, comment_id: existing.id, body: b});
+                } else {
+                  await github.rest.issues.createComment({owner, repo, issue_number, body: b});
+                }
+              } catch (e) {
+                if (e.status === 422) {
+                  const trimmed = b.slice(0, 60000);
+                  if (existing) {
+                    await github.rest.issues.updateComment({owner, repo, comment_id: existing.id, body: trimmed});
+                  } else {
+                    await github.rest.issues.createComment({owner, repo, issue_number, body: trimmed});
+                  }
+                } else {
+                  throw e;
+                }
+              }
+            }
+            await postOrUpdate(body);
