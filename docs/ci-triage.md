@@ -330,3 +330,17 @@ Starting the ETL container crashed with `ModuleNotFoundError: No module named 's
 
 ## Logs
 - `ci-logs/latest/CI/webapp-build.log`
+
+---
+
+## Failing workflows
+- **CI** workflow (compose-logs job)
+
+## Summary
+`keepa_ingestor.py` crashed with `FileNotFoundError: [Errno 2] No such file or directory: 'tests/fixtures/keepa_sample.json'` when the ETL container started without the test fixtures present.
+
+## Fix
+- Copy `tests/fixtures/keepa_sample.json` into the ETL image so the default ingest command finds the sample data.
+
+## Logs
+- `ci-logs/latest/CI/compose-logs.txt`
