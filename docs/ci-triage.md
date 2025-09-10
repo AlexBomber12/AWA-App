@@ -372,3 +372,17 @@ The ETL container exited during `docker compose up` because `keepa_ingestor.py` 
 
 ## Logs
 - `.codex/last-run/compose-logs.txt`
+
+---
+
+## Failing workflows
+- **CI** workflow (unit job)
+
+## Summary
+`unit-pytest.log` flagged `PydanticDeprecatedSince20` because `services/api/routes/score.py` used the deprecated `strip_whitespace` parameter on a `Field`.
+
+## Fix
+- Replace `strip_whitespace=True` with a `BeforeValidator` that strips leading and trailing spaces before validation.
+
+## Logs
+- `ci-logs/latest/unit-pytest.log`
