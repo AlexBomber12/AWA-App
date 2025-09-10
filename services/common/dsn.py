@@ -19,8 +19,8 @@ def build_dsn(sync: bool = True) -> str:
         left unchanged. When overriding, prefer PG_PORT if set, otherwise keep
         the port from the DSN.
         """
-        host = os.getenv("PG_HOST")
-        port = os.getenv("PG_PORT")
+        host = os.getenv("PG_HOST") or os.getenv("PGHOST")
+        port = os.getenv("PG_PORT") or os.getenv("PGPORT")
         if not host:
             return u
 
