@@ -344,3 +344,17 @@ Starting the ETL container crashed with `ModuleNotFoundError: No module named 's
 
 ## Logs
 - `ci-logs/latest/CI/compose-logs.txt`
+
+---
+
+## Failing workflows
+- **CI** workflow (unit job)
+
+## Summary
+`tests/test_docker_build.py::test_api_image_builds` attempted to build a Docker image during the unit job, which stalled without a Docker daemon.
+
+## Fix
+- Marked `tests/test_docker_build.py` as integration-only so Docker image builds run only where Docker is available.
+
+## Logs
+- `ci-logs/latest/CI/unit/unit-pytest.log`
