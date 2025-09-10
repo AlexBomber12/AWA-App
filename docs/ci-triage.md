@@ -358,3 +358,17 @@ Starting the ETL container crashed with `ModuleNotFoundError: No module named 's
 
 ## Logs
 - `ci-logs/latest/CI/unit/unit-pytest.log`
+
+---
+
+## Failing workflows
+- **CI** workflow (compose-up job)
+
+## Summary
+The ETL container exited during `docker compose up` because `keepa_ingestor.py` could not import `pg_utils`.
+
+## Fix
+- Export `PYTHONPATH` in `services/etl/entrypoint.sh` so bundled modules like `pg_utils` are discoverable.
+
+## Logs
+- `.codex/last-run/compose-logs.txt`
