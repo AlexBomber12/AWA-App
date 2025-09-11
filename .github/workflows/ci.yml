@@ -69,55 +69,6 @@ jobs:
             exit ${PIPESTATUS[0]}
           fi
 
-      - name: Pick tail and write summary
-        id: picktail_unit
-        if: always()
-        shell: bash
-        run: |
-          PATTERN='Traceback|ERROR|CRITICAL|Exception|AssertionError|TypeError|ReferenceError|TS[0-9]+:|not found|exit code [1-9]'
-          candidates=()
-          [ -s unit-pytest.log ] && candidates+=("unit-pytest.log")
-          [ -s web-vitest.log ] && candidates+=("web-vitest.log")
-          [ -s webapp-build.log ] && candidates+=("webapp-build.log")
-          pick=""
-          for f in "${candidates[@]}"; do
-            if grep -Eq "$PATTERN" "$f"; then pick="$f"; break; fi
-          done
-          if [ -z "$pick" ] && [ ${#candidates[@]} -gt 0 ]; then
-            pick="$(ls -t "${candidates[@]}" | head -n1)"
-          fi
-          if [ -z "$pick" ]; then
-            echo "no logs" > none.txt
-            pick=none.txt
-          fi
-          echo "tail_path=$pick" >> $GITHUB_OUTPUT
-          {
-            echo "## Summary"
-            echo
-            echo "```"
-            tail -n 200 "$pick"
-            echo "```"
-          } >> $GITHUB_STEP_SUMMARY
-
-      - name: Extract AI hints (unit)
-        if: always()
-        shell: bash
-        run: |
-          : > ai-hints-unit.txt
-          ts="$(date +%H:%M:%S)"
-          for f in unit-pytest.log web-vitest.log webapp-build.log; do
-            [ -f "$f" ] || continue
-            grep -E '(Traceback|ERROR|CRITICAL|Exception|AssertionError|TypeError|ReferenceError|TS[0-9]+:|not found|exit code [1-9])' "$f" | sed "s/^/$ts /" >> ai-hints-unit.txt || true
-          done
-          if [ ! -s ai-hints-unit.txt ]; then echo 'no obvious errors found' > ai-hints-unit.txt; fi
-          {
-            echo '## AI hints (unit)'
-            echo
-            echo '```'
-            tail -n 40 ai-hints-unit.txt
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
-
       - name: Upload artifacts (unit)
         if: always()
         uses: actions/upload-artifact@v4
@@ -127,8 +78,6 @@ jobs:
             unit-pytest.log
             web-vitest.log
             webapp-build.log
-            ai-hints-unit.txt
-            none.txt
           if-no-files-found: ignore
   integration:
     runs-on: ubuntu-latest
@@ -185,56 +134,6 @@ jobs:
             exit ${PIPESTATUS[0]}
           fi
 
-      - name: Pick tail and write summary
-        id: picktail_integration
-        if: always()
-        shell: bash
-        run: |
-          PATTERN='Traceback|ERROR|CRITICAL|Exception|ValueError|not enough values to unpack|connection refused|pg_isready|curl:|panic|segmentation|Address already in use'
-          candidates=()
-          [ -s compose-logs.txt ] && candidates+=("compose-logs.txt")
-          [ -s integration-pytest.log ] && candidates+=("integration-pytest.log")
-          [ -s compose-up.txt ] && candidates+=("compose-up.txt")
-          [ -s compose-build.txt ] && candidates+=("compose-build.txt")
-          pick=""
-          for f in "${candidates[@]}"; do
-            if grep -Eq "$PATTERN" "$f"; then pick="$f"; break; fi
-          done
-          if [ -z "$pick" ] && [ ${#candidates[@]} -gt 0 ]; then
-            pick="$(ls -t "${candidates[@]}" | head -n1)"
-          fi
-          if [ -z "$pick" ]; then
-            echo "no logs" > none.txt
-            pick=none.txt
-          fi
-          echo "tail_path=$pick" >> $GITHUB_OUTPUT
-          {
-            echo "## Summary"
-            echo
-            echo "```"
-            tail -n 200 "$pick"
-            echo "```"
-          } >> $GITHUB_STEP_SUMMARY
-
-      - name: Extract AI hints (integration)
-        if: always()
-        shell: bash
-        run: |
-          : > ai-hints-integration.txt
-          ts="$(date +%H:%M:%S)"
-          for f in compose-logs.txt integration-pytest.log compose-up.txt compose-build.txt; do
-            [ -f "$f" ] || continue
-            grep -E '(Traceback|ERROR|CRITICAL|Exception|ValueError|not enough values to unpack|connection refused|pg_isready|curl:|panic|segmentation|Address already in use)' "$f" | sed "s/^/$ts /" >> ai-hints-integration.txt || true
-          done
-          if [ ! -s ai-hints-integration.txt ]; then echo 'no obvious errors found' > ai-hints-integration.txt; fi
-          {
-            echo '## AI hints (integration)'
-            echo
-            echo '```'
-            tail -n 40 ai-hints-integration.txt
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
-
       - name: Upload artifacts (integration)
         if: always()
         uses: actions/upload-artifact@v4
@@ -246,31 +145,39 @@ jobs:
             compose-up.txt
             compose-build.txt
             integration-pytest.log
-            ai-hints-integration.txt
-            none.txt
           if-no-files-found: ignore
   mirror_logs:
-    # Mirror artifacts and publish a single sanitized log digest comment
     needs: [unit, integration]
     if: ${{ always() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - name: Resolve PR number
+        id: pr
+        uses: actions/github-script@v7
         with:
-          ref: ${{ github.head_ref }}
+          script: |
+            const {owner, repo} = context.repo;
+            let number = context.payload.pull_request?.number || null;
+            if (!number) {
+              const r = await github.rest.repos.listPullRequestsAssociatedWithCommit({owner, repo, commit_sha: context.sha});
+              number = r.data?.[0]?.number || null;
+            }
+            if (!number) core.setFailed('No PR found for this run');
+            core.setOutput('number', String(number));
 
-      - uses: actions/download-artifact@v4
+      - name: Download all CI logs artifacts
+        uses: actions/download-artifact@v4
         with:
           pattern: ci-logs-*
           merge-multiple: true
 
-      - name: Sanitize logs to tmp directory
+      - name: Sanitize logs
         id: sanitize
         shell: bash
         run: |
           rm -rf logs_sanitized && mkdir -p logs_sanitized
           python - <<'PY'
-          import os,re,glob,io,sys,shutil,json
+          import os,re,glob
           os.makedirs("logs_sanitized", exist_ok=True)
           files = sorted(glob.glob("*.log")+glob.glob("*.txt"))
           rules = [
@@ -283,146 +190,82 @@ jobs:
           ]
           for src in files:
             try:
-              data = open(src,'r',errors='ignore').read()
-            except Exception:
-              continue
-            red = data
-            for pat, sub in rules:
-              red = pat.sub(sub, red)
-            with open(os.path.join("logs_sanitized", os.path.basename(src)), "w", encoding="utf-8") as f:
-              f.write(red)
+              t=open(src,'r',errors='ignore').read()
+            except: continue
+            for p,s in rules: t=p.sub(s,t)
+            open(os.path.join("logs_sanitized", os.path.basename(src)),'w',encoding='utf-8').write(t)
           PY
           echo "dir=logs_sanitized" >> $GITHUB_OUTPUT
 
-      - name: Remove raw logs to avoid accidental use
-        shell: bash
-        run: |
-          SAN="${{ steps.sanitize.outputs.dir }}"
-          find . -maxdepth 1 -type f \( -name "*.log" -o -name "*.txt" \) -not -path "./$SAN/*" -delete || true
-
-      - name: Build sanitized digest (pass 1)
-        id: digest1
+      - name: Build PR comment body (sanitized digest, error-first, capped)
+        id: body
         shell: bash
         env:
           SAN_DIR: ${{ steps.sanitize.outputs.dir }}
         run: |
-          python - <<'PY'
-          import os,re,glob,io,sys,json,math
-          san=os.environ.get("SAN_DIR","logs_sanitized")
-          files=[("compose-logs.txt","compose-logs.txt"),
-                 ("integration-pytest.log","integration-pytest.log"),
-                 ("compose-up.txt","compose-up.txt"),
-                 ("compose-build.txt","compose-build.txt"),
-                 ("unit-pytest.log","unit-pytest.log"),
-                 ("web-vitest.log","web-vitest.log"),
-                 ("webapp-build.log","webapp-build.log")]
-          err_pat=re.compile(r"(Traceback \(most recent call last\):|ERROR|FATAL|authentication failed|Exception|ImportError|ModuleNotFoundError|OperationalError|Connection refused|ValueError|TypeError)",re.I)
+          marker="<!-- CI_LOG_MIRROR -->"
+          heading="### CI last run logs (sanitized)"
+          section () {
+            f="$1"; label="$2"
+            [ -s "$f" ] || return 0
+            echo "<details><summary>${label} — $(wc -l < \"$f\") lines</summary>"
+            echo; echo '```'; sed -e 's/\r$//' "$f"; echo '```'; echo; echo '</details>'; echo
+          }
+          {
+            echo "$marker"
+            echo "$heading"
+            echo
+            section "$SAN_DIR/compose-logs.txt"       "compose-logs.txt — Errors"
+            section "$SAN_DIR/integration-pytest.log" "integration-pytest.log"
+            section "$SAN_DIR/compose-up.txt"         "compose-up.txt — Tail"
+            section "$SAN_DIR/compose-build.txt"      "compose-build.txt — Tail"
+            section "$SAN_DIR/unit-pytest.log"        "unit-pytest.log — Tail"
+            section "$SAN_DIR/web-vitest.log"         "web-vitest.log — Tail"
+            section "$SAN_DIR/webapp-build.log"       "webapp-build.log — Tail"
+            echo "> Reply with \`@codex review\` to request an AI patch."
+          } > pr_comment.md
+          [ "$(wc -c < pr_comment.md)" -le 60000 ] || head -c 60000 pr_comment.md > pr_comment.md.trim && mv pr_comment.md.trim pr_comment.md
+          echo "path=pr_comment.md" >> $GITHUB_OUTPUT
 
-          def load(name):
-              p=os.path.join(san,name)
-              if not os.path.exists(p): return name,None
-              with open(p,"r",errors="ignore") as f: return name,f.read()
-
-          def last_traceback(txt):
-              if not txt: return ""
-              idx=[m.start() for m in re.finditer(r"Traceback \(most recent call last\):",txt)]
-              if idx: return txt[idx[-1]:].splitlines()[:200]
-              lines=[l for l in txt.splitlines() if err_pat.search(l)]
-              return lines[-60:] if lines else []
-
-          def section(title,lines):
-              if not lines: return ""
-              b=["<details><summary>%s — %d lines</summary>"% (title,len(lines)),"","```"]
-              b.extend(lines); b.extend(["```","","</details>",""])
-              return "\n".join(b)
-
-          TAIL=300
-          def render(max_total=60000, tail=TAIL):
-              parts=["<!-- CI_LOG_MIRROR -->","### CI last run logs (sanitized)",""]
-              for fname,label in files:
-                  name,txt=load(fname)
-                  if txt is None: continue
-                  err=last_traceback(txt)
-                  if err: parts.append(section(label+" — Errors",err))
-                  tail_lines=txt.splitlines()[-tail:] if tail>0 else []
-                  if tail_lines: parts.append(section(label+" — Tail",tail_lines))
-              body="\n".join(parts)
-              return body
-
-          body=render()
-          open("pr_comment.md","w",encoding="utf-8").write(body)
-          open("pr_len.txt","w").write(str(len(body)))
-          PY
-          echo "len=$(cat pr_len.txt)" >> $GITHUB_OUTPUT
-
-      - name: Shrink digest if needed (pass 2)
-        if: ${{ steps.digest1.outputs.len && fromJSON(steps.digest1.outputs.len) > 60000 }}
-        id: digest2
-        shell: bash
-        env:
-          SAN_DIR: ${{ steps.sanitize.outputs.dir }}
-        run: |
-          python - <<'PY'
-          import os,re
-          san=os.environ.get("SAN_DIR","logs_sanitized")
-          with open("pr_comment.md","r",errors="ignore") as f: body=f.read()
-          if len(body)<=60000:
-              raise SystemExit
-          def rebuild(tail):
-              files=[("compose-logs.txt","compose-logs.txt"),
-                     ("integration-pytest.log","integration-pytest.log"),
-                     ("compose-up.txt","compose-up.txt"),
-                     ("compose-build.txt","compose-build.txt"),
-                     ("unit-pytest.log","unit-pytest.log"),
-                     ("web-vitest.log","web-vitest.log"),
-                     ("webapp-build.log","webapp-build.log")]
-              err_pat=re.compile(r"(Traceback \(most recent call last\):|ERROR|FATAL|authentication failed|Exception|ImportError|ModuleNotFoundError|OperationalError|Connection refused|ValueError|TypeError)",re.I)
-              def load(name):
-                  p=os.path.join(san,name)
-                  if not os.path.exists(p): return name,None
-                  return name,open(p,"r",errors="ignore").read()
-              def last_tb(txt):
-                  if not txt: return []
-                  idx=[m.start() for m in re.finditer(r"Traceback \(most recent call last\):",txt)]
-                  if idx: return txt[idx[-1]:].splitlines()[:200]
-                  lines=[l for l in txt.splitlines() if err_pat.search(l)]
-                  return lines[-60:] if lines else []
-              def section(title,lines):
-                  if not lines: return ""
-                  b=["<details><summary>%s — %d lines</summary>"% (title,len(lines)),"","```"]
-                  b.extend(lines); b.extend(["```","","</details>",""])
-                  return "\n".join(b)
-              parts=["<!-- CI_LOG_MIRROR -->","### CI last run logs (sanitized)",""]
-              for fname,label in files:
-                  name,txt=load(fname)
-                  if txt is None: continue
-                  err=last_tb(txt)
-                  if err: parts.append(section(label+" — Errors",err))
-                  tl=txt.splitlines()[-tail:] if tail>0 else []
-                  if tl: parts.append(section(label+" — Tail",tl))
-              return "\n".join(parts)
-          for tail in (200,120,80,0):
-              b=rebuild(tail)
-              if len(b)<=60000:
-                  open("pr_comment.md","w",encoding="utf-8").write(b)
-                  break
-          else:
-              idx=["<!-- CI_LOG_MIRROR -->","### CI last run logs (sanitized)","","Logs are too large; showing Errors only."]
-              open("pr_comment.md","w",encoding="utf-8").write("\n".join(idx))
-          PY
-
-      - name: Upsert PR comment (sanitized digest)
+      - name: Upsert PR comment (by marker OR heading; 422-safe)
         uses: actions/github-script@v7
         env:
-          BODY_PATH: pr_comment.md
+          BODY_PATH: ${{ steps.body.outputs.path }}
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
         with:
           script: |
-            const fs=require('fs'); const {owner,repo}=context.repo;
-            const issue_number=context.issue.number; const marker='<!-- CI_LOG_MIRROR -->';
-            const body=fs.readFileSync(process.env.BODY_PATH,'utf8');
-            const len=body.length;
-            const comments=await github.rest.issues.listComments({owner,repo,issue_number,per_page:100});
-            const existing=comments.data.find(c=>c.user.type==='Bot' && c.body && c.body.includes(marker));
-            if (existing) await github.rest.issues.updateComment({owner,repo,comment_id:existing.id,body});
-            else await github.rest.issues.createComment({owner,repo,issue_number,body});
-            core.info(`Posted sanitized digest (${len} chars).`)
+            const fs=require('fs');
+            const {owner, repo} = context.repo;
+            const issue_number = Number(process.env.PR_NUMBER);
+            const marker  = '<!-- CI_LOG_MIRROR -->';
+            const heading = '### CI last run logs (sanitized)';
+            const body    = fs.readFileSync(process.env.BODY_PATH,'utf8');
+            const list = await github.rest.issues.listComments({owner, repo, issue_number, per_page: 100});
+            const existing = list.data.find(c => (c.body||'').includes(marker) || (c.body||'').includes(heading));
+            async function upsert(b){
+              try{
+                if (existing) await github.rest.issues.updateComment({owner, repo, comment_id: existing.id, body:b});
+                else await github.rest.issues.createComment({owner, repo, issue_number, body:b});
+              }catch(e){
+                if (e.status===422){
+                  const t=b.slice(0,60000);
+                  if (existing) await github.rest.issues.updateComment({owner, repo, comment_id: existing.id, body:t});
+                  else await github.rest.issues.createComment({owner, repo, issue_number, body:t});
+                } else { throw e; }
+              }
+            }
+            await upsert(body);
+
+      - name: Verify digest comment
+        if: always()
+        uses: actions/github-script@v7
+        env:
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+        with:
+          script: |
+            const {owner, repo} = context.repo;
+            const issue_number = Number(process.env.PR_NUMBER);
+            const list = await github.rest.issues.listComments({owner, repo, issue_number, per_page: 100});
+            const found = list.data.find(c => (c.body||'').includes('CI last run logs (sanitized)'));
+            core.summary.addHeading('CI log digest comment', 2);
+            core.summary.addRaw(found ? `Found id=${found.id}, length=${found.body.length}` : 'Not found').write();
