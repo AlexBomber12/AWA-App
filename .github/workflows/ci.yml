@@ -197,34 +197,82 @@ jobs:
           PY
           echo "dir=logs_sanitized" >> $GITHUB_OUTPUT
 
-      - name: Build PR comment body (sanitized digest, error-first, capped)
+      - name: Build PR comment body (error-first, size-capped)
         id: body
         shell: bash
         env:
           SAN_DIR: ${{ steps.sanitize.outputs.dir }}
         run: |
-          marker="<!-- CI_LOG_MIRROR -->"
-          heading="### CI last run logs (sanitized)"
-          section () {
-            f="$1"; label="$2"
-            [ -s "$f" ] || return 0
-            echo "<details><summary>${label} — $(wc -l < \"$f\") lines</summary>"
-            echo; echo '```'; sed -e 's/\r$//' "$f"; echo '```'; echo; echo '</details>'; echo
-          }
-          {
-            echo "$marker"
-            echo "$heading"
-            echo
-            section "$SAN_DIR/compose-logs.txt"       "compose-logs.txt — Errors"
-            section "$SAN_DIR/integration-pytest.log" "integration-pytest.log"
-            section "$SAN_DIR/compose-up.txt"         "compose-up.txt — Tail"
-            section "$SAN_DIR/compose-build.txt"      "compose-build.txt — Tail"
-            section "$SAN_DIR/unit-pytest.log"        "unit-pytest.log — Tail"
-            section "$SAN_DIR/web-vitest.log"         "web-vitest.log — Tail"
-            section "$SAN_DIR/webapp-build.log"       "webapp-build.log — Tail"
-            echo "> Reply with \`@codex review\` to request an AI patch."
-          } > pr_comment.md
-          [ "$(wc -c < pr_comment.md)" -le 60000 ] || head -c 60000 pr_comment.md > pr_comment.md.trim && mv pr_comment.md.trim pr_comment.md
+          python - <<'PY' > pr_comment.md
+          import os,re
+
+          SAN=os.environ.get("SAN_DIR","logs_sanitized")
+          MARKER="<!-- CI_LOG_MIRROR -->"
+          HEADING="### CI last run logs (sanitized)"
+          MAX=60000
+
+          files=[ # priority order
+            ("compose-logs.txt","compose-logs.txt"),
+            ("integration-pytest.log","integration-pytest.log"),
+            ("compose-up.txt","compose-up.txt"),
+            ("compose-build.txt","compose-build.txt"),
+            ("unit-pytest.log","unit-pytest.log"),
+            ("web-vitest.log","web-vitest.log"),
+            ("webapp-build.log","webapp-build.log"),
+          ]
+
+          err_pat=re.compile(r"(Traceback \(most recent call last\):|ERROR|FATAL|authentication failed|Exception|ImportError|ModuleNotFoundError|OperationalError|Connection refused|ValueError|TypeError)",re.I)
+
+          def load(name):
+            p=os.path.join(SAN,name)
+            if not os.path.exists(p): return None
+            return open(p,"r",errors="ignore").read()
+
+          def last_trace_or_errors(txt, keep=200, fallback=60):
+            if not txt: return []
+            idx=[m.start() for m in re.finditer(r"Traceback \(most recent call last\):",txt)]
+            if idx:
+              return txt[idx[-1]:].splitlines()[:keep]
+            lines=[l for l in txt.splitlines() if err_pat.search(l)]
+            return lines[-fallback:] if lines else []
+
+          def build(tail_lines_per_file=300, err_cap=200, err_fallback=60, only_crit=False):
+            parts=[MARKER, HEADING, ""]
+            errors=[]
+            tails=[]
+            for fname,label in files:
+              txt=load(fname)
+              if not txt: continue
+              err=last_trace_or_errors(txt, keep=err_cap, fallback=err_fallback)
+              if err:
+                errors.append(("<details><summary>%s — Errors — %d lines</summary>\n\n```\n%s\n```\n\n</details>\n" %
+                               (label, len(err), "\n".join(err))))
+              if not only_crit and tail_lines_per_file>0:
+                tail=txt.splitlines()[-tail_lines_per_file:]
+                if tail:
+                  tails.append(("<details><summary>%s — Tail — %d lines</summary>\n\n```\n%s\n```\n\n</details>\n" %
+                                (label, len(tail), "\n".join(tail))))
+            parts.extend(errors)
+            parts.extend(tails)
+            body="\n".join(parts)
+            return body
+
+          for tail in (300,200,120,80,40,0):
+            body=build(tail_lines_per_file=tail)
+            if len(body)<=MAX:
+              open("pr_comment.md","w",encoding="utf-8").write(body)
+              break
+          else:
+            for err_cap in (160,120,80,40):
+              body=build(tail_lines_per_file=0, err_cap=err_cap, err_fallback=40)
+              if len(body)<=MAX:
+                open("pr_comment.md","w",encoding="utf-8").write(body)
+                break
+            else:
+              body=build(tail_lines_per_file=0, err_cap=80, err_fallback=40, only_crit=True)
+              if len(body)>MAX: body=body[:MAX]
+              open("pr_comment.md","w",encoding="utf-8").write(body)
+          PY
           echo "path=pr_comment.md" >> $GITHUB_OUTPUT
 
       - name: Upsert PR comment (by marker OR heading; 422-safe)
