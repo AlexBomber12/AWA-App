@@ -88,6 +88,7 @@ Pytest enforces a minimum of 45% total coverage.
 Docker builds use BuildKit. In CI the stack is built with
 `TZ_CACHE_BUST=${GITHUB_SHA}` and started with `--pull never` so tests run
 against the freshly-built containers instead of any cached `:latest` image.
+Changes under `.codex/**` are ignored by CI to avoid noisy runs.
 
 ### Database commands
 
