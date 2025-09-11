@@ -11,9 +11,9 @@ ENV LANG en_US.UTF-8
 ENV POSTGRES_INITDB_ARGS="--encoding=UTF8 --locale=en_US.UTF-8"
 
 # Ensure MD5 authentication
-COPY docker/postgres/pg_hba.conf /etc/postgresql/pg_hba.conf
-COPY docker/postgres/init-pg_hba.sh /docker-entrypoint-initdb.d/10_init_pg_hba.sh
-COPY docker/postgres/postgresql.conf /etc/postgresql/postgresql.conf
+COPY infra/postgres/pg_hba.conf /etc/postgresql/pg_hba.conf
+COPY infra/postgres/init-pg_hba.sh /docker-entrypoint-initdb.d/10_init_pg_hba.sh
+COPY infra/postgres/postgresql.conf /etc/postgresql/postgresql.conf
 RUN chmod 0644 /etc/postgresql/pg_hba.conf && \
     chmod +x /docker-entrypoint-initdb.d/10_init_pg_hba.sh
 

@@ -1,6 +1,20 @@
 # CI Triage
 
 ## Failing workflows
+- **CI** workflow (integration job)
+
+## Summary
+`docker compose build` failed with `COPY docker/postgres/pg_hba.conf: not found` because `infra/postgres/Dockerfile` still referenced the removed `docker/postgres` path.
+
+## Fix
+- Update `infra/postgres/Dockerfile` to copy files from `infra/postgres`.
+
+## Logs
+- `ci-logs/latest/compose-build.txt`
+
+---
+
+## Failing workflows
 - **CI** workflow (unit job)
 
 ## Summary
