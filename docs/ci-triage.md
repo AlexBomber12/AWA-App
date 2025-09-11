@@ -1,6 +1,20 @@
 # CI Triage
 
 ## Failing workflows
+- **CI** workflow (unit job)
+
+## Summary
+`pytest -q -m "not integration"` failed with `ModuleNotFoundError: No module named 'services.repricer'` during repricer import tests.
+
+## Fix
+- Point the import tests to `services.worker.repricer`.
+
+## Logs
+- `ci-logs/latest/unit-pytest.log`
+
+---
+
+## Failing workflows
 
 ---
 
