@@ -10,7 +10,7 @@ import time
 import psycopg
 import redis
 
-from services.common.dsn import build_dsn
+from packages.awa_common.dsn import build_dsn
 
 from .celery_app import celery_app
 

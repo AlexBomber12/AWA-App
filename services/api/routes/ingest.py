@@ -8,8 +8,8 @@ from typing import Any, Dict
 from celery import states
 from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 
-from services.ingest.celery_app import celery_app
-from services.ingest.tasks import task_import_file
+from services.worker.celery_app import celery_app
+from services.worker.tasks import task_import_file
 
 router = APIRouter(prefix="", tags=["ingest"])
 

@@ -25,7 +25,7 @@ from asyncpg import create_pool
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from services.common.dsn import build_dsn
+from packages.awa_common.dsn import build_dsn
 
 
 def pytest_configure(config):

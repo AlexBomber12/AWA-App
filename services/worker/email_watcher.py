@@ -8,7 +8,7 @@ import boto3
 from imapclient import IMAPClient
 from sqlalchemy import create_engine, text
 
-from services.common.dsn import build_dsn
+from packages.awa_common.dsn import build_dsn
 from services.etl import load_csv
 
 BUCKET = "awa-bucket"

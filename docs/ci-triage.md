@@ -7,7 +7,7 @@
 - **CI** workflow (unit job)
 
 ## Summary
-`alembic upgrade head` failed with `sqlalchemy.exc.OperationalError: (psycopg.OperationalError) [Errno -3] Temporary failure in name resolution` in the unit job. The Alembic env uses `services.common.dsn.build_dsn(sync=True)`, which preferred `PG_SYNC_DSN`. In CI, that DSN points at the Docker hostname `postgres`, while the services run outside Docker with `PG_HOST=localhost`, so the hostname could not be resolved.
+`alembic upgrade head` failed with `sqlalchemy.exc.OperationalError: (psycopg.OperationalError) [Errno -3] Temporary failure in name resolution` in the unit job. The Alembic env uses `packages.awa_common.dsn.build_dsn(sync=True)`, which preferred `PG_SYNC_DSN`. In CI, that DSN points at the Docker hostname `postgres`, while the services run outside Docker with `PG_HOST=localhost`, so the hostname could not be resolved.
 
 ## Fix
 - Extend `services/common/dsn.py` to also honor `PGHOST`/`PGPORT` so any provided DSN (PG_SYNC_DSN/PG_ASYNC_DSN/DATABASE_URL) replaces its hostname with the job's `PG_HOST` or `PGHOST` value. This yields a localhost DSN during CI while remaining a no-op when already inside Docker.
@@ -34,7 +34,7 @@ Docker compose health checks failed because the Redis service exited immediately
 
 ## Summary
 `docker compose` reported `container awa-app-etl-1 is unhealthy`. The ETL image lacked the
-`services.common` package and used an invalid `timeout` parameter in the healthcheck,
+`packages.awa_common` package and used an invalid `timeout` parameter in the healthcheck,
 causing the script to crash.
 
 ## Fix
@@ -80,7 +80,7 @@ The API container failed its health check because it was configured to reach Pos
 
 ## Summary
 `docker compose` reported `container awa-app-celery_worker-1 is unhealthy`. The
-`services.ingest.healthcheck` module referenced `os` and `argparse` without
+`services.worker.healthcheck` module referenced `os` and `argparse` without
 importing them, causing the health check process to exit before Celery could
 report ready.
 

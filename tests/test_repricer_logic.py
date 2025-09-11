@@ -1,6 +1,6 @@
 from decimal import Decimal
 
-from services.repricer.app.logic import compute_price
+from services.worker.repricer.app.logic import compute_price
 
 
 def test_compute_price_float():

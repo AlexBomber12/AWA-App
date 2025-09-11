@@ -1,6 +1,6 @@
 import pytest
 
-from services.repricer.app import main
+from services.worker.repricer.app import main
 
 
 class StubResult:

@@ -5,7 +5,7 @@ import os
 import requests
 
 from pg_utils import connect
-from services.common.dsn import build_dsn
+from packages.awa_common.dsn import build_dsn
 
 
 def main() -> None:

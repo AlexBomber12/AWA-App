@@ -11,7 +11,7 @@ import boto3
 import pandas as pd
 from sqlalchemy import create_engine, text
 
-from services.common.dsn import build_dsn
+from packages.awa_common.dsn import build_dsn
 from services.etl.dialects import (
     amazon_ads_sp_cost,
     amazon_fee_preview,
@@ -22,7 +22,7 @@ from services.etl.dialects import (
     normalise_headers,
     schemas,
 )
-from services.ingest.copy_loader import copy_df_via_temp
+from services.worker.copy_loader import copy_df_via_temp
 
 USE_COPY = os.getenv("USE_COPY", "true").lower() in ("1", "true", "yes")
 BUCKET = "awa-bucket"

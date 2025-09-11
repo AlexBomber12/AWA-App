@@ -10,8 +10,8 @@ def test_task_import_file_eager(monkeypatch) -> None:
     monkeypatch.setenv("CELERY_BROKER_URL", "memory://")
     monkeypatch.setenv("CELERY_RESULT_BACKEND", "cache+memory://")
     monkeypatch.setenv("CELERY_TASK_STORE_EAGER_RESULT", "true")
-    import services.ingest.celery_app as celery_module
-    import services.ingest.tasks as tasks_module
+    import services.worker.celery_app as celery_module
+    import services.worker.tasks as tasks_module
 
     reload(celery_module)
     task_import_file = reload(tasks_module).task_import_file

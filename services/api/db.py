@@ -4,7 +4,7 @@ from typing import AsyncGenerator
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
-from services.common.dsn import build_dsn
+from packages.awa_common.dsn import build_dsn
 
 # Always derive the database URL via build_dsn so it uses the async driver
 # even if a synchronous DATABASE_URL is provided in the environment.

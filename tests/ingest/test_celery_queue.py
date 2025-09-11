@@ -9,7 +9,7 @@ def test_enqueue_import_executes_eager(monkeypatch):
     os.environ["TESTING"] = "1"
     os.environ["CELERY_TASK_ALWAYS_EAGER"] = "true"
     try:
-        from services.ingest import tasks
+        from services.worker import tasks
     except Exception:
         pytest.skip("ingest tasks module not present")
     calls = {}

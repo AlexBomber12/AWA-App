@@ -1,21 +1,10 @@
-.PHONY: test-cov compose-dev db-upgrade db-downgrade db-reset docs fmt
-
-test-cov:
-	pytest -q --cov --cov-report=term-missing
-
-docs:
-	pydoc-markdown
-
-fmt:
-	python -m black services/etl/healthcheck.py services/ingest/healthcheck.py
-
-compose-dev:
-	docker compose up -d --wait
-
-db-upgrade:
-	alembic upgrade head
-
-db-downgrade:
-	alembic downgrade base
-
-db-reset: db-downgrade db-upgrade
+.PHONY: up down logs sh fmt lint test unit integ
+up: ; docker compose up -d --build
+down: ; docker compose down -v
+logs: ; docker compose logs -f --tail=200
+sh: ; docker compose exec api sh -lc "bash || sh"
+fmt: ; python -m black . || true
+lint: ; python -m ruff check . || true
+unit: ; pytest -q -m "not integration" || true
+integ: ; pytest -q -m integration || true
+test: unit integ

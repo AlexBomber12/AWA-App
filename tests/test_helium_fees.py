@@ -3,7 +3,7 @@ import os
 import sys
 import types
 
-from services.common.dsn import build_dsn
+from packages.awa_common.dsn import build_dsn
 
 
 class FakeCursor:

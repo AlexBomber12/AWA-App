@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 from sqlalchemy import create_engine, text
 
-from services.common.dsn import build_dsn
+from packages.awa_common.dsn import build_dsn
 from services.returns_etl import loader
 
 pytestmark = pytest.mark.integration
