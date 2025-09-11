@@ -15,6 +15,7 @@ COPY services/common/ ./services/common
 COPY services/ingest/ ./services/ingest
 COPY pg_utils/ ./pg_utils
 COPY services/etl/ ./services/etl
+COPY tests/fixtures/keepa_sample.json ./services/etl/tests/fixtures/keepa_sample.json
 RUN chmod +x services/etl/wait-for-it.sh services/etl/entrypoint.sh
 
 FROM python:3.12-slim

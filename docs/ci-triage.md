@@ -10,7 +10,7 @@
 `alembic upgrade head` failed with `sqlalchemy.exc.OperationalError: (psycopg.OperationalError) [Errno -3] Temporary failure in name resolution` in the unit job. The Alembic env uses `services.common.dsn.build_dsn(sync=True)`, which preferred `PG_SYNC_DSN`. In CI, that DSN points at the Docker hostname `postgres`, while the services run outside Docker with `PG_HOST=localhost`, so the hostname could not be resolved.
 
 ## Fix
-- Update `services/common/dsn.py` to honor `PG_HOST` as an override for any provided DSN (PG_SYNC_DSN/PG_ASYNC_DSN/DATABASE_URL) by replacing the DSN hostname with `PG_HOST` when they differ. This yields a localhost DSN during CI while remaining a no-op when already inside Docker.
+- Extend `services/common/dsn.py` to also honor `PGHOST`/`PGPORT` so any provided DSN (PG_SYNC_DSN/PG_ASYNC_DSN/DATABASE_URL) replaces its hostname with the job's `PG_HOST` or `PGHOST` value. This yields a localhost DSN during CI while remaining a no-op when already inside Docker.
 
 ## Logs
 - `ci-logs/main/latest/00001047_ci/unit/10_Run migrations.txt`
@@ -302,3 +302,87 @@ errors before execution.
 
 ## Logs
 - No log file was generated; the workflow failed before execution.
+
+---
+
+## Failing workflows
+- **CI** workflow (compose-logs job)
+
+## Summary
+Starting the ETL container crashed with `ModuleNotFoundError: No module named 'sqlalchemy'` from `services/common/base.py`.
+
+## Fix
+- Add `sqlalchemy` to `services/etl/requirements.txt` so the ETL image includes SQLAlchemy.
+
+## Logs
+- `ci-logs/latest/CI/compose-logs.txt`
+
+---
+
+## Failing workflows
+- **CI** workflow (unit job)
+
+## Summary
+`npm run build` in the webapp failed with `Error: <Html> should not be imported outside of pages/_document.` because the build ran with `NODE_ENV=development`, triggering Next.js development-only checks.
+
+## Fix
+- Force `NODE_ENV=production` for the webapp build step in `.github/workflows/ci.yml`.
+
+## Logs
+- `ci-logs/latest/CI/webapp-build.log`
+
+---
+
+## Failing workflows
+- **CI** workflow (compose-logs job)
+
+## Summary
+`keepa_ingestor.py` crashed with `FileNotFoundError: [Errno 2] No such file or directory: 'tests/fixtures/keepa_sample.json'` when the ETL container started without the test fixtures present.
+
+## Fix
+- Copy `tests/fixtures/keepa_sample.json` into the ETL image so the default ingest command finds the sample data.
+
+## Logs
+- `ci-logs/latest/CI/compose-logs.txt`
+
+---
+
+## Failing workflows
+- **CI** workflow (unit job)
+
+## Summary
+`tests/test_docker_build.py::test_api_image_builds` attempted to build a Docker image during the unit job, which stalled without a Docker daemon.
+
+## Fix
+- Marked `tests/test_docker_build.py` as integration-only so Docker image builds run only where Docker is available.
+
+## Logs
+- `ci-logs/latest/CI/unit/unit-pytest.log`
+
+---
+
+## Failing workflows
+- **CI** workflow (compose-up job)
+
+## Summary
+The ETL container exited during `docker compose up` because `keepa_ingestor.py` could not import `pg_utils`.
+
+## Fix
+- Export `PYTHONPATH` in `services/etl/entrypoint.sh` so bundled modules like `pg_utils` are discoverable.
+
+## Logs
+- `.codex/last-run/compose-logs.txt`
+
+---
+
+## Failing workflows
+- **CI** workflow (unit job)
+
+## Summary
+`unit-pytest.log` flagged `PydanticDeprecatedSince20` because `services/api/routes/score.py` used the deprecated `strip_whitespace` parameter on a `Field`.
+
+## Fix
+- Replace `strip_whitespace=True` with a `BeforeValidator` that strips leading and trailing spaces before validation.
+
+## Logs
+- `ci-logs/latest/unit-pytest.log`

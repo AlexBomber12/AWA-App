@@ -7,7 +7,7 @@ from typing import Annotated, List, cast
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, BeforeValidator
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -41,7 +41,11 @@ except Exception:
     repo = None
 
 
-Asin = Annotated[str, Field(min_length=1, strip_whitespace=True)]
+Asin = Annotated[
+    str,
+    BeforeValidator(lambda v: v.strip()),
+    Field(min_length=1),
+]
 
 
 class ScoreRequest(BaseModel):

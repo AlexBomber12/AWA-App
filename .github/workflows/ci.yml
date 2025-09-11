@@ -65,7 +65,7 @@ jobs:
             cd webapp
             set -o pipefail
             npm ci
-            npm run build 2>&1 | tee ../webapp-build.log
+            NODE_ENV=production npm run build 2>&1 | tee ../webapp-build.log
             exit ${PIPESTATUS[0]}
           fi
 
@@ -170,6 +170,7 @@ jobs:
         with:
           pattern: ci-logs-*
           merge-multiple: true
+          if-no-files-found: warn
 
       - name: Sanitize logs
         id: sanitize
@@ -222,7 +223,6 @@ jobs:
           ]
 
           err_pat=re.compile(r"(Traceback \(most recent call last\):|ERROR|FATAL|authentication failed|Exception|ImportError|ModuleNotFoundError|OperationalError|Connection refused|ValueError|TypeError)",re.I)
-
           def load(name):
             p=os.path.join(SAN,name)
             if not os.path.exists(p): return None

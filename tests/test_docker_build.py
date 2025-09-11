@@ -12,6 +12,9 @@ import pytest
 IMAGE = f"awa-test:{uuid.uuid4().hex[:8]}"
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
+# Building Docker images is slow and requires a daemon; mark as integration
+pytestmark = pytest.mark.integration
+
 
 @pytest.mark.skipif(shutil.which("docker") is None, reason="docker not available")
 def test_api_image_builds() -> None:
