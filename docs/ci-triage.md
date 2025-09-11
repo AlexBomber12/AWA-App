@@ -15,6 +15,20 @@
 ---
 
 ## Failing workflows
+- **CI** workflow (integration job)
+
+## Summary
+`docker compose build` failed with `resolve : lstat /home/runner/work/AWA-App/AWA-App/docker: no such file or directory` because `docker-compose.postgres.yml` referenced a missing `docker/postgres` path.
+
+## Fix
+- Point `docker-compose.postgres.yml` to `infra/postgres` for the custom Postgres Dockerfile and configuration.
+
+## Logs
+- `ci-logs/latest/compose-build.txt`
+
+---
+
+## Failing workflows
 
 ---
 
