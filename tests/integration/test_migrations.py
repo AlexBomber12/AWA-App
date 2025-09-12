@@ -3,7 +3,7 @@ from sqlalchemy import create_engine, text
 
 from alembic import command  # type: ignore[attr-defined]
 from alembic.config import Config  # type: ignore[attr-defined]
-from services.common.dsn import build_dsn
+from packages.awa_common.dsn import build_dsn
 
 pytestmark = [pytest.mark.integration, pytest.mark.anyio]
 

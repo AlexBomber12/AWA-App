@@ -8,9 +8,9 @@ pytestmark = pytest.mark.unit
 
 
 def _reload_llm():
-    if "services.common.llm" in list(importlib.sys.modules):
-        importlib.reload(importlib.import_module("services.common.llm"))
-    return importlib.import_module("services.common.llm")
+    if "packages.awa_common.llm" in list(importlib.sys.modules):
+        importlib.reload(importlib.import_module("packages.awa_common.llm"))
+    return importlib.import_module("packages.awa_common.llm")
 
 
 @pytest.mark.asyncio

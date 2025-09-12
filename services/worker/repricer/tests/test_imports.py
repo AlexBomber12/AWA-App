@@ -5,7 +5,7 @@ import pkgutil
 import pytest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-PREFIX = f"services.{ROOT.name}"
+PREFIX = f"services.worker.{ROOT.name}"
 
 
 @pytest.mark.parametrize(

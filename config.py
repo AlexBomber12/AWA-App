@@ -5,7 +5,7 @@ from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from services.common.dsn import build_dsn
+from packages.awa_common.dsn import build_dsn
 
 
 class Settings(BaseSettings):

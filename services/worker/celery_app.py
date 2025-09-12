@@ -79,8 +79,8 @@ if os.getenv("SCHEDULE_NIGHTLY_MAINTENANCE", "true").lower() in ("1", "true", "y
 
 # ensure tasks are registered
 try:
-    importlib.import_module("services.ingest.tasks")
-    importlib.import_module("services.ingest.maintenance")
+    importlib.import_module("services.worker.tasks")
+    importlib.import_module("services.worker.maintenance")
 except Exception:
     # Optional modules may have extra dependencies; ignore failures so
     # the core application can still start.

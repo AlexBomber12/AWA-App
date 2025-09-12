@@ -8,7 +8,7 @@ from urllib.parse import urlparse, urlunparse
 
 import psycopg
 
-from services.common.dsn import build_dsn
+from packages.awa_common.dsn import build_dsn
 
 
 def check_db() -> None:

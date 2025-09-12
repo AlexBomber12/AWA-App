@@ -6,7 +6,7 @@ from typing import Any, List, Mapping
 import httpx
 from sqlalchemy import create_engine
 
-from services.common.dsn import build_dsn
+from packages.awa_common.dsn import build_dsn
 from services.fees_h10 import repository as repo
 
 

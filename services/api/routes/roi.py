@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.types import Numeric
 from starlette import status
 
-from services.common.dsn import build_dsn
+from packages.awa_common.dsn import build_dsn
 
 from .. import roi_repository
 from ..db import get_session

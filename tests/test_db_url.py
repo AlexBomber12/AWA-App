@@ -1,6 +1,6 @@
 import os
 
-from services.common.db_url import build_url
+from packages.awa_common.db_url import build_url
 
 
 def test_build_url_from_parts(monkeypatch):

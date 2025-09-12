@@ -2,7 +2,7 @@ import os
 import sys
 import types
 
-from services.common.dsn import build_dsn
+from packages.awa_common.dsn import build_dsn
 from services.etl import fba_fee_ingestor
 
 

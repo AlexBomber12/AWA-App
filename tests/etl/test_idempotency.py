@@ -5,7 +5,7 @@ import pytest
 from sqlalchemy import create_engine, text
 
 from etl.load_csv import _sha256_file, import_file
-from services.common.dsn import build_dsn
+from packages.awa_common.dsn import build_dsn
 
 pytestmark = [
     pytest.mark.integration,

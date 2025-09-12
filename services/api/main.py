@@ -17,12 +17,13 @@ from starlette.responses import Response
 
 from alembic.config import Config
 from alembic.script import ScriptDirectory
-from api.routers.ingest import router as ingest_router
+from .routes.ingest import router as ingest_router
 from services.api.errors import install_exception_handlers
 from services.api.logging_config import configure_logging
 from services.api.sentry_config import init_sentry_if_configured
-from services.common.dsn import build_dsn
-from services.ingest.upload_router import router as upload_router
+from packages.awa_common.dsn import build_dsn
+from .routes.upload import router as upload_router
+from packages.awa_common.settings import settings
 
 from .db import get_session
 from .routes import health as health_router
@@ -138,8 +139,8 @@ _rate_limiter_dep = Depends(_rate_limit_dependency)
 app.router.dependencies.append(_rate_limiter_dep)
 
 
-@app.get("/ready", status_code=status.HTTP_200_OK, include_in_schema=False)
-async def ready(session: AsyncSession = Depends(get_session)) -> dict[str, str]:
+@app.get("/ready_db", status_code=status.HTTP_200_OK, include_in_schema=False)
+async def ready_db(session: AsyncSession = Depends(get_session)) -> dict[str, str]:
     """Return 200 only when migrations are at head."""
     alembic_config = os.getenv("ALEMBIC_CONFIG", "alembic.ini")
     cfg = Config(alembic_config)
@@ -149,6 +150,11 @@ async def ready(session: AsyncSession = Depends(get_session)) -> dict[str, str]:
     if current == head:
         return {"status": "ready"}
     raise HTTPException(status_code=503, detail="migrations pending")
+
+
+@app.get("/ready")
+def ready() -> dict[str, str]:
+    return {"status": "ok", "env": settings.ENV}
 
 
 app.include_router(upload_router, prefix="/upload")
@@ -198,7 +204,7 @@ async def _check_llm() -> None:
     """
 
     try:
-        from services.common.llm import LAN_BASE, LLM_PROVIDER, LLM_PROVIDER_FALLBACK
+        from packages.awa_common.llm import LAN_BASE, LLM_PROVIDER, LLM_PROVIDER_FALLBACK
     except Exception:
         return
 

@@ -14,7 +14,7 @@ from services.etl.dialects import (
     amazon_inventory_ledger,
     amazon_settlements,
 )
-from services.ingest.copy_loader import copy_df_via_temp
+from services.worker.copy_loader import copy_df_via_temp
 
 TEST_DSN = os.getenv("TEST_DATABASE_URL")
 

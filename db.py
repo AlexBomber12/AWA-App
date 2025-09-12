@@ -1,4 +1,4 @@
-from services.common.dsn import build_dsn
+from packages.awa_common.dsn import build_dsn
 
 
 def pg_dsn() -> str:

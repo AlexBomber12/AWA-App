@@ -26,7 +26,7 @@ async def test_check_llm_sets_fallback(monkeypatch) -> None:
     )
     monkeypatch.setitem(
         sys.modules,
-        "services.common.llm",
+        "packages.awa_common.llm",
         types.SimpleNamespace(
             LAN_BASE="http://x", LLM_PROVIDER="lan", LLM_PROVIDER_FALLBACK="stub"
         ),

@@ -5,8 +5,8 @@ import boto3
 import pytest
 from sqlalchemy import create_engine, text
 
-from services.common.dsn import build_dsn
-from services.ingest import email_watcher
+from packages.awa_common.dsn import build_dsn
+from services.worker import email_watcher
 
 pytestmark = [pytest.mark.integration, pytest.mark.anyio]
 

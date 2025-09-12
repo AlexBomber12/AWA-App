@@ -15,8 +15,8 @@ def _get_client(monkeypatch) -> TestClient:
 
     import api.routers.ingest as ingest_module
     import services.api.main as main_module
-    import services.ingest.celery_app as celery_module
-    import services.ingest.tasks as tasks_module
+    import services.worker.celery_app as celery_module
+    import services.worker.tasks as tasks_module
 
     reload(celery_module)
     reload(tasks_module)
@@ -68,7 +68,7 @@ def test_ingest_failure(monkeypatch, tmp_path) -> None:
 
     monkeypatch.setattr("etl.load_csv.import_file", bad_import_file)
     with _get_client(monkeypatch) as client:
-        from services.ingest.celery_app import celery_app
+        from services.worker.celery_app import celery_app
 
         celery_app.conf.task_eager_propagates = False
 

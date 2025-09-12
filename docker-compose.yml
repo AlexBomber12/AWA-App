@@ -1,346 +1,60 @@
-x-database-env: &db-env
-  PG_USER: ${PG_USER:-postgres}
-  PG_PASSWORD: ${PG_PASSWORD:-pass}
-  PG_DATABASE: ${PG_DATABASE:-awa}
-  PG_HOST: ${PG_HOST:-postgres}
-  PG_PORT: ${PG_PORT:-5432}
-  PG_SYNC_DSN: ${PG_SYNC_DSN:-postgresql+psycopg://postgres:pass@postgres:5432/awa}
-  PG_ASYNC_DSN: ${PG_ASYNC_DSN:-postgresql+asyncpg://postgres:pass@postgres:5432/awa}
-  DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://postgres:pass@postgres:5432/awa}
-
 services:
-  postgres:
-    build:
-      context: .
-      dockerfile: docker/postgres/Dockerfile
-    restart: always
+  db:
+    image: postgres:16
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-${PG_USER}}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-${PG_PASSWORD}}
-      POSTGRES_DB: ${POSTGRES_DB:-${PG_DATABASE}}
-      PGPASSWORD: ${POSTGRES_PASSWORD:-${PG_PASSWORD}} # for healthcheck
-      TZ: UTC
-      LANG: en_US.UTF-8
-      POSTGRES_CONFIG_FILE: /etc/postgresql/postgresql.conf
-    command: ["postgres", "-c", "config_file=/etc/postgresql/postgresql.conf"]
-    volumes:
-      - ./docker/postgres/postgresql.conf:/etc/postgresql/postgresql.conf:ro
+      POSTGRES_DB: app
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app
+    ports: ["5432:5432"]
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "postgres"]
-      start_period: 60s
-      interval: 10s
-      timeout: 5s
-      retries: 10
-    networks:
-      - awa-net
-  minio:
-    image: minio/minio
-    command: server /data --console-address :9001
-    environment:
-      MINIO_ROOT_USER: minio
-      MINIO_ROOT_PASSWORD: minio123 # pragma: allowlist secret
-    ports:
-      - "9000:9000"
-      - "9001:9001"
-    volumes:
-      - miniodata:/data
-    networks:
-      - awa-net
-  redis:
-    image: redis:7-alpine
-    restart: unless-stopped
-    command: ["sh", "-c", "sysctl -w vm.overcommit_memory=1 || true; redis-server"]
-    ports:
-      - "6379:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      start_period: 30s
-      interval: 10s
+      test: ["CMD-SHELL","pg_isready -U app -d app"]
+      interval: 5s
       timeout: 3s
-      retries: 5
-    networks:
-      - awa-net
-  imap_watcher:
-    build:
-      context: ./services/ingest
-      dockerfile: Dockerfile.email
-    environment:
-      IMAP_HOST: ${IMAP_HOST:-imap.example.com}
-      IMAP_USER: ${IMAP_USER:-user@example.com}
-      IMAP_PASS: ${IMAP_PASS:-pass123}
-      MINIO_ENDPOINT: minio:9000
-      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minio}
-      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minio123}
-    depends_on:
-      - minio
-    profiles: [ingest]
-  api:
-    build:
-      context: .
-      dockerfile: services/api/Dockerfile
-      args:
-        TZ_CACHE_BUST: ${GITHUB_SHA:-dev}
-    environment:
-      PG_HOST: ${PG_HOST}
-      PG_PORT: ${PG_PORT}
-      PG_USER: ${PG_USER}
-      PG_PASSWORD: ${PG_PASSWORD}
-      PG_DATABASE: ${PG_DATABASE}
-      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://${PG_USER}:${PG_PASSWORD}@${PG_HOST}:${PG_PORT}/${PG_DATABASE}}
-      TZ: UTC
-      PYTHONPATH: /app:/app/services
-      ENABLE_LIVE: 0
-      LLM_PROVIDER: stub
-      ALEMBIC_CONFIG: /app/alembic.ini
-      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
-      RATE_LIMIT_DEFAULT: ${RATE_LIMIT_DEFAULT:-100/minute}
-      TRUST_X_FORWARDED: ${TRUST_X_FORWARDED:-1}
-      SENTRY_DSN: ${SENTRY_DSN:-}
-      SENTRY_ENV: ${SENTRY_ENV:-local}
-      SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE:-0.05}
-      SENTRY_PROFILES_SAMPLE_RATE: ${SENTRY_PROFILES_SAMPLE_RATE:-0.0}
-      SENTRY_RELEASE: ${GITHUB_SHA:-}
-    depends_on:
-      postgres:
-        condition: service_healthy
-    ports:
-      - "8000:8000"
+      retries: 10
+
+  redis:
+    image: redis:7
+    ports: ["6379:6379"]
     healthcheck:
-      test: ["CMD", "curl", "-fsSL", "http://localhost:8000/health" ]
-      start_period: 120s
-      interval: 8s
+      test: ["CMD","redis-cli","ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build: { context: ., dockerfile: services/api/Dockerfile }
+    environment:
+      DATABASE_URL: postgresql+psycopg://app:app@db:5432/app
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      db: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    ports: ["8000:8000"]
+    healthcheck:
+      test: ["CMD","curl","-fsS","http://localhost:8000/ready"]
+      interval: 5s
       timeout: 3s
       retries: 12
-    networks:
-      - awa-net
-    volumes:
-      - awa-data:/data
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    labels:
-      org.opencontainers.image.revision: ${GITHUB_SHA:-dev}
-      org.opencontainers.image.source: https://github.com/<org>/AWA-App
-  etl:
-    build:
-      context: .
-      dockerfile: services/etl/Dockerfile
-      args:
-        TZ_CACHE_BUST: ${GITHUB_SHA:-dev}
-    environment:
-      PG_HOST: ${PG_HOST}
-      PG_PORT: ${PG_PORT}
-      PG_USER: ${PG_USER}
-      PG_PASSWORD: ${PG_PASSWORD}
-      PG_DATABASE: ${PG_DATABASE}
-      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://${PG_USER}:${PG_PASSWORD}@${PG_HOST}:${PG_PORT}/${PG_DATABASE}}
-      TZ: UTC
-      PYTHONPATH: /app:/app/services
-      ENABLE_LIVE: 0
-      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-minio:9000}
-      SENTRY_DSN: ${SENTRY_DSN:-}
-      SENTRY_ENV: ${SENTRY_ENV:-local}
-      SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE:-0.05}
-      SENTRY_PROFILES_SAMPLE_RATE: ${SENTRY_PROFILES_SAMPLE_RATE:-0.0}
-      SENTRY_RELEASE: ${GITHUB_SHA:-}
-    depends_on:
-      postgres:
-        condition: service_healthy
-      minio:
-        condition: service_started
-    healthcheck:
-      test: ["CMD", "python", "-m", "services.etl.healthcheck"]
-      start_period: 90s
-      interval: 20s
-      timeout: 25s
-      retries: 8
-    networks:
-      - awa-net
-    volumes:
-      - awa-data:/data
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    labels:
-      org.opencontainers.image.revision: ${GITHUB_SHA:-dev}
-      org.opencontainers.image.source: https://github.com/<org>/AWA-App
-  celery_worker:
-    build:
-      context: .
-      dockerfile: services/etl/Dockerfile
-      args:
-        TZ_CACHE_BUST: ${GITHUB_SHA:-dev}
-    command: ["celery", "-A", "services.ingest.celery_app:celery_app", "worker", "-Q", "ingest", "-l", "INFO"]
-    environment:
-      PG_HOST: ${PG_HOST}
-      PG_PORT: ${PG_PORT}
-      PG_USER: ${PG_USER}
-      PG_PASSWORD: ${PG_PASSWORD}
-      PG_DATABASE: ${PG_DATABASE}
-      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://${PG_USER}:${PG_PASSWORD}@${PG_HOST}:${PG_PORT}/${PG_DATABASE}}
-      TZ: UTC
-      PYTHONPATH: /app:/app/services
-      CELERY_BROKER_URL: ${CELERY_BROKER_URL:-redis://redis:6379/0}
-      CELERY_RESULT_BACKEND: ${CELERY_RESULT_BACKEND:-redis://redis:6379/1}
-      ENABLE_LIVE: 0
-      SENTRY_DSN: ${SENTRY_DSN:-}
-      SENTRY_ENV: ${SENTRY_ENV:-local}
-      SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE:-0.05}
-      SENTRY_PROFILES_SAMPLE_RATE: ${SENTRY_PROFILES_SAMPLE_RATE:-0.0}
-      SENTRY_RELEASE: ${GITHUB_SHA:-}
-    depends_on:
-      redis:
-        condition: service_healthy
-      postgres:
-        condition: service_healthy
-    networks:
-      - awa-net
-    volumes:
-      - awa-data:/data
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "python", "-m", "services.ingest.healthcheck", "worker"]
-      start_period: 90s
-      interval: 20s
-      timeout: 25s
-      retries: 8
-    labels:
-      org.opencontainers.image.revision: ${GITHUB_SHA:-dev}
-      org.opencontainers.image.source: https://github.com/<org>/AWA-App
-  celery_beat:
-    build:
-      context: .
-      dockerfile: services/etl/Dockerfile
-      args:
-        TZ_CACHE_BUST: ${GITHUB_SHA:-dev}
-    command: ["celery", "-A", "services.ingest.celery_app:celery_app", "beat", "-l", "INFO"]
-    environment:
-      <<: *db-env
-      TZ: UTC
-      PYTHONPATH: /app:/app/services
-      CELERY_BROKER_URL: redis://redis:6379/0
-      CELERY_RESULT_BACKEND: redis://redis:6379/1
-      SCHEDULE_NIGHTLY_MAINTENANCE: "true"
-      NIGHTLY_MAINTENANCE_CRON: "30 2 * * *"
-      TABLE_MAINTENANCE_LIST: "public.reimbursements_raw,public.returns_raw"
-      SENTRY_DSN: ${SENTRY_DSN:-}
-      SENTRY_ENV: ${SENTRY_ENV:-local}
-      SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE:-0.05}
-      SENTRY_PROFILES_SAMPLE_RATE: ${SENTRY_PROFILES_SAMPLE_RATE:-0.0}
-      SENTRY_RELEASE: ${GITHUB_SHA:-}
-    depends_on:
-      redis:
-        condition: service_started
-    networks:
-      - awa-net
-    restart: unless-stopped
-    profiles: ["beat"]
-    healthcheck:
-      test: ["CMD", "python", "-m", "services.ingest.healthcheck", "beat"]
-      start_period: 60s
-      interval: 15s
-      timeout: 25s
-      retries: 5
-    labels:
-      org.opencontainers.image.revision: ${GITHUB_SHA:-dev}
-      org.opencontainers.image.source: https://github.com/<org>/AWA-App
-  web:
-    build: ./web
-    environment:
-      VITE_API_URL: http://api:8000
-      TZ: UTC
-    ports:
-      - "3000:80"
-    depends_on:
-      - api
-    networks:
-      - awa-net
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-  repricer:
-    build:
-      context: .
-      dockerfile: services/repricer/Dockerfile
-      args:
-        TZ_CACHE_BUST: ${GITHUB_SHA:-dev}
-    ports:
-      - "8100:8100"
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8100/health || exit 1"]
-      interval: 10s
-      retries: 5
-    environment:
-      <<: *db-env
-      TZ: UTC
-      ENABLE_LIVE: 0
-    depends_on:
-      api:
-        condition: service_healthy
-      postgres:
-        condition: service_healthy
-    networks:
-      - awa-net
-    volumes:
-      - awa-data:/data
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-  fees_h10:
-    build:
-      context: ./services/fees_h10
-    environment:
-      <<: *db-env
-      PYTHONPATH: /app:/app/services
-      SENTRY_DSN: ${SENTRY_DSN:-}
-      SENTRY_ENV: ${SENTRY_ENV:-local}
-      SENTRY_TRACES_SAMPLE_RATE: ${SENTRY_TRACES_SAMPLE_RATE:-0.05}
-      SENTRY_PROFILES_SAMPLE_RATE: ${SENTRY_PROFILES_SAMPLE_RATE:-0.0}
-      SENTRY_RELEASE: ${SENTRY_RELEASE:-}
-      CELERY_BROKER_URL: redis://redis:6379/0
-    command: ["./start.sh"]
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    networks:
-      - awa-net
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-  logistics_etl:
-    build:
-      context: ./services/logistics_etl
-    environment:
-      <<: *db-env
-      PYTHONPATH: /app:/app/services
-    command: ["python", "-m", "logistics_etl"]
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - awa-net
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-  alert_bot:
-    build:
-      context: ./services/alert_bot
-    environment:
-      <<: *db-env
-      TZ: UTC
-      TELEGRAM_TOKEN: ${TELEGRAM_TOKEN:-}
-      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
-      ROI_THRESHOLD: "5"
-      ROI_DURATION_DAYS: "30"
-      COST_DELTA_PCT: "10"
-      PRICE_DROP_PCT: "15"
-      RETURNS_PCT: "5"
-      STALE_DAYS: "30"
-      CHECK_INTERVAL_MIN: "60"
-    depends_on:
-      - postgres
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    profiles: [alerts]
 
-volumes:
-  miniodata:
-  awa-data:
-networks:
-  awa-net:
+  worker:
+    build: { context: ., dockerfile: services/worker/Dockerfile }
+    environment:
+      DATABASE_URL: postgresql+psycopg://app:app@db:5432/app
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      db: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    ports: ["8001:8001"]
+    healthcheck:
+      test: ["CMD","curl","-fsS","http://localhost:8001/ready"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  webapp:
+    build: { context: ., dockerfile: webapp/Dockerfile }
+    environment:
+      NEXT_PUBLIC_API_URL: http://api:8000
+    depends_on:
+      api: { condition: service_healthy }
+    ports: ["3000:3000"]

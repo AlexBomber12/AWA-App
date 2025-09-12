@@ -6,7 +6,7 @@ from typing import Any, List
 from celery.utils.log import get_task_logger
 from sqlalchemy import create_engine, text
 
-from services.common.dsn import build_dsn
+from packages.awa_common.dsn import build_dsn
 
 from .celery_app import celery_app
 

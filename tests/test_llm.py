@@ -2,7 +2,7 @@ import types
 
 import pytest
 
-from services.common import llm
+from packages.awa_common import llm
 
 
 class DummyResp:
