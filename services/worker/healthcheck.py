@@ -3,28 +3,28 @@
 from __future__ import annotations
 
 import argparse
-import os
 import sys
 import time
 
 import psycopg
 import redis
 
-from packages.awa_common.dsn import build_dsn
+from packages.awa_common.settings import settings
 
 from .celery_app import celery_app
 
 
 def check_db() -> None:
-    dsn = build_dsn(sync=True).replace("+psycopg", "")
+    dsn = settings.DATABASE_URL.replace("+psycopg", "")
     with psycopg.connect(dsn, connect_timeout=2) as conn:
         with conn.cursor() as cur:
             cur.execute("SELECT 1")
 
 
 def check_redis() -> None:
-    url = os.getenv("CELERY_BROKER_URL", "redis://redis:6379/0")
-    client = redis.Redis.from_url(url, socket_connect_timeout=2, socket_timeout=2)
+    client = redis.Redis.from_url(
+        settings.REDIS_URL, socket_connect_timeout=2, socket_timeout=2
+    )
     client.ping()
 
 

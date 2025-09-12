@@ -8,7 +8,7 @@ import boto3
 from imapclient import IMAPClient
 from sqlalchemy import create_engine, text
 
-from packages.awa_common.dsn import build_dsn
+from packages.awa_common.settings import settings
 from services.etl import load_csv
 
 BUCKET = "awa-bucket"
@@ -58,7 +58,7 @@ def main() -> dict[str, str]:
                 load_id, inserted = load_csv.main(
                     ["--source", f"minio://{dst}", "--table", "auto"]
                 )
-                engine = create_engine(build_dsn(sync=True))
+                engine = create_engine(settings.DATABASE_URL)
                 with engine.begin() as db:
                     db.execute(
                         text(

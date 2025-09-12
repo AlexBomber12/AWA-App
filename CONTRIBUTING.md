@@ -7,12 +7,22 @@ pip install pre-commit
 pre-commit install
 ```
 
-Run the full test suite with Postgres:
+For local development, copy the example environment file and start the stack:
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.postgres.yml \
-  --env-file .env.postgres up -d --wait
-pytest -q
+cp .env.example .env.local
+docker compose up -d --build
+```
+
+After the containers start, `/ready` should return 200 and the logs include a
+redacted `settings={...}` banner. Staging and production deployments should
+provide variables via the orchestrator or a secrets manager; `.env.prod.example`
+documents the expected keys.
+
+Run the full test suite:
+
+```bash
+ENV=test pytest -q
 ```
 
 Before pushing changes, run the full pre-commit suite and tests:

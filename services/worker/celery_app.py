@@ -1,14 +1,20 @@
 from __future__ import annotations
 
 import importlib
+import json
+import logging
 import os
 
 from celery import Celery
 from celery.schedules import crontab
 
+from packages.awa_common.settings import settings
+
+logging.getLogger(__name__).info("settings=%s", json.dumps(settings.redacted()))
+
 
 def _init_sentry() -> None:
-    dsn = os.getenv("SENTRY_DSN", "").strip()
+    dsn = (settings.SENTRY_DSN or "").strip()
     if not dsn:
         return
     try:
@@ -18,7 +24,7 @@ def _init_sentry() -> None:
         return
     sentry_sdk.init(
         dsn=dsn,
-        environment=os.getenv("SENTRY_ENV", "local"),
+        environment=settings.ENV,
         release=os.getenv("SENTRY_RELEASE") or os.getenv("COMMIT_SHA"),
         send_default_pii=False,
         integrations=[CeleryIntegration()],
@@ -29,8 +35,8 @@ _init_sentry()
 
 
 def make_celery() -> Celery:
-    broker = os.getenv("CELERY_BROKER_URL", "redis://redis:6379/0")
-    backend = os.getenv("CELERY_RESULT_BACKEND", "redis://redis:6379/1")
+    broker = settings.REDIS_URL
+    backend = settings.REDIS_URL
     app = Celery("awa_app", broker=broker, backend=backend)
     app.conf.update(
         task_acks_late=True,
