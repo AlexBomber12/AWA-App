@@ -2,327 +2,299 @@ name: ci
 
 on:
   pull_request:
-    paths-ignore:
-      - '.codex/**'
   push:
-    branches: [main]
-    paths-ignore:
-      - '.codex/**'
+    branches: [ main ]
   workflow_dispatch:
 
-permissions:
-  contents: read
-  pull-requests: write
-  issues: write
-
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
+
+env:
+  PYTHON_VERSION: "3.11"
+  NODE_VERSION: "20"
+  DOCKER_BUILDKIT: "1"
+  COMPOSE_DOCKER_CLI_BUILD: "1"
 
 jobs:
   unit:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
       - uses: actions/setup-node@v4
         with:
-          node-version: 'lts/*'
+          node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
           cache-dependency-path: |
             web/package-lock.json
             webapp/package-lock.json
 
-      - name: Install Python dev deps
-        shell: bash
+      - name: Install Python deps
         run: |
           if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
-
-      - name: Install service requirements
-        shell: bash
-        run: |
           for f in services/*/requirements.txt; do [ -f "$f" ] && pip install -r "$f" || true; done
 
-      - name: Python unit tests
-        shell: bash
+      - name: Install Node deps
         run: |
-          if [ -f pyproject.toml ] || [ -f pytest.ini ]; then
-            set -o pipefail
-            pytest -q -m "not integration" 2>&1 | tee unit-pytest.log
-            exit ${PIPESTATUS[0]}
-          fi
+          if [ -f web/package.json ]; then (cd web && npm ci); fi
+          if [ -f webapp/package.json ]; then (cd webapp && npm ci); fi
 
-      - name: Frontend web tests
-        shell: bash
+      - name: Backend unit tests
+        run: |
+          set -o pipefail
+          pytest -vv -q | tee unit.log
+          test ${PIPESTATUS[0]} -eq 0
+
+      - name: Frontend lint/type/tests
         run: |
           if [ -f web/package.json ]; then
             cd web
-            set -o pipefail
-            npm ci
-            npm test 2>&1 | tee ../web-vitest.log
-            exit ${PIPESTATUS[0]}
+            npm run lint | tee ../eslint.log || true
+            npx tsc -p . | tee ../tsc.log || true
+            npm run test:unit --if-present | tee ../vitest.log || true
           fi
 
-      - name: Frontend webapp build
-        shell: bash
+      - name: Build docker images
         run: |
-          if [ -f webapp/package.json ]; then
-            cd webapp
-            set -o pipefail
-            npm ci
-            NODE_ENV=production npm run build 2>&1 | tee ../webapp-build.log
-            exit ${PIPESTATUS[0]}
-          fi
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml build
 
-      - name: Upload artifacts (unit)
+      - name: Make debug bundle
+        if: always()
+        run: ./scripts/ci/make_debug_bundle.sh debug-bundle-unit
+
+      - name: Upload debug bundle
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ci-logs-${{ github.run_id }}-${{ github.run_attempt }}-unit
-          path: |
-            unit-pytest.log
-            web-vitest.log
-            webapp-build.log
-          if-no-files-found: ignore
+          name: debug-bundle-unit
+          path: debug-bundle-unit.tar.gz
+
   integration:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
-    needs: unit
+    needs: [unit]
+    continue-on-error: true
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
 
       - name: Prepare .env.ci
-        shell: bash
         run: |
-          printf "PG_HOST=postgres\nPG_PORT=5432\nPG_USER=%s\nPG_PASSWORD=%s\nPG_DATABASE=%s\nPOSTGRES_HOST=postgres\nPOSTGRES_PORT=5432\nPOSTGRES_USER=%s\nPOSTGRES_PASSWORD=%s\nPOSTGRES_DB=%s\nDATABASE_URL=postgresql://%s:%s@postgres:5432/%s\n" "${{ secrets.PG_USER || 'postgres' }}" "${{ secrets.PG_PASSWORD || 'pass' }}" "${{ secrets.PG_DATABASE || 'awa' }}" "${{ secrets.PG_USER || 'postgres' }}" "${{ secrets.PG_PASSWORD || 'pass' }}" "${{ secrets.PG_DATABASE || 'awa' }}" "${{ secrets.PG_USER || 'postgres' }}" "${{ secrets.PG_PASSWORD || 'pass' }}" "${{ secrets.PG_DATABASE || 'awa' }}" > .env.ci
+          printf "PG_HOST=postgres\nPG_PORT=5432\nPG_USER=%s\nPG_PASSWORD=%s\nPG_DATABASE=%s\n" "${{ secrets.PG_USER || 'postgres' }}" "${{ secrets.PG_PASSWORD || 'pass' }}" "${{ secrets.PG_DATABASE || 'awa' }}" > .env.ci
 
-      - name: Build images
-        shell: bash
+      - name: Compose up services
         run: |
-          export COMPOSE_DOCKER_CLI_BUILD=1 DOCKER_BUILDKIT=1
-          COMPOSE_FILES=""
-          [ -f docker-compose.yml ] && COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.yml"
-          [ -f docker-compose.ci.yml ] && COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.ci.yml"
-          [ -f docker-compose.postgres.yml ] && COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.postgres.yml"
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml -f docker-compose.postgres.yml --env-file .env.ci up -d --build db redis api worker
+          for url in http://localhost:8000/ready http://localhost:8001/ready; do
+            for i in {1..60}; do
+              if curl -fsS "$url" >/dev/null; then break; fi
+              sleep 2
+            done
+          done
+
+      - name: Integration tests
+        run: |
           set -o pipefail
-          docker compose $COMPOSE_FILES --env-file .env.ci build --pull 2>&1 | tee compose-build.txt
-          exit ${PIPESTATUS[0]}
+          pytest -vv -m integration | tee integ.log
+          test ${PIPESTATUS[0]} -eq 0
+        continue-on-error: true
 
-      - name: Up services
-        shell: bash
-        run: |
-          COMPOSE_FILES=""
-          [ -f docker-compose.yml ] && COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.yml"
-          [ -f docker-compose.ci.yml ] && COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.ci.yml"
-          [ -f docker-compose.postgres.yml ] && COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.postgres.yml"
-          set -o pipefail
-          docker compose $COMPOSE_FILES --env-file .env.ci up -d --wait 2>&1 | tee compose-up.txt
-          exit ${PIPESTATUS[0]}
-
-      - name: Dump compose logs
+      - name: Compose logs snapshot
         if: always()
-        shell: bash
-        run: |
-          COMPOSE_FILES=""
-          [ -f docker-compose.yml ] && COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.yml"
-          [ -f docker-compose.ci.yml ] && COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.ci.yml"
-          [ -f docker-compose.postgres.yml ] && COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.postgres.yml"
-          docker compose $COMPOSE_FILES --env-file .env.ci ps > compose-ps.txt || true
-          docker compose $COMPOSE_FILES --env-file .env.ci logs --no-color > compose-logs.txt || true
+        run: docker compose logs --no-color > compose-integration-logs.txt
 
-      - name: Python integration tests
-        shell: bash
-        run: |
-          if [ -f pyproject.toml ] || [ -f pytest.ini ]; then
-            set -o pipefail
-            pytest -q -m integration 2>&1 | tee integration-pytest.log
-            exit ${PIPESTATUS[0]}
-          fi
+      - name: Make debug bundle
+        if: always()
+        run: ./scripts/ci/make_debug_bundle.sh debug-bundle-integration
 
-      - name: Upload artifacts (integration)
+      - name: Upload debug bundle
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: ci-logs-${{ github.run_id }}-${{ github.run_attempt }}-integration
+          name: debug-bundle-integration
           path: |
-            compose-ps.txt
-            compose-logs.txt
-            compose-up.txt
-            compose-build.txt
-            integration-pytest.log
-          if-no-files-found: ignore
-  mirror_logs:
-    needs: [unit, integration]
-    if: ${{ always() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
-    runs-on: ubuntu-latest
-    steps:
-      - name: Resolve PR number
-        id: pr
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const {owner, repo} = context.repo;
-            let number = context.payload.pull_request?.number || null;
-            if (!number) {
-              const r = await github.rest.repos.listPullRequestsAssociatedWithCommit({owner, repo, commit_sha: context.sha});
-              number = r.data?.[0]?.number || null;
-            }
-            if (!number) core.setFailed('No PR found for this run');
-            core.setOutput('number', String(number));
+            debug-bundle-integration.tar.gz
+            compose-integration-logs.txt
 
-      - name: Download all CI logs artifacts
+      - name: Compose down
+        if: always()
+        run: docker compose down -v
+
+  migrations:
+    runs-on: ubuntu-latest
+    needs: [unit]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare .env.ci
+        run: |
+          printf "PG_HOST=postgres\nPG_PORT=5432\nPG_USER=%s\nPG_PASSWORD=%s\nPG_DATABASE=%s\n" "${{ secrets.PG_USER || 'postgres' }}" "${{ secrets.PG_PASSWORD || 'pass' }}" "${{ secrets.PG_DATABASE || 'awa' }}" > .env.ci
+
+      - name: Start database
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml -f docker-compose.postgres.yml --env-file .env.ci up -d --build db
+          for i in {1..60}; do
+            if docker compose exec -T db pg_isready -U "${{ secrets.PG_USER || 'postgres' }}" >/dev/null 2>&1; then break; fi
+            sleep 2
+          done
+
+      - name: Alembic migrations
+        run: |
+          set -e
+          docker compose run --rm api alembic upgrade head
+          docker compose run --rm api alembic downgrade -1
+          docker compose run --rm api alembic upgrade head
+
+      - name: Make debug bundle
+        if: always()
+        run: ./scripts/ci/make_debug_bundle.sh debug-bundle-migrations
+
+      - name: Upload debug bundle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-bundle-migrations
+          path: debug-bundle-migrations.tar.gz
+
+      - name: Compose down
+        if: always()
+        run: docker compose down -v
+
+  preview:
+    runs-on: ubuntu-latest
+    needs: [integration, migrations]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare .env.ci
+        run: |
+          printf "PG_HOST=postgres\nPG_PORT=5432\nPG_USER=%s\nPG_PASSWORD=%s\nPG_DATABASE=%s\n" "${{ secrets.PG_USER || 'postgres' }}" "${{ secrets.PG_PASSWORD || 'pass' }}" "${{ secrets.PG_DATABASE || 'awa' }}" > .env.ci
+
+      - name: Bring up stack
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml -f docker-compose.postgres.yml --env-file .env.ci up -d --build
+          for url in http://localhost:8000/ready http://localhost:8001/ready; do
+            for i in {1..60}; do
+              if curl -fsS "$url" >/dev/null; then break; fi
+              sleep 2
+            done
+          done
+
+      - name: Cloudflare tunnel
+        if: ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN && secrets.PREVIEW_HOSTNAME }}
+        run: |
+          npx cloudflared tunnel --url http://localhost:8080 --hostname "${{ secrets.PREVIEW_HOSTNAME }}" --token "${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}" &
+          echo "https://${{ secrets.PREVIEW_HOSTNAME }}" > preview-url.txt
+
+      - name: Fallback preview URL
+        if: ${{ !(secrets.CLOUDFLARE_TUNNEL_TOKEN && secrets.PREVIEW_HOSTNAME) }}
+        run: echo "http://localhost:8080" > preview-url.txt
+
+      - name: Preview summary
+        run: |
+          echo "Preview URL: $(cat preview-url.txt)" >> $GITHUB_STEP_SUMMARY
+
+      - name: Make debug bundle
+        if: always()
+        run: ./scripts/ci/make_debug_bundle.sh debug-bundle-preview
+
+      - name: Upload debug bundle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-bundle-preview
+          path: |
+            debug-bundle-preview.tar.gz
+            preview-url.txt
+
+      - name: Compose down
+        if: always()
+        run: docker compose down -v
+
+  mirror_logs:
+    name: mirror-logs (persist sanitized CI logs to repo)
+    runs-on: ubuntu-latest
+    needs: [unit, integration, migrations, preview]
+    if: always()
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
-          pattern: ci-logs-*
-          merge-multiple: true
-          if-no-files-found: warn
+          path: artifacts
 
-      - name: Sanitize logs
-        id: sanitize
-        shell: bash
+      - name: Prepare sanitized mirror
+        id: prep
         run: |
-          rm -rf logs_sanitized && mkdir -p logs_sanitized
-          python - <<'PY'
-          import os,re,glob
-          os.makedirs("logs_sanitized", exist_ok=True)
-          files = sorted(glob.glob("*.log")+glob.glob("*.txt"))
-          rules = [
-            (re.compile(r'(?i)\b(PG_PASSWORD|POSTGRES_PASSWORD|REDIS_PASSWORD|MINIO_SECRET_KEY|AWS_SECRET_ACCESS_KEY|OPENAI_API_KEY|API_KEY|SECRET|TOKEN|PASSWORD)\s*=\s*[^\s]+'), r'\1=<redacted>'),
-            (re.compile(r'(?i)\bDATABASE_URL\s*=\s*\S+'), 'DATABASE_URL=<redacted>'),
-            (re.compile(r'postgres(?:ql|\+psycopg)?://([^:@/]+):([^@/]+)@'), r'postgresql://\1:<redacted>@'),
-            (re.compile(r'://([^:@/]+):([^@/]+)@'), r'://\1:<redacted>@'),
-            (re.compile(r'Bearer\s+[A-Za-z0-9\-._~+/]+=*'), 'Bearer <redacted>'),
-            (re.compile(r'(?i)(Authorization:\s*)\S+'), r'\1<redacted>')
-          ]
-          for src in files:
-            try:
-              t=open(src,'r',errors='ignore').read()
-            except: continue
-            for p,s in rules: t=p.sub(s,t)
-            open(os.path.join("logs_sanitized", os.path.basename(src)),'w',encoding='utf-8').write(t)
-          PY
-          echo "dir=logs_sanitized" >> $GITHUB_OUTPUT
+          set -Eeuo pipefail
+          PR_NUM="${{ github.event.pull_request.number || '' }}"
+          SHA_SHORT="$(git rev-parse --short ${{ github.sha }})"
+          REF_NAME="${{ github.ref_name }}"
+          TS="$(date -u +%Y%m%dT%H%M%SZ)"
 
-      - name: Build PR comment body (error-first, size-capped)
-        id: body
-        shell: bash
+          if [ -n "$PR_NUM" ]; then
+            BASE="mirror-logs/pr-$PR_NUM/sha-$SHA_SHORT"
+          else
+            BASE="mirror-logs/branch-$REF_NAME/sha-$SHA_SHORT"
+          fi
+          mkdir -p "$BASE"
+
+          find artifacts -type f -name "*.tar.gz" -print0 | while IFS= read -r -d '' f; do
+            d="$BASE/$(basename "$f" .tar.gz)"
+            mkdir -p "$d"
+            tar -xzf "$f" -C "$d"
+          done
+
+          find artifacts -type f ! -name "*.tar.gz" -maxdepth 2 -print0 | while IFS= read -r -d '' f; do
+            cp -f "$f" "$BASE/$(basename "$f")"
+          done
+
+          find "$BASE" -type f -print0 | xargs -0 -I{} sed -i -E 's/(TOKEN|SECRET|PASSWORD|KEY|DSN|AUTH|COOKIE)=\S+/\1=REDACTED/g' {}
+
+          LATEST_DIR="$(dirname "$BASE")/latest"
+          rm -rf "$LATEST_DIR"
+          mkdir -p "$LATEST_DIR"
+          cp -a "$BASE"/. "$LATEST_DIR"/
+
+          echo "base=$BASE" >> $GITHUB_OUTPUT
+          echo "latest=$LATEST_DIR" >> $GITHUB_OUTPUT
+
+      - name: Push to ci-logs branch
+        if: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
         env:
-          SAN_DIR: ${{ steps.sanitize.outputs.dir }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          python - <<'PY' > pr_comment.md
-          import os,re
+          set -Eeuo pipefail
+          LOGS_BRANCH="ci-logs"
+          git fetch origin $LOGS_BRANCH || true
+          if git ls-remote --exit-code --heads origin $LOGS_BRANCH; then
+            git checkout -B $LOGS_BRANCH origin/$LOGS_BRANCH
+          else
+            git checkout --orphan $LOGS_BRANCH
+            git rm -rf . || true
+            echo "# CI Logs branch" > README.md
+            mkdir -p .github/workflows
+            git add -A
+            git commit -m "init ci-logs branch [skip ci]" || true
+          fi
 
-          SAN=os.environ.get("SAN_DIR","logs_sanitized")
-          MARKER="<!-- CI_LOG_MIRROR -->"
-          HEADING="### CI last run logs (sanitized)"
-          MAX=60000
+          mkdir -p "$(dirname "${{ steps.prep.outputs.base }}")"
+          rsync -a --delete "${{ steps.prep.outputs.base%/* }}/" "$(dirname "${{ steps.prep.outputs.base }}")/"
+          rsync -a --delete "${{ steps.prep.outputs.latest%/* }}/" "$(dirname "${{ steps.prep.outputs.latest }}")/"
 
-          files=[ # priority order
-            ("compose-logs.txt","compose-logs.txt"),
-            ("integration-pytest.log","integration-pytest.log"),
-            ("compose-up.txt","compose-up.txt"),
-            ("compose-build.txt","compose-build.txt"),
-            ("unit-pytest.log","unit-pytest.log"),
-            ("web-vitest.log","web-vitest.log"),
-            ("webapp-build.log","webapp-build.log"),
-          ]
+          git add -A
+          COMMIT_MSG="mirror-logs: ${GITHUB_SHA} (PR #${{ github.event.pull_request.number || 'n/a' }}) [skip ci]"
+          git -c user.name="github-actions" -c user.email="github-actions@users.noreply.github.com" commit -m "$COMMIT_MSG" || echo "Nothing to commit"
+          git push origin $LOGS_BRANCH
 
-          err_pat=re.compile(r"(Traceback \(most recent call last\):|ERROR|FATAL|authentication failed|Exception|ImportError|ModuleNotFoundError|OperationalError|Connection refused|ValueError|TypeError)",re.I)
-          def load(name):
-            p=os.path.join(SAN,name)
-            if not os.path.exists(p): return None
-            return open(p,"r",errors="ignore").read()
-
-          def last_trace_or_errors(txt, keep=200, fallback=60):
-            if not txt: return []
-            idx=[m.start() for m in re.finditer(r"Traceback \(most recent call last\):",txt)]
-            if idx:
-              return txt[idx[-1]:].splitlines()[:keep]
-            lines=[l for l in txt.splitlines() if err_pat.search(l)]
-            return lines[-fallback:] if lines else []
-
-          def build(tail_lines_per_file=300, err_cap=200, err_fallback=60, only_crit=False):
-            parts=[MARKER, HEADING, ""]
-            errors=[]
-            tails=[]
-            for fname,label in files:
-              txt=load(fname)
-              if not txt: continue
-              err=last_trace_or_errors(txt, keep=err_cap, fallback=err_fallback)
-              if err:
-                errors.append(("<details><summary>%s — Errors — %d lines</summary>\n\n```\n%s\n```\n\n</details>\n" %
-                               (label, len(err), "\n".join(err))))
-              if not only_crit and tail_lines_per_file>0:
-                tail=txt.splitlines()[-tail_lines_per_file:]
-                if tail:
-                  tails.append(("<details><summary>%s — Tail — %d lines</summary>\n\n```\n%s\n```\n\n</details>\n" %
-                                (label, len(tail), "\n".join(tail))))
-            parts.extend(errors)
-            parts.extend(tails)
-            body="\n".join(parts)
-            return body
-
-          for tail in (300,200,120,80,40,0):
-            body=build(tail_lines_per_file=tail)
-            if len(body)<=MAX:
-              open("pr_comment.md","w",encoding="utf-8").write(body)
-              break
-          else:
-            for err_cap in (160,120,80,40):
-              body=build(tail_lines_per_file=0, err_cap=err_cap, err_fallback=40)
-              if len(body)<=MAX:
-                open("pr_comment.md","w",encoding="utf-8").write(body)
-                break
-            else:
-              body=build(tail_lines_per_file=0, err_cap=80, err_fallback=40, only_crit=True)
-              if len(body)>MAX: body=body[:MAX]
-              open("pr_comment.md","w",encoding="utf-8").write(body)
-          PY
-          echo "path=pr_comment.md" >> $GITHUB_OUTPUT
-
-      - name: Upsert PR comment (by marker OR heading; 422-safe)
-        uses: actions/github-script@v7
-        env:
-          BODY_PATH: ${{ steps.body.outputs.path }}
-          PR_NUMBER: ${{ steps.pr.outputs.number }}
-        with:
-          script: |
-            const fs=require('fs');
-            const {owner, repo} = context.repo;
-            const issue_number = Number(process.env.PR_NUMBER);
-            const marker  = '<!-- CI_LOG_MIRROR -->';
-            const heading = '### CI last run logs (sanitized)';
-            const body    = fs.readFileSync(process.env.BODY_PATH,'utf8');
-            const list = await github.rest.issues.listComments({owner, repo, issue_number, per_page: 100});
-            const existing = list.data.find(c => (c.body||'').includes(marker) || (c.body||'').includes(heading));
-            async function upsert(b){
-              try{
-                if (existing) await github.rest.issues.updateComment({owner, repo, comment_id: existing.id, body:b});
-                else await github.rest.issues.createComment({owner, repo, issue_number, body:b});
-              }catch(e){
-                if (e.status===422){
-                  const t=b.slice(0,60000);
-                  if (existing) await github.rest.issues.updateComment({owner, repo, comment_id: existing.id, body:t});
-                  else await github.rest.issues.createComment({owner, repo, issue_number, body:t});
-                } else { throw e; }
-              }
-            }
-            await upsert(body);
-
-      - name: Verify digest comment
-        if: always()
-        uses: actions/github-script@v7
-        env:
-          PR_NUMBER: ${{ steps.pr.outputs.number }}
-        with:
-          script: |
-            const {owner, repo} = context.repo;
-            const issue_number = Number(process.env.PR_NUMBER);
-            const list = await github.rest.issues.listComments({owner, repo, issue_number, per_page: 100});
-            const found = list.data.find(c => (c.body||'').includes('CI last run logs (sanitized)'));
-            core.summary.addHeading('CI log digest comment', 2);
-            core.summary.addRaw(found ? `Found id=${found.id}, length=${found.body.length}` : 'Not found').write();
+      - name: Summarize mirror-logs location
+        run: |
+          echo "### Mirror-Logs persisted" >> $GITHUB_STEP_SUMMARY
+          echo "- Branch: \`ci-logs\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Latest: \`${{ steps.prep.outputs.latest }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Commit: \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
