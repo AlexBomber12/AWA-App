@@ -24,8 +24,12 @@ services:
   api:
     build: { context: ., dockerfile: services/api/Dockerfile }
     environment:
-      DATABASE_URL: postgresql+psycopg://app:app@db:5432/app
-      REDIS_URL: redis://redis:6379/0
+      ENV: ${ENV:-local}
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://app:app@db:5432/app}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://api:8000}
     depends_on:
       db: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -39,8 +43,11 @@ services:
   worker:
     build: { context: ., dockerfile: services/worker/Dockerfile }
     environment:
-      DATABASE_URL: postgresql+psycopg://app:app@db:5432/app
-      REDIS_URL: redis://redis:6379/0
+      ENV: ${ENV:-local}
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://app:app@db:5432/app}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
     depends_on:
       db: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -54,7 +61,7 @@ services:
   webapp:
     build: { context: ., dockerfile: webapp/Dockerfile }
     environment:
-      NEXT_PUBLIC_API_URL: http://api:8000
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://api:8000}
     depends_on:
       api: { condition: service_healthy }
     ports: ["3000:3000"]

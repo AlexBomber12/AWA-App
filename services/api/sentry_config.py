@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from typing import Any, Dict, Mapping
 
+import os
 import sentry_sdk
 from asgi_correlation_id import correlation_id
 from sentry_sdk.integrations.celery import CeleryIntegration
@@ -10,6 +11,8 @@ from sentry_sdk.integrations.fastapi import FastApiIntegration
 from sentry_sdk.integrations.logging import LoggingIntegration
 from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
 from sentry_sdk.types import Event, Hint
+
+from packages.awa_common.settings import settings
 
 _SCRUB_HEADERS: set[str] = {"authorization", "cookie", "set-cookie", "x-api-key"}
 _SCRUB_FIELDS: set[str] = {
@@ -94,10 +97,10 @@ def before_send(event: Event, hint: Hint) -> Event | None:
 
 
 def init_sentry_if_configured() -> None:
-    dsn = os.getenv("SENTRY_DSN", "").strip()
+    dsn = (settings.SENTRY_DSN or "").strip()
     if not dsn:
         return  # disabled
-    env = os.getenv("SENTRY_ENV", "local")
+    env = settings.ENV
     release = os.getenv("SENTRY_RELEASE") or os.getenv("COMMIT_SHA")
     traces_rate = float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.05"))
     profiles_rate = float(os.getenv("SENTRY_PROFILES_SAMPLE_RATE", "0.0"))

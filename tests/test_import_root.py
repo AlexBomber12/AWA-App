@@ -1,6 +1,6 @@
 import importlib
 
-MODULES = ["config", "db", "helium_fees"]
+MODULES = ["db", "helium_fees"]
 
 
 def test_import_root_modules() -> None:

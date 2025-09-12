@@ -6,7 +6,7 @@ from typing import Any, List
 from celery.utils.log import get_task_logger
 from sqlalchemy import create_engine, text
 
-from packages.awa_common.dsn import build_dsn
+from packages.awa_common.settings import settings
 
 from .celery_app import celery_app
 
@@ -15,7 +15,7 @@ logger = get_task_logger(__name__)
 
 @celery_app.task(name="ingest.analyze_table")  # type: ignore[misc]
 def task_analyze_table(table_fqname: str) -> dict[str, str]:
-    engine = create_engine(build_dsn(sync=True))
+    engine = create_engine(settings.DATABASE_URL)
     try:
         with engine.begin() as conn:
             conn.execute(text(f"ANALYZE {table_fqname}"))
@@ -31,7 +31,7 @@ def task_maintenance_nightly() -> dict[str, Any]:
     )
     tables: List[str] = [t.strip() for t in tables_cfg.split(",") if t.strip()]
     vacuum = os.getenv("VACUUM_ENABLE", "false").lower() in ("1", "true", "yes")
-    engine = create_engine(build_dsn(sync=True))
+    engine = create_engine(settings.DATABASE_URL)
     processed: List[str] = []
     try:
         with engine.begin() as conn:

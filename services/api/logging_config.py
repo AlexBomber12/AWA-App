@@ -1,7 +1,8 @@
 import logging
-import os
 import sys
 from typing import Any, Mapping, MutableMapping
+
+from packages.awa_common.settings import settings
 
 import structlog
 from asgi_correlation_id import correlation_id
@@ -17,7 +18,7 @@ def _request_id_injector(
 
 
 def configure_logging() -> None:
-    level = os.getenv("LOG_LEVEL", "INFO").upper()
+    level = settings.LOG_LEVEL.upper()
     logging.basicConfig(level=level, stream=sys.stdout)
     structlog.configure(
         processors=[

@@ -1,4 +1,6 @@
 import asyncio
+import json
+import logging
 import os
 from contextlib import asynccontextmanager
 
@@ -21,7 +23,6 @@ from .routes.ingest import router as ingest_router
 from services.api.errors import install_exception_handlers
 from services.api.logging_config import configure_logging
 from services.api.sentry_config import init_sentry_if_configured
-from packages.awa_common.dsn import build_dsn
 from .routes.upload import router as upload_router
 from packages.awa_common.settings import settings
 
@@ -33,6 +34,7 @@ from .routes.stats import router as stats_router
 
 configure_logging()
 init_sentry_if_configured()
+logging.getLogger(__name__).info("settings=%s", json.dumps(settings.redacted()))
 
 
 def _is_truthy(v: str | None) -> bool:
@@ -80,7 +82,7 @@ def _parse_rate_limit(s: str) -> tuple[int, int]:
 async def lifespan(app: FastAPI):
     await _wait_for_db()
     await _check_llm()
-    redis_url = os.getenv("REDIS_URL", "redis://redis:6379/0")
+    redis_url = settings.REDIS_URL
     r = None
     try:
         r = await _wait_for_redis(redis_url)
@@ -169,7 +171,7 @@ async def _wait_for_db() -> None:
     """Block application startup until the database becomes available."""
     from sqlalchemy import create_engine
 
-    url = build_dsn(sync=True)
+    url = settings.DATABASE_URL
 
     delay = 0.2
     for _ in range(50):
@@ -211,7 +213,7 @@ async def _check_llm() -> None:
     if LLM_PROVIDER != "lan":
         return
     try:
-        async with httpx.AsyncClient(timeout=5) as cli:
+        async with httpx.AsyncClient(timeout=settings.REQUEST_TIMEOUT_S) as cli:
             await cli.get(f"{LAN_BASE}/health")
     except Exception:
         os.environ["LLM_PROVIDER"] = LLM_PROVIDER_FALLBACK
