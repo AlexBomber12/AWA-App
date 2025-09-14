@@ -23,10 +23,14 @@ first_errors() {
   )
   for f in integ.log compose-logs.txt unit.log vitest.log docker-build.log; do
     [ -f "$LOG_DIR/$f" ] || continue
-    line=$(grep -m1 -E 'ERROR|FATAL|Traceback' "$LOG_DIR/$f" || true)
+    line=$(grep -im1 -E '(^E\\s+|ERROR|FATAL|Traceback|SyntaxError|npm ERR!)' "$LOG_DIR/$f" || true)
     [ -n "$line" ] && out+="${files[$f]}: $line\n"
   done
-  echo -n "$out" | head -n "$ERR_N"
+  if [ -n "$out" ]; then
+    echo -n "$out" | head -n "$ERR_N"
+  else
+    echo 'n/a'
+  fi
 }
 
 tail_block() {
