@@ -47,7 +47,10 @@ log_targets = [
     ("eslint.log", "ESLint"),
 ]
 
-errors_pattern = re.compile(r"(ERROR|FATAL|Traceback|E\s+\d+|^\s*at\s+)", re.IGNORECASE | re.MULTILINE)
+errors_pattern = re.compile(
+    r"(ERROR|FATAL|Traceback|^\s*E\s+|^\s*FAIL(?:ED)?|npm ERR!|^\s*at\s+)",
+    re.IGNORECASE | re.MULTILINE,
+)
 key_pattern = re.compile(r"([A-Za-z0-9_]*?(?:TOKEN|SECRET|PASSWORD|API_KEY|DSN|AUTH|COOKIE)[A-Za-z0-9_]*=)([^\s]+)", re.IGNORECASE)
 url_pattern = re.compile(r"(://[^:@\s/]+:)([^@\s]+)(@)")
 

@@ -415,8 +415,10 @@ jobs:
         id: extract
         run: |
           mkdir -p digest_logs mirror_ready
-          shopt -s nullglob
-          for archive in artifacts/**/*.tar.gz; do
+          if [ ! -d artifacts ]; then
+            exit 0
+          fi
+          while IFS= read -r -d '' archive; do
             base="$(basename "$archive" .tar.gz)"
             stage="${base#debug-bundle-}"
             stage="${stage%%-*}"
@@ -452,8 +454,7 @@ jobs:
                   ;;
               esac
             fi
-          done
-          shopt -u nullglob
+          done < <(find artifacts -type f -name '*.tar.gz' -print0)
 
       - name: Sanitize logs
         run: |
