@@ -23,6 +23,7 @@ import math
 import os
 import pathlib
 import re
+from collections import OrderedDict
 from typing import List
 
 log_root = pathlib.Path(os.environ.get("LOG_ROOT", ".")).resolve()
@@ -38,13 +39,23 @@ if not digest_path.is_absolute():
     digest_path = log_root / digest_path
 
 log_targets = [
-    ("integ.log", "Integration tests"),
-    ("unit.log", "Unit tests"),
-    ("compose-logs.txt", "docker compose logs"),
-    ("docker-build.log", "Docker build"),
-    ("vitest.log", "Vitest"),
-    ("tsc.log", "TypeScript"),
-    ("eslint.log", "ESLint"),
+    ("Unit tests", ["unit.log", "unit-unit.log"]),
+    ("Unit setup", ["unit-setup.log", "unit-unit-setup.log"]),
+    ("Integration tests", ["integ.log", "integration-integ.log"]),
+    ("Integration compose up", ["integration-compose-up.log"]),
+    ("Integration readiness", ["integration-ready.log"]),
+    ("Preview compose up", ["preview-compose-up.log"]),
+    ("Preview readiness", ["preview-ready.log"]),
+    ("docker compose logs", [
+        "compose-logs.txt",
+        "integration-compose-logs.txt",
+        "preview-compose-logs.txt",
+    ]),
+    ("Docker build", ["docker-build.log", "unit-docker-build.log"]),
+    ("Vitest", ["vitest.log", "unit-vitest.log"]),
+    ("TypeScript", ["tsc.log", "unit-tsc.log"]),
+    ("ESLint", ["eslint.log", "unit-eslint.log"]),
+    ("Migrations", ["migrations.log", "migrations-migrations.log"]),
 ]
 
 errors_pattern = re.compile(
@@ -67,38 +78,65 @@ def read_text(path: pathlib.Path):
     except FileNotFoundError:
         return None
 
-error_entries = []
-remaining = err_n
-for filename, label in log_targets:
-    if remaining <= 0:
-        break
-    content = read_text(log_root / filename)
+def locate_log(names: List[str]) -> pathlib.Path | None:
+    for name in names:
+        candidate = log_root / name
+        if candidate.exists():
+            return candidate
+    matches: List[pathlib.Path] = []
+    for name in names:
+        matches.extend(sorted(log_root.rglob(name)))
+    if matches:
+        return matches[0]
+    return None
+
+
+def relative_name(path: pathlib.Path) -> str:
+    try:
+        return str(path.relative_to(log_root))
+    except ValueError:
+        return path.name
+
+
+log_entries_map: OrderedDict[str, dict] = OrderedDict()
+for label, names in log_targets:
+    path = locate_log(names)
+    if not path:
+        continue
+    content = read_text(path)
     if not content:
         continue
-    lines = content.splitlines()
+    key = str(path.resolve())
+    if key in log_entries_map:
+        continue
+    log_entries_map[key] = {
+        "label": label,
+        "filename": relative_name(path),
+        "lines": content.splitlines(),
+    }
+
+log_entries = list(log_entries_map.values())
+
+error_entries = []
+remaining = err_n
+for entry in log_entries:
+    if remaining <= 0:
+        break
+    lines = entry["lines"]
     matches = [line for line in lines if errors_pattern.search(line)]
     if not matches:
         continue
     snippet = matches[:remaining]
     remaining -= len(snippet)
-    error_entries.append((label, filename, snippet))
+    error_entries.append((entry["label"], entry["filename"], snippet))
 
-TailEntry = dict
-
-def collect_tails() -> List[TailEntry]:
-    entries: List[TailEntry] = []
-    for filename, label in log_targets:
-        content = read_text(log_root / filename)
-        if not content:
-            continue
-        lines = content.splitlines()
-        if not lines:
-            continue
-        limited = lines[-tail_n:]
-        entries.append({"label": label, "filename": filename, "lines": limited})
-    return entries
-
-tail_entries = collect_tails()
+tail_entries = []
+for entry in log_entries:
+    lines = entry["lines"]
+    if not lines:
+        continue
+    limited = lines[-tail_n:]
+    tail_entries.append({"label": entry["label"], "filename": entry["filename"], "lines": limited})
 
 header_lines = [
     "<!-- AWA-CI-DIGEST -->",

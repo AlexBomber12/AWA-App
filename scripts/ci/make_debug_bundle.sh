@@ -85,12 +85,17 @@ fi
 
 LOG_FILES=(
   unit.log
+  unit-setup.log
   integ.log
+  integration-compose-up.log
+  integration-ready.log
   vitest.log
   tsc.log
   eslint.log
   docker-build.log
   migrations.log
+  preview-compose-up.log
+  preview-ready.log
   preview-url.txt
 )
 for file in "${LOG_FILES[@]}"; do

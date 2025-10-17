@@ -40,13 +40,17 @@ jobs:
 
       - name: Upgrade pip and install base requirements
         run: |
-          python -m pip install --upgrade pip
-          if [ -f requirements-dev.txt ]; then
-            pip install -r requirements-dev.txt
-          fi
-          for file in services/*/requirements.txt; do
-            [ -f "$file" ] && pip install -r "$file"
-          done
+          set -o pipefail
+          : > unit-setup.log
+          {
+            python -m pip install --upgrade pip
+            if [ -f requirements-dev.txt ]; then
+              pip install -r requirements-dev.txt
+            fi
+            for file in services/*/requirements.txt; do
+              [ -f "$file" ] && pip install -r "$file"
+            done
+          } 2>&1 | tee -a unit-setup.log
 
       - name: Set up Node.js
         if: ${{ hashFiles('webapp/package.json') != '' }}
@@ -150,25 +154,35 @@ jobs:
           for file in docker-compose.yml docker-compose.ci.yml docker-compose.postgres.yml; do
             [ -f "$file" ] && COMPOSE_FILES+=("-f" "$file")
           done
-          docker compose "${COMPOSE_FILES[@]}" up -d --build db redis api worker
+          : > integration-compose-up.log
+          docker compose "${COMPOSE_FILES[@]}" up -d --build db redis api worker | tee -a integration-compose-up.log
 
       - name: Wait for API readiness
         run: |
-          for service in 8000 8001; do
-            ok=0
-            for attempt in $(seq 1 60); do
-              if curl -fsS "http://localhost:${service}/ready" >/dev/null 2>&1; then
-                ok=1
-                echo "Service on port ${service} is ready"
-                break
+          set -o pipefail
+          : > integration-ready.log
+          (
+            set -e
+            for service in 8000 8001; do
+              ok=0
+              for attempt in $(seq 1 60); do
+                if curl -fsS "http://localhost:${service}/ready" >/dev/null 2>&1; then
+                  ok=1
+                  echo "Service on port ${service} is ready"
+                  break
+                fi
+                sleep 2
+              done
+              if [ "$ok" -ne 1 ]; then
+                echo "Service on port ${service} did not become ready" >&2
+                exit 1
               fi
-              sleep 2
             done
-            if [ "$ok" -ne 1 ]; then
-              echo "Service on port ${service} did not become ready" >&2
-              exit 1
-            fi
-          done
+          ) 2>&1 | tee -a integration-ready.log
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            exit "$status"
+          fi
 
       - name: Integration tests
         run: |
@@ -290,25 +304,35 @@ jobs:
           for file in docker-compose.yml docker-compose.ci.yml docker-compose.postgres.yml; do
             [ -f "$file" ] && COMPOSE_FILES+=("-f" "$file")
           done
-          docker compose "${COMPOSE_FILES[@]}" up -d --build
+          : > preview-compose-up.log
+          docker compose "${COMPOSE_FILES[@]}" up -d --build | tee -a preview-compose-up.log
 
       - name: Wait for services
         run: |
-          for service in 8000 8001; do
-            ok=0
-            for attempt in $(seq 1 60); do
-              if curl -fsS "http://localhost:${service}/ready" >/dev/null 2>&1; then
-                ok=1
-                echo "Service on port ${service} is ready"
-                break
+          set -o pipefail
+          : > preview-ready.log
+          (
+            set -e
+            for service in 8000 8001; do
+              ok=0
+              for attempt in $(seq 1 60); do
+                if curl -fsS "http://localhost:${service}/ready" >/dev/null 2>&1; then
+                  ok=1
+                  echo "Service on port ${service} is ready"
+                  break
+                fi
+                sleep 2
+              done
+              if [ "$ok" -ne 1 ]; then
+                echo "Service on port ${service} did not become ready" >&2
+                exit 1
               fi
-              sleep 2
             done
-            if [ "$ok" -ne 1 ]; then
-              echo "Service on port ${service} did not become ready" >&2
-              exit 1
-            fi
-          done
+          ) 2>&1 | tee -a preview-ready.log
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            exit "$status"
+          fi
 
       - name: Start Cloudflare tunnel
         id: tunnel
@@ -430,23 +454,35 @@ jobs:
             if [ -d "$bundle_root" ]; then
               case "$stage" in
                 unit)
-                  for file in unit.log vitest.log tsc.log eslint.log docker-build.log system.txt; do
-                    [ -f "$bundle_root/$file" ] && cp "$bundle_root/$file" "digest_logs/$file"
+                  for file in unit.log unit-setup.log vitest.log tsc.log eslint.log docker-build.log system.txt; do
+                    if [ -f "$bundle_root/$file" ]; then
+                      cp "$bundle_root/$file" "digest_logs/$file"
+                      cp "$bundle_root/$file" "digest_logs/${stage}-${file}"
+                    fi
                   done
                   ;;
                 integration)
-                  for file in integ.log compose-logs.txt compose-ps.txt system.txt; do
-                    [ -f "$bundle_root/$file" ] && cp "$bundle_root/$file" "digest_logs/$file"
+                  for file in integ.log integration-compose-up.log integration-ready.log compose-logs.txt compose-ps.txt system.txt; do
+                    if [ -f "$bundle_root/$file" ]; then
+                      cp "$bundle_root/$file" "digest_logs/$file"
+                      cp "$bundle_root/$file" "digest_logs/${stage}-${file}"
+                    fi
                   done
                   ;;
                 migrations)
                   for file in migrations.log system.txt; do
-                    [ -f "$bundle_root/$file" ] && cp "$bundle_root/$file" "digest_logs/$file"
+                    if [ -f "$bundle_root/$file" ]; then
+                      cp "$bundle_root/$file" "digest_logs/$file"
+                      cp "$bundle_root/$file" "digest_logs/${stage}-${file}"
+                    fi
                   done
                   ;;
                 preview)
-                  for file in preview-url.txt system.txt; do
-                    [ -f "$bundle_root/$file" ] && cp "$bundle_root/$file" "digest_logs/$file"
+                  for file in preview-compose-up.log preview-ready.log preview-url.txt system.txt; do
+                    if [ -f "$bundle_root/$file" ]; then
+                      cp "$bundle_root/$file" "digest_logs/$file"
+                      cp "$bundle_root/$file" "digest_logs/${stage}-${file}"
+                    fi
                   done
                   ;;
                 *)
