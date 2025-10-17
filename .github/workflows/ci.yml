@@ -451,45 +451,39 @@ jobs:
             mkdir -p "$dest"
             tar -xzf "$archive" -C "$dest"
             bundle_root="$dest/debug-bundle"
-            if [ -d "$bundle_root" ]; then
-              case "$stage" in
-                unit)
-                  for file in unit.log unit-setup.log vitest.log tsc.log eslint.log docker-build.log system.txt; do
-                    if [ -f "$bundle_root/$file" ]; then
-                      cp "$bundle_root/$file" "digest_logs/$file"
-                      cp "$bundle_root/$file" "digest_logs/${stage}-${file}"
-                    fi
-                  done
-                  ;;
-                integration)
-                  for file in integ.log integration-compose-up.log integration-ready.log compose-logs.txt compose-ps.txt system.txt; do
-                    if [ -f "$bundle_root/$file" ]; then
-                      cp "$bundle_root/$file" "digest_logs/$file"
-                      cp "$bundle_root/$file" "digest_logs/${stage}-${file}"
-                    fi
-                  done
-                  ;;
-                migrations)
-                  for file in migrations.log system.txt; do
-                    if [ -f "$bundle_root/$file" ]; then
-                      cp "$bundle_root/$file" "digest_logs/$file"
-                      cp "$bundle_root/$file" "digest_logs/${stage}-${file}"
-                    fi
-                  done
-                  ;;
-                preview)
-                  for file in preview-compose-up.log preview-ready.log preview-url.txt system.txt; do
-                    if [ -f "$bundle_root/$file" ]; then
-                      cp "$bundle_root/$file" "digest_logs/$file"
-                      cp "$bundle_root/$file" "digest_logs/${stage}-${file}"
-                    fi
-                  done
-                  ;;
-                *)
+            if [ ! -d "$bundle_root" ]; then
+              continue
+            fi
+            find "$bundle_root" -type f -print0 | while IFS= read -r -d '' file; do
+              rel="${file#$bundle_root/}"
+              case "$rel" in
+                *.log|*.txt|*.out|*.err|*.json|*.xml|*.junit|*.tap)
                   :
                   ;;
+                *)
+                  continue
+                  ;;
               esac
-            fi
+              base_name="$(basename "$rel")"
+              flat_rel="${rel//\//-}"
+              stage_flat="${stage}-${flat_rel}"
+              stage_base="${stage}-${base_name}"
+              dest_root="digest_logs/$base_name"
+              stage_dest="digest_logs/$stage_flat"
+              stage_base_dest="digest_logs/$stage_base"
+              tree_dest="digest_logs/${stage}/${rel}"
+              mkdir -p "$(dirname "$tree_dest")"
+              cp "$file" "$tree_dest"
+              if [ ! -f "$dest_root" ]; then
+                mkdir -p "$(dirname "$dest_root")"
+                cp "$file" "$dest_root"
+              fi
+              mkdir -p "$(dirname "$stage_dest")"
+              cp "$file" "$stage_dest"
+              if [ ! -f "$stage_base_dest" ]; then
+                cp "$file" "$stage_base_dest"
+              fi
+            done
           done < <(find artifacts -type f -name '*.tar.gz' -print0)
 
       - name: Sanitize logs
@@ -552,6 +546,7 @@ jobs:
           else
             git worktree add --force -b ci-logs ci-logs-worktree
           fi
+          git config --global --add safe.directory "$(pwd)/ci-logs-worktree"
           PARENT_DIR="$(dirname "$MIRROR_SUBDIR")"
           mkdir -p "ci-logs-worktree/$PARENT_DIR"
           rsync -a --delete mirror_ready/ "ci-logs-worktree/${MIRROR_SUBDIR}/"
