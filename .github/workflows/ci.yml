@@ -360,7 +360,7 @@ jobs:
       - integration
       - migrations
       - preview
-    if: always()
+    if: ${{ always() }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -523,7 +523,11 @@ PY
           if git diff --staged --quiet; then
             echo "No mirror changes"
           else
-            CONTEXT="${{ steps.context.outputs.event_type == 'pr' ? format('PR #{0}', steps.context.outputs.pr_number) : format('branch {0}', steps.context.outputs.branch_name) }}"
+            if [ "${{ steps.context.outputs.event_type }}" = "pr" ]; then
+              CONTEXT="PR #${{ steps.context.outputs.pr_number }}"
+            else
+              CONTEXT="branch ${{ steps.context.outputs.branch_name }}"
+            fi
             git commit -m "[skip ci] Mirror logs for ${CONTEXT}"
             git push origin HEAD:ci-logs
           fi
