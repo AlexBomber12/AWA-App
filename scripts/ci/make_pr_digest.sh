@@ -59,7 +59,11 @@ log_targets = [
 ]
 
 errors_pattern = re.compile(
-    r"(ERROR|FATAL|Traceback|^\s*E\s+|^\s*FAIL(?:ED)?|npm ERR!|^\s*at\s+)",
+    r"("
+    r"ERROR|FATAL|Traceback|^\s*E\s+|^\s*FAIL(?:ED)?|npm ERR!|^\s*at\s+|"
+    r"exit_code=[1-9]\d*|did not become ready|Alembic upgrade failed|"
+    r"Docker build exited with status"
+    r")",
     re.IGNORECASE | re.MULTILINE,
 )
 key_pattern = re.compile(r"([A-Za-z0-9_]*?(?:TOKEN|SECRET|PASSWORD|API_KEY|DSN|AUTH|COOKIE)[A-Za-z0-9_]*=)([^\s]+)", re.IGNORECASE)
