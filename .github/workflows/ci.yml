@@ -276,6 +276,9 @@ jobs:
     needs:
       - integration
       - migrations
+    env:
+      CF_TUNNEL_TOKEN: ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}
+      CF_TUNNEL_HOSTNAME: ${{ secrets.CLOUDFLARE_TUNNEL_HOSTNAME }}
     if: ${{ always() }}
     steps:
       - uses: actions/checkout@v4
@@ -309,11 +312,11 @@ jobs:
 
       - name: Start Cloudflare tunnel
         id: tunnel
-        if: ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN != '' && secrets.CLOUDFLARE_TUNNEL_HOSTNAME != '' }}
+        if: ${{ env.CF_TUNNEL_TOKEN != '' && env.CF_TUNNEL_HOSTNAME != '' }}
         continue-on-error: true
         env:
-          CF_TUNNEL_TOKEN: ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}
-          CF_TUNNEL_HOSTNAME: ${{ secrets.CLOUDFLARE_TUNNEL_HOSTNAME }}
+          CF_TUNNEL_TOKEN: ${{ env.CF_TUNNEL_TOKEN }}
+          CF_TUNNEL_HOSTNAME: ${{ env.CF_TUNNEL_HOSTNAME }}
         run: |
           docker run -d --name awa-preview-tunnel --network host cloudflare/cloudflared:2024.9.0 tunnel --no-autoupdate run --token "$CF_TUNNEL_TOKEN"
           echo "url=${CF_TUNNEL_HOSTNAME}" >> "$GITHUB_OUTPUT"
