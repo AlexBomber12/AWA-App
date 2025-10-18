@@ -29,6 +29,28 @@
 ---
 
 ## Failing workflows
+- **CI** workflow (unit job)
+
+## Summary
+`pytest -q -m "not integration"` failed immediately with
+`ModuleNotFoundError: No module named 'asyncpg'` while importing
+`tests/conftest.py`. The fixture file always imported `asyncpg` and
+`sqlalchemy`, so environments without those optional integration
+dependencies could not even collect the unit tests.
+
+## Fix
+- Gate the `asyncpg` and `sqlalchemy` imports in `tests/conftest.py` behind
+  availability checks and store `None` when they are absent.
+- Skip the integration fixtures (`_db_available`, `migrate_db`, `_migrate`,
+  `pg_pool`, `db_engine`) whenever the optional dependencies are missing so
+  unit-only runs proceed.
+
+## Logs
+- `ci-logs/latest/unit-pytest.log`
+
+---
+
+## Failing workflows
 - **CI** workflow (integration job)
 
 ## Summary
@@ -131,6 +153,26 @@ report ready.
 
 ## Logs
 - `ci-logs/latest/CI/3_compose-health.txt`
+---
+
+## Failing workflows
+- **CI** workflow (unit job)
+
+## Summary
+`pytest -q -m "not integration"` failed during collection with
+`ModuleNotFoundError: No module named 'sqlalchemy'` while importing
+`packages.awa_common`. The package's `__init__` module always imported
+SQLAlchemy-backed models, so trying to load `packages.awa_common.dsn`
+for DSN helpers crashed when SQLAlchemy was not installed.
+
+## Fix
+- Expose the SQLAlchemy-dependent symbols in `packages/awa_common/__init__.py`
+  lazily and raise a targeted `ModuleNotFoundError` when the optional
+  dependency is missing so DSN utilities stay importable.
+
+## Logs
+- `ci-logs/latest/unit-pytest.log`
+
 ---
 
 ## Failing workflows
