@@ -292,10 +292,11 @@ jobs:
     needs:
       - integration
       - migrations
+    continue-on-error: true
     env:
       CF_TUNNEL_TOKEN: ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}
       CF_TUNNEL_HOSTNAME: ${{ secrets.CLOUDFLARE_TUNNEL_HOSTNAME }}
-    if: ${{ always() }}
+    if: ${{ github.event_name == 'pull_request' && vars.PREVIEW_ENABLED == '1' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -358,6 +359,13 @@ jobs:
             printf "n/a" > preview-url.txt
           fi
 
+      - name: Ensure preview placeholder
+        if: always()
+        run: |
+          if [ ! -f preview-url.txt ]; then
+            printf "n/a" > preview-url.txt
+          fi
+
       - name: Create debug bundle
         if: always()
         run: |
@@ -388,12 +396,71 @@ jobs:
       - unit
       - integration
       - migrations
-      - preview
     if: ${{ always() }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Wait for preview job
+        if: ${{ github.event_name == 'pull_request' && vars.PREVIEW_ENABLED == '1' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import time
+          import urllib.error
+          import urllib.request
+
+          token = os.environ.get('GITHUB_TOKEN')
+          run_id = os.environ.get('GITHUB_RUN_ID')
+          repo = os.environ.get('GITHUB_REPOSITORY')
+          if not token or not run_id or not repo:
+              raise SystemExit(0)
+
+          def fetch_jobs(url):
+              request = urllib.request.Request(
+                  url,
+                  headers={
+                      'Authorization': f'Bearer {token}',
+                      'Accept': 'application/vnd.github+json',
+                  },
+              )
+              try:
+                  with urllib.request.urlopen(request, timeout=30) as response:
+                      payload = json.loads(response.read().decode('utf-8'))
+                      link_header = response.headers.get('Link') or ''
+              except urllib.error.HTTPError:
+                  return [], None
+              except urllib.error.URLError:
+                  return [], None
+              next_url = None
+              for part in link_header.split(','):
+                  part = part.strip()
+                  if part.endswith('rel="next"') and part.startswith('<'):
+                      next_url = part[1 : part.find('>')]
+                      break
+              return payload.get('jobs', []), next_url
+
+          base_url = f'https://api.github.com/repos/{repo}/actions/runs/{run_id}/jobs?per_page=100'
+          for attempt in range(60):
+              url = base_url
+              jobs = []
+              while url:
+                  batch, url = fetch_jobs(url)
+                  jobs.extend(batch)
+              preview_job = next((job for job in jobs if job.get('name') == 'preview'), None)
+              if not preview_job:
+                  time.sleep(10)
+                  continue
+              if preview_job.get('status') == 'completed':
+                  break
+              time.sleep(10)
+          PY
 
       - name: Determine context
         id: context
@@ -520,26 +587,45 @@ jobs:
                   path.write_text(sanitized, encoding='utf-8')
           PY
 
+      - name: Ensure preview placeholder artifact
+        run: |
+          mkdir -p digest_logs
+          if [ ! -f digest_logs/preview-url.txt ]; then
+            printf "n/a" > digest_logs/preview-url.txt
+          fi
+
       - name: Build digest
         id: digest
+        env:
+          MIRROR_PATH_VALUE: ${{ steps.context.outputs.mirror_path }}
         run: |
           PREVIEW="n/a"
           if [ -f digest_logs/preview-url.txt ]; then
             PREVIEW=$(tr -d '\r\n' < digest_logs/preview-url.txt)
           fi
-          MIRROR_PATH_VALUE="${{ steps.context.outputs.mirror_path }}"
-          TAIL_N=150 ERR_N=120 MIRROR_PATH="$MIRROR_PATH_VALUE" PREVIEW_URL="$PREVIEW" ./scripts/ci/make_pr_digest.sh digest_logs
+          MIRROR_PATH="$MIRROR_PATH_VALUE" PREVIEW_URL="$PREVIEW" FAILED_TAIL_LINES=200 ./scripts/ci/make_pr_digest.sh digest_logs
           cat digest_logs/ci-digest.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Stage digest for mirror
+        run: |
+          mkdir -p mirror_ready
+          if [ -f digest_logs/ci-digest.md ]; then
+            cp digest_logs/ci-digest.md mirror_ready/ci-digest.md
+          fi
 
       - name: Prepare Codex mirror
         run: |
           set -euo pipefail
           RUN_ID="${GITHUB_RUN_ID}"
           OUT=".codex/mirror-logs/${RUN_ID}"
-          mkdir -p "$OUT/raw"
-          cp -r digest_logs/. "$OUT/raw/"
-          cp digest_logs/ci-digest.md "$OUT/digest.md"
-          cp digest_logs/ci-digest.md .codex/mirror-logs/latest.md
+          rm -rf "$OUT"
+          mkdir -p "$OUT"
+          if [ -d digest_logs ]; then
+            cp -r digest_logs/. "$OUT/"
+          fi
+          if [ -f digest_logs/ci-digest.md ]; then
+            cp digest_logs/ci-digest.md .codex/mirror-logs/latest.md
+          fi
 
       - uses: actions/checkout@v4
         if: ${{ steps.context.outputs.event_type == 'pr' && steps.context.outputs.is_fork != 'true' }}
@@ -607,7 +693,13 @@ jobs:
             const body = fs.readFileSync('digest_logs/ci-digest.md', 'utf8');
             const comments = await github.rest.issues.listComments({ owner, repo, issue_number, per_page: 100 });
             const existing = comments.data.find(comment => comment.body && comment.body.includes(marker));
-            const payload = body.length > 65000 ? body.slice(0, 65000) : body;
+            const limit = 65000;
+            const note = '\n\n_Truncated digest: original length exceeded 65000 characters._\n';
+            let payload = body;
+            if (payload.length > limit) {
+              const sliceLength = Math.max(0, limit - note.length);
+              payload = payload.slice(0, sliceLength).trimEnd() + note;
+            }
             if (existing) {
               await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body: payload });
             } else {
