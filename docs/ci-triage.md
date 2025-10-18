@@ -156,6 +156,26 @@ report ready.
 ---
 
 ## Failing workflows
+- **CI** workflow (unit job)
+
+## Summary
+`pytest -q -m "not integration"` failed during collection with
+`ModuleNotFoundError: No module named 'sqlalchemy'` while importing
+`packages.awa_common`. The package's `__init__` module always imported
+SQLAlchemy-backed models, so trying to load `packages.awa_common.dsn`
+for DSN helpers crashed when SQLAlchemy was not installed.
+
+## Fix
+- Expose the SQLAlchemy-dependent symbols in `packages/awa_common/__init__.py`
+  lazily and raise a targeted `ModuleNotFoundError` when the optional
+  dependency is missing so DSN utilities stay importable.
+
+## Logs
+- `ci-logs/latest/unit-pytest.log`
+
+---
+
+## Failing workflows
 - **CI** workflow (install-deps job)
 
 ## Summary
