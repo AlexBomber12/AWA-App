@@ -580,26 +580,75 @@ PY
           cp "$OUT/digest.md" .codex/mirror-logs/latest.md
           cp -r logs/. mirror_ready/
           python - <<'PY'
-import pathlib
-import re
-base = pathlib.Path("mirror_ready")
-if base.exists():
-    key_pattern = re.compile(r'([A-Za-z0-9_]*?(?:TOKEN|SECRET|PASSWORD|API_KEY|DSN|AUTH|COOKIE)[A-Za-z0-9_]*=)([^\\s]+)', re.IGNORECASE)
-    url_pattern = re.compile(r'(://[^:@\\s/]+:)([^@\\s]+)(@)')
-    for path in base.rglob("*"):
-        if not path.is_file():
-            continue
-        if path.suffix.lower() not in {".log", ".txt", ".out", ".err", ".json", ".xml", ".junit", ".tap"}:
-            continue
-        try:
-            data = path.read_text(encoding="utf-8", errors="replace")
-        except OSError:
-            continue
-        for _ in range(2):
-            data = key_pattern.sub(lambda m: m.group(1) + "<redacted>", data)
-            data = url_pattern.sub(lambda m: m.group(1) + "****" + m.group(3), data)
-        path.write_text(data, encoding="utf-8")
-PY
+          import pathlib
+          import re
+
+          root_paths = [pathlib.Path('digest_logs'), pathlib.Path('mirror_ready')]
+          key_pattern = re.compile(r'([A-Za-z0-9_]*?(?:TOKEN|SECRET|PASSWORD|API_KEY|DSN|AUTH|COOKIE)[A-Za-z0-9_]*=)([^\s]+)', re.IGNORECASE)
+          url_pattern = re.compile(r'(://[^:@\s/]+:)([^@\s]+)(@)')
+
+          def sanitize(text: str) -> str:
+              for _ in range(2):
+                  text = key_pattern.sub(lambda m: m.group(1) + '<redacted>', text)
+                  text = url_pattern.sub(lambda m: m.group(1) + '****' + m.group(3), text)
+              return text
+
+          for base in root_paths:
+              if not base.exists():
+                  continue
+              for path in base.rglob('*'):
+                  if not path.is_file():
+                      continue
+                  if path.suffix.lower() not in {'.log', '.txt', '.out', '.err', '.json', '.xml', '.junit', '.tap'}:
+                      continue
+                  try:
+                      data = path.read_text(encoding='utf-8', errors='replace')
+                  except OSError:
+                      continue
+                  sanitized = sanitize(data)
+                  path.write_text(sanitized, encoding='utf-8')
+          PY
+
+      - name: Ensure preview placeholder artifact
+        run: |
+          mkdir -p digest_logs
+          if [ ! -f digest_logs/preview-url.txt ]; then
+            printf "n/a" > digest_logs/preview-url.txt
+          fi
+
+      - name: Build digest
+        id: digest
+        env:
+          MIRROR_PATH_VALUE: ${{ steps.context.outputs.mirror_path }}
+        run: |
+          PREVIEW="n/a"
+          if [ -f digest_logs/preview-url.txt ]; then
+            PREVIEW=$(tr -d '\r\n' < digest_logs/preview-url.txt)
+          fi
+          MIRROR_PATH="$MIRROR_PATH_VALUE" PREVIEW_URL="$PREVIEW" FAILED_TAIL_LINES=200 ./scripts/ci/make_pr_digest.sh digest_logs
+          cat digest_logs/ci-digest.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Stage digest for mirror
+        run: |
+          mkdir -p mirror_ready
+          if [ -f digest_logs/ci-digest.md ]; then
+            cp digest_logs/ci-digest.md mirror_ready/ci-digest.md
+          fi
+
+      - name: Prepare Codex mirror
+        run: |
+          set -euo pipefail
+          RUN_ID="${GITHUB_RUN_ID}"
+          OUT=".codex/mirror-logs/${RUN_ID}"
+          rm -rf "$OUT"
+          mkdir -p "$OUT"
+          if [ -d digest_logs ]; then
+            cp -r digest_logs/. "$OUT/"
+          fi
+          if [ -f digest_logs/ci-digest.md ]; then
+            cp digest_logs/ci-digest.md .codex/mirror-logs/latest.md
+          fi
+
       - uses: actions/checkout@v4
         if: ${{ steps.context.outputs.event_type == 'pr' && steps.context.outputs.is_fork != 'true' }}
         with:
