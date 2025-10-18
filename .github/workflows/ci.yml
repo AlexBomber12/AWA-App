@@ -68,15 +68,23 @@ jobs:
         working-directory: webapp
         run: npm ci
 
-      - name: Python unit tests
-        run: |
-          if [ -f pyproject.toml ] || [ -f pytest.ini ]; then
-            set -o pipefail
-            pytest -vv -q -m "not integration" | tee unit.log
-            test ${PIPESTATUS[0]} -eq 0
-          else
-            echo "No pytest configuration detected; skipping."
-          fi
+      - name: Parse check
+        run: python -m compileall -q services tests
+
+      - name: Pytest collect-only
+        run: pytest --collect-only -q
+
+      - name: Pytest
+        run: pytest -q -m "not integration" --maxfail=1 --disable-warnings --junitxml=unit-report.xml
+
+      - name: Upload unit artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-artifacts
+          path: |
+            unit-report.xml
+            .pytest_cache/**
 
       - name: Webapp lint
         if: ${{ hashFiles('webapp/package.json') != '' }}
@@ -292,10 +300,11 @@ jobs:
     needs:
       - integration
       - migrations
+    continue-on-error: true
     env:
       CF_TUNNEL_TOKEN: ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}
       CF_TUNNEL_HOSTNAME: ${{ secrets.CLOUDFLARE_TUNNEL_HOSTNAME }}
-    if: ${{ always() }}
+    if: ${{ github.event_name == 'pull_request' && vars.PREVIEW_ENABLED == '1' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -358,6 +367,13 @@ jobs:
             printf "n/a" > preview-url.txt
           fi
 
+      - name: Ensure preview placeholder
+        if: always()
+        run: |
+          if [ ! -f preview-url.txt ]; then
+            printf "n/a" > preview-url.txt
+          fi
+
       - name: Create debug bundle
         if: always()
         run: |
@@ -388,12 +404,71 @@ jobs:
       - unit
       - integration
       - migrations
-      - preview
     if: ${{ always() }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Wait for preview job
+        if: ${{ github.event_name == 'pull_request' && vars.PREVIEW_ENABLED == '1' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import time
+          import urllib.error
+          import urllib.request
+
+          token = os.environ.get('GITHUB_TOKEN')
+          run_id = os.environ.get('GITHUB_RUN_ID')
+          repo = os.environ.get('GITHUB_REPOSITORY')
+          if not token or not run_id or not repo:
+              raise SystemExit(0)
+
+          def fetch_jobs(url):
+              request = urllib.request.Request(
+                  url,
+                  headers={
+                      'Authorization': f'Bearer {token}',
+                      'Accept': 'application/vnd.github+json',
+                  },
+              )
+              try:
+                  with urllib.request.urlopen(request, timeout=30) as response:
+                      payload = json.loads(response.read().decode('utf-8'))
+                      link_header = response.headers.get('Link') or ''
+              except urllib.error.HTTPError:
+                  return [], None
+              except urllib.error.URLError:
+                  return [], None
+              next_url = None
+              for part in link_header.split(','):
+                  part = part.strip()
+                  if part.endswith('rel="next"') and part.startswith('<'):
+                      next_url = part[1 : part.find('>')]
+                      break
+              return payload.get('jobs', []), next_url
+
+          base_url = f'https://api.github.com/repos/{repo}/actions/runs/{run_id}/jobs?per_page=100'
+          for attempt in range(60):
+              url = base_url
+              jobs = []
+              while url:
+                  batch, url = fetch_jobs(url)
+                  jobs.extend(batch)
+              preview_job = next((job for job in jobs if job.get('name') == 'preview'), None)
+              if not preview_job:
+                  time.sleep(10)
+                  continue
+              if preview_job.get('status') == 'completed':
+                  break
+              time.sleep(10)
+          PY
 
       - name: Determine context
         id: context
@@ -430,117 +505,101 @@ jobs:
             echo "latest_subdir=$LATEST_SUBDIR" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Download artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-          merge-multiple: true
-          if-no-files-found: ignore
+      - name: Download run logs
+        run: gh api repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/logs > logs.zip
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract artifacts
-        id: extract
-        run: |
-          mkdir -p digest_logs mirror_ready
-          if [ ! -d artifacts ]; then
-            exit 0
-          fi
-          while IFS= read -r -d '' archive; do
-            base="$(basename "$archive" .tar.gz)"
-            stage="${base#debug-bundle-}"
-            stage="${stage%%-*}"
-            dest="mirror_ready/${stage}"
-            rm -rf "$dest"
-            mkdir -p "$dest"
-            tar -xzf "$archive" -C "$dest"
-            bundle_root="$dest/debug-bundle"
-            if [ ! -d "$bundle_root" ]; then
-              continue
-            fi
-            find "$bundle_root" -type f -print0 | while IFS= read -r -d '' file; do
-              rel="${file#$bundle_root/}"
-              case "$rel" in
-                *.log|*.txt|*.out|*.err|*.json|*.xml|*.junit|*.tap)
-                  :
-                  ;;
-                *)
-                  continue
-                  ;;
-              esac
-              base_name="$(basename "$rel")"
-              flat_rel="${rel//\//-}"
-              stage_flat="${stage}-${flat_rel}"
-              stage_base="${stage}-${base_name}"
-              dest_root="digest_logs/$base_name"
-              stage_dest="digest_logs/$stage_flat"
-              stage_base_dest="digest_logs/$stage_base"
-              tree_dest="digest_logs/${stage}/${rel}"
-              mkdir -p "$(dirname "$tree_dest")"
-              cp "$file" "$tree_dest"
-              if [ ! -f "$dest_root" ]; then
-                mkdir -p "$(dirname "$dest_root")"
-                cp "$file" "$dest_root"
-              fi
-              mkdir -p "$(dirname "$stage_dest")"
-              cp "$file" "$stage_dest"
-              if [ ! -f "$stage_base_dest" ]; then
-                cp "$file" "$stage_base_dest"
-              fi
-            done
-          done < <(find artifacts -type f -name '*.tar.gz' -print0)
-
-      - name: Sanitize logs
-        run: |
-          python - <<'PY'
-          import pathlib
-          import re
-
-          root_paths = [pathlib.Path('digest_logs'), pathlib.Path('mirror_ready')]
-          key_pattern = re.compile(r'([A-Za-z0-9_]*?(?:TOKEN|SECRET|PASSWORD|API_KEY|DSN|AUTH|COOKIE)[A-Za-z0-9_]*=)([^\s]+)', re.IGNORECASE)
-          url_pattern = re.compile(r'(://[^:@\s/]+:)([^@\s]+)(@)')
-
-          def sanitize(text: str) -> str:
-              for _ in range(2):
-                  text = key_pattern.sub(lambda m: m.group(1) + '<redacted>', text)
-                  text = url_pattern.sub(lambda m: m.group(1) + '****' + m.group(3), text)
-              return text
-
-          for base in root_paths:
-              if not base.exists():
-                  continue
-              for path in base.rglob('*'):
-                  if not path.is_file():
-                      continue
-                  if path.suffix.lower() not in {'.log', '.txt', '.out', '.err', '.json', '.xml', '.junit', '.tap'}:
-                      continue
-                  try:
-                      data = path.read_text(encoding='utf-8', errors='replace')
-                  except OSError:
-                      continue
-                  sanitized = sanitize(data)
-                  path.write_text(sanitized, encoding='utf-8')
-          PY
-
-      - name: Build digest
-        id: digest
-        run: |
-          PREVIEW="n/a"
-          if [ -f digest_logs/preview-url.txt ]; then
-            PREVIEW=$(tr -d '\r\n' < digest_logs/preview-url.txt)
-          fi
-          MIRROR_PATH_VALUE="${{ steps.context.outputs.mirror_path }}"
-          TAIL_N=150 ERR_N=120 MIRROR_PATH="$MIRROR_PATH_VALUE" PREVIEW_URL="$PREVIEW" ./scripts/ci/make_pr_digest.sh digest_logs
-          cat digest_logs/ci-digest.md >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Prepare Codex mirror
+      - name: Build digest and mirror
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_ID: ${{ github.run_id }}
+          REPO: ${{ github.repository }}
+          MIRROR_PATH: ${{ steps.context.outputs.mirror_path }}
         run: |
           set -euo pipefail
-          RUN_ID="${GITHUB_RUN_ID}"
+          rm -rf logs mirror_ready .codex/mirror-logs || true
+          mkdir -p mirror_ready
+          unzip -q logs.zip -d logs
+          RUN_ID="$RUN_ID"
+          REPO="$REPO"
           OUT=".codex/mirror-logs/${RUN_ID}"
-          mkdir -p "$OUT/raw"
-          cp -r digest_logs/. "$OUT/raw/"
-          cp digest_logs/ci-digest.md "$OUT/digest.md"
-          cp digest_logs/ci-digest.md .codex/mirror-logs/latest.md
-
+          mkdir -p "$OUT"
+          gh api repos/"$REPO"/actions/runs/"$RUN_ID"/jobs --paginate > "$OUT/jobs.json"
+          PREVIEW_PATH=$(find . -maxdepth 4 -name "preview-url.txt" -print -quit || true)
+          PREVIEW_URL="n/a"
+          if [ -n "$PREVIEW_PATH" ]; then
+            PREVIEW_URL=$(python - <<'PY'
+import pathlib
+import sys
+path = pathlib.Path(sys.argv[1])
+print(path.read_text(encoding="utf-8").strip())
+PY
+ "$PREVIEW_PATH")
+          fi
+          MIRROR_PATH_VALUE="${MIRROR_PATH:-n/a}"
+          {
+            echo "<!-- AWA-CI-DIGEST -->"
+            echo ""
+            echo "CI digest for \`$RUN_ID\`"
+            echo ""
+            echo "- Preview URL: $PREVIEW_URL"
+            echo "- Mirror path: $MIRROR_PATH_VALUE"
+            echo "- Workflow run: https://github.com/$REPO/actions/runs/$RUN_ID"
+            echo ""
+            echo "| Job | Conclusion | URL |"
+            echo "|---|---|---|"
+            jq -r '.jobs[] | "| " + .name + " | " + (.conclusion // "Unknown") + " | " + (.html_url // "") + " |"' "$OUT/jobs.json"
+            echo ""
+            echo "Failed tails"
+            echo ""
+            FAIL_COUNT=$(jq '[.jobs[] | select(.conclusion != "success" and .conclusion != null)] | length' "$OUT/jobs.json")
+            if [ "$FAIL_COUNT" -eq 0 ]; then
+              echo "All monitored jobs succeeded."
+            else
+              jq -r '.jobs[] | select(.conclusion != "success" and .conclusion != null) | .name' "$OUT/jobs.json" | while read -r NAME; do
+                [ -z "$NAME" ] && continue
+                echo ""
+                echo "### $NAME"
+                CANDIDATES=$(grep -rilE "(FAILURES|FAILED|ERROR|AssertionError|Traceback|E +)" logs || true)
+                if [ -n "$CANDIDATES" ]; then
+                  echo ""
+                  for f in $CANDIDATES; do
+                    echo "File: $f"
+                    echo '```'
+                    tail -n 200 "$f"
+                    echo '```'
+                  done
+                else
+                  echo "_No matching tail found in run logs. Open the job URL above._"
+                fi
+              done
+            fi
+          } > "$OUT/digest.md"
+          cp -r logs "$OUT/raw"
+          cp "$OUT/digest.md" .codex/mirror-logs/latest.md
+          cp -r logs/. mirror_ready/
+          python - <<'PY'
+import pathlib
+import re
+base = pathlib.Path("mirror_ready")
+if base.exists():
+    key_pattern = re.compile(r'([A-Za-z0-9_]*?(?:TOKEN|SECRET|PASSWORD|API_KEY|DSN|AUTH|COOKIE)[A-Za-z0-9_]*=)([^\\s]+)', re.IGNORECASE)
+    url_pattern = re.compile(r'(://[^:@\\s/]+:)([^@\\s]+)(@)')
+    for path in base.rglob("*"):
+        if not path.is_file():
+            continue
+        if path.suffix.lower() not in {".log", ".txt", ".out", ".err", ".json", ".xml", ".junit", ".tap"}:
+            continue
+        try:
+            data = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        for _ in range(2):
+            data = key_pattern.sub(lambda m: m.group(1) + "<redacted>", data)
+            data = url_pattern.sub(lambda m: m.group(1) + "****" + m.group(3), data)
+        path.write_text(data, encoding="utf-8")
+PY
       - uses: actions/checkout@v4
         if: ${{ steps.context.outputs.event_type == 'pr' && steps.context.outputs.is_fork != 'true' }}
         with:
@@ -604,10 +663,16 @@ jobs:
             const { owner, repo } = context.repo;
             const issue_number = Number('${{ steps.context.outputs.pr_number }}');
             const marker = '<!-- AWA-CI-DIGEST -->';
-            const body = fs.readFileSync('digest_logs/ci-digest.md', 'utf8');
+            const body = fs.readFileSync('.codex/mirror-logs/latest.md', 'utf8');
             const comments = await github.rest.issues.listComments({ owner, repo, issue_number, per_page: 100 });
             const existing = comments.data.find(comment => comment.body && comment.body.includes(marker));
-            const payload = body.length > 65000 ? body.slice(0, 65000) : body;
+            const limit = 65000;
+            const note = '\n\n_Truncated digest: original length exceeded 65000 characters._\n';
+            let payload = body;
+            if (payload.length > limit) {
+              const sliceLength = Math.max(0, limit - note.length);
+              payload = payload.slice(0, sliceLength).trimEnd() + note;
+            }
             if (existing) {
               await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body: payload });
             } else {
