@@ -62,7 +62,9 @@ errors_pattern = re.compile(
     r"("
     r"ERROR|FATAL|Traceback|^\s*E\s+|^\s*FAIL(?:ED)?|npm ERR!|^\s*at\s+|"
     r"exit_code=[1-9]\d*|did not become ready|Alembic upgrade failed|"
-    r"Docker build exited with status"
+    r"Docker build exited with status|returned non-zero exit status|"
+    r"non-zero exit status|non-zero exit code|non-zero code|"
+    r"Process completed with exit code|Process exited with code"
     r")",
     re.IGNORECASE | re.MULTILINE,
 )
@@ -121,6 +123,26 @@ for label, names in log_targets:
 
 log_entries = list(log_entries_map.values())
 
+log_suffixes = {".log", ".txt", ".out", ".err", ".json", ".xml", ".junit", ".tap"}
+for extra_path in sorted(log_root.rglob("*")):
+    if not extra_path.is_file():
+        continue
+    if extra_path.suffix.lower() not in log_suffixes:
+        continue
+    key = str(extra_path.resolve())
+    if key in log_entries_map:
+        continue
+    content = read_text(extra_path)
+    if not content:
+        continue
+    log_entries_map[key] = {
+        "label": f"Additional log ({relative_name(extra_path)})",
+        "filename": relative_name(extra_path),
+        "lines": content.splitlines(),
+    }
+
+log_entries = list(log_entries_map.values())
+
 error_entries = []
 remaining = err_n
 for entry in log_entries:
@@ -161,7 +183,25 @@ if error_entries:
         error_section.append("```")
         error_section.append("")
 else:
-    error_section = ["", "### First errors", "", "_No matching error patterns found in the inspected logs._", ""]
+    fallback_entries = []
+    for entry in log_entries:
+        if not entry["lines"]:
+            continue
+        snippet = entry["lines"][-min(len(entry["lines"]), err_n):]
+        fallback_entries.append((entry["label"], entry["filename"], snippet))
+        if len(fallback_entries) >= 3:
+            break
+    if fallback_entries:
+        error_section = ["", "### First errors", "", "_No explicit error markers found; showing recent log excerpts._", ""]
+        for label, filename, snippet in fallback_entries:
+            error_section.append(f"**{label}** (`{filename}`)")
+            error_section.append("")
+            error_section.append("```")
+            error_section.extend(snippet)
+            error_section.append("```")
+            error_section.append("")
+    else:
+        error_section = ["", "### First errors", "", "_No log files were available for analysis._", ""]
 
 
 def build_tails(scale: float) -> List[str]:
