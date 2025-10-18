@@ -4,10 +4,12 @@ on:
   pull_request:
     paths-ignore:
       - 'ci-logs/**'
+      - '.codex/mirror-logs/**'
   push:
     branches: [main]
     paths-ignore:
       - 'ci-logs/**'
+      - '.codex/mirror-logs/**'
   workflow_dispatch:
 
 permissions:
@@ -528,6 +530,32 @@ jobs:
           MIRROR_PATH_VALUE="${{ steps.context.outputs.mirror_path }}"
           TAIL_N=150 ERR_N=120 MIRROR_PATH="$MIRROR_PATH_VALUE" PREVIEW_URL="$PREVIEW" ./scripts/ci/make_pr_digest.sh digest_logs
           cat digest_logs/ci-digest.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Prepare Codex mirror
+        run: |
+          set -euo pipefail
+          RUN_ID="${GITHUB_RUN_ID}"
+          OUT=".codex/mirror-logs/${RUN_ID}"
+          mkdir -p "$OUT/raw"
+          cp -r digest_logs/. "$OUT/raw/"
+          cp digest_logs/ci-digest.md "$OUT/digest.md"
+          cp digest_logs/ci-digest.md .codex/mirror-logs/latest.md
+
+      - uses: actions/checkout@v4
+        if: ${{ steps.context.outputs.event_type == 'pr' && steps.context.outputs.is_fork != 'true' }}
+        with:
+          ref: ${{ steps.context.outputs.branch_name }}
+          fetch-depth: 0
+          clean: false
+
+      - name: Commit Codex mirror to PR branch
+        if: ${{ steps.context.outputs.event_type == 'pr' && steps.context.outputs.is_fork != 'true' }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .codex/mirror-logs
+          git commit -m "[skip ci] chore(ci): codex mirror logs for run ${GITHUB_RUN_ID}" || true
+          git push
 
       - name: Push logs to ci-logs
         if: ${{ steps.context.outputs.is_fork != 'true' }}
