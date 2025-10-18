@@ -4,7 +4,8 @@ import asyncio
 import os
 from pathlib import Path
 
-import asyncpg
+import importlib
+
 import pytest
 
 __all__ = [
@@ -21,9 +22,19 @@ __all__ = [
     "sample_xlsx",
     "migrated_session",
 ]
-from asyncpg import create_pool
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+if importlib.util.find_spec("asyncpg") is not None:
+    import asyncpg
+    from asyncpg import create_pool
+else:  # pragma: no cover - exercised only when asyncpg is missing
+    asyncpg = None
+    create_pool = None
+
+if importlib.util.find_spec("sqlalchemy") is not None:
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+else:  # pragma: no cover - exercised only when sqlalchemy is missing
+    create_engine = None
+    sessionmaker = None
 
 from packages.awa_common.dsn import build_dsn
 
@@ -35,6 +46,9 @@ def pytest_configure(config):
 
 
 def _db_available() -> bool:
+    if asyncpg is None:
+        return False
+
     async def _check() -> None:
         conn = await asyncpg.connect(
             dsn=os.getenv("PG_ASYNC_DSN", build_dsn(sync=False)), timeout=1
@@ -97,6 +111,9 @@ def migrate_db(_set_db_url, request):
     markexpr = request.config.getoption("-m")
     if markexpr and "integration" not in markexpr:
         return
+    if asyncpg is None:
+        pytest.skip("asyncpg not installed – integration tests skipped")
+
     if os.getenv("TESTING") != "1" or not _db_available():
         return
 
@@ -118,6 +135,9 @@ def migrate_db(_set_db_url, request):
 
 @pytest.fixture(scope="session")
 async def _migrate(_set_db_url):
+    if asyncpg is None:
+        pytest.skip("asyncpg not installed – integration tests skipped")
+
     dsn = os.getenv("PG_ASYNC_DSN") or build_dsn(sync=False)
     for _ in range(30):
         try:
@@ -138,6 +158,9 @@ async def _migrate(_set_db_url):
 
 @pytest.fixture
 async def pg_pool(_set_db_url, _migrate):
+    if create_pool is None:
+        pytest.skip("asyncpg not installed – integration tests skipped")
+
     async_dsn = os.getenv("PG_ASYNC_DSN") or build_dsn(sync=False)
     pool = await create_pool(dsn=async_dsn)
     yield pool
@@ -146,6 +169,9 @@ async def pg_pool(_set_db_url, _migrate):
 
 @pytest.fixture()
 def db_engine(_set_db_url, _migrate):
+    if create_engine is None:
+        pytest.skip("sqlalchemy not installed – integration tests skipped")
+
     engine = create_engine(build_dsn(sync=True))
     try:
         yield engine

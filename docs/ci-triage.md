@@ -29,6 +29,28 @@
 ---
 
 ## Failing workflows
+- **CI** workflow (unit job)
+
+## Summary
+`pytest -q -m "not integration"` failed immediately with
+`ModuleNotFoundError: No module named 'asyncpg'` while importing
+`tests/conftest.py`. The fixture file always imported `asyncpg` and
+`sqlalchemy`, so environments without those optional integration
+dependencies could not even collect the unit tests.
+
+## Fix
+- Gate the `asyncpg` and `sqlalchemy` imports in `tests/conftest.py` behind
+  availability checks and store `None` when they are absent.
+- Skip the integration fixtures (`_db_available`, `migrate_db`, `_migrate`,
+  `pg_pool`, `db_engine`) whenever the optional dependencies are missing so
+  unit-only runs proceed.
+
+## Logs
+- `ci-logs/latest/unit-pytest.log`
+
+---
+
+## Failing workflows
 - **CI** workflow (integration job)
 
 ## Summary
