@@ -1,88 +1,36 @@
-import os
-import urllib.parse as _u
+from typing import Mapping, Optional, Any
+from urllib.parse import quote, urlencode
 
+DEFAULT_PORT = {"postgresql": 5432, "postgres": 5432, "mysql": 3306, "mariadb": 3306, "redis": 6379, "amqp": 5672}
 
-def build_dsn(sync: bool = True) -> str:
-    """Return a Postgres DSN, validating required variables.
+def _bracket_ipv6(host: str) -> str:
+    if ":" in host and not (host.startswith("[") and host.endswith("]")):
+        return f"[{host}]"
+    return host
 
-    The function prefers explicit DSNs via ``PG_SYNC_DSN`` / ``PG_ASYNC_DSN`` or
-    ``DATABASE_URL``.  If those are absent it assembles a connection string from
-    ``PG_HOST`` and related variables and raises a helpful error when any are
-    missing.
-    """
+def build_dsn(
+    scheme: str,
+    host: str = "localhost",
+    port: Optional[int | str] = None,
+    user: Optional[str] = None,
+    password: Optional[str] = None,
+    database: Optional[str] = None,
+    params: Optional[Mapping[str, Any]] = None,
+) -> str:
+    auth = ""
+    if user:
+        u = quote(str(user))
+        if password is not None:
+            auth = f"{u}:{quote(str(password))}@"
+        else:
+            auth = f"{u}@"
+    h = _bracket_ipv6(host)
+    eff = int(port) if port not in (None, "", 0) else DEFAULT_PORT.get(scheme)
+    p = f":{eff}" if eff else ""
+    db = f"/{database}" if database else ""
+    q = ""
+    if params:
+        q = "?" + urlencode({k: v for k, v in params.items() if v is not None}, doseq=True)
+    return f"{scheme}://{auth}{h}{p}{db}{q}"
 
-    def _apply_host_override(u: str) -> str:
-        """If PG_HOST is set, force the DSN host to match it.
-
-        This makes DSN values portable between Docker (host 'postgres') and CI/
-        local runs (host 'localhost'). If the DSN already matches PG_HOST, it is
-        left unchanged. When overriding, prefer PG_PORT if set, otherwise keep
-        the port from the DSN.
-        """
-        host = os.getenv("PG_HOST") or os.getenv("PGHOST")
-        port = os.getenv("PG_PORT") or os.getenv("PGPORT")
-        if not host:
-            return u
-
-        parsed = _u.urlparse(u)
-        # Only override when the DSN has a hostname and it differs from PG_HOST
-        if parsed.hostname and parsed.hostname != host:
-            auth = ""
-            if parsed.username:
-                auth = parsed.username
-                if parsed.password:
-                    auth += f":{parsed.password}"
-                auth += "@"
-            effective_port = port or (str(parsed.port) if parsed.port else "")
-            netloc = f"{auth}{host}{":" + effective_port if effective_port else ''}"
-            u = parsed._replace(netloc=netloc).geturl()
-        return u
-
-    url = os.getenv("PG_SYNC_DSN" if sync else "PG_ASYNC_DSN")
-    if url:
-        url = _apply_host_override(url)
-        return url.replace(
-            "postgresql://",
-            "postgresql+psycopg://" if sync else "postgresql+asyncpg://",
-        )
-    if not url:
-        other = os.getenv("PG_ASYNC_DSN" if sync else "PG_SYNC_DSN")
-        if other:
-            other = _apply_host_override(other)
-            if sync:
-                return other.replace("+asyncpg", "+psycopg").replace(
-                    "postgresql://", "postgresql+psycopg://"
-                )
-            return other.replace("+psycopg", "+asyncpg").replace(
-                "postgresql://", "postgresql+asyncpg://"
-            )
-
-    url = os.getenv("DATABASE_URL")
-    if url:
-        url = _apply_host_override(url)
-        if "+asyncpg" in url or "+psycopg" in url:
-            return (
-                url.replace("+asyncpg", "+psycopg")
-                if sync
-                else url.replace("+psycopg", "+asyncpg")
-            )
-        return url.replace(
-            "postgresql://",
-            "postgresql+psycopg://" if sync else "postgresql+asyncpg://",
-        )
-
-    required = ["PG_USER", "PG_PASSWORD", "PG_DATABASE", "PG_HOST", "PG_PORT"]
-    missing = [name for name in required if not os.getenv(name)]
-    if missing:
-        joined = ", ".join(missing)
-        raise RuntimeError(f"Missing required env vars: {joined}")
-
-    user = _u.quote_plus(os.getenv("PG_USER") or "")
-    pwd = _u.quote_plus(os.getenv("PG_PASSWORD") or "")
-    host = os.getenv("PG_HOST")
-    port = os.getenv("PG_PORT")
-    db = os.getenv("PG_DATABASE")
-    base = f"postgresql://{user}:{pwd}@{host}:{port}/{db}"
-    if sync:
-        return base.replace("postgresql://", "postgresql+psycopg://")
-    return base.replace("postgresql://", "postgresql+asyncpg://")
+__all__ = ["build_dsn"]
