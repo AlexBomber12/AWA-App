@@ -1,5 +1,8 @@
 # CI Triage
 
+## Unit job diagnostics
+- The unit workflow uploads a `unit-pip-diagnostics-<run_id>-<attempt>` artifact containing `unit-setup.log`, `unit-setup-tail.log`, and `pip-freeze.txt` for pip troubleshooting.
+
 ## Failing workflows
 - **CI** workflow (integration job)
 

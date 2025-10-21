@@ -52,7 +52,14 @@ jobs:
             for file in services/*/requirements.txt; do
               [ -f "$file" ] && python -m pip install -r "$file" -c constraints.txt
             done
+            python -m pip check || true
           } 2>&1 | tee -a unit-setup.log
+          status=${PIPESTATUS[0]}
+          python -m pip freeze > pip-freeze.txt || true
+          tail -n 200 unit-setup.log > unit-setup-tail.log || true
+          if [ "$status" -ne 0 ]; then
+            exit "$status"
+          fi
 
       - name: Set up Node.js
         if: ${{ hashFiles('webapp/package.json') != '' }}
@@ -70,9 +77,6 @@ jobs:
 
       - name: Parse check
         run: python -m compileall -q services tests
-
-      - name: Pip check
-        run: python -m pip check || true
 
       - name: Pytest collect
         run: pytest --collect-only -q
@@ -121,6 +125,16 @@ jobs:
             echo "Docker build exited with status $status" >&2
             exit "$status"
           fi
+
+      - name: Upload pip diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-pip-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            unit-setup.log
+            unit-setup-tail.log
+            pip-freeze.txt
 
       - name: Create debug bundle
         if: always()
@@ -509,9 +523,9 @@ jobs:
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
+          pattern: "debug-bundle-*"
           path: artifacts
           merge-multiple: true
-          if-no-files-found: ignore
 
       - name: Extract artifacts
         id: extract
