@@ -52,7 +52,14 @@ jobs:
             for file in services/*/requirements.txt; do
               [ -f "$file" ] && python -m pip install -r "$file" -c constraints.txt
             done
+            python -m pip check || true
           } 2>&1 | tee -a unit-setup.log
+          status=${PIPESTATUS[0]}
+          python -m pip freeze > pip-freeze.txt || true
+          tail -n 200 unit-setup.log > unit-setup-tail.log || true
+          if [ "$status" -ne 0 ]; then
+            exit "$status"
+          fi
 
       - name: Set up Node.js
         if: ${{ hashFiles('webapp/package.json') != '' }}
@@ -70,9 +77,6 @@ jobs:
 
       - name: Parse check
         run: python -m compileall -q services tests
-
-      - name: Pip check
-        run: python -m pip check || true
 
       - name: Pytest collect
         run: pytest --collect-only -q
@@ -122,6 +126,20 @@ jobs:
             exit "$status"
           fi
 
+      - name: Upload pip diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-pip-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            unit-setup.log
+            unit-setup-tail.log
+            pip-freeze.txt
+
+      - name: Make CI scripts executable
+        if: always()
+        run: chmod +x scripts/ci/*.sh
+
       - name: Create debug bundle
         if: always()
         run: |
@@ -158,59 +176,68 @@ jobs:
             [ -f "$file" ] && python -m pip install -r "$file" -c constraints.txt
           done
 
+      - name: Install awa_common (editable)
+        run: python -m pip install -e ./packages/awa_common -c constraints.txt
+
+      - name: Verify awa_common import
+        run: |
+          python -c "import awa_common, sys; import awa_common.dsn; print('awa_common OK', sys.version)"
+
+      - name: Prepare .env
+        run: |
+          [ -f .env.test ] && cp -f .env.test .env || true
+
       - name: Compose up api stack
         run: |
-          set -o pipefail
-          COMPOSE_FILES=()
-          for file in docker-compose.yml docker-compose.ci.yml docker-compose.postgres.yml; do
-            [ -f "$file" ] && COMPOSE_FILES+=("-f" "$file")
-          done
-          : > integration-compose-up.log
-          docker compose "${COMPOSE_FILES[@]}" up -d --build db redis api worker | tee -a integration-compose-up.log
+          set -euo pipefail
+          docker compose up -d --build --wait db redis
+          docker compose up -d --build --wait api worker
+          docker compose ps > integration-compose-up.log || true
 
-      - name: Wait for API readiness
+      - name: Wait API/Worker ready
         run: |
-          set -o pipefail
+          set -euo pipefail
           : > integration-ready.log
-          (
-            set -e
-            for service in 8000 8001; do
-              ok=0
-              for attempt in $(seq 1 60); do
-                if curl -fsS "http://localhost:${service}/ready" >/dev/null 2>&1; then
-                  ok=1
-                  echo "Service on port ${service} is ready"
-                  break
-                fi
-                sleep 2
-              done
-              if [ "$ok" -ne 1 ]; then
-                echo "Service on port ${service} did not become ready" >&2
-                exit 1
-              fi
-            done
-          ) 2>&1 | tee -a integration-ready.log
-          status=${PIPESTATUS[0]}
-          if [ "$status" -ne 0 ]; then
-            exit "$status"
-          fi
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:8000/ready >/dev/null 2>&1 && curl -fsS http://localhost:8001/ready >/dev/null 2>&1; then
+              echo "Services on ports 8000 and 8001 are ready" | tee -a integration-ready.log
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose logs api worker | tail -n 200 | tee -a integration-ready.log
+          exit 1
+
+      - name: API import smoke
+        run: |
+          set -euo pipefail
+          docker compose exec -T api python -c "import awa_common; import sys; print('import-ok', sys.version)"
+
+      - name: awa_common metadata
+        run: |
+          docker compose exec -T api python -c "import awa_common, import importlib.metadata as m; print(m.version('awa_common'))" || true
+
+      - name: Collect integration logs
+        if: always()
+        run: |
+          set -euo pipefail
+          docker compose logs db redis api worker > integration-services.log || true
+
+      - name: Upload integration logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-bundle-integration-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            .env
+            docker-compose.yml
+            docker-compose*.yml
+            **/*.log
 
       - name: Integration tests
         run: |
           set -o pipefail
           pytest -vv -m integration | tee integ.log || true
-
-      - name: Create debug bundle
-        if: always()
-        run: |
-          ./scripts/ci/make_debug_bundle.sh "debug-bundle-integration-${{ github.run_id }}-${{ github.run_attempt }}.tar.gz"
-
-      - name: Upload integration bundle
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: debug-bundle-integration-${{ github.run_id }}-${{ github.run_attempt }}
-          path: debug-bundle-integration-${{ github.run_id }}-${{ github.run_attempt }}.tar.gz
 
       - name: Compose down
         if: always()
@@ -228,63 +255,81 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Start database
+      - uses: actions/setup-python@v5
+        with:
+          python-version: 3.11
+
+      - name: Install Alembic and deps
         run: |
-          set -o pipefail
-          COMPOSE_FILES=()
-          for file in docker-compose.yml docker-compose.ci.yml docker-compose.postgres.yml; do
-            [ -f "$file" ] && COMPOSE_FILES+=("-f" "$file")
-          done
-          docker compose "${COMPOSE_FILES[@]}" up -d db
+          python -m pip install -U pip
+          if [ -f requirements-dev.txt ]; then python -m pip install -r requirements-dev.txt -c constraints.txt; fi
+
+      - name: Prepare .env
+        run: |
+          set -euo pipefail
+          [ -f .env.test ] && cp -f .env.test .env || true
+          cat <<'EOF' > .env.postgres
+          PG_HOST=127.0.0.1
+          PG_PORT=5432
+          PG_USER=postgres
+          PG_PASSWORD=postgres
+          PG_DATABASE=postgres
+          EOF
+
+      - name: Compose up db/redis
+        run: |
+          set -euo pipefail
+          export POSTGRES_USER=postgres
+          export POSTGRES_PASSWORD=postgres
+          export POSTGRES_DB=postgres
+          docker compose up -d --build --wait db redis
 
       - name: Wait for Postgres
         run: |
-          set -o pipefail
-          COMPOSE_FILES=()
-          for file in docker-compose.yml docker-compose.ci.yml docker-compose.postgres.yml; do
-            [ -f "$file" ] && COMPOSE_FILES+=("-f" "$file")
-          done
-          for attempt in $(seq 1 60); do
-            if docker compose "${COMPOSE_FILES[@]}" exec -T db pg_isready -U app -d app >/dev/null 2>&1; then
-              echo "Postgres is ready"
-              exit 0
-            fi
-            sleep 2
-          done
-          echo "Postgres did not become ready" >&2
-          exit 1
-
-      - name: Run migration smoke test
-        run: |
-          set -o pipefail
-          COMPOSE_FILES=()
-          for file in docker-compose.yml docker-compose.ci.yml docker-compose.postgres.yml; do
-            [ -f "$file" ] && COMPOSE_FILES+=("-f" "$file")
-          done
+          set -euo pipefail
           : > migrations.log
-          docker compose "${COMPOSE_FILES[@]}" run --rm -T api alembic upgrade head | tee -a migrations.log
-          up_status=${PIPESTATUS[0]}
-          docker compose "${COMPOSE_FILES[@]}" run --rm -T api alembic downgrade -1 | tee -a migrations.log || true
-          down_status=${PIPESTATUS[0]}
-          docker compose "${COMPOSE_FILES[@]}" run --rm -T api alembic upgrade head | tee -a migrations.log
-          final_status=${PIPESTATUS[0]}
-          echo "downgrade_exit=${down_status}" >> migrations.log
-          if [ "$up_status" -ne 0 ] || [ "$final_status" -ne 0 ]; then
-            echo "Alembic upgrade failed" >&2
+          echo "Waiting for Postgres readiness (timeout 60s)" | tee -a migrations.log
+          U=$(docker compose exec -T db bash -lc 'printf %s "${POSTGRES_USER:-postgres}"')
+          D=$(docker compose exec -T db bash -lc 'printf %s "${POSTGRES_DB:-$POSTGRES_USER}"')
+          READY=0
+          for i in $(seq 1 60); do
+            if docker compose exec -T db pg_isready -U "$U" -d "$D" >/dev/null 2>&1; then
+              READY=1
+              echo "Postgres ready after $i attempt(s)" | tee -a migrations.log
+              break
+            fi
+            sleep 1
+          done
+          if [ "$READY" -ne 1 ]; then
+            echo "Postgres did not become ready within timeout" | tee -a migrations.log
+            docker compose logs db | tee -a migrations.log
             exit 1
           fi
 
-      - name: Create debug bundle
-        if: always()
+      - name: Alembic smoke (up→down→up)
         run: |
-          ./scripts/ci/make_debug_bundle.sh "debug-bundle-migrations-${{ github.run_id }}-${{ github.run_attempt }}.tar.gz"
+          set -euo pipefail
+          U=$(docker compose exec -T db bash -lc 'printf %s "${POSTGRES_USER:-postgres}"')
+          P=$(docker compose exec -T db bash -lc 'printf %s "${POSTGRES_PASSWORD:-postgres}"')
+          D=$(docker compose exec -T db bash -lc 'printf %s "${POSTGRES_DB:-$POSTGRES_USER}"')
+          PORT=$(docker compose port db 5432 | awk -F: '{print $2}')
+          export DATABASE_URL="postgresql+psycopg://${U}:${P}@127.0.0.1:${PORT}/${D}"
+          alembic upgrade head
+          alembic downgrade -1 || true
+          alembic upgrade head
 
-      - name: Upload migrations bundle
+      - name: Upload migrations logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: debug-bundle-migrations-${{ github.run_id }}-${{ github.run_attempt }}
-          path: debug-bundle-migrations-${{ github.run_id }}-${{ github.run_attempt }}.tar.gz
+          path: |
+            .env
+            docker-compose.yml
+            docker-compose*.yml
+            **/alembic.ini
+            **/migrations/**
+            **/*.log
 
       - name: Stop database
         if: always()
@@ -509,9 +554,9 @@ jobs:
       - name: Download artifacts
         uses: actions/download-artifact@v4
         with:
+          pattern: "debug-bundle-*"
           path: artifacts
           merge-multiple: true
-          if-no-files-found: ignore
 
       - name: Extract artifacts
         id: extract
@@ -602,6 +647,9 @@ jobs:
           if [ ! -f digest_logs/preview-url.txt ]; then
             printf "n/a" > digest_logs/preview-url.txt
           fi
+
+      - name: Make CI scripts executable
+        run: chmod +x scripts/ci/*.sh
 
       - name: Build digest
         id: digest

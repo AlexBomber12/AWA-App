@@ -1,5 +1,38 @@
 # CI Triage
 
+## Unit job diagnostics
+- The unit workflow uploads a `unit-pip-diagnostics-<run_id>-<attempt>` artifact containing `unit-setup.log`, `unit-setup-tail.log`, and `pip-freeze.txt` for pip troubleshooting.
+
+## Failing workflows
+- **CI** workflow (unit job)
+
+## Summary
+`python -m pip install -r requirements-dev.txt -c constraints.txt` failed with `ResolutionImpossible` because both the repository constraints and the API service constraints pinned `python-multipart==0.0.9`, which is incompatible with FastAPI 0.116.1 that requires `python-multipart>=0.0.18`.
+
+## Fix
+- Bump `python-multipart` to `0.0.19` in the top-level `constraints.txt` and `services/api/constraints.txt`.
+- Allow requirement files to consume the higher version without an explicit strict pin.
+
+## Logs
+- `ci-logs/latest/unit/unit-setup.log`
+
+---
+
+## Failing workflows
+- **CI** workflow (mirror_logs job)
+
+## Summary
+`./scripts/ci/make_pr_digest.sh` exited with `Permission denied` during the mirror logs job because the tracked scripts lost their executable bit on Windows commits, and the workflow never restored permissions before running them.
+
+## Fix
+- Mark `scripts/ci/make_debug_bundle.sh` and `scripts/ci/make_pr_digest.sh` as executable in git.
+- Add a workflow step to `chmod +x scripts/ci/*.sh` before invoking the scripts.
+
+## Logs
+- `ci-logs/latest/mirror_logs/Build digest.txt`
+
+---
+
 ## Failing workflows
 - **CI** workflow (integration job)
 
