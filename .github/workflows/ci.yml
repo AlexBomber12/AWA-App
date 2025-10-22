@@ -172,6 +172,13 @@ jobs:
             [ -f "$file" ] && python -m pip install -r "$file" -c constraints.txt
           done
 
+      - name: Install awa_common (editable)
+        run: python -m pip install -e ./packages/awa_common -c constraints.txt
+
+      - name: Verify awa_common import
+        run: |
+          python -c "import awa_common, sys; import awa_common.dsn; print('awa_common OK', sys.version)"
+
       - name: Prepare .env
         run: |
           [ -f .env.test ] && cp -f .env.test .env || true
@@ -179,7 +186,8 @@ jobs:
       - name: Compose up api stack
         run: |
           set -euo pipefail
-          docker compose up -d --build db redis api worker
+          docker compose up -d --build --wait db redis
+          docker compose up -d --build --wait api worker
           docker compose ps > integration-compose-up.log || true
 
       - name: Wait API/Worker ready
@@ -195,6 +203,15 @@ jobs:
           done
           docker compose logs api worker | tail -n 200 | tee -a integration-ready.log
           exit 1
+
+      - name: API import smoke
+        run: |
+          set -euo pipefail
+          docker compose exec -T api python -c "import awa_common; import sys; print('import-ok', sys.version)"
+
+      - name: awa_common metadata
+        run: |
+          docker compose exec -T api python -c "import awa_common, import importlib.metadata as m; print(m.version('awa_common'))" || true
 
       - name: Collect integration logs
         if: always()
@@ -234,30 +251,58 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-python@v5
+        with:
+          python-version: 3.11
+
+      - name: Install Alembic and deps
+        run: |
+          python -m pip install -U pip
+          if [ -f requirements-dev.txt ]; then python -m pip install -r requirements-dev.txt -c constraints.txt; fi
+
       - name: Prepare .env
         run: |
+          set -euo pipefail
           [ -f .env.test ] && cp -f .env.test .env || true
+          cat <<'EOF' > .env.postgres
+          PG_HOST=127.0.0.1
+          PG_PORT=5432
+          PG_USER=postgres
+          PG_PASSWORD=postgres
+          PG_DATABASE=postgres
+          EOF
 
       - name: Compose up db/redis
-        run: docker compose up -d --build db redis
+        run: |
+          set -euo pipefail
+          export POSTGRES_USER=postgres
+          export POSTGRES_PASSWORD=postgres
+          export POSTGRES_DB=postgres
+          docker compose up -d --build --wait db redis
 
       - name: Wait for Postgres
         run: |
           set -euo pipefail
           : > migrations.log
+          echo "Waiting for Postgres readiness (timeout 60s)" | tee -a migrations.log
           U=$(docker compose exec -T db bash -lc 'printf %s "${POSTGRES_USER:-postgres}"')
-          P=$(docker compose exec -T db bash -lc 'printf %s "${POSTGRES_PASSWORD:-postgres}"')
           D=$(docker compose exec -T db bash -lc 'printf %s "${POSTGRES_DB:-$POSTGRES_USER}"')
+          READY=0
           for i in $(seq 1 60); do
             if docker compose exec -T db pg_isready -U "$U" -d "$D" >/dev/null 2>&1; then
-              exit 0
+              READY=1
+              echo "Postgres ready after $i attempt(s)" | tee -a migrations.log
+              break
             fi
-            sleep 2
+            sleep 1
           done
-          docker compose logs db | tail -n 200 | tee -a migrations.log
-          exit 1
+          if [ "$READY" -ne 1 ]; then
+            echo "Postgres did not become ready within timeout" | tee -a migrations.log
+            docker compose logs db | tee -a migrations.log
+            exit 1
+          fi
 
-      - name: Alembic smoke
+      - name: Alembic smoke (up→down→up)
         run: |
           set -euo pipefail
           U=$(docker compose exec -T db bash -lc 'printf %s "${POSTGRES_USER:-postgres}"')
@@ -265,9 +310,9 @@ jobs:
           D=$(docker compose exec -T db bash -lc 'printf %s "${POSTGRES_DB:-$POSTGRES_USER}"')
           PORT=$(docker compose port db 5432 | awk -F: '{print $2}')
           export DATABASE_URL="postgresql+psycopg://${U}:${P}@127.0.0.1:${PORT}/${D}"
-          (alembic upgrade head) 2>&1 | tee -a migrations.log
-          (alembic downgrade -1 || true) 2>&1 | tee -a migrations.log
-          (alembic upgrade head) 2>&1 | tee -a migrations.log
+          alembic upgrade head
+          alembic downgrade -1 || true
+          alembic upgrade head
 
       - name: Upload migrations logs
         if: always()

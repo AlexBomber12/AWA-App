@@ -1,9 +1,9 @@
 SHELL := /usr/bin/env bash
 
-.PHONY: up down logs sh fmt lint test unit integ bootstrap ci-local migrations-local integration-local ci-all doctor
+.PHONY: up down logs sh fmt lint test unit integ bootstrap ci-fast ci-local migrations-local integration-local ci-all doctor
 
 up:
-	docker compose up -d --build
+	docker compose up -d --build --wait db redis api worker
 
 down:
 	docker compose down -v
@@ -32,6 +32,10 @@ bootstrap:
 	bash scripts/dev/bootstrap_wsl.sh
 
 ci-local:
+	bash scripts/ci/unit.sh
+
+ci-fast:
+	@echo "Unit only (fast)"
 	bash scripts/ci/unit.sh
 
 migrations-local:
