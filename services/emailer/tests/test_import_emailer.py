@@ -8,7 +8,7 @@ def test_import_emailer() -> None:
     assert pkg.ping() == "pong"
     assert pkg.add(2, 3) == 5
 
-    llm_stub = importlib.import_module("packages.awa_common.llm")
+    llm_stub = importlib.import_module("awa_common.llm")
 
     async def _gen(prompt: str) -> str:
         return "OK"

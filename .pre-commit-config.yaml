@@ -1,26 +1,46 @@
+exclude: >
+  (?x)^(
+    \.git/|
+    \.venv/|
+    \.local-artifacts/|
+    artifacts/|
+    __pycache__/|\.pytest_cache/|\.mypy_cache/|\.ruff_cache/|
+    coverage/|coverage\.xml|htmlcov/|
+    dist/|build/|.*\.egg-info/|
+    node_modules/|
+    webapp/\.next/|webapp/(out|build)/
+    |\.codex/
+  )
 repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.9.9
+    rev: v0.7.0
     hooks:
       - id: ruff
-        args: ["--fix"]
-  - repo: https://github.com/psf/ruff
-    rev: v0.9.9
-    hooks:
+        args: [--fix]
       - id: ruff-format
-        args: ["--target-version=py311"]
+  - repo: https://github.com/psf/black
+    rev: 24.8.0
+    hooks:
+      - id: black
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: end-of-file-fixer
+        exclude: '\.(md|MD)$'
+      - id: trailing-whitespace
+        exclude: '\.(md|MD)$'
+      - id: check-merge-conflict
+      - id: mixed-line-ending
+        args: [--fix=lf]
   - repo: https://github.com/adamchainz/blacken-docs
     rev: 1.16.0
     hooks:
       - id: blacken-docs
+        args: ["--skip-errors"]
   - repo: https://github.com/asottile/pyupgrade
     rev: v3.15.0
     hooks:
       - id: pyupgrade
-  - repo: https://github.com/psf/black
-    rev: 24.10.0
-    hooks:
-      - id: black
   - repo: https://github.com/pre-commit/mirrors-mypy
     rev: v1.8.0
     hooks:
@@ -32,3 +52,9 @@ repos:
     rev: v2.10
     hooks:
       - id: vulture  # detect dead code
+        args:
+          - --min-confidence=80
+          - --ignore-decorators=@router.get,@router.post
+          - --ignore-names=__init__
+          - --exclude=*/services/api/tests/*,*/services/api/migrations/*
+          - services/api

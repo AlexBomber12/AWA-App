@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import os
-from typing import Any, List
+from typing import Any
 
+from awa_common.settings import settings
 from celery.utils.log import get_task_logger
 from sqlalchemy import create_engine, text
-
-from packages.awa_common.settings import settings
 
 from .celery_app import celery_app
 
@@ -29,10 +28,10 @@ def task_maintenance_nightly() -> dict[str, Any]:
     tables_cfg = os.getenv(
         "TABLE_MAINTENANCE_LIST", "public.reimbursements_raw,public.returns_raw"
     )
-    tables: List[str] = [t.strip() for t in tables_cfg.split(",") if t.strip()]
+    tables: list[str] = [t.strip() for t in tables_cfg.split(",") if t.strip()]
     vacuum = os.getenv("VACUUM_ENABLE", "false").lower() in ("1", "true", "yes")
     engine = create_engine(settings.DATABASE_URL)
-    processed: List[str] = []
+    processed: list[str] = []
     try:
         with engine.begin() as conn:
             for tbl in tables:

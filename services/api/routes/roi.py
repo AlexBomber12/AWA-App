@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import os
 import secrets
-from typing import List
 
+from awa_common.dsn import build_dsn
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.templating import Jinja2Templates
@@ -11,8 +11,6 @@ from sqlalchemy import String, bindparam, create_engine, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.types import Numeric
 from starlette import status
-
-from packages.awa_common.dsn import build_dsn
 
 from .. import roi_repository
 from ..db import get_session
@@ -123,7 +121,7 @@ APPROVE_SQL = text(
 ).bindparams(bindparam("asins", expanding=True))
 
 
-async def _extract_asins(request: Request) -> List[str]:
+async def _extract_asins(request: Request) -> list[str]:
     if request.headers.get("content-type", "").startswith("application/json"):
         data = await request.json()
         return data.get("asins", [])

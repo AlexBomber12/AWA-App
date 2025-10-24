@@ -4,10 +4,10 @@ pytest.importorskip("asyncpg")
 pytest.importorskip("sqlalchemy")
 
 import sqlalchemy as sa  # noqa: E402
+from awa_common.dsn import build_dsn  # noqa: E402
 
 from alembic import command  # type: ignore[attr-defined]  # noqa: E402
 from alembic.config import Config  # noqa: E402
-from packages.awa_common.dsn import build_dsn  # noqa: E402
 from tests.conftest import *  # noqa: E402,F403
 
 pytestmark = pytest.mark.integration

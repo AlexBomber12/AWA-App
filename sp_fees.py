@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import os
 
+from awa_common.dsn import build_dsn
+
 from pg_utils import connect
-from packages.awa_common.dsn import build_dsn
 from sp_api.api import SellingPartnerAPI
 
 

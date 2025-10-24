@@ -42,4 +42,3 @@ Each mirror commit includes `[skip ci]` to avoid triggering workflows from the m
 ## Fork Behaviour
 
 When a pull request originates from a fork the workflow still uploads artifacts but intentionally skips the mirror push and the PR digest comment because forks do not have the required permissions. The job summary explicitly notes when this happens.
-

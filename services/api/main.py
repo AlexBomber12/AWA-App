@@ -8,6 +8,7 @@ import httpx
 import redis.asyncio as aioredis
 import structlog
 from asgi_correlation_id import CorrelationIdMiddleware
+from awa_common.settings import settings
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi_limiter import FastAPILimiter
@@ -19,18 +20,17 @@ from starlette.responses import Response
 
 from alembic.config import Config
 from alembic.script import ScriptDirectory
-from .routes.ingest import router as ingest_router
 from services.api.errors import install_exception_handlers
 from services.api.logging_config import configure_logging
 from services.api.sentry_config import init_sentry_if_configured
-from .routes.upload import router as upload_router
-from packages.awa_common.settings import settings
 
 from .db import get_session
 from .routes import health as health_router
+from .routes.ingest import router as ingest_router
 from .routes.roi import router as roi_router
 from .routes.score import router as score_router
 from .routes.stats import router as stats_router
+from .routes.upload import router as upload_router
 
 configure_logging()
 init_sentry_if_configured()
@@ -66,15 +66,14 @@ def _parse_rate_limit(s: str) -> tuple[int, int]:
         unit = unit.strip().lower()
     except Exception:
         return 100, 60
-    seconds = (
-        60
-        if unit.startswith("min")
-        else 1
-        if unit.startswith("sec")
-        else 3600
-        if unit.startswith("hour")
-        else 60
-    )
+    if unit.startswith("min"):
+        seconds = 60
+    elif unit.startswith("sec"):
+        seconds = 1
+    elif unit.startswith("hour"):
+        seconds = 3600
+    else:
+        seconds = 60
     return max(times, 1), seconds
 
 
@@ -206,7 +205,7 @@ async def _check_llm() -> None:
     """
 
     try:
-        from packages.awa_common.llm import LAN_BASE, LLM_PROVIDER, LLM_PROVIDER_FALLBACK
+        from awa_common.llm import LAN_BASE, LLM_PROVIDER
     except Exception:
         return
 
@@ -216,7 +215,10 @@ async def _check_llm() -> None:
         async with httpx.AsyncClient(timeout=settings.REQUEST_TIMEOUT_S) as cli:
             await cli.get(f"{LAN_BASE}/health")
     except Exception:
-        os.environ["LLM_PROVIDER"] = LLM_PROVIDER_FALLBACK
+        fallback = os.environ.get("LLM_PROVIDER_FALLBACK", "stub")
+        os.environ["LLM_PROVIDER"] = fallback
+        if hasattr(settings, "LLM_PROVIDER"):
+            settings.LLM_PROVIDER = fallback.upper()
 
 
 __all__ = ["app", "ready"]

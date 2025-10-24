@@ -9,9 +9,9 @@ from typing import Any, Callable
 
 import boto3
 import pandas as pd
+from awa_common.dsn import build_dsn
 from sqlalchemy import create_engine, text
 
-from packages.awa_common.dsn import build_dsn
 from services.etl.dialects import (
     amazon_ads_sp_cost,
     amazon_fee_preview,

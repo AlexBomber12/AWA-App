@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from logging.config import fileConfig
 
+from awa_common.dsn import build_dsn
 from sqlalchemy import create_engine
 
 from alembic import context
-from packages.awa_common.dsn import build_dsn
 
 config = context.config
 if config.config_file_name is not None:

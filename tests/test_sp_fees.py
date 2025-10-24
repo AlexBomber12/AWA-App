@@ -2,7 +2,7 @@ import os
 import sys
 import types
 
-from packages.awa_common.dsn import build_dsn
+from awa_common.dsn import build_dsn
 
 
 class FakeCursor:

@@ -6,10 +6,10 @@ import sys
 import time
 
 import keepa
+from awa_common.dsn import build_dsn
 from minio import Minio
 
 from pg_utils import connect
-from packages.awa_common.dsn import build_dsn
 
 key = os.environ["KEEPA_KEY"]
 minio_endpoint = os.environ["MINIO_ENDPOINT"]

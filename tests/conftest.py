@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import importlib
 import os
 from pathlib import Path
-
-import importlib
 
 import pytest
 
@@ -36,7 +35,7 @@ else:  # pragma: no cover - exercised only when sqlalchemy is missing
     create_engine = None
     sessionmaker = None
 
-from packages.awa_common.dsn import build_dsn
+from awa_common.dsn import build_dsn
 
 
 def pytest_configure(config):
@@ -69,7 +68,7 @@ def pytest_collection_modifyitems(config, items):
     if _db_available():
         return
     skip_integration = pytest.mark.skip(
-        reason="Postgres not running – integration tests skipped",
+        reason="Postgres not running – integration tests skipped"
     )
     for item in items:
         if "integration" in item.keywords:

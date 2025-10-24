@@ -3,7 +3,7 @@ from __future__ import annotations
 import shutil
 import tempfile
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 from celery import states
 from fastapi import APIRouter, File, HTTPException, Request, UploadFile
@@ -21,7 +21,7 @@ async def submit_ingest(
     uri: str | None = None,
     report_type: str | None = None,
     force: bool = False,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     if not file and uri is None:
         try:
             payload = await request.json()
@@ -50,7 +50,7 @@ async def submit_ingest(
 
 
 @router.get("/jobs/{task_id}")
-async def get_job(task_id: str) -> Dict[str, Any]:
+async def get_job(task_id: str) -> dict[str, Any]:
     res = celery_app.AsyncResult(task_id)
     try:
         state = res.state

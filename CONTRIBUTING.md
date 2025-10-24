@@ -25,6 +25,12 @@ Run the full test suite:
 ENV=test pytest -q
 ```
 
+Coverage quickstart (matches the CI gate):
+
+```bash
+pytest -q -m "not integration" --cov=services/api --cov=services/worker --cov=packages/awa_common
+```
+
 Before pushing changes, run the full pre-commit suite and tests:
 
 ```bash

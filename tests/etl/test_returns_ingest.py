@@ -1,8 +1,8 @@
 import pytest
+from awa_common.dsn import build_dsn
 from sqlalchemy import create_engine, text
 
 from etl import load_csv
-from packages.awa_common.dsn import build_dsn
 
 pytestmark = pytest.mark.integration
 

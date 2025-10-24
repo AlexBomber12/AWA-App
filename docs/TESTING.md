@@ -98,4 +98,3 @@ LLM_REMOTE_URL — override remote HTTP endpoint in tests
 Run:
 
 pytest tests/llm -q
-

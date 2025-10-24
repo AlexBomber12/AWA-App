@@ -14,7 +14,8 @@ pytestmark = pytest.mark.integration
 pytest.importorskip("apscheduler")
 respx = pytest.importorskip("respx")
 
-from packages.awa_common import db_url, dsn  # noqa: E402
+from awa_common import db_url, dsn  # noqa: E402
+
 from services.logistics_etl import client, cron, repository  # noqa: E402
 
 

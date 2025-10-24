@@ -17,7 +17,8 @@ def _auth_headers():
 def setup_test_view(pg_engine):
     with pg_engine.begin() as c:
         c.execute(
-            text("""
+            text(
+                """
             CREATE TABLE IF NOT EXISTS test_roi_view(
                 asin text,
                 vendor text,
@@ -25,17 +26,20 @@ def setup_test_view(pg_engine):
                 roi numeric,
                 dt date
             );
-        """)
+        """
+            )
         )
         c.execute(text("TRUNCATE test_roi_view;"))
         c.execute(
-            text("""
+            text(
+                """
             INSERT INTO test_roi_view(asin,vendor,category,roi,dt) VALUES
             ('A1','V1','Beauty', 50.0, '2024-01-15'),
             ('A2','V1','Beauty', 10.0, '2024-02-10'),
             ('A3','V2','Sports', 70.0, '2024-02-20'),
             ('A4','V2','Sports', 30.0, '2024-03-05');
-        """)
+        """
+            )
         )
 
 

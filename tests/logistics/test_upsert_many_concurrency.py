@@ -31,9 +31,9 @@ def test_concurrent_upserts_no_deadlock(pg_engine, ensure_test_logistics_table):
     t2.start()
     t1.join(timeout=10)
     t2.join(timeout=10)
-    assert not t1.is_alive() and not t2.is_alive(), (
-        "Deadlock or hang in concurrent upserts"
-    )
+    assert (
+        not t1.is_alive() and not t2.is_alive()
+    ), "Deadlock or hang in concurrent upserts"
 
     with pg_engine.connect() as c:
         val = float(

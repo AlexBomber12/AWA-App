@@ -2,8 +2,9 @@ import json
 import os
 import urllib.request
 
+from awa_common.dsn import build_dsn
+
 from pg_utils import connect
-from packages.awa_common.dsn import build_dsn
 
 ASINS = ["DUMMY1", "DUMMY2"]
 

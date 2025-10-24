@@ -4,9 +4,9 @@ import os
 from typing import Any, List, Mapping
 
 import httpx
+from awa_common.dsn import build_dsn
 from sqlalchemy import create_engine
 
-from packages.awa_common.dsn import build_dsn
 from services.fees_h10 import repository as repo
 
 

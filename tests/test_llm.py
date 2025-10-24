@@ -1,8 +1,7 @@
 import types
 
 import pytest
-
-from packages.awa_common import llm
+from awa_common import llm
 
 
 class DummyResp:

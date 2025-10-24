@@ -78,6 +78,76 @@ jobs:
       - name: Parse check
         run: python -m compileall -q services tests
 
+      - name: Pre-commit
+        if: ${{ hashFiles('.pre-commit-config.yaml') != '' }}
+        run: |
+          set -o pipefail
+          pre-commit run --all-files --show-diff-on-failure | tee pre-commit.log
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            exit "$status"
+          fi
+
+      - name: Ruff lint
+        run: |
+          set -o pipefail
+          python -m ruff check . | tee ruff.log
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            exit "$status"
+          fi
+
+      - name: Black check
+        run: |
+          set -o pipefail
+          python -m black --check . | tee black.log
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            exit "$status"
+          fi
+
+      - name: Mypy type check
+        run: |
+          set -o pipefail
+          python -m mypy . | tee mypy.log
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            exit "$status"
+          fi
+
+      - name: Webapp lint
+        if: ${{ hashFiles('webapp/package.json') != '' }}
+        working-directory: webapp
+        run: |
+          set -o pipefail
+          npm run lint | tee ../eslint.log
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            exit "$status"
+          fi
+
+      - name: Webapp type check
+        if: ${{ hashFiles('webapp/package.json') != '' }}
+        working-directory: webapp
+        run: |
+          set -o pipefail
+          npx tsc -p . | tee ../tsc.log
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            exit "$status"
+          fi
+
+      - name: Webapp unit tests
+        if: ${{ hashFiles('webapp/package.json') != '' }}
+        working-directory: webapp
+        run: |
+          set -o pipefail
+          npm run test:unit --if-present | tee ../vitest.log
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            exit "$status"
+          fi
+
       - name: Pytest collect
         run: pytest --collect-only -q
 
@@ -90,27 +160,6 @@ jobs:
           else
             echo "No pytest configuration detected; skipping."
           fi
-
-      - name: Webapp lint
-        if: ${{ hashFiles('webapp/package.json') != '' }}
-        working-directory: webapp
-        run: |
-          set -o pipefail
-          npm run lint | tee ../eslint.log || true
-
-      - name: Webapp type check
-        if: ${{ hashFiles('webapp/package.json') != '' }}
-        working-directory: webapp
-        run: |
-          set -o pipefail
-          npx tsc -p . | tee ../tsc.log || true
-
-      - name: Webapp unit tests
-        if: ${{ hashFiles('webapp/package.json') != '' }}
-        working-directory: webapp
-        run: |
-          set -o pipefail
-          npm run test:unit --if-present | tee ../vitest.log || true
 
       - name: Docker image build
         run: |

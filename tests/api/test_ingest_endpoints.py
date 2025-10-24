@@ -14,6 +14,7 @@ def _get_client(monkeypatch) -> TestClient:
     from importlib import reload
 
     import api.routers.ingest as ingest_module
+
     import services.api.main as main_module
     import services.worker.celery_app as celery_module
     import services.worker.tasks as tasks_module

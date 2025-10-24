@@ -3,11 +3,11 @@ from __future__ import annotations
 import importlib
 import os
 from types import ModuleType
-from typing import Annotated, List, cast
+from typing import Annotated, cast
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
-from pydantic import BaseModel, Field, BeforeValidator
+from pydantic import BaseModel, BeforeValidator, Field
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -41,15 +41,11 @@ except Exception:
     repo = None
 
 
-Asin = Annotated[
-    str,
-    BeforeValidator(lambda v: v.strip()),
-    Field(min_length=1),
-]
+Asin = Annotated[str, BeforeValidator(lambda v: v.strip()), Field(min_length=1)]
 
 
 class ScoreRequest(BaseModel):
-    asins: List[Asin] = Field(..., description="List of ASINs")
+    asins: list[Asin] = Field(..., description="List of ASINs")
 
 
 class ScoreItem(BaseModel):
@@ -61,7 +57,7 @@ class ScoreItem(BaseModel):
 
 
 class ScoreResponse(BaseModel):
-    items: List[ScoreItem]
+    items: list[ScoreItem]
 
 
 router = APIRouter(prefix="/score", tags=["score"])

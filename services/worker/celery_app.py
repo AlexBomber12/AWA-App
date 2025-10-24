@@ -5,10 +5,9 @@ import json
 import logging
 import os
 
+from awa_common.settings import settings
 from celery import Celery
 from celery.schedules import crontab
-
-from packages.awa_common.settings import settings
 
 logging.getLogger(__name__).info("settings=%s", json.dumps(settings.redacted()))
 

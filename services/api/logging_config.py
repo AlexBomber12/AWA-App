@@ -2,14 +2,13 @@ import logging
 import sys
 from typing import Any, Mapping, MutableMapping
 
-from packages.awa_common.settings import settings
-
 import structlog
 from asgi_correlation_id import correlation_id
+from awa_common.settings import settings
 
 
 def _request_id_injector(
-    logger: Any, method_name: str, event_dict: MutableMapping[str, Any]
+    _logger: Any, _method_name: str, event_dict: MutableMapping[str, Any]
 ) -> Mapping[str, Any]:
     request_id = correlation_id.get()
     if request_id:
