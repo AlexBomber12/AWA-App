@@ -159,6 +159,26 @@ causing the script to crash.
 ---
 
 ## Failing workflows
+- **CI** workflow (unit job)
+
+## Summary
+`pytest -q -m "not integration"` failed at
+`tests/unit/services/api/test_main.py::test_wait_for_db_retries_then_succeeds`
+because `_wait_for_db` never invoked the monkeypatched
+`sqlalchemy.create_engine`, so the retry counter remained at 0 and the test
+timed out waiting for the second attempt.
+
+## Fix
+- Ensure `_wait_for_db` always builds a fallback DSN, calls
+  `sa.create_engine` inside the retry loop, and only raises outside local/test
+  environments after exhausting retries.
+
+## Logs
+- Local reproduction: `pytest -q tests/unit/services/api/test_main.py::test_wait_for_db_retries_then_succeeds`
+
+---
+
+## Failing workflows
 - **CI** workflow (compose-health job)
 
 ## Summary

@@ -168,30 +168,39 @@ app.include_router(health_router.router)
 
 
 async def _wait_for_db(max_attempts: int = 10, delay_s: float = 0.05) -> None:
-    """Block application startup until the database becomes available."""
+    """
+    Local/dev readiness loop. In unit tests, sqlalchemy.create_engine is monkeypatched,
+    so this must always call sa.create_engine to exercise the retry path.
+    """
     env = os.getenv("ENV", getattr(settings, "ENV", "local")).lower()
+
+    # Build DSN: env var -> settings -> safe fallback (prevents early-return in tests)
     db_url = (
-        os.getenv("DATABASE_URL")
-        or str(getattr(settings, "DATABASE_URL", ""))
+        (os.getenv("DATABASE_URL") or "").strip()
+        or str(getattr(settings, "DATABASE_URL", "")).strip()
         or "postgresql+psycopg://app:app@db:5432/app"
     )
 
     last_err: Exception | None = None
     for _ in range(max_attempts):
-        engine = sa.create_engine(db_url)
+        engine = sa.create_engine(
+            db_url
+        )  # must be module attr to hit the test monkeypatch
         try:
             with engine.connect() as conn:
                 conn.execute(sa_text("SELECT 1"))
             last_err = None
             break
-        except Exception as exc:  # pragma: no cover - exercised via unit tests
+        except Exception as exc:
             last_err = exc
+            # unit test monkeypatches asyncio.sleep to a no-op; keep the await
             await asyncio.sleep(delay_s)
         finally:
             try:
                 engine.dispose()
             except Exception:
                 pass
+
     if last_err and env not in {"local", "test"}:
         raise last_err
 
