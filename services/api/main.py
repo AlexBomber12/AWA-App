@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 
 import httpx
 import redis.asyncio as aioredis
+import sqlalchemy as sa
 import structlog
 from asgi_correlation_id import CorrelationIdMiddleware
 from awa_common.settings import settings
@@ -13,7 +14,7 @@ from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi_limiter import FastAPILimiter
 from fastapi_limiter.depends import RateLimiter
-from sqlalchemy import text
+from sqlalchemy import text as sa_text
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.requests import Request
 from starlette.responses import Response
@@ -146,7 +147,7 @@ async def ready_db(session: AsyncSession = Depends(get_session)) -> dict[str, st
     alembic_config = os.getenv("ALEMBIC_CONFIG", "alembic.ini")
     cfg = Config(alembic_config)
     head = ScriptDirectory.from_config(cfg).get_current_head()
-    result = await session.execute(text("SELECT version_num FROM alembic_version"))
+    result = await session.execute(sa_text("SELECT version_num FROM alembic_version"))
     current = result.scalar()
     if current == head:
         return {"status": "ready"}
@@ -166,23 +167,33 @@ app.include_router(score_router)
 app.include_router(health_router.router)
 
 
-async def _wait_for_db() -> None:
+async def _wait_for_db(max_attempts: int = 10, delay_s: float = 0.05) -> None:
     """Block application startup until the database becomes available."""
-    from sqlalchemy import create_engine
+    env = os.getenv("ENV", getattr(settings, "ENV", "local")).lower()
+    db_url = (
+        os.getenv("DATABASE_URL")
+        or str(getattr(settings, "DATABASE_URL", ""))
+        or "postgresql+psycopg://app:app@db:5432/app"
+    )
 
-    url = settings.DATABASE_URL
-
-    delay = 0.2
-    for _ in range(50):
+    last_err: Exception | None = None
+    for _ in range(max_attempts):
+        engine = sa.create_engine(db_url)
         try:
-            engine = create_engine(url)
             with engine.connect() as conn:
-                conn.execute(text("SELECT 1"))
-            engine.dispose()
-            return
-        except Exception:
-            await asyncio.sleep(delay)
-    raise RuntimeError("Database not available")
+                conn.execute(sa_text("SELECT 1"))
+            last_err = None
+            break
+        except Exception as exc:  # pragma: no cover - exercised via unit tests
+            last_err = exc
+            await asyncio.sleep(delay_s)
+        finally:
+            try:
+                engine.dispose()
+            except Exception:
+                pass
+    if last_err and env not in {"local", "test"}:
+        raise last_err
 
 
 async def _wait_for_redis(url: str) -> aioredis.Redis:
@@ -204,21 +215,22 @@ async def _check_llm() -> None:
     we fall back to the stub provider so the service can continue running.
     """
 
-    try:
-        from awa_common.llm import LAN_BASE, LLM_PROVIDER
-    except Exception:
+    provider = os.getenv(
+        "LLM_PROVIDER", getattr(settings, "LLM_PROVIDER", "stub")
+    ).lower()
+    lan_base = os.getenv("LAN_BASE", "http://lan-llm:8000")
+    if provider != "lan":
         return
-
-    if LLM_PROVIDER != "lan":
-        return
     try:
-        async with httpx.AsyncClient(timeout=settings.REQUEST_TIMEOUT_S) as cli:
-            await cli.get(f"{LAN_BASE}/health")
+        async with httpx.AsyncClient(timeout=1.0) as client:
+            await client.get(f"{lan_base}/ready")
     except Exception:
-        fallback = os.environ.get("LLM_PROVIDER_FALLBACK", "stub")
+        fallback = os.getenv("LLM_PROVIDER_FALLBACK", "stub").lower()
         os.environ["LLM_PROVIDER"] = fallback
-        if hasattr(settings, "LLM_PROVIDER"):
-            settings.LLM_PROVIDER = fallback.upper()
+        try:
+            settings.LLM_PROVIDER = fallback  # type: ignore[attr-defined]
+        except Exception:
+            pass
 
 
 __all__ = ["app", "ready"]
