@@ -3,6 +3,24 @@
 ## Unit job diagnostics
 - The unit workflow uploads a `unit-pip-diagnostics-<run_id>-<attempt>` artifact containing `unit-setup.log`, `unit-setup-tail.log`, and `pip-freeze.txt` for pip troubleshooting.
 
+---
+
+## Failing workflows
+- **CI** workflow (unit job)
+
+## Summary
+`tests/test_api_fast.py::test_health_endpoint` timed out because `FastAPILimiter.init` and the DB readiness loop ran during `TestClient(main.app)` setup when tests expected the mocked lifespan.
+
+## Fix
+- Add an autouse fixture in `tests/conftest.py` that no-ops the FastAPI lifespan unless `@pytest.mark.real_lifespan` is set.
+- Make `services/api/main.py::_wait_for_db` use configurable attempt/delay defaults with the module-level `sqlalchemy.create_engine`.
+- Ensure the unit job installs `packages/awa_common` in editable mode so API imports succeed in a fresh checkout.
+
+## Logs
+- GitHub Actions unit job (unit.log – artifact not present in repo; reproduced locally from failure summary)
+
+---
+
 ## Failing workflows
 - **CI** workflow (unit job)
 

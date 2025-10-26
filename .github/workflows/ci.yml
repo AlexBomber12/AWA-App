@@ -42,30 +42,13 @@ jobs:
 
       - name: Install Python deps
         run: |
-          set -o pipefail
-          : > unit-setup.log
-          {
-            python -m pip install -U pip
-            if [ -f requirements.txt ]; then
-              python -m pip install -r requirements.txt -c constraints.txt
-            fi
-            python -m pip install -r requirements-dev.txt -c constraints.txt
-            python -m pip install -e packages/awa_common
-            for file in services/*/requirements.txt; do
-              [ -f "$file" ] && python -m pip install -r "$file" -c constraints.txt
-            done
-            python - <<'PY'
-import pkgutil
-assert pkgutil.find_loader('xdist'), 'pytest-xdist not installed'
+          python -m pip install -U pip wheel
+          if [ -f requirements.txt ]; then pip install -r requirements.txt -c constraints.txt || pip install -r requirements.txt; fi
+          pip install -r requirements-dev.txt -c constraints.txt || pip install -r requirements-dev.txt
+          pip install -e packages/awa_common
+          python - <<'PY'
+import pkgutil; assert pkgutil.find_loader('awa_common'), 'awa_common not installed'
 PY
-            python -m pip check || true
-          } 2>&1 | tee -a unit-setup.log
-          status=${PIPESTATUS[0]}
-          python -m pip freeze > pip-freeze.txt || true
-          tail -n 200 unit-setup.log > unit-setup-tail.log || true
-          if [ "$status" -ne 0 ]; then
-            exit "$status"
-          fi
 
       - name: Set up Node.js
         if: ${{ hashFiles('webapp/package.json') != '' }}

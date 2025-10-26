@@ -237,3 +237,59 @@ def _fast_sleep_all(monkeypatch, request):
 
     monkeypatch.setattr(asyncio, "sleep", _fast_asyncio_sleep, raising=True)
     monkeypatch.setattr(time, "sleep", _fast_time_sleep, raising=True)
+
+
+@pytest.fixture(autouse=True)
+def _api_fast_startup_global(monkeypatch, request):
+    """Fast lifespan for API tests using TestClient(main.app).
+    Always no-op FastAPILimiter & Redis; only skip _wait_for_db patch if a test
+    needs the real DB retry loop via @pytest.mark.needs_wait_for_db.
+    Opt-out of the whole shim with @pytest.mark.real_lifespan.
+    """
+    if request.node.get_closest_marker("real_lifespan"):
+        return
+
+    # 1) limiter no-ops (always)
+    try:
+        import fastapi_limiter
+
+        async def _noop_async(*_a, **_k):
+            return None
+
+        monkeypatch.setattr(
+            fastapi_limiter.FastAPILimiter, "init", _noop_async, raising=True
+        )
+        monkeypatch.setattr(
+            fastapi_limiter.FastAPILimiter, "close", _noop_async, raising=False
+        )
+    except Exception:
+        pass
+
+    # 2) Redis no-op (always)
+    try:
+        import redis.asyncio as aioredis
+
+        class _FakeRedis:
+            async def ping(self):
+                return True
+
+            async def aclose(self):
+                return None
+
+        monkeypatch.setattr(
+            aioredis, "from_url", lambda *_a, **_k: _FakeRedis(), raising=True
+        )
+    except Exception:
+        pass
+
+    # 3) Only patch _wait_for_db if the test does NOT request the real loop
+    if not request.node.get_closest_marker("needs_wait_for_db"):
+        try:
+            import services.api.main as main
+
+            async def _noop_wait():
+                return None
+
+            monkeypatch.setattr(main, "_wait_for_db", _noop_wait, raising=True)
+        except Exception:
+            pass

@@ -2,13 +2,15 @@ import pytest
 
 
 @pytest.fixture(autouse=True)
-def _api_fast_startup(monkeypatch):
+def _api_fast_startup(monkeypatch, request):
     """
     Neutralize blocking startup for API tests that construct TestClient(main.app):
     - fastapi_limiter FastAPILimiter.init/close no-op
     - redis.asyncio.from_url returns a fake client with ping/aclose
-    - services.api.main._wait_for_db no-op
+    - services.api.main._wait_for_db no-op unless @pytest.mark.needs_wait_for_db
     """
+    if request.node.get_closest_marker("real_lifespan"):
+        return
     try:
         import fastapi_limiter
 
@@ -40,12 +42,13 @@ def _api_fast_startup(monkeypatch):
     except Exception:
         pass
 
-    try:
-        import services.api.main as main
+    if not request.node.get_closest_marker("needs_wait_for_db"):
+        try:
+            import services.api.main as main
 
-        async def _noop_wait():
-            return None
+            async def _noop_wait():
+                return None
 
-        monkeypatch.setattr(main, "_wait_for_db", _noop_wait, raising=True)
-    except Exception:
-        pass
+            monkeypatch.setattr(main, "_wait_for_db", _noop_wait, raising=True)
+        except Exception:
+            pass

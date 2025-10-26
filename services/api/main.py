@@ -167,16 +167,28 @@ app.include_router(score_router)
 app.include_router(health_router.router)
 
 
-async def _wait_for_db(max_attempts: int = 10, delay_s: float = 0.05) -> None:
+async def _wait_for_db(
+    max_attempts: int | None = None, delay_s: float | None = None
+) -> None:
     env = os.getenv("ENV", getattr(settings, "ENV", "local")).lower()
-
-    # DSN precedence: ENV -> settings -> safe fallback (prevents early-return)
+    if max_attempts is None:
+        max_attempts = int(
+            os.getenv(
+                "WAIT_FOR_DB_MAX_ATTEMPTS",
+                "10" if env in {"local", "test"} else "50",
+            )
+        )
+    if delay_s is None:
+        delay_s = float(
+            os.getenv(
+                "WAIT_FOR_DB_DELAY_S", "0.05" if env in {"local", "test"} else "0.2"
+            )
+        )
     db_url = (
         (os.getenv("DATABASE_URL") or "").strip()
         or str(getattr(settings, "DATABASE_URL", "")).strip()
         or "postgresql+psycopg://app:app@db:5432/app"
     )
-
     last_err: Exception | None = None
     for _ in range(max_attempts):
         engine = sqlalchemy.create_engine(db_url)
@@ -187,13 +199,12 @@ async def _wait_for_db(max_attempts: int = 10, delay_s: float = 0.05) -> None:
             break
         except Exception as exc:
             last_err = exc
-            await asyncio.sleep(delay_s)  # test monkeypatches sleep to no-op
+            await asyncio.sleep(delay_s)
         finally:
             try:
                 engine.dispose()
             except Exception:
                 pass
-
     if last_err and env not in {"local", "test"}:
         raise last_err
 
