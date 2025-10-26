@@ -9,13 +9,13 @@
 - **CI** workflow (unit job)
 
 ## Summary
-The `Pre-commit` step exited with status 127 because the GitHub runner could not find the `pre-commit` executable. Our workflow installed dependencies with the bare `pip` command, which resolved to the system interpreter and dropped scripts into a PATH that Actions does not add to the job environment, so `pre-commit` was missing.
+The `Pre-commit` step exited with status 127 because GitHub Actions could not locate the `pre-commit` console script on PATH.
 
 ## Fix
-- Install all Python dependencies via `python -m pip` to target the `actions/setup-python` interpreter, ensuring CLI entry points like `pre-commit` land on the PATH.
+- Invoke the hook runner via `python -m pre_commit ...` so the workflow uses the interpreter configured by `actions/setup-python` even when the console script is unavailable.
 
 ## Logs
-- GitHub Actions run `18824639708`, job `53705350491` (unit) – see `Pre-commit` step failure message.
+- GitHub Actions runs `18824639708` and `18824912593`, job `53706009373` (unit) – see `Pre-commit` step failure message.
 
 ---
 
