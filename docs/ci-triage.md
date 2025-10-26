@@ -13,9 +13,10 @@ The `Pre-commit` step exited with status 127 because GitHub Actions could not lo
 
 ## Fix
 - Invoke the hook runner via `python -m pre_commit ...` so the workflow uses the interpreter configured by `actions/setup-python` even when the console script is unavailable.
+- Add `pre-commit` to `requirements-dev.txt` so the module is installed during the unit job setup step.
 
 ## Logs
-- GitHub Actions runs `18824639708` and `18824912593`, job `53706009373` (unit) – see `Pre-commit` step failure message.
+- GitHub Actions runs `18824639708`, `18824912593`, and `18825010664`, job `53706256685` (unit) – see `Pre-commit` step failure message.
 
 ---
 
