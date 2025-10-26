@@ -256,11 +256,24 @@ def _api_fast_startup_global(monkeypatch, request):
         async def _noop_async(*_a, **_k):
             return None
 
+        class _FakeLimiterRedis:
+            async def evalsha(self, *_a, **_k):
+                return 0
+
+            async def script_load(self, *_a, **_k):
+                return "noop"
+
         monkeypatch.setattr(
             fastapi_limiter.FastAPILimiter, "init", _noop_async, raising=True
         )
         monkeypatch.setattr(
             fastapi_limiter.FastAPILimiter, "close", _noop_async, raising=False
+        )
+        monkeypatch.setattr(
+            fastapi_limiter.FastAPILimiter, "redis", _FakeLimiterRedis(), raising=False
+        )
+        monkeypatch.setattr(
+            fastapi_limiter.FastAPILimiter, "lua_sha", "noop", raising=False
         )
     except Exception:
         pass

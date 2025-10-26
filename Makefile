@@ -1,9 +1,30 @@
-SHELL := /usr/bin/env bash
-PYTHON ?= $(shell command -v python 2>/dev/null || command -v python3 2>/dev/null)
+SHELL := /bin/bash
+.ONESHELL:
 
-ifeq ($(PYTHON),)
-$(error Python interpreter not found; please install python3)
+ART := .local-artifacts
+
+# Interpreter discovery (prefer repo venv, then python3, then python)
+VENV_PY := $(CURDIR)/.venv/bin/python
+ifeq ($(wildcard $(VENV_PY)),)
+  PY := $(shell command -v python3 2>/dev/null)
+  ifeq ($(PY),)
+    PY := $(shell command -v python 2>/dev/null)
+  endif
+else
+  PY := $(VENV_PY)
+  PATH := $(CURDIR)/.venv/bin:$(PATH)
 endif
+
+# Fail early with a helpful message if no interpreter was found
+ifeq ($(PY),)
+  $(error No Python interpreter found. Activate your virtualenv or install Python 3.11; e.g. `pyenv local 3.11.9` or `python3 -m venv .venv && . .venv/bin/activate`)
+endif
+
+PIP := $(PY) -m pip
+PYTEST := $(PY) -m pytest
+MYPY := $(PY) -m mypy
+RUFF := $(PY) -m ruff
+BLACK := $(PY) -m black
 
 .PHONY: up down logs sh fmt lint type test unit unit-all integ qa qa-fix install-dev bootstrap-dev ensure-bootstrap bootstrap ci-fast ci-local migrations-local integration-local ci-all doctor
 
@@ -20,35 +41,35 @@ sh:
 	docker compose exec api sh -lc "bash || sh"
 
 fmt:
-	$(PYTHON) -m black . || true
+	$(BLACK) . || true
 
 lint: ensure-bootstrap
-	@$(PYTHON) -m ruff check .
-	@$(PYTHON) -m black --check .
+	@$(RUFF) check .
+	@$(BLACK) --check .
 
 type: ensure-bootstrap
-	$(PYTHON) -m mypy .
+	$(MYPY) .
 
 unit:
-	mkdir -p .local-artifacts
-	PYTHONUNBUFFERED=1 pytest -vv -s -m "not integration and not slow" \
+	mkdir -p $(ART)
+	PYTHONUNBUFFERED=1 $(PYTEST) -vv -s -m "not integration and not slow" \
 	  -n auto --dist=loadfile --durations=20 \
-	| tee .local-artifacts/unit.log ; test $${PIPESTATUS[0]} -eq 0
+	| tee $(ART)/unit.log ; test $${PIPESTATUS[0]} -eq 0
 
 unit-all: ensure-bootstrap
 	@set -o pipefail; \
-	mkdir -p .local-artifacts; \
-	PYTHONUNBUFFERED=1 pytest -vv -s -m "not integration" -n auto --dist=loadfile --durations=20 2>&1 | tee .local-artifacts/pytest-unit-all.log; \
+	mkdir -p $(ART); \
+	PYTHONUNBUFFERED=1 $(PYTEST) -vv -s -m "not integration" -n auto --dist=loadfile --durations=20 2>&1 | tee $(ART)/pytest-unit-all.log; \
 	test $${PIPESTATUS[0]} -eq 0
 
 integ:
-	pytest -q -m integration || true
+	$(PYTEST) -q -m integration || true
 
 bootstrap-dev:
-	PIP_BREAK_SYSTEM_PACKAGES=1 $(PYTHON) -m pip install -U pip wheel
-	PIP_BREAK_SYSTEM_PACKAGES=1 $(PYTHON) -m pip install -U pre-commit mypy pytest-cov
-	PIP_BREAK_SYSTEM_PACKAGES=1 $(PYTHON) -m pip install -r requirements-dev.txt
-	PIP_BREAK_SYSTEM_PACKAGES=1 $(PYTHON) -m pip install -e packages/awa_common
+	PIP_BREAK_SYSTEM_PACKAGES=1 $(PIP) install -U pip wheel
+	PIP_BREAK_SYSTEM_PACKAGES=1 $(PIP) install -U pre-commit mypy pytest-cov
+	PIP_BREAK_SYSTEM_PACKAGES=1 $(PIP) install -r requirements-dev.txt
+	PIP_BREAK_SYSTEM_PACKAGES=1 $(PIP) install -e packages/awa_common
 	pre-commit clean
 	pre-commit install
 	pre-commit install-hooks
@@ -60,7 +81,7 @@ ensure-bootstrap:
 install-dev: bootstrap-dev
 
 qa: ensure-bootstrap
-	mkdir -p .local-artifacts
+	mkdir -p $(ART)
 	pre-commit run --all-files --show-diff-on-failure || true
 	@git diff --quiet || (echo "✖ Pre-commit modified files. Commit baseline or run 'make qa-fix'."; exit 1)
 	$(MAKE) lint
@@ -69,16 +90,16 @@ qa: ensure-bootstrap
 
 qa-fix: ensure-bootstrap
 	@set -o pipefail; \
-	mkdir -p .local-artifacts; \
+	mkdir -p $(ART); \
 	if [ -d .git ]; then git config --local --unset-all http.https://github.com/.extraheader || true; fi; \
-	pre-commit run --all-files --show-diff-on-failure 2>&1 | tee .local-artifacts/pre-commit.log || true; \
+	pre-commit run --all-files --show-diff-on-failure 2>&1 | tee $(ART)/pre-commit.log || true; \
 	git add -A; \
-	pre-commit run --all-files --show-diff-on-failure 2>&1 | tee .local-artifacts/pre-commit.log || true; \
+	pre-commit run --all-files --show-diff-on-failure 2>&1 | tee $(ART)/pre-commit.log || true; \
 	git add -A; \
-	$(PYTHON) -m ruff check . --fix 2>&1 | tee .local-artifacts/ruff.log; \
-	$(PYTHON) -m black . 2>&1 | tee .local-artifacts/black.log; \
-	$(PYTHON) -m mypy . 2>&1 | tee .local-artifacts/mypy.log; \
-	PYTHONUNBUFFERED=1 pytest -vv -s -m "not integration and not slow" -n auto --dist=loadfile --durations=20 2>&1 | tee .local-artifacts/pytest-unit.log
+	$(RUFF) check . --fix 2>&1 | tee $(ART)/ruff.log; \
+	$(BLACK) . 2>&1 | tee $(ART)/black.log; \
+	$(MYPY) . 2>&1 | tee $(ART)/mypy.log; \
+	PYTHONUNBUFFERED=1 $(PYTEST) -vv -s -m "not integration and not slow" -n auto --dist=loadfile --durations=20 2>&1 | tee $(ART)/pytest-unit.log
 
 test: unit integ
 
@@ -102,4 +123,5 @@ ci-all:
 	bash scripts/ci/all.sh
 
 doctor:
-	echo "PWD=$$PWD"; python -V; which python; echo "$$WSL_DISTRO_NAME"
+	@echo "Using PY=$(PY)"
+	$(PY) -c "import sys,platform; print('exe:', sys.executable); print('ver:', sys.version); print('platform:', platform.platform())"
