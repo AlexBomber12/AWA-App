@@ -24,6 +24,20 @@ The `Pre-commit` step exited with status 127 because GitHub Actions could not lo
 - **CI** workflow (unit job)
 
 ## Summary
+`npm run lint` in the webapp failed with `eslint: not found` because the project did not declare an ESLint dependency, so the CLI was unavailable during CI.
+
+## Fix
+- Add `eslint@8.57.0` and `eslint-config-next@14.1.0` to `webapp/package.json` devDependencies so the lint step installs the required tooling.
+
+## Logs
+- GitHub Actions run `18825119046`, job `53706526386` (unit) – see `Webapp lint` step output.
+
+---
+
+## Failing workflows
+- **CI** workflow (unit job)
+
+## Summary
 `tests/test_api_fast.py::test_health_endpoint` timed out because `FastAPILimiter.init` and the DB readiness loop ran during `TestClient(main.app)` setup when tests expected the mocked lifespan.
 
 ## Fix
