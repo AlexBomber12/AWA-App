@@ -40,18 +40,24 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
 
-      - name: Upgrade pip and install base requirements
+      - name: Install Python deps
         run: |
           set -o pipefail
           : > unit-setup.log
           {
             python -m pip install -U pip
-            if [ -f requirements-dev.txt ]; then
-              python -m pip install -r requirements-dev.txt -c constraints.txt
+            if [ -f requirements.txt ]; then
+              python -m pip install -r requirements.txt -c constraints.txt
             fi
+            python -m pip install -r requirements-dev.txt -c constraints.txt
+            python -m pip install -e packages/awa_common
             for file in services/*/requirements.txt; do
               [ -f "$file" ] && python -m pip install -r "$file" -c constraints.txt
             done
+            python - <<'PY'
+import pkgutil
+assert pkgutil.find_loader('xdist'), 'pytest-xdist not installed'
+PY
             python -m pip check || true
           } 2>&1 | tee -a unit-setup.log
           status=${PIPESTATUS[0]}
