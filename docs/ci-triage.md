@@ -24,13 +24,14 @@ The `Pre-commit` step exited with status 127 because GitHub Actions could not lo
 - **CI** workflow (unit job)
 
 ## Summary
-`npm run lint` in the webapp failed with `eslint: not found` because the project did not declare an ESLint dependency, so the CLI was unavailable during CI.
+`npx tsc -p .` failed in the webapp type-check step because the project lacked a `tsconfig.json`, so TypeScript could not locate compiler options. The preceding run also surfaced a missing ESLint dependency for the lint step.
 
 ## Fix
 - Add `eslint@8.57.0` and `eslint-config-next@14.1.0` to `webapp/package.json` devDependencies so the lint step installs the required tooling.
+- Commit a minimal `webapp/tsconfig.json` that extends `next/tsconfig.json` so the TypeScript compiler has configuration during CI.
 
 ## Logs
-- GitHub Actions run `18825119046`, job `53706526386` (unit) – see `Webapp lint` step output.
+- GitHub Actions runs `18825119046` (unit job `53706526386`) and `18825322969` (unit job `53707008150`) – see `Webapp lint`/`Webapp type check` step outputs.
 
 ---
 
