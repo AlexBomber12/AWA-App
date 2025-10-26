@@ -62,6 +62,23 @@ def event_loop() -> AsyncIterator[asyncio.AbstractEventLoop]:
 
 
 @pytest.fixture(autouse=True)
+def _patch_wait_for_db_autouse(
+    monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest
+) -> None:
+    """Provide a fast no-op wait_for_db unless a test opts out via marker."""
+
+    if request.node.get_closest_marker("needs_wait_for_db"):
+        return
+
+    import services.api.main as api_main
+
+    async def _fake_wait_for_db() -> None:
+        return None
+
+    monkeypatch.setattr(api_main, "_wait_for_db", _fake_wait_for_db)
+
+
+@pytest.fixture(autouse=True)
 def settings_env(monkeypatch: pytest.MonkeyPatch):
     """Set safe defaults for all tests and update shared settings instance."""
 
@@ -108,16 +125,12 @@ def api_app(settings_env, monkeypatch: pytest.MonkeyPatch):  # noqa: ANN001
             self.pings += 1
             return "PONG"
 
-    async def _fake_wait_for_db() -> None:
-        return None
-
     async def _fake_wait_for_redis(url: str):
         return DummyRedis(url)
 
     async def _fake_check_llm() -> None:
         return None
 
-    monkeypatch.setattr(api_main, "_wait_for_db", _fake_wait_for_db)
     monkeypatch.setattr(api_main, "_wait_for_redis", _fake_wait_for_redis)
     monkeypatch.setattr(api_main, "_check_llm", _fake_check_llm)
 

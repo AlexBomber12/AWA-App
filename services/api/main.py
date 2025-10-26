@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 
 import httpx
 import redis.asyncio as aioredis
-import sqlalchemy as sa
+import sqlalchemy
 import structlog
 from asgi_correlation_id import CorrelationIdMiddleware
 from awa_common.settings import settings
@@ -168,13 +168,9 @@ app.include_router(health_router.router)
 
 
 async def _wait_for_db(max_attempts: int = 10, delay_s: float = 0.05) -> None:
-    """
-    Local/dev readiness loop. In unit tests, sqlalchemy.create_engine is monkeypatched,
-    so this must always call sa.create_engine to exercise the retry path.
-    """
     env = os.getenv("ENV", getattr(settings, "ENV", "local")).lower()
 
-    # Build DSN: env var -> settings -> safe fallback (prevents early-return in tests)
+    # DSN precedence: ENV -> settings -> safe fallback (prevents early-return)
     db_url = (
         (os.getenv("DATABASE_URL") or "").strip()
         or str(getattr(settings, "DATABASE_URL", "")).strip()
@@ -183,9 +179,7 @@ async def _wait_for_db(max_attempts: int = 10, delay_s: float = 0.05) -> None:
 
     last_err: Exception | None = None
     for _ in range(max_attempts):
-        engine = sa.create_engine(
-            db_url
-        )  # must be module attr to hit the test monkeypatch
+        engine = sqlalchemy.create_engine(db_url)
         try:
             with engine.connect() as conn:
                 conn.execute(sa_text("SELECT 1"))
@@ -193,8 +187,7 @@ async def _wait_for_db(max_attempts: int = 10, delay_s: float = 0.05) -> None:
             break
         except Exception as exc:
             last_err = exc
-            # unit test monkeypatches asyncio.sleep to a no-op; keep the await
-            await asyncio.sleep(delay_s)
+            await asyncio.sleep(delay_s)  # test monkeypatches sleep to no-op
         finally:
             try:
                 engine.dispose()

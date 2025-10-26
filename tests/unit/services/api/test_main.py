@@ -113,6 +113,7 @@ async def test_ready_db_pending(monkeypatch, fake_db_session):
     assert excinfo.value.status_code == 503
 
 
+@pytest.mark.needs_wait_for_db
 @pytest.mark.asyncio
 async def test_wait_for_db_retries_then_succeeds(monkeypatch):
     attempts = {"count": 0}

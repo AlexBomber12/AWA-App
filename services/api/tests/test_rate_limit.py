@@ -23,7 +23,11 @@ async def _noop() -> None:
     pass
 
 
-api_main._wait_for_db = _noop
+@pytest.fixture(autouse=True)
+def _stub_wait_for_db(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(api_main, "_wait_for_db", _noop)
+
+
 app = api_main.app  # noqa: E402
 
 
