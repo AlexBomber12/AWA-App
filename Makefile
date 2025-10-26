@@ -5,7 +5,7 @@ ifeq ($(PYTHON),)
 $(error Python interpreter not found; please install python3)
 endif
 
-.PHONY: up down logs sh fmt lint test unit integ qa qa-fix install-dev bootstrap ci-fast ci-local migrations-local integration-local ci-all doctor
+.PHONY: up down logs sh fmt lint type test unit unit-all integ qa qa-fix install-dev bootstrap-dev ensure-bootstrap bootstrap ci-fast ci-local migrations-local integration-local ci-all doctor
 
 up:
 	docker compose up -d --build --wait db redis api worker
@@ -22,48 +22,52 @@ sh:
 fmt:
 	$(PYTHON) -m black . || true
 
-lint:
-	$(PYTHON) -m ruff check . || true
+lint: ensure-bootstrap
+	@$(PYTHON) -m ruff check .
+	@$(PYTHON) -m black --check .
+
+type: ensure-bootstrap
+	$(PYTHON) -m mypy .
 
 unit:
-	pytest -q -m "not integration" || true
+	mkdir -p .local-artifacts
+	PYTHONUNBUFFERED=1 pytest -vv -s -m "not integration and not slow" \
+	  -n auto --dist=loadfile --durations=20 \
+	| tee .local-artifacts/unit.log ; test $${PIPESTATUS[0]} -eq 0
+
+unit-all: ensure-bootstrap
+	@set -o pipefail; \
+	mkdir -p .local-artifacts; \
+	PYTHONUNBUFFERED=1 pytest -vv -s -m "not integration" -n auto --dist=loadfile --durations=20 2>&1 | tee .local-artifacts/pytest-unit-all.log; \
+	test $${PIPESTATUS[0]} -eq 0
 
 integ:
 	pytest -q -m integration || true
 
-install-dev:
-	@PIP_BREAK_SYSTEM_PACKAGES=1 $(PYTHON) -m pip install -U pre-commit ruff black mypy pytest-cov
-	@PIP_BREAK_SYSTEM_PACKAGES=1 $(PYTHON) -m pip install -r requirements-dev.txt
-	@PIP_BREAK_SYSTEM_PACKAGES=1 $(PYTHON) -m pip install -e packages/awa_common
-	@if [ -d .git ]; then \
-		git config --local --unset-all http.https://github.com/.extraheader || true; \
-		pre-commit clean; \
-		if [ -n "$${PRE_COMMIT_AUTOUPDATE:-}" ]; then pre-commit autoupdate; fi; \
-		pre-commit install -f; \
-		pre-commit install-hooks; \
-	fi
+bootstrap-dev:
+	PIP_BREAK_SYSTEM_PACKAGES=1 $(PYTHON) -m pip install -U pip wheel
+	PIP_BREAK_SYSTEM_PACKAGES=1 $(PYTHON) -m pip install -U pre-commit mypy pytest-cov
+	PIP_BREAK_SYSTEM_PACKAGES=1 $(PYTHON) -m pip install -r requirements-dev.txt
+	PIP_BREAK_SYSTEM_PACKAGES=1 $(PYTHON) -m pip install -e packages/awa_common
+	pre-commit clean
+	pre-commit install
+	pre-commit install-hooks
+	touch .dev_bootstrapped
 
-qa: install-dev
-	@set -o pipefail; \
-	mkdir -p .local-artifacts; \
-	if [ -d .git ]; then git config --local --unset-all http.https://github.com/.extraheader || true; fi; \
-	pre-commit run --all-files --show-diff-on-failure 2>&1 | tee .local-artifacts/pre-commit.log; \
-	status=$${PIPESTATUS[0]}; \
-	if ! git diff --quiet; then \
-		echo "✖ Pre-commit modified files. Commit baseline or run 'make qa-fix'."; \
-		exit 1; \
-	fi; \
-	test $$status -eq 0 || exit $$status; \
-	$(PYTHON) -m ruff check . 2>&1 | tee .local-artifacts/ruff.log; \
-	status=$${PIPESTATUS[0]}; test $$status -eq 0 || exit $$status; \
-	$(PYTHON) -m black --check . 2>&1 | tee .local-artifacts/black.log; \
-	status=$${PIPESTATUS[0]}; test $$status -eq 0 || exit $$status; \
-	$(PYTHON) -m mypy . 2>&1 | tee .local-artifacts/mypy.log; \
-	status=$${PIPESTATUS[0]}; test $$status -eq 0 || exit $$status; \
-	pytest -q -m "not integration" 2>&1 | tee .local-artifacts/pytest-unit.log; \
-	status=$${PIPESTATUS[0]}; test $$status -eq 0 || exit $$status
+ensure-bootstrap:
+	@test -f .dev_bootstrapped || $(MAKE) bootstrap-dev
 
-qa-fix: install-dev
+install-dev: bootstrap-dev
+
+qa: ensure-bootstrap
+	mkdir -p .local-artifacts
+	pre-commit run --all-files --show-diff-on-failure || true
+	@git diff --quiet || (echo "✖ Pre-commit modified files. Commit baseline or run 'make qa-fix'."; exit 1)
+	$(MAKE) lint
+	$(MAKE) type
+	$(MAKE) unit
+
+qa-fix: ensure-bootstrap
 	@set -o pipefail; \
 	mkdir -p .local-artifacts; \
 	if [ -d .git ]; then git config --local --unset-all http.https://github.com/.extraheader || true; fi; \
@@ -74,7 +78,7 @@ qa-fix: install-dev
 	$(PYTHON) -m ruff check . --fix 2>&1 | tee .local-artifacts/ruff.log; \
 	$(PYTHON) -m black . 2>&1 | tee .local-artifacts/black.log; \
 	$(PYTHON) -m mypy . 2>&1 | tee .local-artifacts/mypy.log; \
-	pytest -q -m "not integration" 2>&1 | tee .local-artifacts/pytest-unit.log
+	PYTHONUNBUFFERED=1 pytest -vv -s -m "not integration and not slow" -n auto --dist=loadfile --durations=20 2>&1 | tee .local-artifacts/pytest-unit.log
 
 test: unit integ
 

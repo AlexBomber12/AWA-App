@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import importlib
 import os
+import time
 from pathlib import Path
 
 import pytest
@@ -220,3 +221,19 @@ def migrated_session(db_engine):
         yield session
     finally:
         session.close()
+
+
+@pytest.fixture(autouse=True)
+def _fast_sleep_all(monkeypatch, request):
+    # Opt-out with @pytest.mark.real_sleep on tests that must keep true timing
+    if request.node.get_closest_marker("real_sleep"):
+        return
+
+    async def _fast_asyncio_sleep(_delay=0, *_a, **_k):
+        return None
+
+    def _fast_time_sleep(_delay=0):
+        return None
+
+    monkeypatch.setattr(asyncio, "sleep", _fast_asyncio_sleep, raising=True)
+    monkeypatch.setattr(time, "sleep", _fast_time_sleep, raising=True)

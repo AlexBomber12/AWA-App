@@ -4,7 +4,7 @@ import types
 
 import pytest
 
-pytestmark = pytest.mark.unit
+pytestmark = [pytest.mark.unit, pytest.mark.slow]
 
 
 def _reload_llm():
@@ -13,6 +13,7 @@ def _reload_llm():
     return importlib.import_module("awa_common.llm")
 
 
+@pytest.mark.slow
 @pytest.mark.asyncio
 async def test_timeout_on_lan_falls_back_to_stub(monkeypatch):
     os.environ["TESTING"] = "1"
@@ -47,6 +48,7 @@ async def test_timeout_on_lan_falls_back_to_stub(monkeypatch):
     assert out.startswith("[stub]")
 
 
+@pytest.mark.slow
 @pytest.mark.asyncio
 async def test_local_http_ok_no_fallback(monkeypatch):
     os.environ["TESTING"] = "1"
@@ -91,6 +93,7 @@ async def test_local_http_ok_no_fallback(monkeypatch):
     assert out == "LOCAL_OK"
 
 
+@pytest.mark.slow
 @pytest.mark.asyncio
 async def test_openai_missing_module_falls_back(monkeypatch):
     os.environ["TESTING"] = "1"
@@ -106,6 +109,7 @@ async def test_openai_missing_module_falls_back(monkeypatch):
     assert out.startswith("[stub]")
 
 
+@pytest.mark.slow
 @pytest.mark.asyncio
 async def test_unknown_provider_uses_stub(monkeypatch):
     os.environ["TESTING"] = "1"
@@ -115,6 +119,7 @@ async def test_unknown_provider_uses_stub(monkeypatch):
     assert out.startswith("[stub]")
 
 
+@pytest.mark.slow
 @pytest.mark.asyncio
 async def test_env_switch_effective_without_restart(monkeypatch):
     os.environ["TESTING"] = "1"
