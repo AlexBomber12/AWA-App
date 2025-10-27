@@ -6,6 +6,22 @@
 - **CI** workflow (migrations job)
 
 ## Summary
+`alembic -c services/api/alembic.ini current` raised `psycopg.OperationalError: [Errno -3] Temporary failure in name resolution` because the DSN pointed to `db:5432`; that hostname only resolves inside the Compose network, not from the host runner where Alembic executes.
+
+## Fix
+- Resolve the Docker-exposed Postgres port via `docker compose port db 5432` and pass it through `$GITHUB_OUTPUT`.
+- Export `DATABASE_URL=postgresql+psycopg://app:app@127.0.0.1:$PORT/app` before running Alembic, with a short retry loop on `alembic current`.
+- Leave the debug bundle upload and Compose teardown in place.
+
+## Logs
+- GitHub Actions CI run (migrations job, `Alembic upgrade/downgrade/upgrade` step) showing the psycopg name resolution failure.
+
+---
+
+## Failing workflows
+- **CI** workflow (migrations job)
+
+## Summary
 `alembic upgrade head` aborted with `FAILED: Path doesn't exist: services/api/migrations` because the migrations job ran inside `services/api`, causing Alembic to look for `services/api/services/api/migrations`, which does not exist.
 
 ## Fix
