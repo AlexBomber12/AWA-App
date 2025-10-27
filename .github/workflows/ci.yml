@@ -288,71 +288,48 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     needs: unit
+    env:
+      ENV: test
+      PYTHON_VERSION: '3.11'
+      PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/services
     steps:
       - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v6
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          python-version: 3.11
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
 
-      - name: Install Alembic and deps
+      - name: Install deps for Alembic
+        shell: bash
         run: |
-          python -m pip install -U pip
-          if [ -f requirements-dev.txt ]; then python -m pip install -r requirements-dev.txt -c constraints.txt; fi
+          set -euxo pipefail
+          python -m pip install -U pip wheel
+          if [ -f requirements.txt ]; then pip install -r requirements.txt -c constraints.txt || pip install -r requirements.txt ; fi
+          pip install -r requirements-dev.txt -c constraints.txt || pip install -r requirements-dev.txt
+          pip install -e packages/awa_common
+          python -c "import pkgutil; assert pkgutil.find_loader('awa_common'), 'awa_common not installed'"
 
-      - name: Prepare .env
+      - name: Bring up Postgres
+        shell: bash
         run: |
-          set -euo pipefail
-          [ -f .env.test ] && cp -f .env.test .env || true
-          cat <<'EOF' > .env.postgres
-          PG_HOST=127.0.0.1
-          PG_PORT=5432
-          PG_USER=postgres
-          PG_PASSWORD=postgres
-          PG_DATABASE=postgres
-          EOF
+          set -euxo pipefail
+          docker compose up -d --build db
+          docker compose exec -T db bash -lc 't=0; until pg_isready -U "${POSTGRES_USER:-app}" -d "${POSTGRES_DB:-app}" >/dev/null 2>&1; do sleep 1; if [ $((t+=1)) -gt 60 ]; then exit 1; fi; done'
 
-      - name: Compose up db/redis
+      - name: Alembic upgrade/downgrade/upgrade
+        shell: bash
+        working-directory: services/api
+        env:
+          DATABASE_URL: postgresql+psycopg://app:app@db:5432/app
         run: |
-          set -euo pipefail
-          export POSTGRES_USER=postgres
-          export POSTGRES_PASSWORD=postgres
-          export POSTGRES_DB=postgres
-          docker compose up -d --build --wait db redis
-
-      - name: Wait for Postgres
-        run: |
-          set -euo pipefail
-          : > migrations.log
-          echo "Waiting for Postgres readiness (timeout 60s)" | tee -a migrations.log
-          U=$(docker compose exec -T db bash -lc 'printf %s "${POSTGRES_USER:-postgres}"')
-          D=$(docker compose exec -T db bash -lc 'printf %s "${POSTGRES_DB:-$POSTGRES_USER}"')
-          READY=0
-          for i in $(seq 1 60); do
-            if docker compose exec -T db pg_isready -U "$U" -d "$D" >/dev/null 2>&1; then
-              READY=1
-              echo "Postgres ready after $i attempt(s)" | tee -a migrations.log
-              break
-            fi
-            sleep 1
-          done
-          if [ "$READY" -ne 1 ]; then
-            echo "Postgres did not become ready within timeout" | tee -a migrations.log
-            docker compose logs db | tee -a migrations.log
-            exit 1
-          fi
-
-      - name: Alembic smoke (up→down→up)
-        run: |
-          set -euo pipefail
-          U=$(docker compose exec -T db bash -lc 'printf %s "${POSTGRES_USER:-postgres}"')
-          P=$(docker compose exec -T db bash -lc 'printf %s "${POSTGRES_PASSWORD:-postgres}"')
-          D=$(docker compose exec -T db bash -lc 'printf %s "${POSTGRES_DB:-$POSTGRES_USER}"')
-          PORT=${PG_PORT:-5432}
-          export DATABASE_URL="postgresql+psycopg://${U}:${P}@127.0.0.1:${PORT}/${D}"
-          alembic upgrade head
-          alembic downgrade -1 || true
-          alembic upgrade head
+          set -euxo pipefail
+          test -f alembic.ini
+          alembic -c alembic.ini current || true
+          alembic -c alembic.ini upgrade head
+          alembic -c alembic.ini downgrade -1 || true
+          alembic -c alembic.ini upgrade head
 
       - name: Upload migrations logs
         if: always()
