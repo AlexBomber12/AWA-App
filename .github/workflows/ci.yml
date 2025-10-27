@@ -348,7 +348,15 @@ jobs:
           U=$(docker compose exec -T db bash -lc 'printf %s "${POSTGRES_USER:-postgres}"')
           P=$(docker compose exec -T db bash -lc 'printf %s "${POSTGRES_PASSWORD:-postgres}"')
           D=$(docker compose exec -T db bash -lc 'printf %s "${POSTGRES_DB:-$POSTGRES_USER}"')
-          PORT=$(docker compose port db 5432 | python3 -c "import sys; data=sys.stdin.read(); print(data.strip().rsplit(':',1)[-1])")
+          PORT=$(python3 - <<'PY'
+import subprocess
+try:
+    out = subprocess.check_output(['docker', 'compose', 'port', 'db', '5432'], text=True)
+    print(out.strip().rsplit(':', 1)[-1])
+except Exception:
+    print('')
+PY
+)
           if [ -z "$PORT" ]; then
             PORT=${PG_PORT:-5432}
           fi
