@@ -36,6 +36,20 @@ The `Pre-commit` step exited with status 127 because GitHub Actions could not lo
 ---
 
 ## Failing workflows
+- **CI** workflow (migrations job)
+
+## Summary
+`alembic upgrade head` failed because the generated `DATABASE_URL` omitted the port; `docker compose port db 5432` occasionally returns nothing on the GitHub runner, leaving an empty port that SQLAlchemy rejects.
+
+## Fix
+- Fallback to `${PG_PORT:-5432}` when `docker compose port` yields an empty string before exporting `DATABASE_URL`.
+
+## Logs
+- GitHub Actions run `18825703315`, job `53708077796` – see `Alembic smoke (up→down→up)` step output.
+
+---
+
+## Failing workflows
 - **CI** workflow (unit job)
 
 ## Summary
