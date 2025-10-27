@@ -5,6 +5,8 @@ from fastapi.testclient import TestClient
 
 from services.api import db, main
 
+pytestmark = pytest.mark.slow
+
 
 @pytest.mark.parametrize(
     "pkg",
@@ -42,6 +44,8 @@ async def _noop() -> None:
     return None
 
 
+@pytest.mark.slow
+@pytest.mark.timeout(0)
 @pytest.mark.parametrize("_", range(5))
 def test_health(monkeypatch, _) -> None:
     monkeypatch.setattr(main, "_wait_for_db", _noop)

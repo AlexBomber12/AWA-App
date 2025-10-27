@@ -931,4 +931,3 @@ Refresh materialized views, using CONCURRENTLY when safe.
 <a id="common.config"></a>
 
 # common.config
-

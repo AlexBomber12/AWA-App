@@ -1,4 +1,4 @@
-from packages.awa_common.settings import Settings
+from awa_common.settings import Settings
 
 
 def test_defaults_local_envfile_resolution(monkeypatch, tmp_path):

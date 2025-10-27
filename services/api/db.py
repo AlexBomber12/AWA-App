@@ -1,10 +1,9 @@
 import os
 from typing import AsyncGenerator
 
+from awa_common.settings import settings
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
-
-from packages.awa_common.settings import settings
 
 # Always derive the database URL from shared settings
 DATABASE_URL = settings.DATABASE_URL

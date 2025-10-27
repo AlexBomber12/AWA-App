@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import asyncio
-import os
-from pathlib import Path
-
 import importlib
+import os
+import time
+from pathlib import Path
 
 import pytest
 
@@ -36,7 +36,7 @@ else:  # pragma: no cover - exercised only when sqlalchemy is missing
     create_engine = None
     sessionmaker = None
 
-from packages.awa_common.dsn import build_dsn
+from awa_common.dsn import build_dsn
 
 
 def pytest_configure(config):
@@ -69,7 +69,7 @@ def pytest_collection_modifyitems(config, items):
     if _db_available():
         return
     skip_integration = pytest.mark.skip(
-        reason="Postgres not running – integration tests skipped",
+        reason="Postgres not running – integration tests skipped"
     )
     for item in items:
         if "integration" in item.keywords:
@@ -221,3 +221,88 @@ def migrated_session(db_engine):
         yield session
     finally:
         session.close()
+
+
+@pytest.fixture(autouse=True)
+def _fast_sleep_all(monkeypatch, request):
+    # Opt-out with @pytest.mark.real_sleep on tests that must keep true timing
+    if request.node.get_closest_marker("real_sleep"):
+        return
+
+    async def _fast_asyncio_sleep(_delay=0, *_a, **_k):
+        return None
+
+    def _fast_time_sleep(_delay=0):
+        return None
+
+    monkeypatch.setattr(asyncio, "sleep", _fast_asyncio_sleep, raising=True)
+    monkeypatch.setattr(time, "sleep", _fast_time_sleep, raising=True)
+
+
+@pytest.fixture(autouse=True)
+def _api_fast_startup_global(monkeypatch, request):
+    """Fast lifespan for API tests using TestClient(main.app).
+    Always no-op FastAPILimiter & Redis; only skip _wait_for_db patch if a test
+    needs the real DB retry loop via @pytest.mark.needs_wait_for_db.
+    Opt-out of the whole shim with @pytest.mark.real_lifespan.
+    """
+    if request.node.get_closest_marker("real_lifespan"):
+        return
+
+    # 1) limiter no-ops (always)
+    try:
+        import fastapi_limiter
+
+        async def _noop_async(*_a, **_k):
+            return None
+
+        class _FakeLimiterRedis:
+            async def evalsha(self, *_a, **_k):
+                return 0
+
+            async def script_load(self, *_a, **_k):
+                return "noop"
+
+        monkeypatch.setattr(
+            fastapi_limiter.FastAPILimiter, "init", _noop_async, raising=True
+        )
+        monkeypatch.setattr(
+            fastapi_limiter.FastAPILimiter, "close", _noop_async, raising=False
+        )
+        monkeypatch.setattr(
+            fastapi_limiter.FastAPILimiter, "redis", _FakeLimiterRedis(), raising=False
+        )
+        monkeypatch.setattr(
+            fastapi_limiter.FastAPILimiter, "lua_sha", "noop", raising=False
+        )
+    except Exception:
+        pass
+
+    # 2) Redis no-op (always)
+    try:
+        import redis.asyncio as aioredis
+
+        class _FakeRedis:
+            async def ping(self):
+                return True
+
+            async def aclose(self):
+                return None
+
+        monkeypatch.setattr(
+            aioredis, "from_url", lambda *_a, **_k: _FakeRedis(), raising=True
+        )
+    except Exception:
+        pass
+
+    # 3) Only patch _wait_for_db if the test does NOT request the real loop
+    if not request.node.get_closest_marker("needs_wait_for_db"):
+        try:
+            import services.api.main as main
+
+            async def _noop_wait():
+                return None
+
+            monkeypatch.setattr(main, "_wait_for_db", _noop_wait, raising=True)
+        except Exception:
+            pass

@@ -3,12 +3,11 @@ from __future__ import annotations
 import os
 import sys
 import time
-from urllib.request import Request, urlopen
 from urllib.parse import urlparse, urlunparse
+from urllib.request import Request, urlopen
 
 import psycopg
-
-from packages.awa_common.dsn import build_dsn
+from awa_common.dsn import build_dsn
 
 
 def check_db() -> None:

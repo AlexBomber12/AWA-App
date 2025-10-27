@@ -1,6 +1,5 @@
+import awa_common.llm as llm
 import pytest
-
-import packages.awa_common.llm as llm
 
 
 @pytest.mark.asyncio

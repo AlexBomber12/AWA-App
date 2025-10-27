@@ -1,9 +1,8 @@
 import os
 
 import pytest
+from awa_common.dsn import build_dsn
 from sqlalchemy import create_engine, text
-
-from packages.awa_common.dsn import build_dsn
 
 pytestmark = [
     pytest.mark.integration,

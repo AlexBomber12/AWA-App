@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import subprocess
-from typing import Dict
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
@@ -25,7 +24,7 @@ def health() -> dict[str, str]:
 
 
 @app.post("/llm")
-def gen(r: Req) -> Dict[str, str]:
+def gen(r: Req) -> dict[str, str]:
     try:
         out = subprocess.check_output(
             [

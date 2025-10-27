@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from typing import Any, Mapping, Optional
+from typing import Any, Mapping
 from urllib.parse import quote, urlencode
 
 DEFAULT_PORT = {
@@ -24,7 +24,7 @@ def _bracket_ipv6(host: str) -> str:
     return host
 
 
-def _first_env(*names: str, default: Optional[str] = None) -> Optional[str]:
+def _first_env(*names: str, default: str | None = None) -> str | None:
     for name in names:
         value = os.getenv(name)
         if value:
@@ -33,8 +33,8 @@ def _first_env(*names: str, default: Optional[str] = None) -> Optional[str]:
 
 
 def _normalize_driver(
-    sync: Optional[bool], driver: Optional[str]
-) -> tuple[Optional[bool], Optional[str]]:
+    sync: bool | None, driver: str | None
+) -> tuple[bool | None, str | None]:
     norm = driver.lower() if driver else None
     if norm in {_SYNC_DRIVER, _ASYNC_DRIVER}:
         sync = norm == _SYNC_DRIVER
@@ -45,9 +45,7 @@ def _normalize_driver(
     return sync, norm
 
 
-def _apply_postgres_driver(
-    url: str, sync: Optional[bool], driver: Optional[str]
-) -> str:
+def _apply_postgres_driver(url: str, sync: bool | None, driver: str | None) -> str:
     scheme, sep, rest = url.partition("://")
     if not sep:
         return url
@@ -72,13 +70,13 @@ def _apply_postgres_driver(
 def _build_from_parts(
     scheme: str,
     host: str = "localhost",
-    port: Optional[int | str] = None,
-    user: Optional[str] = None,
-    password: Optional[str] = None,
-    database: Optional[str] = None,
-    params: Optional[Mapping[str, Any]] = None,
-    sync: Optional[bool] = None,
-    driver: Optional[str] = None,
+    port: int | str | None = None,
+    user: str | None = None,
+    password: str | None = None,
+    database: str | None = None,
+    params: Mapping[str, Any] | None = None,
+    sync: bool | None = None,
+    driver: str | None = None,
 ) -> str:
     auth = ""
     if user:
@@ -94,14 +92,16 @@ def _build_from_parts(
     db_part = f"/{database}" if database else ""
     query_part = ""
     if params:
-        query_part = "?" + urlencode({k: v for k, v in params.items() if v is not None}, doseq=True)
+        query_part = "?" + urlencode(
+            {k: v for k, v in params.items() if v is not None}, doseq=True
+        )
     url = f"{scheme}://{auth}{host_part}{port_part}{db_part}{query_part}"
     if base_scheme.lower() in _POSTGRES_SCHEMES:
         return _apply_postgres_driver(url, sync, driver)
     return url
 
 
-def _build_from_env(sync: Optional[bool], driver: Optional[str]) -> str:
+def _build_from_env(sync: bool | None, driver: str | None) -> str:
     sync, driver = _normalize_driver(sync, driver)
     order = []
     if sync is True:
@@ -124,7 +124,9 @@ def _build_from_env(sync: Optional[bool], driver: Optional[str]) -> str:
             return _apply_postgres_driver(value, sync, driver)
 
     host = _first_env("PG_HOST", "POSTGRES_HOST", default="localhost")
-    port = _first_env("PG_PORT", "POSTGRES_PORT", default=str(DEFAULT_PORT["postgresql"]))
+    port = _first_env(
+        "PG_PORT", "POSTGRES_PORT", default=str(DEFAULT_PORT["postgresql"])
+    )
     user = _first_env("PG_USER", "POSTGRES_USER")
     password = _first_env("PG_PASSWORD", "POSTGRES_PASSWORD")
     database = _first_env("PG_DATABASE", "POSTGRES_DB")
@@ -142,16 +144,16 @@ def _build_from_env(sync: Optional[bool], driver: Optional[str]) -> str:
 
 
 def build_dsn(
-    scheme: Optional[str] = None,
+    scheme: str | None = None,
     host: str = "localhost",
-    port: Optional[int | str] = None,
-    user: Optional[str] = None,
-    password: Optional[str] = None,
-    database: Optional[str] = None,
-    params: Optional[Mapping[str, Any]] = None,
+    port: int | str | None = None,
+    user: str | None = None,
+    password: str | None = None,
+    database: str | None = None,
+    params: Mapping[str, Any] | None = None,
     *,
-    sync: Optional[bool] = None,
-    driver: Optional[str] = None,
+    sync: bool | None = None,
+    driver: str | None = None,
 ) -> str:
     """Return a connection string assembled from explicit parts or environment variables.
 

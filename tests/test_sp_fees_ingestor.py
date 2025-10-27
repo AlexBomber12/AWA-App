@@ -3,7 +3,8 @@ import sys
 import types
 
 import pytest
-from packages.awa_common.dsn import build_dsn
+from awa_common.dsn import build_dsn
+
 from services.etl import sp_fees_ingestor
 
 pytestmark = pytest.mark.integration

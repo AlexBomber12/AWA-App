@@ -10,7 +10,7 @@ from alembic import context
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT))
 
-from packages.awa_common.base import Base  # noqa: E402
+from awa_common.base import Base  # noqa: E402
 
 config = context.config
 if config.config_file_name and os.path.exists(config.config_file_name):

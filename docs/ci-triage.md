@@ -1,7 +1,115 @@
 # CI Triage
 
+---
+
+## Failing workflows
+- **CI** workflow (migrations job)
+
+## Summary
+`alembic -c services/api/alembic.ini current` raised `psycopg.OperationalError: [Errno -3] Temporary failure in name resolution` because the DSN pointed to `db:5432`; that hostname only resolves inside the Compose network, not from the host runner where Alembic executes.
+
+## Fix
+- Resolve the Docker-exposed Postgres port via `docker compose port db 5432` and pass it through `$GITHUB_OUTPUT`.
+- Export `DATABASE_URL=postgresql+psycopg://app:app@127.0.0.1:$PORT/app` before running Alembic, with a short retry loop on `alembic current`.
+- Leave the debug bundle upload and Compose teardown in place.
+
+## Logs
+- GitHub Actions CI run (migrations job, `Alembic upgrade/downgrade/upgrade` step) showing the psycopg name resolution failure.
+
+---
+
+## Failing workflows
+- **CI** workflow (migrations job)
+
+## Summary
+`alembic upgrade head` aborted with `FAILED: Path doesn't exist: services/api/migrations` because the migrations job ran inside `services/api`, causing Alembic to look for `services/api/services/api/migrations`, which does not exist.
+
+## Fix
+- Invoke Alembic from the repository root with `-c services/api/alembic.ini` so `script_location = services/api/migrations` resolves correctly.
+- Emit diagnostic output (working directory, config, filesystem layout) before the upgrade step to capture future regressions.
+- Continue uploading the debug bundle and shut down Docker resources at job completion.
+
+## Logs
+- GitHub Actions CI run (migrations job, `Alembic upgrade/downgrade/upgrade` step). Local `ci-logs/latest` artifacts were unavailable; failure copied from the workflow summary.
+
 ## Unit job diagnostics
 - The unit workflow uploads a `unit-pip-diagnostics-<run_id>-<attempt>` artifact containing `unit-setup.log`, `unit-setup-tail.log`, and `pip-freeze.txt` for pip troubleshooting.
+
+---
+
+## Failing workflows
+- **CI** workflow (unit job)
+
+## Summary
+The `Pre-commit` step exited with status 127 because GitHub Actions could not locate the `pre-commit` console script on PATH.
+
+## Fix
+- Invoke the hook runner via `python -m pre_commit ...` so the workflow uses the interpreter configured by `actions/setup-python` even when the console script is unavailable.
+- Add `pre-commit` to `requirements-dev.txt` so the module is installed during the unit job setup step.
+
+## Logs
+- GitHub Actions runs `18824639708`, `18824912593`, and `18825010664`, job `53706256685` (unit) – see `Pre-commit` step failure message.
+
+---
+
+## Failing workflows
+- **CI** workflow (unit job)
+
+## Summary
+`npx tsc -p .` failed in the webapp type-check step because the project lacked a `tsconfig.json`, so TypeScript could not locate compiler options. The preceding run also surfaced a missing ESLint dependency for the lint step.
+
+## Fix
+- Add `eslint@8.57.0` and `eslint-config-next@14.1.0` to `webapp/package.json` devDependencies so the lint step installs the required tooling.
+- Commit a minimal `webapp/tsconfig.json` mirroring the default Next.js settings (preserves JSX, enables the Next TS plugin) so the TypeScript compiler has configuration during CI.
+
+## Logs
+- GitHub Actions runs `18825119046` (unit job `53706526386`), `18825322969` (unit job `53707008150`), and `18825391921` (unit job `53707176383`) – see `Webapp lint`/`Webapp type check` step outputs.
+
+---
+
+## Failing workflows
+- **CI** workflow (migrations job)
+
+## Summary
+`alembic upgrade head` failed because the workflow shell truncated the subshell assignment when parsing the inline Python one-liner; the `PORT` variable ended up empty, so `DATABASE_URL` was invalid.
+
+## Fix
+- Stop parsing the published port dynamically; the migrations job now uses `${PG_PORT:-5432}` directly when composing `DATABASE_URL`.
+
+## Logs
+- GitHub Actions run `18826515165`, job `53710236279` – see `Alembic smoke (up→down→up)` step output.
+
+---
+
+## Failing workflows
+- **CI** workflow (migrations job)
+
+## Summary
+`alembic upgrade head` failed because the generated `DATABASE_URL` omitted the port; `docker compose port db 5432` occasionally returns nothing on the GitHub runner, leaving an empty port that SQLAlchemy rejects.
+
+## Fix
+- Fallback to `${PG_PORT:-5432}` when `docker compose port` yields an empty string before exporting `DATABASE_URL`.
+
+## Logs
+- GitHub Actions run `18825703315`, job `53708077796` – see `Alembic smoke (up→down→up)` step output.
+
+---
+
+## Failing workflows
+- **CI** workflow (unit job)
+
+## Summary
+`tests/test_api_fast.py::test_health_endpoint` timed out because `FastAPILimiter.init` and the DB readiness loop ran during `TestClient(main.app)` setup when tests expected the mocked lifespan.
+
+## Fix
+- Add an autouse fixture in `tests/conftest.py` that no-ops the FastAPI lifespan unless `@pytest.mark.real_lifespan` is set.
+- Make `services/api/main.py::_wait_for_db` use configurable attempt/delay defaults with the module-level `sqlalchemy.create_engine`.
+- Ensure the unit job installs `packages/awa_common` in editable mode so API imports succeed in a fresh checkout.
+
+## Logs
+- GitHub Actions unit job (unit.log – artifact not present in repo; reproduced locally from failure summary)
+
+---
 
 ## Failing workflows
 - **CI** workflow (unit job)
@@ -104,7 +212,7 @@ dependencies could not even collect the unit tests.
 - **CI** workflow (unit job)
 
 ## Summary
-`alembic upgrade head` failed with `sqlalchemy.exc.OperationalError: (psycopg.OperationalError) [Errno -3] Temporary failure in name resolution` in the unit job. The Alembic env uses `packages.awa_common.dsn.build_dsn(sync=True)`, which preferred `PG_SYNC_DSN`. In CI, that DSN points at the Docker hostname `postgres`, while the services run outside Docker with `PG_HOST=localhost`, so the hostname could not be resolved.
+`alembic upgrade head` failed with `sqlalchemy.exc.OperationalError: (psycopg.OperationalError) [Errno -3] Temporary failure in name resolution` in the unit job. The Alembic env uses `awa_common.dsn.build_dsn(sync=True)`, which preferred `PG_SYNC_DSN`. In CI, that DSN points at the Docker hostname `postgres`, while the services run outside Docker with `PG_HOST=localhost`, so the hostname could not be resolved.
 
 ## Fix
 - Extend `services/common/dsn.py` to also honor `PGHOST`/`PGPORT` so any provided DSN (PG_SYNC_DSN/PG_ASYNC_DSN/DATABASE_URL) replaces its hostname with the job's `PG_HOST` or `PGHOST` value. This yields a localhost DSN during CI while remaining a no-op when already inside Docker.
@@ -131,7 +239,7 @@ Docker compose health checks failed because the Redis service exited immediately
 
 ## Summary
 `docker compose` reported `container awa-app-etl-1 is unhealthy`. The ETL image lacked the
-`packages.awa_common` package and used an invalid `timeout` parameter in the healthcheck,
+`awa_common` package and used an invalid `timeout` parameter in the healthcheck,
 causing the script to crash.
 
 ## Fix
@@ -155,6 +263,26 @@ causing the script to crash.
 ## Logs
 - `ci-logs/latest/test/0_health-checks.txt`
 - `ci-logs/latest/test/health-checks/5_Run export COMPOSE_DOCKER_CLI_BUILD=1.txt`
+
+---
+
+## Failing workflows
+- **CI** workflow (unit job)
+
+## Summary
+`pytest -q -m "not integration"` failed at
+`tests/unit/services/api/test_main.py::test_wait_for_db_retries_then_succeeds`
+because `_wait_for_db` never invoked the monkeypatched
+`sqlalchemy.create_engine`, so the retry counter remained at 0 and the test
+timed out waiting for the second attempt.
+
+## Fix
+- Ensure `_wait_for_db` always builds a fallback DSN, calls
+  `sa.create_engine` inside the retry loop, and only raises outside local/test
+  environments after exhausting retries.
+
+## Logs
+- Local reproduction: `pytest -q tests/unit/services/api/test_main.py::test_wait_for_db_retries_then_succeeds`
 
 ---
 
@@ -194,8 +322,8 @@ report ready.
 ## Summary
 `pytest -q -m "not integration"` failed during collection with
 `ModuleNotFoundError: No module named 'sqlalchemy'` while importing
-`packages.awa_common`. The package's `__init__` module always imported
-SQLAlchemy-backed models, so trying to load `packages.awa_common.dsn`
+`awa_common`. The package's `__init__` module always imported
+SQLAlchemy-backed models, so trying to load `awa_common.dsn`
 for DSN helpers crashed when SQLAlchemy was not installed.
 
 ## Fix

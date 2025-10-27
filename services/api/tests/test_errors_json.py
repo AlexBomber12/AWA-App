@@ -1,8 +1,8 @@
 import base64
 import os
 
-import pytest
 import psycopg
+import pytest
 from fastapi.testclient import TestClient
 
 from services.api import db as api_db

@@ -10,7 +10,7 @@ async def test_timeout_env_changes_timeout_used(monkeypatch):
     os.environ["TESTING"] = "1"
     os.environ["LLM_PROVIDER"] = "local"
     os.environ["LLM_TIMEOUT_SECS"] = "0.1"
-    llm = importlib.reload(importlib.import_module("packages.awa_common.llm"))
+    llm = importlib.reload(importlib.import_module("awa_common.llm"))
     captured: dict[str, float | None] = {}
 
     class FakeClient:

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from typing import Any, Dict, Iterable, Mapping, Sequence
+from typing import Any, Iterable, Mapping, Sequence
 
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
@@ -64,7 +64,7 @@ if os.getenv("TESTING") == "1":
         # Build VALUES table and params
         cols = keys + upd
         values_rows = []
-        params: Dict[str, Any] = {}
+        params: dict[str, Any] = {}
         for i, r in enumerate(incoming):
             values_rows.append(f"({', '.join(f':{c}{i}' for c in cols)})")
             for c in cols:

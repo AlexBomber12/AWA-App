@@ -23,4 +23,3 @@ do
   sleep 1
 done
 exec "$@"
-

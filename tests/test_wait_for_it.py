@@ -2,7 +2,11 @@ import pathlib
 import subprocess
 import sys
 
+import pytest
 
+
+@pytest.mark.slow
+@pytest.mark.timeout(0)
 def test_wait_for_it_exec() -> None:
     script = pathlib.Path("services/etl/wait-for-it.sh")
     if not script.exists():

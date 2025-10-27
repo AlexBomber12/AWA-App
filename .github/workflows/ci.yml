@@ -40,26 +40,13 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
 
-      - name: Upgrade pip and install base requirements
+      - name: Install Python deps
         run: |
-          set -o pipefail
-          : > unit-setup.log
-          {
-            python -m pip install -U pip
-            if [ -f requirements-dev.txt ]; then
-              python -m pip install -r requirements-dev.txt -c constraints.txt
-            fi
-            for file in services/*/requirements.txt; do
-              [ -f "$file" ] && python -m pip install -r "$file" -c constraints.txt
-            done
-            python -m pip check || true
-          } 2>&1 | tee -a unit-setup.log
-          status=${PIPESTATUS[0]}
-          python -m pip freeze > pip-freeze.txt || true
-          tail -n 200 unit-setup.log > unit-setup-tail.log || true
-          if [ "$status" -ne 0 ]; then
-            exit "$status"
-          fi
+          python -m pip install -U pip wheel
+          if [ -f requirements.txt ]; then python -m pip install -r requirements.txt -c constraints.txt || python -m pip install -r requirements.txt; fi
+          python -m pip install -r requirements-dev.txt -c constraints.txt || python -m pip install -r requirements-dev.txt
+          python -m pip install -e packages/awa_common
+          python -c "import pkgutil; assert pkgutil.find_loader('awa_common'), 'awa_common not installed'"
 
       - name: Set up Node.js
         if: ${{ hashFiles('webapp/package.json') != '' }}
@@ -78,6 +65,76 @@ jobs:
       - name: Parse check
         run: python -m compileall -q services tests
 
+      - name: Pre-commit
+        if: ${{ hashFiles('.pre-commit-config.yaml') != '' }}
+        run: |
+          set -o pipefail
+          python -m pre_commit run --all-files --show-diff-on-failure | tee pre-commit.log
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            exit "$status"
+          fi
+
+      - name: Ruff lint
+        run: |
+          set -o pipefail
+          python -m ruff check . | tee ruff.log
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            exit "$status"
+          fi
+
+      - name: Black check
+        run: |
+          set -o pipefail
+          python -m black --check . | tee black.log
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            exit "$status"
+          fi
+
+      - name: Mypy type check
+        run: |
+          set -o pipefail
+          python -m mypy . | tee mypy.log
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            exit "$status"
+          fi
+
+      - name: Webapp lint
+        if: ${{ hashFiles('webapp/package.json') != '' }}
+        working-directory: webapp
+        run: |
+          set -o pipefail
+          npm run lint | tee ../eslint.log
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            exit "$status"
+          fi
+
+      - name: Webapp type check
+        if: ${{ hashFiles('webapp/package.json') != '' }}
+        working-directory: webapp
+        run: |
+          set -o pipefail
+          npx tsc -p . | tee ../tsc.log
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            exit "$status"
+          fi
+
+      - name: Webapp unit tests
+        if: ${{ hashFiles('webapp/package.json') != '' }}
+        working-directory: webapp
+        run: |
+          set -o pipefail
+          npm run test:unit --if-present | tee ../vitest.log
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            exit "$status"
+          fi
+
       - name: Pytest collect
         run: pytest --collect-only -q
 
@@ -90,27 +147,6 @@ jobs:
           else
             echo "No pytest configuration detected; skipping."
           fi
-
-      - name: Webapp lint
-        if: ${{ hashFiles('webapp/package.json') != '' }}
-        working-directory: webapp
-        run: |
-          set -o pipefail
-          npm run lint | tee ../eslint.log || true
-
-      - name: Webapp type check
-        if: ${{ hashFiles('webapp/package.json') != '' }}
-        working-directory: webapp
-        run: |
-          set -o pipefail
-          npx tsc -p . | tee ../tsc.log || true
-
-      - name: Webapp unit tests
-        if: ${{ hashFiles('webapp/package.json') != '' }}
-        working-directory: webapp
-        run: |
-          set -o pipefail
-          npm run test:unit --if-present | tee ../vitest.log || true
 
       - name: Docker image build
         run: |
@@ -251,88 +287,107 @@ jobs:
   migrations:
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    needs: unit
+    needs:
+      - unit
+    env:
+      ENV: test
+      PYTHON_VERSION: '3.11'
+      PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/services
     steps:
       - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v6
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          python-version: 3.11
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
 
-      - name: Install Alembic and deps
+      - name: Install deps for Alembic
+        shell: bash
         run: |
-          python -m pip install -U pip
-          if [ -f requirements-dev.txt ]; then python -m pip install -r requirements-dev.txt -c constraints.txt; fi
+          set -euxo pipefail
+          python -m pip install -U pip wheel
+          if [ -f requirements.txt ]; then pip install -r requirements.txt -c constraints.txt || pip install -r requirements.txt ; fi
+          pip install -r requirements-dev.txt -c constraints.txt || pip install -r requirements-dev.txt
+          pip install -e packages/awa_common
+          python -c "import pkgutil; assert pkgutil.find_loader('awa_common'), 'awa_common not installed'"
 
-      - name: Prepare .env
+      - name: Bring up Postgres
+        shell: bash
         run: |
-          set -euo pipefail
-          [ -f .env.test ] && cp -f .env.test .env || true
-          cat <<'EOF' > .env.postgres
-          PG_HOST=127.0.0.1
-          PG_PORT=5432
-          PG_USER=postgres
-          PG_PASSWORD=postgres
-          PG_DATABASE=postgres
-          EOF
+          set -euxo pipefail
+          docker compose up -d --build --wait db
+          docker compose exec -T db bash -lc 't=0; until pg_isready -U "${POSTGRES_USER:-app}" -d "${POSTGRES_DB:-app}" >/dev/null 2>&1; do sleep 1; if [ $((t+=1)) -gt 60 ]; then exit 1; fi; done'
 
-      - name: Compose up db/redis
+      - name: Resolve DB host port on the runner
+        id: dbport
+        shell: bash
         run: |
-          set -euo pipefail
-          export POSTGRES_USER=postgres
-          export POSTGRES_PASSWORD=postgres
-          export POSTGRES_DB=postgres
-          docker compose up -d --build --wait db redis
+          set -euxo pipefail
+          OUT="$(docker compose port db 5432)"
+          echo "compose_port=$OUT"
+          PORT="$(echo "$OUT" | awk -F: '{print $NF}')"
+          test -n "$PORT"
+          echo "port=$PORT" >> "$GITHUB_OUTPUT"
 
-      - name: Wait for Postgres
+      - name: Show Alembic config & paths
+        shell: bash
+        env:
+          HOST_DB_PORT: ${{ steps.dbport.outputs.port }}
         run: |
-          set -euo pipefail
-          : > migrations.log
-          echo "Waiting for Postgres readiness (timeout 60s)" | tee -a migrations.log
-          U=$(docker compose exec -T db bash -lc 'printf %s "${POSTGRES_USER:-postgres}"')
-          D=$(docker compose exec -T db bash -lc 'printf %s "${POSTGRES_DB:-$POSTGRES_USER}"')
-          READY=0
-          for i in $(seq 1 60); do
-            if docker compose exec -T db pg_isready -U "$U" -d "$D" >/dev/null 2>&1; then
-              READY=1
-              echo "Postgres ready after $i attempt(s)" | tee -a migrations.log
+          set -euxo pipefail
+          echo "PWD=$(pwd)"
+          echo "PYTHONPATH=${PYTHONPATH}"
+          echo "DATABASE_URL=${DATABASE_URL:-postgresql+psycopg://app:app@db:5432/app}"
+          echo "Resolved host DB port=${HOST_DB_PORT:-unset}"
+          grep -n '^script_location' services/api/alembic.ini || true
+          ls -la services/api | sed -n '1,120p'
+          [ -d services/api/migrations ] && ls -la services/api/migrations | sed -n '1,120p' || true
+
+      - name: Alembic upgrade/downgrade/upgrade (host → mapped port)
+        shell: bash
+        env:
+          DB_HOST: 127.0.0.1
+          DB_PORT: ${{ steps.dbport.outputs.port }}
+        run: |
+          set -euxo pipefail
+          test -f services/api/alembic.ini
+          export DATABASE_URL="postgresql+psycopg://app:app@${DB_HOST}:${DB_PORT}/app"
+          echo "Using DATABASE_URL=$DATABASE_URL (masked in logs)"
+          success=0
+          for i in $(seq 1 10); do
+            if alembic -c services/api/alembic.ini current; then
+              success=1
               break
             fi
             sleep 1
           done
-          if [ "$READY" -ne 1 ]; then
-            echo "Postgres did not become ready within timeout" | tee -a migrations.log
-            docker compose logs db | tee -a migrations.log
+          if [ "$success" -ne 1 ]; then
+            echo "alembic current failed after retries" >&2
             exit 1
           fi
+          alembic -c services/api/alembic.ini upgrade head
+          alembic -c services/api/alembic.ini downgrade -1 || true
+          alembic -c services/api/alembic.ini upgrade head
 
-      - name: Alembic smoke (up→down→up)
+      - name: Make debug bundle
+        if: always()
+        shell: bash
         run: |
-          set -euo pipefail
-          U=$(docker compose exec -T db bash -lc 'printf %s "${POSTGRES_USER:-postgres}"')
-          P=$(docker compose exec -T db bash -lc 'printf %s "${POSTGRES_PASSWORD:-postgres}"')
-          D=$(docker compose exec -T db bash -lc 'printf %s "${POSTGRES_DB:-$POSTGRES_USER}"')
-          PORT=$(docker compose port db 5432 | awk -F: '{print $2}')
-          export DATABASE_URL="postgresql+psycopg://${U}:${P}@127.0.0.1:${PORT}/${D}"
-          alembic upgrade head
-          alembic downgrade -1 || true
-          alembic upgrade head
+          chmod +x scripts/ci/make_debug_bundle.sh || true
+          scripts/ci/make_debug_bundle.sh debug-bundle
 
-      - name: Upload migrations logs
+      - name: Upload debug bundle (migrations)
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: debug-bundle-migrations-${{ github.run_id }}-${{ github.run_attempt }}
-          path: |
-            .env
-            docker-compose.yml
-            docker-compose*.yml
-            **/alembic.ini
-            **/migrations/**
-            **/*.log
+          path: debug-bundle.tar.gz
+          if-no-files-found: warn
 
-      - name: Stop database
+      - name: Compose down
         if: always()
+        shell: bash
         run: |
           COMPOSE_FILES=()
           for file in docker-compose.yml docker-compose.ci.yml docker-compose.postgres.yml; do

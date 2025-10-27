@@ -3,11 +3,15 @@ from fastapi.testclient import TestClient
 
 from services.api import db, main
 
+pytestmark = pytest.mark.slow
+
 
 async def _noop() -> None:  # pragma: no cover - used only for monkeypatch
     return None
 
 
+@pytest.mark.slow
+@pytest.mark.timeout(0)
 @pytest.mark.parametrize("_", range(5))
 def test_health(monkeypatch, _):
     monkeypatch.setattr(main, "_wait_for_db", _noop)

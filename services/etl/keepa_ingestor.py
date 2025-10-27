@@ -6,10 +6,10 @@ import time
 from pathlib import Path
 
 import keepa
+from awa_common.dsn import build_dsn
 from minio import Minio
 
 from pg_utils import connect
-from packages.awa_common.dsn import build_dsn
 
 
 def main() -> None:

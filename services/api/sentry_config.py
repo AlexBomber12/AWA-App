@@ -1,18 +1,16 @@
 from __future__ import annotations
 
 import os
-from typing import Any, Dict, Mapping
+from typing import Any, Mapping
 
-import os
 import sentry_sdk
 from asgi_correlation_id import correlation_id
+from awa_common.settings import settings
 from sentry_sdk.integrations.celery import CeleryIntegration
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 from sentry_sdk.integrations.logging import LoggingIntegration
 from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
 from sentry_sdk.types import Event, Hint
-
-from packages.awa_common.settings import settings
 
 _SCRUB_HEADERS: set[str] = {"authorization", "cookie", "set-cookie", "x-api-key"}
 _SCRUB_FIELDS: set[str] = {
@@ -33,8 +31,8 @@ def _is_truthy(v: str | None) -> bool:
     return (v or "").strip().lower() in {"1", "true", "yes", "y"}
 
 
-def _scrub_mapping(d: Mapping[str, Any]) -> Dict[str, Any]:
-    red: Dict[str, Any] = {}
+def _scrub_mapping(d: Mapping[str, Any]) -> dict[str, Any]:
+    red: dict[str, Any] = {}
     for k, v in d.items():
         key = str(k).lower()
         if key in _SCRUB_FIELDS or key in _SCRUB_HEADERS:
@@ -55,9 +53,9 @@ def _scrub_mapping(d: Mapping[str, Any]) -> Dict[str, Any]:
     return red
 
 
-def before_send(event: Event, hint: Hint) -> Event | None:
+def before_send(event: Event, _hint: Hint) -> Event | None:
     # attach request_id tag
-    req: Dict[str, Any] = event.get("request") or {}
+    req: dict[str, Any] = event.get("request") or {}
     headers = req.get("headers")
     rid: str | None = None
     if isinstance(headers, Mapping):

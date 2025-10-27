@@ -5,10 +5,10 @@ import tempfile
 from typing import Any
 
 import boto3
+from awa_common.settings import settings
 from imapclient import IMAPClient
 from sqlalchemy import create_engine, text
 
-from packages.awa_common.settings import settings
 from services.etl import load_csv
 
 BUCKET = "awa-bucket"
