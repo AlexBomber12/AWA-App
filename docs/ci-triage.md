@@ -42,7 +42,7 @@ The `Pre-commit` step exited with status 127 because GitHub Actions could not lo
 `alembic upgrade head` failed because the workflow shell truncated the subshell assignment when parsing the inline Python one-liner; the `PORT` variable ended up empty, so `DATABASE_URL` was invalid.
 
 ## Fix
-- Parse the Compose port inline with `python3 -c` and fall back gracefully when it returns nothing before exporting `DATABASE_URL`.
+- Stop parsing the published port dynamically; the migrations job now uses `${PG_PORT:-5432}` directly when composing `DATABASE_URL`.
 
 ## Logs
 - GitHub Actions run `18826515165`, job `53710236279` – see `Alembic smoke (up→down→up)` step output.
