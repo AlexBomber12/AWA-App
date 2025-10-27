@@ -7,11 +7,11 @@
 
 | Job | Conclusion | URL |
 | --- | ---------- | --- |
-| unit | ✅ Success | [Logs](https://github.com/AlexBomber12/AWA-App/actions/runs/18853066239/job/53794095457) |
-| integration | ✅ Success | [Logs](https://github.com/AlexBomber12/AWA-App/actions/runs/18853066239/job/53794524128) |
-| migrations | ✅ Success | [Logs](https://github.com/AlexBomber12/AWA-App/actions/runs/18853066239/job/53794524133) |
-| preview | ⚪ Skipped | [Logs](https://github.com/AlexBomber12/AWA-App/actions/runs/18853066239/job/53794691471) |
-| mirror_logs | ⏳ In Progress | [Logs](https://github.com/AlexBomber12/AWA-App/actions/runs/18853066239/job/53794691377) |
+| unit | ✅ Success | [Logs](https://github.com/AlexBomber12/AWA-App/actions/runs/18853066239/job/53807867415) |
+| integration | ✅ Success | [Logs](https://github.com/AlexBomber12/AWA-App/actions/runs/18853066239/job/53808269056) |
+| migrations | ✅ Success | [Logs](https://github.com/AlexBomber12/AWA-App/actions/runs/18853066239/job/53808269025) |
+| preview | ⚪ Skipped | [Logs](https://github.com/AlexBomber12/AWA-App/actions/runs/18853066239/job/53808396995) |
+| mirror_logs | ⏳ In Progress | [Logs](https://github.com/AlexBomber12/AWA-App/actions/runs/18853066239/job/53808396867) |
 
 ### Failed tails
 
