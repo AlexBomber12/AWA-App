@@ -28,10 +28,10 @@ The `Pre-commit` step exited with status 127 because GitHub Actions could not lo
 
 ## Fix
 - Add `eslint@8.57.0` and `eslint-config-next@14.1.0` to `webapp/package.json` devDependencies so the lint step installs the required tooling.
-- Commit a minimal `webapp/tsconfig.json` that extends `next/tsconfig.json` so the TypeScript compiler has configuration during CI.
+- Commit a minimal `webapp/tsconfig.json` mirroring the default Next.js settings (preserves JSX, enables the Next TS plugin) so the TypeScript compiler has configuration during CI.
 
 ## Logs
-- GitHub Actions runs `18825119046` (unit job `53706526386`) and `18825322969` (unit job `53707008150`) – see `Webapp lint`/`Webapp type check` step outputs.
+- GitHub Actions runs `18825119046` (unit job `53706526386`), `18825322969` (unit job `53707008150`), and `18825391921` (unit job `53707176383`) – see `Webapp lint`/`Webapp type check` step outputs.
 
 ---
 
