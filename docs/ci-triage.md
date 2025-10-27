@@ -1,5 +1,21 @@
 # CI Triage
 
+---
+
+## Failing workflows
+- **CI** workflow (migrations job)
+
+## Summary
+`alembic upgrade head` aborted with `FAILED: Path doesn't exist: services/api/migrations` because the migrations job ran inside `services/api`, causing Alembic to look for `services/api/services/api/migrations`, which does not exist.
+
+## Fix
+- Invoke Alembic from the repository root with `-c services/api/alembic.ini` so `script_location = services/api/migrations` resolves correctly.
+- Emit diagnostic output (working directory, config, filesystem layout) before the upgrade step to capture future regressions.
+- Continue uploading the debug bundle and shut down Docker resources at job completion.
+
+## Logs
+- GitHub Actions CI run (migrations job, `Alembic upgrade/downgrade/upgrade` step). Local `ci-logs/latest` artifacts were unavailable; failure copied from the workflow summary.
+
 ## Unit job diagnostics
 - The unit workflow uploads a `unit-pip-diagnostics-<run_id>-<attempt>` artifact containing `unit-setup.log`, `unit-setup-tail.log`, and `pip-freeze.txt` for pip troubleshooting.
 

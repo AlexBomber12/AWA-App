@@ -287,7 +287,8 @@ jobs:
   migrations:
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    needs: unit
+    needs:
+      - unit
     env:
       ENV: test
       PYTHON_VERSION: '3.11'
@@ -315,37 +316,50 @@ jobs:
         shell: bash
         run: |
           set -euxo pipefail
-          docker compose up -d --build db
+          docker compose up -d --build --wait db
           docker compose exec -T db bash -lc 't=0; until pg_isready -U "${POSTGRES_USER:-app}" -d "${POSTGRES_DB:-app}" >/dev/null 2>&1; do sleep 1; if [ $((t+=1)) -gt 60 ]; then exit 1; fi; done'
 
-      - name: Alembic upgrade/downgrade/upgrade
+      - name: Show Alembic config & paths
         shell: bash
-        working-directory: services/api
+        run: |
+          set -euxo pipefail
+          echo "PWD=$(pwd)"
+          echo "PYTHONPATH=${PYTHONPATH}"
+          echo "DATABASE_URL=${DATABASE_URL:-postgresql+psycopg://app:app@db:5432/app}"
+          grep -n '^script_location' services/api/alembic.ini || true
+          ls -la services/api | sed -n '1,120p'
+          [ -d services/api/migrations ] && ls -la services/api/migrations | sed -n '1,120p' || true
+
+      - name: Alembic upgrade/downgrade/upgrade (run from repo root with -c)
+        shell: bash
         env:
           DATABASE_URL: postgresql+psycopg://app:app@db:5432/app
         run: |
           set -euxo pipefail
-          test -f alembic.ini
-          alembic -c alembic.ini current || true
-          alembic -c alembic.ini upgrade head
-          alembic -c alembic.ini downgrade -1 || true
-          alembic -c alembic.ini upgrade head
+          test -f services/api/alembic.ini
+          alembic -c services/api/alembic.ini current || true
+          alembic -c services/api/alembic.ini upgrade head
+          alembic -c services/api/alembic.ini downgrade -1 || true
+          alembic -c services/api/alembic.ini upgrade head
 
-      - name: Upload migrations logs
+      - name: Make debug bundle
+        if: always()
+        shell: bash
+        run: |
+          chmod +x scripts/ci/make_debug_bundle.sh || true
+          scripts/ci/make_debug_bundle.sh debug-bundle
+
+      - name: Upload debug bundle (migrations)
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: debug-bundle-migrations-${{ github.run_id }}-${{ github.run_attempt }}
-          path: |
-            .env
-            docker-compose.yml
-            docker-compose*.yml
-            **/alembic.ini
-            **/migrations/**
-            **/*.log
+          path: debug-bundle.tar.gz
+          if-no-files-found: warn
 
-      - name: Stop database
+      - name: Compose down
         if: always()
+        shell: bash
         run: |
           COMPOSE_FILES=()
           for file in docker-compose.yml docker-compose.ci.yml docker-compose.postgres.yml; do
