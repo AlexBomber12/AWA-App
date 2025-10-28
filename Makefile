@@ -26,7 +26,7 @@ MYPY := $(PY) -m mypy
 RUFF := $(PY) -m ruff
 BLACK := $(PY) -m black
 
-.PHONY: up down logs sh fmt lint type test unit unit-all integ qa qa-fix install-dev bootstrap-dev ensure-bootstrap bootstrap ci-fast ci-local migrations-local integration-local ci-all doctor secrets.print-age-recipient secrets.encrypt secrets.decrypt
+.PHONY: up down logs sh fmt lint type test unit unit-all integ qa qa-fix install-dev bootstrap-dev ensure-bootstrap bootstrap ci-fast ci-local migrations-local integration-local ci-all doctor secrets.print-age-recipient secrets.encrypt secrets.decrypt backup-now restore-check
 
 up:
 	docker compose up -d --build --wait db redis api worker
@@ -139,3 +139,9 @@ secrets.decrypt:
 doctor:
 	@echo "Using PY=$(PY)"
 	$(PY) -c "import sys,platform; print('exe:', sys.executable); print('ver:', sys.version); print('platform:', platform.platform())"
+
+backup-now:
+	@bash ops/backup/bin/backup-now.sh
+
+restore-check:
+	@bash ops/backup/bin/restore-check.sh

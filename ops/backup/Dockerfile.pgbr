@@ -1,0 +1,25 @@
+FROM postgres:16
+
+ARG PG_BACKREST_VERSION=2.57.0-1.pgdg12+1
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+        ca-certificates=20230311+deb12u1 \
+        wget=1.21.3-1+deb12u1 \
+        gnupg=2.2.40-1.1+deb12u1; \
+    . /etc/os-release; \
+    wget -qO - https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor -o /usr/share/keyrings/postgresql-archive-keyring.gpg; \
+    echo "deb [signed-by=/usr/share/keyrings/postgresql-archive-keyring.gpg] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" > /etc/apt/sources.list.d/pgdg.list; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends \
+        pgbackrest=${PG_BACKREST_VERSION} \
+        curl=7.88.1-10+deb12u14 \
+        unzip=6.0-28 \
+        gettext-base=0.21-12 \
+        awscli=2.9.19-1; \
+    rm -f /usr/share/keyrings/postgresql-archive-keyring.gpg; \
+    rm -rf /var/lib/apt/lists/*; \
+    mkdir -p /var/log/pgbackrest && chown postgres:postgres /var/log/pgbackrest && chmod 775 /var/log/pgbackrest
