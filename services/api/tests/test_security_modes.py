@@ -116,9 +116,9 @@ def _prepare_oidc(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(settings, "OIDC_AUDIENCE", "awa", raising=False)
     monkeypatch.setattr(settings, "OIDC_CLIENT_ID", None, raising=False)
     monkeypatch.setattr(settings, "OIDC_JWKS_URL", None, raising=False)
-    monkeypatch.setattr(settings, "AUTH_REQUIRED_ROUTES_REGEX", "", raising=False)
-    monkeypatch.setattr(settings, "_role_map_cache", None, raising=False)
-    monkeypatch.setattr(settings, "_role_map_cache_key", None, raising=False)
+    monkeypatch.setattr(settings, "AUTH_REQUIRED_ROUTES_REGEX", ".*", raising=False)
+    monkeypatch.setattr(settings, "_role_regex_cache", None, raising=False)
+    monkeypatch.setattr(settings, "_role_regex_cache_key", None, raising=False)
     token_ok = _issue_token(private_pem, public_jwk["kid"], ["ops"])
     token_viewer = _issue_token(private_pem, public_jwk["kid"], ["viewer"])
     token_invalid = token_ok[:-4] + "abcd"
@@ -132,9 +132,9 @@ def _prepare_forward_auth(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(
         settings, "FA_GROUPS_HEADER", "X-Forwarded-Groups", raising=False
     )
-    monkeypatch.setattr(settings, "AUTH_REQUIRED_ROUTES_REGEX", "", raising=False)
-    monkeypatch.setattr(settings, "_role_map_cache", None, raising=False)
-    monkeypatch.setattr(settings, "_role_map_cache_key", None, raising=False)
+    monkeypatch.setattr(settings, "AUTH_REQUIRED_ROUTES_REGEX", ".*", raising=False)
+    monkeypatch.setattr(settings, "_role_regex_cache", None, raising=False)
+    monkeypatch.setattr(settings, "_role_regex_cache_key", None, raising=False)
 
 
 @pytest.fixture

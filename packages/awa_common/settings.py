@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 from typing import Literal
@@ -67,6 +68,7 @@ class Settings(BaseSettings):
     _role_map_cache: dict[str, set[str]] | None = None
     _role_map_cache_key: str | None = None
     _role_regex_cache: re.Pattern[str] | None = None
+    _role_regex_cache_key: str | None = None
 
     def _load_role_map(self) -> dict[str, set[str]]:
         raw_json = self.ROLE_MAP_JSON or "{}"
@@ -110,12 +112,18 @@ class Settings(BaseSettings):
     def should_protect_path(self, path: str) -> bool:
         regex = (self.AUTH_REQUIRED_ROUTES_REGEX or "").strip()
         if not regex:
-            return True
-        if self._role_regex_cache is None or self._role_regex_cache.pattern != regex:
+            return False
+        if self._role_regex_cache is None or self._role_regex_cache_key != regex:
             try:
-                self._role_regex_cache = re.compile(regex)
+                compiled = re.compile(regex)
             except re.error:
-                self._role_regex_cache = re.compile("^$")  # never matches on invalid
+                logging.getLogger(__name__).warning(
+                    "Invalid AUTH_REQUIRED_ROUTES_REGEX=%r — failing closed (protect all)",
+                    regex,
+                )
+                compiled = re.compile(".*")
+            self._role_regex_cache = compiled
+            self._role_regex_cache_key = regex
         return bool(self._role_regex_cache.search(path))
 
     def redacted(self) -> dict:
