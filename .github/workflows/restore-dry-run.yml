@@ -42,7 +42,7 @@ jobs:
 
       - name: Start backup stack
         run: |
-          docker compose -f docker-compose.yml -f ops/backup/docker-compose.backup.yml up -d minio db-pgbr
+          docker compose -f docker-compose.yml -f ops/backup/docker-compose.backup.yml up -d --wait minio db-pgbr
           docker compose -f docker-compose.yml -f ops/backup/docker-compose.backup.yml ps
 
       - name: Wait for PostgreSQL
@@ -55,6 +55,20 @@ jobs:
             sleep 3
           done
           echo "PostgreSQL did not become ready in time" >&2
+          exit 1
+
+      - name: Wait for MinIO
+        run: |
+          set -euo pipefail
+          for i in {1..60}; do
+            if docker compose -f docker-compose.yml -f ops/backup/docker-compose.backup.yml exec -T minio \
+                 sh -lc 'curl -fsS http://localhost:9000/minio/health/ready >/dev/null'; then
+              echo "MinIO is ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "MinIO did not become ready in time" >&2
           exit 1
 
       - name: Stanza setup

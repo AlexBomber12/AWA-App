@@ -13,10 +13,10 @@ services:
     volumes:
       - minio-data:/data
     healthcheck:
-      test: ["CMD","curl","-fsS","http://localhost:9000/minio/health/live"]
-      interval: 5s
-      timeout: 3s
-      retries: 12
+      test: ["CMD","curl","-fsS","http://localhost:9000/minio/health/ready"]
+      interval: 3s
+      timeout: 1s
+      retries: 60
 
   db-pgbr:
     build:
@@ -52,7 +52,7 @@ services:
       - "${PG_BR_PORT:-5435}:5432"
     depends_on:
       minio:
-        condition: service_started
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL","pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
