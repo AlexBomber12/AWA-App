@@ -16,10 +16,16 @@ from .. import roi_repository
 from ..db import get_session
 
 try:
-    from ..security import require_basic_auth
+    from ..security import require_basic_auth, require_ops, require_viewer
 except Exception:  # pragma: no cover - fallback if security missing
 
     def require_basic_auth() -> None:
+        return None
+
+    def require_viewer() -> None:
+        return None
+
+    def require_ops() -> None:
         return None
 
 
@@ -28,7 +34,7 @@ security = HTTPBasic()
 templates = Jinja2Templates(directory="templates")
 
 
-@router.get("/roi", dependencies=[Depends(require_basic_auth)])
+@router.get("/roi", dependencies=[Depends(require_basic_auth), Depends(require_viewer)])
 async def roi(
     roi_min: float = 0,
     vendor: int | None = None,
@@ -86,6 +92,7 @@ def roi_review(
     vendor: int | None = None,
     category: str | None = None,
     _: str = Depends(_check_basic_auth),
+    __: object = Depends(require_ops),
 ):
     url = build_dsn(sync=True)
     engine = create_engine(url)
@@ -132,7 +139,9 @@ async def _extract_asins(request: Request) -> list[str]:
 
 @router.post("/roi-review/approve")
 async def approve(
-    request: Request, _: str = Depends(_check_basic_auth)
+    request: Request,
+    _: str = Depends(_check_basic_auth),
+    __: object = Depends(require_ops),
 ) -> dict[str, int]:
     asins = await _extract_asins(request)
     if not asins:

@@ -21,12 +21,13 @@ from starlette.responses import Response
 
 from alembic.config import Config
 from alembic.script import ScriptDirectory
+from services.api.audit import AuditMiddleware
 from services.api.errors import install_exception_handlers
 from services.api.logging_config import configure_logging
 from services.api.metrics import install_metrics
 from services.api.sentry_config import init_sentry_if_configured
 
-from .db import get_session
+from .db import async_session, get_session
 from .routes import health as health_router
 from .routes.ingest import router as ingest_router
 from .routes.roi import router as roi_router
@@ -105,6 +106,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 
 app.add_middleware(CorrelationIdMiddleware, header_name="X-Request-ID")
+app.add_middleware(AuditMiddleware, session_factory=async_session)
 install_exception_handlers(app)
 install_metrics(app)
 

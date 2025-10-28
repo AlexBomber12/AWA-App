@@ -50,7 +50,7 @@ lint: ensure-bootstrap
 type: ensure-bootstrap
 	$(MYPY) .
 
-unit:
+unit: ensure-bootstrap
 	mkdir -p $(ART)
 	PYTHONUNBUFFERED=1 $(PYTEST) -vv -s -m "not integration and not slow" \
 	  -n auto --dist=loadfile --durations=20 \

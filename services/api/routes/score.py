@@ -3,7 +3,7 @@ from __future__ import annotations
 import importlib
 import os
 from types import ModuleType
-from typing import Annotated, cast
+from typing import Annotated, Any, cast
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
@@ -23,6 +23,7 @@ except Exception:  # pragma: no cover - fallback if dependencies missing
 try:
     from services.api.security import (
         require_basic_auth,  # dependency that raises on bad creds
+        require_viewer,
     )
 except Exception:
     _security = HTTPBasic()
@@ -30,6 +31,9 @@ except Exception:
     def require_basic_auth(
         credentials: HTTPBasicCredentials = Depends(_security),
     ) -> None:  # no-op if project already handles auth globally
+        return None
+
+    async def require_viewer(*_args: Any, **_kwargs: Any) -> Any:
         return None
 
 
@@ -70,7 +74,9 @@ def _roi_view_name() -> str:
 
 
 @router.post(
-    "", response_model=ScoreResponse, dependencies=[Depends(require_basic_auth)]
+    "",
+    response_model=ScoreResponse,
+    dependencies=[Depends(require_basic_auth), Depends(require_viewer)],
 )
 def score(body: ScoreRequest, db: Session | None = Depends(get_db)) -> ScoreResponse:
     if not body.asins:
