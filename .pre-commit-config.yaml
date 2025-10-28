@@ -69,14 +69,35 @@ repos:
       - id: block-plain-secrets
         name: Block committing plaintext secrets
         language: system
-        entry: bash
-        args:
-          - -c
-          - |
-              set -euo pipefail
-              files="$(git diff --cached --name-only)"
-              if echo "$files" | grep -E "\.env($|\.local$|\.prod$|\.test$)|(^|/)secrets\.(ya?ml|json|env)$" | grep -vE "\.example$|\.enc\." > /dev/null; then
-                echo "Plaintext secrets detected in staged files. Commit blocked. Use SOPS (.enc.*) or .example files."
-                exit 1
+        entry: |-
+          bash -lc '
+            set -euo pipefail
+            mapfile -t files < <(git diff --cached --name-only)
+            bad=()
+            for f in "${files[@]}"; do
+              # Skip non-existent (deleted/renamed) entries
+              [ -e "$f" ] || continue
+              # Allowlist: encrypted/ examples/ gitkeep
+              case "$f" in
+                *.enc.*) continue;;
+                *.example) continue;;
+                */.gitkeep) continue;;
+              esac
+              base="${f##*/}"
+              # Block any .env or .env.* anywhere (except *.example handled above)
+              if [[ "$base" =~ ^\.env($|\.) ]]; then bad+=("$f"); continue; fi
+              # Block anything under ops/secrets/**
+              if [[ "$f" == ops/secrets/* ]]; then bad+=("$f"); continue; fi
+              # Block obvious secret filenames anywhere (exact base names, not substrings)
+              if [[ "$base" =~ ^(secret|secrets|credentials|apikey|api_key|token|private(_|-)?key)(\..*)?$ ]]; then
+                bad+=("$f"); continue
               fi
-        stages: [pre-commit]
+            done
+            if ((${#bad[@]})); then
+              echo "❌ Plaintext secrets detected in staged files:"
+              printf "  - %s\n" "${bad[@]}"
+              echo "Commit blocked. Encrypt with SOPS (*.enc.*) or use .example files."
+              exit 1
+            fi
+          '
+        stages: [commit]
