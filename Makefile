@@ -26,7 +26,7 @@ MYPY := $(PY) -m mypy
 RUFF := $(PY) -m ruff
 BLACK := $(PY) -m black
 
-.PHONY: up down logs sh fmt lint type test unit unit-all integ qa qa-fix install-dev bootstrap-dev ensure-bootstrap bootstrap ci-fast ci-local migrations-local integration-local ci-all doctor
+.PHONY: up down logs sh fmt lint type test unit unit-all integ qa qa-fix install-dev bootstrap-dev ensure-bootstrap bootstrap ci-fast ci-local migrations-local integration-local ci-all doctor secrets.print-age-recipient secrets.encrypt secrets.decrypt
 
 up:
 	docker compose up -d --build --wait db redis api worker
@@ -121,6 +121,20 @@ integration-local:
 
 ci-all:
 	bash scripts/ci/all.sh
+
+secrets.print-age-recipient:
+	@[ -f "$$SOPS_AGE_KEY_FILE" ] || { echo "Set SOPS_AGE_KEY_FILE to your age private key"; exit 1; }
+	@age-keygen -y "$$SOPS_AGE_KEY_FILE" 2>/dev/null | sed 's/^/Recipient: /'
+
+secrets.encrypt:
+	@[ "$$SRC" ] || { echo "Usage: make secrets.encrypt SRC=ops/secrets/dev.yaml DST=ops/secrets/dev.enc.yaml"; exit 1; }
+	@[ "$$DST" ] || { echo "Usage: make secrets.encrypt SRC=... DST=..."; exit 1; }
+	@sops --encrypt "$$SRC" > "$$DST"
+
+secrets.decrypt:
+	@[ "$$SRC" ] || { echo "Usage: make secrets.decrypt SRC=ops/secrets/dev.enc.yaml DST=.env.local"; exit 1; }
+	@[ "$$DST" ] || { echo "Usage: make secrets.decrypt SRC=... DST=..."; exit 1; }
+	@sops --decrypt "$$SRC" > "$$DST"
 
 doctor:
 	@echo "Using PY=$(PY)"
