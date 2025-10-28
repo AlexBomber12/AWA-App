@@ -1,0 +1,112 @@
+name: Restore Dry Run
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "30 5 * * *"
+
+permissions:
+  contents: read
+
+env:
+  BACKUP_COMPOSE_FILES: docker-compose.yml ops/backup/docker-compose.backup.yml
+  MINIO_ENDPOINT: ${{ secrets.MINIO_ENDPOINT }}
+  MINIO_ACCESS_KEY: ${{ secrets.MINIO_ACCESS_KEY }}
+  MINIO_SECRET_KEY: ${{ secrets.MINIO_SECRET_KEY }}
+  PG_BR_REPO_PASS: ${{ secrets.PG_BR_REPO_PASS }}
+  MINIO_BUCKET: ${{ vars.MINIO_BUCKET || 'awa-pgbackups' }}
+  MINIO_REGION: ${{ vars.MINIO_REGION || 'us-east-1' }}
+  S3_VERIFY_TLS: ${{ vars.S3_VERIFY_TLS || 'n' }}
+  POSTGRES_DB: ${{ vars.BACKUP_POSTGRES_DB || 'awa' }}
+  POSTGRES_USER: ${{ vars.BACKUP_POSTGRES_USER || 'awa' }}
+  POSTGRES_PASSWORD: ${{ vars.BACKUP_POSTGRES_PASSWORD || 'awa' }}
+  PGBACKREST_STANZA: ${{ vars.PGBACKREST_STANZA || 'awa' }}
+
+jobs:
+  restore-check:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate secrets
+        run: |
+          : "${MINIO_ENDPOINT:?MINIO_ENDPOINT secret not set}"
+          : "${MINIO_ACCESS_KEY:?MINIO_ACCESS_KEY secret not set}"
+          : "${MINIO_SECRET_KEY:?MINIO_SECRET_KEY secret not set}"
+          : "${PG_BR_REPO_PASS:?PG_BR_REPO_PASS secret not set}"
+
+      - name: Build backup image
+        run: |
+          docker compose -f docker-compose.yml -f ops/backup/docker-compose.backup.yml build db-pgbr
+
+      - name: Start backup stack
+        run: |
+          docker compose -f docker-compose.yml -f ops/backup/docker-compose.backup.yml up -d --wait minio db-pgbr
+          docker compose -f docker-compose.yml -f ops/backup/docker-compose.backup.yml ps
+
+      - name: Wait for PostgreSQL
+        run: |
+          set -euo pipefail
+          for i in {1..40}; do
+            if docker compose -f docker-compose.yml -f ops/backup/docker-compose.backup.yml exec -T db-pgbr pg_isready -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" >/dev/null 2>&1; then
+              exit 0
+            fi
+            sleep 3
+          done
+          echo "PostgreSQL did not become ready in time" >&2
+          exit 1
+
+      - name: Wait for MinIO
+        run: |
+          set -euo pipefail
+          for i in {1..60}; do
+            if docker compose -f docker-compose.yml -f ops/backup/docker-compose.backup.yml exec -T minio \
+                 sh -lc 'curl -fsS http://localhost:9000/minio/health/ready >/dev/null'; then
+              echo "MinIO is ready"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "MinIO did not become ready in time" >&2
+          exit 1
+
+      - name: Stanza setup
+        run: bash ops/backup/bin/stanza-setup.sh
+
+      - name: Create full backup
+        env:
+          WAL_TEST: "1"
+        run: bash ops/backup/bin/backup-now.sh
+
+      - name: Restore validation
+        run: |
+          set -euo pipefail
+          mkdir -p ops/backup/logs
+          bash ops/backup/bin/restore-check.sh | tee ops/backup/logs/restore-check.log
+
+      - name: Collect artifacts
+        if: always()
+        run: |
+          set -euo pipefail
+          mkdir -p ops/backup/logs
+          docker compose -f docker-compose.yml -f ops/backup/docker-compose.backup.yml exec -T db-pgbr pgbackrest --config=/var/lib/postgresql/pgbackrest/pgbackrest.conf --stanza="${PGBACKREST_STANZA}" info > ops/backup/logs/pgbackrest-info.txt
+          docker compose -f docker-compose.yml -f ops/backup/docker-compose.backup.yml exec -T db-pgbr sh -c 'cat /var/log/pgbackrest/pgbackrest.log' > ops/backup/logs/pgbackrest.log || true
+          AWS_ARGS="--endpoint-url ${MINIO_ENDPOINT}"
+          if [ "${S3_VERIFY_TLS}" = "n" ] || [ "${S3_VERIFY_TLS}" = "N" ]; then
+            AWS_ARGS="${AWS_ARGS} --no-verify-ssl"
+          fi
+          docker compose -f docker-compose.yml -f ops/backup/docker-compose.backup.yml exec -T db-pgbr sh -c "aws ${AWS_ARGS} s3 ls s3://${MINIO_BUCKET} --recursive" > ops/backup/logs/minio-listing.txt || true
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: restore-dry-run-artifacts
+          path: ops/backup/logs
+          if-no-files-found: warn
+
+      - name: Teardown
+        if: always()
+        run: |
+          docker compose -f docker-compose.yml -f ops/backup/docker-compose.backup.yml down -v

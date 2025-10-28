@@ -1,0 +1,65 @@
+version: "3.9"
+
+services:
+  minio:
+    image: minio/minio:RELEASE.2025-07-23T15-54-02Z
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    ports:
+      - "${MINIO_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD","curl","-fsS","http://localhost:9000/minio/health/ready"]
+      interval: 3s
+      timeout: 1s
+      retries: 60
+
+  db-pgbr:
+    build:
+      context: ../..
+      dockerfile: ops/backup/Dockerfile.pgbr
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-awa}
+      POSTGRES_USER: ${POSTGRES_USER:-awa}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-awa}
+      PGBACKREST_STANZA: ${PGBACKREST_STANZA:-awa}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-http://minio:9000}
+      MINIO_BUCKET: ${MINIO_BUCKET:-awa-pgbackups}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+      MINIO_REGION: ${MINIO_REGION:-us-east-1}
+      S3_VERIFY_TLS: ${S3_VERIFY_TLS:-n}
+      PG_BR_REPO_PASS: ${PG_BR_REPO_PASS:-example-pgbackrest-pass}
+    command:
+      - postgres
+      - "-c"
+      - "archive_mode=on"
+      - "-c"
+      - "wal_level=replica"
+      - "-c"
+      - "archive_timeout=60"
+      - "-c"
+      - "archive_command=PGBACKREST_CONF=/var/lib/postgresql/pgbackrest/pgbackrest.conf pgbackrest --stanza=$${PGBACKREST_STANZA} archive-push %p"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - pgbackrest_repo:/pgbackrest
+      - ./pgbackrest:/pgbackrest-template:ro
+    ports:
+      - "${PG_BR_PORT:-5435}:5432"
+    depends_on:
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL","pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+
+volumes:
+  minio-data:
+  pgdata:
+  pgbackrest_repo:
