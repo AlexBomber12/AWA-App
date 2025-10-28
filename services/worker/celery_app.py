@@ -101,6 +101,22 @@ if os.getenv("SCHEDULE_MV_REFRESH", "true").lower() in ("1", "true", "yes"):
         ),
     }
 
+if os.getenv("SCHEDULE_LOGISTICS_ETL", "false").lower() in ("1", "true", "yes"):
+    cron_expr = os.getenv("LOGISTICS_CRON", "0 3 * * *")
+    logistics_cron = cron_expr.split()
+    if len(logistics_cron) != 5:
+        logistics_cron = "0 3 * * *".split()
+    _beat_schedule["logistics-etl-full"] = {
+        "task": "logistics.etl.full",
+        "schedule": crontab(
+            minute=logistics_cron[0],
+            hour=logistics_cron[1],
+            day_of_month=logistics_cron[2],
+            month_of_year=logistics_cron[3],
+            day_of_week=logistics_cron[4],
+        ),
+    }
+
 if _beat_schedule:
     celery_app.conf.beat_schedule = _beat_schedule
 

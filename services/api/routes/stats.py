@@ -24,6 +24,31 @@ except Exception:
 
 router = APIRouter(prefix="/stats", tags=["stats"])
 
+_RETURNS_VENDOR_COLUMN: bool | None = None
+
+
+def _returns_vendor_available(db) -> bool:
+    global _RETURNS_VENDOR_COLUMN
+    if _RETURNS_VENDOR_COLUMN is not None:
+        return _RETURNS_VENDOR_COLUMN
+    try:
+        result = db.execute(
+            text(
+                """
+                    SELECT 1
+                      FROM information_schema.columns
+                     WHERE table_schema = 'public'
+                       AND table_name = 'returns_raw'
+                       AND column_name = 'vendor'
+                     LIMIT 1
+                    """
+            )
+        ).scalar()
+        _RETURNS_VENDOR_COLUMN = bool(result)
+    except Exception:
+        _RETURNS_VENDOR_COLUMN = False
+    return _RETURNS_VENDOR_COLUMN
+
 
 def _roi_view_name():
     if repo and hasattr(repo, "_roi_view_name"):
@@ -79,6 +104,56 @@ def roi_by_vendor(db=Depends(get_db) if get_db else None):
             "total_vendors": len(rows),
         }
     return {"items": [], "total_vendors": 0}
+
+
+@router.get("/returns", dependencies=[Depends(require_basic_auth)])
+def returns_stats(
+    date_from: str | None = None,
+    date_to: str | None = None,
+    asin: str | None = None,
+    vendor: str | None = None,
+    db=Depends(get_db) if get_db else None,
+):
+    if os.getenv("STATS_USE_SQL") != "1" or db is None:
+        return {"items": [], "total_returns": 0}
+
+    clauses: list[str] = []
+    params: dict[str, str] = {}
+
+    if date_from:
+        clauses.append("return_date >= :date_from")
+        params["date_from"] = date_from
+    if date_to:
+        clauses.append("return_date <= :date_to")
+        params["date_to"] = date_to
+    if asin:
+        clauses.append("asin = :asin")
+        params["asin"] = asin
+    if vendor and _returns_vendor_available(db):
+        clauses.append("vendor = :vendor")
+        params["vendor"] = vendor
+
+    query_parts = [
+        "SELECT asin, SUM(qty) AS qty, SUM(refund_amount) AS refund_amount",
+        "FROM returns_raw",
+    ]
+    if clauses:
+        query_parts.append("WHERE " + " AND ".join(clauses))
+    query_parts.append("GROUP BY asin ORDER BY asin")
+    sql = " ".join(query_parts)
+
+    rows = db.execute(text(sql), params).mappings().all()
+    return {
+        "items": [
+            {
+                "asin": row["asin"],
+                "qty": int(row.get("qty") or 0),
+                "refund_amount": float(row.get("refund_amount") or 0.0),
+            }
+            for row in rows
+        ],
+        "total_returns": len(rows),
+    }
 
 
 @router.get("/roi_trend", dependencies=[Depends(require_basic_auth)])

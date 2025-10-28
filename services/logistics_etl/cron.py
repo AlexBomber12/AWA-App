@@ -1,16 +1,31 @@
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from __future__ import annotations
 
-from .client import fetch_rates
-from .repository import upsert_many
+import logging
+from typing import Any
+
+from services.worker.celery_app import celery_app
+
+logger = logging.getLogger(__name__)
 
 
-async def job() -> None:
-    rows = await fetch_rates()
-    if rows:
-        await upsert_many(rows)
+def _run_full_sync(dry_run: bool = False) -> list[dict[str, Any]]:
+    import asyncio
+
+    from . import flow
+
+    return asyncio.run(flow.full(dry_run=dry_run))
+
+
+@celery_app.task(name="logistics.etl.full")  # type: ignore[misc]
+def logistics_etl_full() -> list[dict[str, Any]]:
+    """Celery task entrypoint triggered by beat."""
+    try:
+        return _run_full_sync(dry_run=False)
+    except Exception:  # pragma: no cover - let Celery handle retry/logging
+        logger.exception("Logistics ETL task failed")
+        raise
 
 
 def start() -> None:
-    scheduler = AsyncIOScheduler(timezone="UTC")
-    scheduler.add_job(job, "cron", hour=2)
-    scheduler.start()
+    """Manual entrypoint used by __main__ for ad-hoc runs."""
+    _run_full_sync(dry_run=False)
