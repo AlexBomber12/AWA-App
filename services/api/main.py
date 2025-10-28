@@ -30,6 +30,7 @@ from .routes import health as health_router
 from .routes.ingest import router as ingest_router
 from .routes.roi import router as roi_router
 from .routes.score import router as score_router
+from .routes.sku import router as sku_router
 from .routes.stats import router as stats_router
 from .routes.upload import router as upload_router
 
@@ -164,6 +165,7 @@ app.include_router(ingest_router)
 app.include_router(roi_router)
 app.include_router(stats_router)
 app.include_router(score_router)
+app.include_router(sku_router)
 app.include_router(health_router.router)
 
 

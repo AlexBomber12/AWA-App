@@ -67,20 +67,42 @@ def make_celery() -> Celery:
 
 celery_app = make_celery()
 
+_beat_schedule = dict(getattr(celery_app.conf, "beat_schedule", {}) or {})
+
 if os.getenv("SCHEDULE_NIGHTLY_MAINTENANCE", "true").lower() in ("1", "true", "yes"):
-    cron = os.getenv("NIGHTLY_MAINTENANCE_CRON", "30 2 * * *").split()
-    celery_app.conf.beat_schedule = {
-        "nightly-maintenance": {
-            "task": "ingest.maintenance_nightly",
-            "schedule": crontab(
-                minute=cron[0],
-                hour=cron[1],
-                day_of_month=cron[2],
-                month_of_year=cron[3],
-                day_of_week=cron[4],
-            ),
-        }
+    cron_expr = os.getenv("NIGHTLY_MAINTENANCE_CRON", "30 2 * * *")
+    cron = cron_expr.split()
+    if len(cron) != 5:
+        cron = "30 2 * * *".split()
+    _beat_schedule["nightly-maintenance"] = {
+        "task": "ingest.maintenance_nightly",
+        "schedule": crontab(
+            minute=cron[0],
+            hour=cron[1],
+            day_of_month=cron[2],
+            month_of_year=cron[3],
+            day_of_week=cron[4],
+        ),
     }
+
+if os.getenv("SCHEDULE_MV_REFRESH", "true").lower() in ("1", "true", "yes"):
+    cron_expr = os.getenv("MV_REFRESH_CRON", "*/15 * * * *")
+    mv_cron = cron_expr.split()
+    if len(mv_cron) != 5:
+        mv_cron = "*/15 * * * *".split()
+    _beat_schedule["refresh-roi-fees-mvs"] = {
+        "task": "db.refresh_roi_mvs",
+        "schedule": crontab(
+            minute=mv_cron[0],
+            hour=mv_cron[1],
+            day_of_month=mv_cron[2],
+            month_of_year=mv_cron[3],
+            day_of_week=mv_cron[4],
+        ),
+    }
+
+if _beat_schedule:
+    celery_app.conf.beat_schedule = _beat_schedule
 
 # ensure tasks are registered
 try:
