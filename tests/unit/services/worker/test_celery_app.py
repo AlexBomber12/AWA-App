@@ -49,6 +49,19 @@ def test_init_sentry_if_dsn(monkeypatch):
     assert captured["dsn"] == "https://dsn"
 
 
+def test_init_sentry_ignores_invalid_dsn(monkeypatch):
+    import sentry_sdk
+    from sentry_sdk.utils import BadDsn
+
+    monkeypatch.setattr(celery_module.settings, "SENTRY_DSN", "https://dsn.example/1")
+
+    def boom(*_args, **_kwargs):
+        raise BadDsn("missing")
+
+    monkeypatch.setattr(sentry_sdk, "init", boom)
+    celery_module._init_sentry()  # should not raise
+
+
 @pytest.fixture
 def reload_celery_module():
     yield importlib.reload

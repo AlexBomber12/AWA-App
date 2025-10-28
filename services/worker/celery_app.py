@@ -21,13 +21,29 @@ def _init_sentry() -> None:
         from sentry_sdk.integrations.celery import CeleryIntegration
     except Exception:  # pragma: no cover - optional telemetry
         return
-    sentry_sdk.init(
-        dsn=dsn,
-        environment=settings.ENV,
-        release=os.getenv("SENTRY_RELEASE") or os.getenv("COMMIT_SHA"),
-        send_default_pii=False,
-        integrations=[CeleryIntegration()],
-    )
+    BadDsnT: type[BaseException]
+    try:
+        from sentry_sdk.utils import BadDsn as _BadDsn
+    except Exception:  # pragma: no cover
+        BadDsnT = Exception
+    else:
+        BadDsnT = _BadDsn
+    try:
+        sentry_sdk.init(
+            dsn=dsn,
+            environment=settings.ENV,
+            release=os.getenv("SENTRY_RELEASE") or os.getenv("COMMIT_SHA"),
+            send_default_pii=False,
+            integrations=[CeleryIntegration()],
+        )
+    except BadDsnT:
+        logging.getLogger(__name__).warning(
+            "Ignoring invalid SENTRY_DSN", exc_info=False
+        )
+    except Exception:
+        logging.getLogger(__name__).debug(
+            "Sentry init failed – continuing without telemetry", exc_info=True
+        )
 
 
 _init_sentry()
@@ -68,6 +84,12 @@ def make_celery() -> Celery:
 celery_app = make_celery()
 
 _beat_schedule = dict(getattr(celery_app.conf, "beat_schedule", {}) or {})
+
+if os.getenv("ENABLE_METRICS", "1") != "0":
+    from services.worker.metrics import maybe_start_metrics_server  # noqa: E402
+
+    port = int(os.getenv("METRICS_PORT", "9097"))
+    maybe_start_metrics_server(port)
 
 if os.getenv("SCHEDULE_NIGHTLY_MAINTENANCE", "true").lower() in ("1", "true", "yes"):
     cron_expr = os.getenv("NIGHTLY_MAINTENANCE_CRON", "30 2 * * *")
