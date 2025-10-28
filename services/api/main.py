@@ -23,6 +23,7 @@ from alembic.config import Config
 from alembic.script import ScriptDirectory
 from services.api.errors import install_exception_handlers
 from services.api.logging_config import configure_logging
+from services.api.metrics import install_metrics
 from services.api.sentry_config import init_sentry_if_configured
 
 from .db import get_session
@@ -105,6 +106,7 @@ app = FastAPI(lifespan=lifespan)
 
 app.add_middleware(CorrelationIdMiddleware, header_name="X-Request-ID")
 install_exception_handlers(app)
+install_metrics(app)
 
 origins = [o.strip() for o in os.getenv("CORS_ORIGINS", "").split(",") if o.strip()]
 origin_regex = os.getenv("CORS_ALLOW_ORIGIN_REGEX", "").strip()

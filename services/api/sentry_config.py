@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 from typing import Any, Mapping
 
@@ -102,20 +103,36 @@ def init_sentry_if_configured() -> None:
     release = os.getenv("SENTRY_RELEASE") or os.getenv("COMMIT_SHA")
     traces_rate = float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.05"))
     profiles_rate = float(os.getenv("SENTRY_PROFILES_SAMPLE_RATE", "0.0"))
-    sentry_sdk.init(
-        dsn=dsn,
-        environment=env,
-        release=release,
-        send_default_pii=False,
-        before_send=before_send,
-        integrations=[
-            FastApiIntegration(),
-            SqlalchemyIntegration(),
-            CeleryIntegration(),
-            LoggingIntegration(
-                level=None, event_level=None
-            ),  # breadcrumbs only; no log->event promotion
-        ],
-        traces_sample_rate=traces_rate,
-        profiles_sample_rate=profiles_rate,
-    )
+    BadDsnT: type[BaseException]
+    try:
+        from sentry_sdk.utils import BadDsn as _BadDsn
+    except Exception:  # pragma: no cover
+        BadDsnT = Exception
+    else:
+        BadDsnT = _BadDsn
+    try:
+        sentry_sdk.init(
+            dsn=dsn,
+            environment=env,
+            release=release,
+            send_default_pii=False,
+            before_send=before_send,
+            integrations=[
+                FastApiIntegration(),
+                SqlalchemyIntegration(),
+                CeleryIntegration(),
+                LoggingIntegration(
+                    level=None, event_level=None
+                ),  # breadcrumbs only; no log->event promotion
+            ],
+            traces_sample_rate=traces_rate,
+            profiles_sample_rate=profiles_rate,
+        )
+    except BadDsnT:
+        logging.getLogger(__name__).warning(
+            "Ignoring invalid SENTRY_DSN", exc_info=False
+        )
+    except Exception:
+        logging.getLogger(__name__).debug(
+            "Sentry init failed – continuing without telemetry", exc_info=True
+        )
