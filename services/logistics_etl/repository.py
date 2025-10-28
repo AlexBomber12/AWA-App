@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from datetime import date, datetime
 from typing import Any, Iterable, Mapping, Sequence
 
 from sqlalchemy import text
@@ -19,19 +20,134 @@ def _get_engine() -> AsyncEngine:
     return _engine
 
 
-async def upsert_many(rows: Iterable[dict]) -> None:
+def _prepare_row(row: Mapping[str, Any]) -> dict[str, Any]:
+    prepared = dict(row)
+    for key in ("effective_from", "effective_to"):
+        value = prepared.get(key)
+        if value in (None, "", "null"):
+            prepared[key] = None
+            continue
+        if isinstance(value, date):
+            prepared[key] = value
+            continue
+        if isinstance(value, datetime):
+            prepared[key] = value.date()
+            continue
+        if isinstance(value, str):
+            prepared[key] = date.fromisoformat(value)
+            continue
+        raise ValueError(f"Unsupported date value for {key}: {value!r}")
+    return prepared
+
+
+async def upsert_many(
+    *,
+    table: str,
+    key_cols: Sequence[str],
+    rows: Iterable[Mapping[str, Any]],
+    update_columns: Sequence[str] | None = None,
+) -> dict[str, int]:
+    incoming = [_prepare_row(row) for row in rows]
+    if not incoming:
+        return {"inserted": 0, "updated": 0, "skipped": 0}
+
+    update_columns = list(update_columns or [])
+    engine = _get_engine()
+    inserted = updated = 0
+
+    async with engine.begin() as conn:
+        for row in incoming:
+            params = dict(row)
+            where_clauses: list[str] = []
+            for key in key_cols:
+                if key == "effective_from":
+                    where_clauses.append(
+                        "COALESCE(effective_from, DATE '1900-01-01') = "
+                        "COALESCE(:effective_from, DATE '1900-01-01')"
+                    )
+                else:
+                    where_clauses.append(f"{key} = :{key}")
+            if not where_clauses:
+                raise ValueError("at least one key column is required")
+
+            set_parts: list[str] = []
+            change_checks: list[str] = []
+            for col in update_columns:
+                if col == "updated_at":
+                    set_parts.append("updated_at = CURRENT_TIMESTAMP")
+                else:
+                    set_parts.append(f"{col} = :{col}")
+                    change_checks.append(f"{col} IS DISTINCT FROM :{col}")
+            if not set_parts:
+                set_parts.append("updated_at = CURRENT_TIMESTAMP")
+
+            update_sql = f"""
+                UPDATE {table}
+                   SET {', '.join(set_parts)}
+                 WHERE {' AND '.join(where_clauses)}
+            """
+            if change_checks:
+                update_sql += f" AND ({' OR '.join(change_checks)})"
+            update_sql += " RETURNING 1"
+
+            result = await conn.execute(text(update_sql), params)
+            if result.scalar_one_or_none():
+                updated += 1
+                continue
+
+            insert_cols = list(row.keys())
+            placeholders = ", ".join(f":{col}" for col in insert_cols)
+            insert_sql = f"""
+                INSERT INTO {table} ({', '.join(insert_cols)})
+                VALUES ({placeholders})
+            """
+            await conn.execute(text(insert_sql), params)
+            inserted += 1
+
+    skipped = max(0, len(incoming) - (inserted + updated))
+    return {"inserted": inserted, "updated": updated, "skipped": skipped}
+
+
+async def seen_load(source: str, sha256: str | None, seqno: str | None) -> bool:
+    if not source:
+        return False
+    if sha256 is None and seqno is None:
+        return False
+
+    engine = _get_engine()
     query = text(
         """
-        INSERT INTO freight_rates (lane, mode, eur_per_kg)
-        VALUES (:lane, :mode, :eur_per_kg)
-        ON CONFLICT (lane, mode) DO UPDATE SET
-          eur_per_kg = EXCLUDED.eur_per_kg,
-          updated_at = CURRENT_TIMESTAMP
+        SELECT 1
+          FROM logistics_loadlog
+         WHERE source = :source
+           AND (
+                (:sha256 IS NOT NULL AND sha256 = :sha256)
+             OR (:seqno IS NOT NULL AND seqno = :seqno)
+           )
+         LIMIT 1
         """
     )
+    params = {"source": source, "sha256": sha256, "seqno": seqno}
+    async with engine.connect() as conn:
+        result = await conn.execute(query, params)
+        return result.scalar_one_or_none() is not None
+
+
+async def mark_load(
+    source: str, sha256: str | None, seqno: str | None, rows: int
+) -> None:
     engine = _get_engine()
+    query = text(
+        """
+        INSERT INTO logistics_loadlog (source, sha256, seqno, rows)
+        VALUES (:source, :sha256, :seqno, :rows)
+        ON CONFLICT DO NOTHING
+        """
+    )
     async with engine.begin() as conn:
-        await conn.execute(query, list(rows))
+        await conn.execute(
+            query, {"source": source, "sha256": sha256, "seqno": seqno, "rows": rows}
+        )
 
 
 if os.getenv("TESTING") == "1":
