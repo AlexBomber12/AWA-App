@@ -1,3 +1,5 @@
+import pytest
+
 from services.worker import maintenance as maintenance_module
 
 
@@ -37,6 +39,48 @@ class DummyContext:
         return False
 
 
+class RefreshExecutionContext:
+    def __init__(self, connection, log):
+        self.connection = connection
+        self.log = log
+
+    def __enter__(self):
+        return self.connection
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+
+class RefreshConnection:
+    def __init__(self, log, raise_on_first=False):
+        self.log = log
+        self.raise_on_first = raise_on_first
+        self.calls = 0
+
+    def execution_options(self, **options):
+        self.log.append(("execution_options", options))
+        return RefreshExecutionContext(self, self.log)
+
+    def execute(self, stmt, params=None):
+        self.calls += 1
+        self.log.append(str(stmt))
+        if self.raise_on_first and self.calls == 1:
+            raise RuntimeError("refresh failed")
+
+
+class RefreshEngine:
+    def __init__(self, raise_on_first=False):
+        self.log = []
+        self.raise_on_first = raise_on_first
+        self.disposed = False
+
+    def connect(self):
+        return RefreshConnection(self.log, self.raise_on_first)
+
+    def dispose(self):
+        self.disposed = True
+
+
 def test_task_analyze_table(monkeypatch):
     engine = DummyEngine()
     monkeypatch.setattr(maintenance_module, "create_engine", lambda *_: engine)
@@ -54,3 +98,28 @@ def test_task_maintenance_nightly(monkeypatch):
     assert result["status"] == "success"
     assert len(result["tables"]) == 2
     assert any("VACUUM" in stmt for stmt, _ in engine.log)
+
+
+def test_task_refresh_roi_mvs_executes_both_views(monkeypatch):
+    engine = RefreshEngine()
+    monkeypatch.setattr(maintenance_module, "create_engine", lambda *_: engine)
+    result = maintenance_module.task_refresh_roi_mvs.run()
+    assert result == {
+        "status": "success",
+        "views": ["mat_v_roi_full", "mat_fees_expanded"],
+    }
+    assert engine.disposed is True
+    assert engine.log[0] == ("execution_options", {"isolation_level": "AUTOCOMMIT"})
+    assert engine.log[1] == "REFRESH MATERIALIZED VIEW CONCURRENTLY mat_v_roi_full"
+    assert engine.log[2] == "REFRESH MATERIALIZED VIEW CONCURRENTLY mat_fees_expanded"
+
+
+def test_task_refresh_roi_mvs_raises_and_disposes(monkeypatch):
+    engine = RefreshEngine(raise_on_first=True)
+    monkeypatch.setattr(maintenance_module, "create_engine", lambda *_: engine)
+    with pytest.raises(RuntimeError):
+        maintenance_module.task_refresh_roi_mvs.run()
+    assert engine.disposed is True
+    assert engine.log[0] == ("execution_options", {"isolation_level": "AUTOCOMMIT"})
+    assert engine.log[1] == "REFRESH MATERIALIZED VIEW CONCURRENTLY mat_v_roi_full"
+    assert len(engine.log) == 2
