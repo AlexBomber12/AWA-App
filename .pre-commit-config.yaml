@@ -58,3 +58,25 @@ repos:
           - --ignore-names=__init__
           - --exclude=*/services/api/tests/*,*/services/api/migrations/*
           - services/api
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.18.4
+    hooks:
+      - id: gitleaks
+        name: gitleaks (protect staged)
+        args: ["protect", "--staged", "--verbose", "--redact", "--no-banner", "--config=.gitleaks.toml"]
+  - repo: local
+    hooks:
+      - id: block-plain-secrets
+        name: Block committing plaintext secrets
+        language: system
+        entry: bash
+        args:
+          - -c
+          - |
+              set -euo pipefail
+              files="$(git diff --cached --name-only)"
+              if echo "$files" | grep -E "\.env($|\.local$|\.prod$|\.test$)|(^|/)secrets\.(ya?ml|json|env)$" | grep -vE "\.example$|\.enc\." > /dev/null; then
+                echo "Plaintext secrets detected in staged files. Commit blocked. Use SOPS (.enc.*) or .example files."
+                exit 1
+              fi
+        stages: [pre-commit]
