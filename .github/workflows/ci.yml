@@ -57,11 +57,20 @@ jobs:
 
       - name: Install Python deps
         run: |
-          python -m pip install -U pip wheel
-          if [ -f requirements.txt ]; then python -m pip install -r requirements.txt -c constraints.txt || python -m pip install -r requirements.txt; fi
-          python -m pip install -r requirements-dev.txt -c constraints.txt || python -m pip install -r requirements-dev.txt
-          python -m pip install -e packages/awa_common
-          python -c "import pkgutil; assert pkgutil.find_loader('awa_common'), 'awa_common not installed'"
+          set -o pipefail
+          (
+            python -m pip install -U pip wheel
+            if [ -f requirements.txt ]; then python -m pip install -r requirements.txt -c constraints.txt || python -m pip install -r requirements.txt; fi
+            python -m pip install -r requirements-dev.txt -c constraints.txt || python -m pip install -r requirements-dev.txt
+            python -m pip install -e packages/awa_common
+            python -c "import pkgutil; assert pkgutil.find_loader('awa_common'), 'awa_common not installed'"
+          ) 2>&1 | tee unit-setup.log
+          status=${PIPESTATUS[0]}
+          if [ "$status" -ne 0 ]; then
+            exit "$status"
+          fi
+          pip freeze > pip-freeze.txt
+          tail -n 1000 unit-setup.log > unit-setup-tail.log || cp unit-setup.log unit-setup-tail.log
 
       - name: Set up Node.js
         if: ${{ hashFiles('webapp/package.json') != '' }}
