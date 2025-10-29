@@ -118,7 +118,7 @@ The `Pre-commit` step exited with status 127 because GitHub Actions could not lo
 `python -m pip install -r requirements-dev.txt -c constraints.txt` failed with `ResolutionImpossible` because both the repository constraints and the API service constraints pinned `python-multipart==0.0.9`, which is incompatible with FastAPI 0.116.1 that requires `python-multipart>=0.0.18`.
 
 ## Fix
-- Bump `python-multipart` to `0.0.19` in the top-level `constraints.txt` and `services/api/constraints.txt`.
+- Bump `python-multipart` to `0.0.19` in `constraints.txt` (service-level constraint files were later removed).
 - Allow requirement files to consume the higher version without an explicit strict pin.
 
 ## Logs

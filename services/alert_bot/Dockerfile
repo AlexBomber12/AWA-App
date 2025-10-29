@@ -2,13 +2,10 @@
 FROM python:3.12-slim AS base
 ENV PYTHONUNBUFFERED=1
 WORKDIR /app
-COPY requirements*.txt constraints.txt ./
-ARG CONSTRAINTS=""
-RUN if [ -n "$CONSTRAINTS" ] && [ -f "$CONSTRAINTS" ]; then \
-        pip install -r requirements.txt -c "$CONSTRAINTS"; \
-    else \
-        pip install -r requirements.txt; \
-    fi
+COPY constraints.txt ./constraints.txt
+ENV PIP_CONSTRAINT=/app/constraints.txt
+COPY services/alert_bot/requirements.txt ./services/alert_bot/requirements.txt
+RUN pip install -r services/alert_bot/requirements.txt
 COPY . .
 
 FROM python:3.12-slim

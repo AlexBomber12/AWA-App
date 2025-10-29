@@ -176,7 +176,25 @@ single refund model. The companion `v_refunds_summary` view aggregates those
 refund amounts by ASIN and day for simplified analysis.
 
 ### Dependency pinning
-Run `./scripts/pin_constraints.sh` whenever you update service requirements to refresh an optional `constraints.txt` for reproducible installs.
+All Python pins live in the root `./constraints.txt`. Every service `requirements.txt`
+starts with a relative `-c ../../constraints.txt` include so that running
+
+```bash
+pip install -r services/api/requirements.txt
+```
+
+from the repository root will resolve the exact versions recorded in the
+constraints file. If you are installing from a different working directory,
+pass the constraint path explicitly:
+
+```bash
+pip install -r services/api/requirements.txt -c constraints.txt
+```
+
+The `scripts/ci/check_constraints.py` guard runs in CI and will fail if new
+`constraints*.txt` files appear or if `services/**/requirements.txt` reintroduce
+version pins. Run `./scripts/pin_constraints.sh` whenever you intentionally
+change dependencies to regenerate `constraints.txt`.
 
 ### Health checks
 Each container exposes a simple probe:

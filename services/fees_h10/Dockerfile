@@ -5,13 +5,10 @@ WORKDIR /app
 # Install dependencies first to leverage Docker layer caching.  The service
 # sources live under /app/fees_h10 in the final image so that Python can
 # import the `fees_h10` package.
-COPY requirements*.txt constraints.txt ./fees_h10/
-ARG CONSTRAINTS=""
-RUN if [ -n "$CONSTRAINTS" ] && [ -f "fees_h10/$CONSTRAINTS" ]; then \
-        pip install -r fees_h10/requirements.txt -c fees_h10/$CONSTRAINTS; \
-    else \
-        pip install -r fees_h10/requirements.txt; \
-    fi
+COPY constraints.txt ./constraints.txt
+ENV PIP_CONSTRAINT=/app/constraints.txt
+COPY services/fees_h10/requirements.txt ./fees_h10/requirements.txt
+RUN pip install -r fees_h10/requirements.txt
 # Copy the application code into a package directory and place the start
 # script at the image root.
 COPY . ./fees_h10

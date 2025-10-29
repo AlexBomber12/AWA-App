@@ -3,13 +3,10 @@ FROM python:3.12-slim AS base
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app:/app/services
 WORKDIR /app
-COPY services/etl/requirements*.txt services/etl/constraints.txt ./
-ARG CONSTRAINTS=""
-RUN if [ -n "$CONSTRAINTS" ] && [ -f "$CONSTRAINTS" ]; then \
-        pip install -r requirements.txt -c "$CONSTRAINTS"; \
-    else \
-        pip install -r requirements.txt; \
-    fi
+COPY constraints.txt ./constraints.txt
+ENV PIP_CONSTRAINT=/app/constraints.txt
+COPY services/etl/requirements.txt ./services/etl/requirements.txt
+RUN pip install -r services/etl/requirements.txt
 # copy shared modules under /app/services
 COPY services/common/ ./services/common
 COPY services/ingest/ ./services/ingest

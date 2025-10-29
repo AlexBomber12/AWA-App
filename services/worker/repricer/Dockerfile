@@ -2,14 +2,11 @@
 FROM python:3.12-slim AS base
 ENV PYTHONUNBUFFERED=1
 WORKDIR /app
-COPY services/repricer/requirements*.txt services/repricer/constraints.txt ./
-ARG CONSTRAINTS=""
-RUN if [ -n "$CONSTRAINTS" ] && [ -f "$CONSTRAINTS" ]; then \
-        pip install -r requirements.txt -c "$CONSTRAINTS"; \
-    else \
-        pip install -r requirements.txt; \
-    fi
-COPY services/repricer/ .
+COPY constraints.txt ./constraints.txt
+ENV PIP_CONSTRAINT=/app/constraints.txt
+COPY services/worker/repricer/requirements.txt ./services/worker/repricer/requirements.txt
+RUN pip install -r services/worker/repricer/requirements.txt
+COPY services/worker/repricer/ .
 
 FROM python:3.12-slim
 ARG TZ_CACHE_BUST

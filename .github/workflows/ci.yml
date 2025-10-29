@@ -66,6 +66,9 @@ jobs:
           git rev-parse HEAD
           git log -1 --oneline
 
+      - name: Verify constraints policy
+        run: python3 scripts/ci/check_constraints.py
+
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
@@ -79,7 +82,7 @@ jobs:
             python -m pip install -U pip wheel
             if [ -f requirements.txt ]; then python -m pip install -r requirements.txt -c constraints.txt || python -m pip install -r requirements.txt; fi
             python -m pip install -r requirements-dev.txt -c constraints.txt || python -m pip install -r requirements-dev.txt
-            python -m pip install -e packages/awa_common
+            python -m pip install -e packages/awa_common -c constraints.txt
             python -c "import pkgutil; assert pkgutil.find_loader('awa_common'), 'awa_common not installed'"
           ) 2>&1 | tee unit-setup.log
           status=${PIPESTATUS[0]}
@@ -408,7 +411,7 @@ jobs:
           python -m pip install -U pip wheel
           if [ -f requirements.txt ]; then pip install -r requirements.txt -c constraints.txt || pip install -r requirements.txt ; fi
           pip install -r requirements-dev.txt -c constraints.txt || pip install -r requirements-dev.txt
-          pip install -e packages/awa_common
+          pip install -e packages/awa_common -c constraints.txt
           python -c "import pkgutil; assert pkgutil.find_loader('awa_common'), 'awa_common not installed'"
 
       - name: Bring up Postgres
