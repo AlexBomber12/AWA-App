@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+export PYTHONPATH="${PYTHONPATH:-/app:/app/packages}"
+
 # Ensure pg_isready authenticates using the same credentials as the app
 export PGPASSWORD="${PG_PASSWORD:-}"
 
@@ -13,5 +15,5 @@ until pg_isready \
   sleep 1
 done
 
-alembic -c "${ALEMBIC_CONFIG:-alembic.ini}" upgrade head
+alembic -c "${ALEMBIC_CONFIG:-services/api/alembic.ini}" upgrade head
 exec uvicorn services.api.main:app --host 0.0.0.0 --port 8000

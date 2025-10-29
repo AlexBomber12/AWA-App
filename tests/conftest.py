@@ -37,6 +37,7 @@ else:  # pragma: no cover - exercised only when sqlalchemy is missing
     sessionmaker = None
 
 from awa_common.dsn import build_dsn
+from awa_common.settings import settings
 
 
 def pytest_configure(config):
@@ -103,6 +104,7 @@ def _set_db_url():
     sync_url = build_dsn(sync=True)
     os.environ["DATABASE_URL"] = sync_url
     os.environ["PG_ASYNC_DSN"] = sync_url.replace("+psycopg", "")
+    settings.DATABASE_URL = sync_url  # type: ignore[attr-defined]
 
 
 @pytest.fixture(scope="session", autouse=True)

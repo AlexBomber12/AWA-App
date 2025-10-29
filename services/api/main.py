@@ -8,6 +8,8 @@ import httpx
 import redis.asyncio as aioredis
 import sqlalchemy
 import structlog
+from alembic.config import Config
+from alembic.script import ScriptDirectory
 from asgi_correlation_id import CorrelationIdMiddleware
 from awa_common.settings import settings
 from fastapi import Depends, FastAPI, HTTPException, status
@@ -19,8 +21,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.requests import Request
 from starlette.responses import Response
 
-from alembic.config import Config
-from alembic.script import ScriptDirectory
 from services.api.audit import AuditMiddleware
 from services.api.errors import install_exception_handlers
 from services.api.logging_config import configure_logging
@@ -149,7 +149,7 @@ app.router.dependencies.append(_rate_limiter_dep)
 @app.get("/ready_db", status_code=status.HTTP_200_OK, include_in_schema=False)
 async def ready_db(session: AsyncSession = Depends(get_session)) -> dict[str, str]:
     """Return 200 only when migrations are at head."""
-    alembic_config = os.getenv("ALEMBIC_CONFIG", "alembic.ini")
+    alembic_config = os.getenv("ALEMBIC_CONFIG", "services/api/alembic.ini")
     cfg = Config(alembic_config)
     head = ScriptDirectory.from_config(cfg).get_current_head()
     result = await session.execute(sa_text("SELECT version_num FROM alembic_version"))
