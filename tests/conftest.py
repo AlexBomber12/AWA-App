@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import importlib
 import os
+import sys
 import time
 from pathlib import Path
 
@@ -130,9 +131,17 @@ def migrate_db(_set_db_url, request):
     if not asyncio.run(_has_table()):
         import subprocess
 
-        subprocess.check_call(
-            ["alembic", "-c", "services/api/alembic.ini", "upgrade", "head"]
-        )
+        repo_root = Path(__file__).resolve().parent.parent
+        cmd = [
+            sys.executable,
+            "-m",
+            "alembic",
+            "-c",
+            "services/api/alembic.ini",
+            "upgrade",
+            "head",
+        ]
+        subprocess.check_call(cmd, cwd=repo_root)
 
 
 @pytest.fixture(scope="session")
