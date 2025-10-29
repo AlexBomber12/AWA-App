@@ -2,12 +2,11 @@ import importlib
 import shutil
 
 import pytest
+from alembic import command  # type: ignore[attr-defined]
+from alembic.config import Config
 from httpx import Response
 from sqlalchemy import create_engine, text
 from sqlalchemy.ext.asyncio import create_async_engine
-
-from alembic import command  # type: ignore[attr-defined]
-from alembic.config import Config
 
 pytestmark = pytest.mark.integration
 
@@ -15,6 +14,7 @@ pytest.importorskip("apscheduler")
 respx = pytest.importorskip("respx")
 
 from awa_common import db_url, dsn  # noqa: E402
+from awa_common.settings import settings  # noqa: E402
 
 from services.logistics_etl import client, cron, repository  # noqa: E402
 
@@ -37,10 +37,12 @@ async def test_job_inserts_and_affects_roi(postgresql_proc, tmp_path, monkeypatc
     monkeypatch.setattr(
         dsn, "build_dsn", lambda sync=True: dsn_sync if sync else dsn_async
     )
+    monkeypatch.setenv("DATABASE_URL", dsn_sync)
+    settings.DATABASE_URL = dsn_sync  # type: ignore[attr-defined]
     importlib.reload(repository)
     repository._engine = create_async_engine(dsn_async, future=True)
 
-    cfg = Config("alembic.ini")
+    cfg = Config("services/api/alembic.ini")
     command.upgrade(cfg, "head")
 
     engine = create_engine(dsn_sync)

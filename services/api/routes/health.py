@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, status
 from fastapi.responses import JSONResponse
@@ -20,8 +20,8 @@ async def health(session: AsyncSession = Depends(get_session)) -> JSONResponse:
     result = await session.execute(text("SELECT (now() AT TIME ZONE 'UTC')"))
     db_now = result.scalar()
     if isinstance(db_now, datetime):
-        db_now = db_now.replace(tzinfo=timezone.utc)
-    app_now = datetime.utcnow().replace(tzinfo=timezone.utc)
+        db_now = db_now.replace(tzinfo=UTC)
+    app_now = datetime.now(UTC)
     if db_now is None or abs((db_now - app_now).total_seconds()) > MAX_SKEW:
         return JSONResponse(status_code=503, content={"detail": "clock_skew"})
     return JSONResponse(status_code=status.HTTP_200_OK, content={"status": "ok"})

@@ -3,9 +3,8 @@ from pathlib import Path
 from textwrap import dedent
 
 import sqlalchemy as sa
-from sqlalchemy import inspect
-
 from alembic import op  # type: ignore[attr-defined]
+from sqlalchemy import inspect
 
 sys.path.append(str(Path(__file__).resolve().parents[4]))
 from services.db.utils.views import replace_view

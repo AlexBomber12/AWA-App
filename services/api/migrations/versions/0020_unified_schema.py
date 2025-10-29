@@ -1,5 +1,4 @@
 import sqlalchemy as sa
-
 from alembic import op
 
 revision = "0020_unified_schema"

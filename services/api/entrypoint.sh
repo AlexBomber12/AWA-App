@@ -12,6 +12,8 @@ export PG_HOST PG_PORT PG_USER PG_PASSWORD PG_DATABASE
 
 set -euo pipefail
 
+export PYTHONPATH="${PYTHONPATH:-/app:/app/packages}"
+
 # If the first argument looks like a command, run it directly.
 if [[ $# -gt 0 ]]; then
   if [[ "$1" == -* ]] || command -v "$1" >/dev/null 2>&1; then
@@ -32,5 +34,5 @@ else
   echo "pg_isready not found; skipping DB readiness check"
 fi
 
-alembic -c "${ALEMBIC_CONFIG:-alembic.ini}" upgrade head
+alembic -c "${ALEMBIC_CONFIG:-services/api/alembic.ini}" upgrade head
 exec uvicorn services.api.main:app --host 0.0.0.0 --port 8000

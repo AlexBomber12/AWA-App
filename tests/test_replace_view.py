@@ -1,4 +1,5 @@
 from alembic import op
+
 from services.db.utils.views import replace_view
 
 

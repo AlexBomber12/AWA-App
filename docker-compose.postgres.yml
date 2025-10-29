@@ -3,13 +3,16 @@ services:
     build:
       context: .
       dockerfile: infra/postgres/Dockerfile
-    env_file:
-      - .env.postgres
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-${PG_USER}}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-${PG_PASSWORD}}
-      POSTGRES_DB: ${POSTGRES_DB:-${PG_DATABASE}}
-      PGPASSWORD: ${POSTGRES_PASSWORD:-${PG_PASSWORD}}
+      PG_HOST: ${PG_HOST:-postgres}
+      PG_PORT: ${PG_PORT:-5432}
+      PG_USER: ${PG_USER:-postgres}
+      PG_PASSWORD: ${PG_PASSWORD:-pass}
+      PG_DATABASE: ${PG_DATABASE:-awa}
+      POSTGRES_USER: ${POSTGRES_USER:-${PG_USER:-postgres}}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-${PG_PASSWORD:-pass}}
+      POSTGRES_DB: ${POSTGRES_DB:-${PG_DATABASE:-awa}}
+      PGPASSWORD: ${POSTGRES_PASSWORD:-${PG_PASSWORD:-pass}}
       TZ: UTC
       LANG: en_US.UTF-8
       POSTGRES_CONFIG_FILE: /etc/postgresql/postgresql.conf
@@ -49,15 +52,13 @@ services:
       args:
         TZ_CACHE_BUST: ${GITHUB_SHA:-dev}
     environment:
-      PG_HOST: ${PG_HOST}
-      PG_PORT: ${PG_PORT}
-      PG_USER: ${PG_USER}
-      PG_PASSWORD: ${PG_PASSWORD}
-      PG_DATABASE: ${PG_DATABASE}
-      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://${PG_USER}:${PG_PASSWORD}@${PG_HOST}:${PG_PORT}/${PG_DATABASE}}
+      PG_HOST: ${PG_HOST:-postgres}
+      PG_PORT: ${PG_PORT:-5432}
+      PG_USER: ${PG_USER:-postgres}
+      PG_PASSWORD: ${PG_PASSWORD:-pass}
+      PG_DATABASE: ${PG_DATABASE:-awa}
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://${PG_USER:-postgres}:${PG_PASSWORD:-pass}@${PG_HOST:-postgres}:${PG_PORT:-5432}/${PG_DATABASE:-awa}}
       TZ: UTC
-    env_file:
-      - .env.postgres
     depends_on:
       postgres:
         condition: service_healthy
@@ -83,14 +84,12 @@ services:
       args:
         TZ_CACHE_BUST: ${GITHUB_SHA:-dev}
     environment:
-      PG_HOST: ${PG_HOST}
-      PG_PORT: ${PG_PORT}
-      PG_USER: ${PG_USER}
-      PG_PASSWORD: ${PG_PASSWORD}
-      PG_DATABASE: ${PG_DATABASE}
-      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://${PG_USER}:${PG_PASSWORD}@${PG_HOST}:${PG_PORT}/${PG_DATABASE}}
-    env_file:
-      - .env.postgres
+      PG_HOST: ${PG_HOST:-postgres}
+      PG_PORT: ${PG_PORT:-5432}
+      PG_USER: ${PG_USER:-postgres}
+      PG_PASSWORD: ${PG_PASSWORD:-pass}
+      PG_DATABASE: ${PG_DATABASE:-awa}
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://${PG_USER:-postgres}:${PG_PASSWORD:-pass}@${PG_HOST:-postgres}:${PG_PORT:-5432}/${PG_DATABASE:-awa}}
     depends_on:
       postgres:
         condition: service_healthy
@@ -136,8 +135,13 @@ services:
       test: ["CMD-SHELL", "curl -f http://localhost:8100/health || exit 1"]
       interval: 10s
       retries: 5
-    env_file:
-      - .env.postgres
+    environment:
+      PG_HOST: ${PG_HOST:-postgres}
+      PG_PORT: ${PG_PORT:-5432}
+      PG_USER: ${PG_USER:-postgres}
+      PG_PASSWORD: ${PG_PASSWORD:-pass}
+      PG_DATABASE: ${PG_DATABASE:-awa}
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://${PG_USER:-postgres}:${PG_PASSWORD:-pass}@${PG_HOST:-postgres}:${PG_PORT:-5432}/${PG_DATABASE:-awa}}
     depends_on:
       api:
         condition: service_healthy
@@ -152,7 +156,13 @@ services:
   fees_h10:
     build: services/fees_h10
     command: ["celery", "-A", "services.fees_h10.worker", "beat", "-l", "info"]
-    env_file: .env.postgres
+    environment:
+      PG_HOST: ${PG_HOST:-postgres}
+      PG_PORT: ${PG_PORT:-5432}
+      PG_USER: ${PG_USER:-postgres}
+      PG_PASSWORD: ${PG_PASSWORD:-pass}
+      PG_DATABASE: ${PG_DATABASE:-awa}
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://${PG_USER:-postgres}:${PG_PASSWORD:-pass}@${PG_HOST:-postgres}:${PG_PORT:-5432}/${PG_DATABASE:-awa}}
     depends_on:
       postgres:
         condition: service_healthy
@@ -162,8 +172,14 @@ services:
       - "host.docker.internal:host-gateway"
   logistics_etl:
     build: services/logistics_etl
-    env_file: .env.postgres
     command: ["python", "-m", "logistics_etl"]
+    environment:
+      PG_HOST: ${PG_HOST:-postgres}
+      PG_PORT: ${PG_PORT:-5432}
+      PG_USER: ${PG_USER:-postgres}
+      PG_PASSWORD: ${PG_PASSWORD:-pass}
+      PG_DATABASE: ${PG_DATABASE:-awa}
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://${PG_USER:-postgres}:${PG_PASSWORD:-pass}@${PG_HOST:-postgres}:${PG_PORT:-5432}/${PG_DATABASE:-awa}}
     depends_on:
       postgres:
         condition: service_healthy

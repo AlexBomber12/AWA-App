@@ -1,8 +1,7 @@
 from textwrap import dedent
 
-from sqlalchemy import text
-
 from alembic import op  # type: ignore[attr-defined]
+from sqlalchemy import text
 
 revision = "0002_create_roi_view"
 down_revision = "0001_baseline"

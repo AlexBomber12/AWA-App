@@ -1,7 +1,6 @@
 import sqlalchemy as sa
-from sqlalchemy.dialects import postgresql
-
 from alembic import op
+from sqlalchemy.dialects import postgresql
 
 revision = "0025_pr4_indexes_loadlog"
 down_revision = "0024_create_buybox"

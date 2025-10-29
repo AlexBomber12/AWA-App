@@ -47,7 +47,7 @@ def main() -> dict[str, str]:
                 if not (name.endswith(".csv") or name.endswith(".xlsx")):
                     continue
                 data: Any = part.get_payload(decode=True)
-                if not isinstance(data, (bytes, bytearray)):
+                if not isinstance(data, bytes | bytearray):
                     data = b""
                 with tempfile.NamedTemporaryFile(delete=False) as tmp:
                     tmp.write(data)

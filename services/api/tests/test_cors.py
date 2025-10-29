@@ -22,9 +22,9 @@ def _get_app(monkeypatch, **env):
         async def execute(self, query):  # pragma: no cover - simple stub
             class R:
                 def scalar(self):
-                    import datetime
+                    from datetime import UTC, datetime
 
-                    return datetime.datetime.utcnow()
+                    return datetime.now(UTC)
 
             return R()
 

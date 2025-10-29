@@ -44,7 +44,7 @@ def _scrub_mapping(d: Mapping[str, Any]) -> dict[str, Any]:
             red[k] = [
                 (
                     "[redacted]"
-                    if isinstance(x, (str, bytes)) and key in _SCRUB_FIELDS
+                    if isinstance(x, str | bytes) and key in _SCRUB_FIELDS
                     else x
                 )
                 for x in v

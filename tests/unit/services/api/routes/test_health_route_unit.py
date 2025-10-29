@@ -1,4 +1,4 @@
-import datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -8,7 +8,7 @@ from tests.unit.conftest import _StubResult
 
 @pytest.mark.asyncio
 async def test_health_ok(fake_db_session):
-    now = datetime.datetime.utcnow()
+    now = datetime.now(UTC)
     session = fake_db_session(_StubResult(scalar=now))
     response = await health.health(session=session)
     assert response.status_code == 200
@@ -17,7 +17,7 @@ async def test_health_ok(fake_db_session):
 
 @pytest.mark.asyncio
 async def test_health_clock_skew(fake_db_session):
-    old = datetime.datetime.utcnow() - datetime.timedelta(minutes=5)
+    old = datetime.now(UTC) - timedelta(minutes=5)
     session = fake_db_session(_StubResult(scalar=old))
     response = await health.health(session=session)
     assert response.status_code == 503
