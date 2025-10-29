@@ -1,66 +1,31 @@
 import os
-import sys
-import types
 
-from awa_common.dsn import build_dsn
+from services.etl import sp_fees
 
 
-class FakeCursor:
+class DummyEngine:
     def __init__(self):
-        self.queries = []
+        self.disposed = False
 
-    def execute(self, query, params=None):
-        self.queries.append((query, params))
-
-    def close(self):
-        pass
+    def dispose(self):
+        self.disposed = True
 
 
-class FakeConn:
-    def __init__(self):
-        self.cur = FakeCursor()
-
-    def cursor(self):
-        return self.cur
-
-    def commit(self):
-        pass
-
-    def close(self):
-        pass
-
-
-class FakeSP:
-    def __init__(self):
-        self.calls = []
-
-    def get_my_fees_estimate_for_sku(self, *args, **kwargs):
-        self.calls.append(1)
-
-
-def test_main_offline(monkeypatch):
+def test_main_offline(monkeypatch, tmp_path):
     os.environ.pop("ENABLE_LIVE", None)
-    os.environ["DATABASE_URL"] = build_dsn(sync=True)
-    fake_api = FakeSP()
-    monkeypatch.setitem(
-        sys.modules,
-        "sp_api.api",
-        types.SimpleNamespace(SellingPartnerAPI=lambda: fake_api),
-    )
-    fake_conn = FakeConn()
-    monkeypatch.setitem(
-        sys.modules, "pg_utils", types.SimpleNamespace(connect=lambda dsn: fake_conn)
-    )
+    os.environ["TESTING"] = "1"
+    dummy = DummyEngine()
+    monkeypatch.setattr("services.etl.sp_fees.create_engine", lambda dsn: dummy)
+    captured = {}
 
-    import importlib
+    def fake_upsert(engine, rows, testing):
+        captured["engine"] = engine
+        captured["rows"] = rows
+        captured["testing"] = testing
 
-    sys.path.insert(0, os.getcwd())
-    sp_fees = importlib.import_module("sp_fees")
-
-    sp_fees.main()
-
-    assert fake_api.calls == []
-    inserts = [
-        q for q in fake_conn.cur.queries if q[0].startswith("INSERT INTO fees_raw")
-    ]
-    assert len(inserts) == 2
+    monkeypatch.setattr(sp_fees.repo, "upsert_fees_raw", fake_upsert)
+    assert sp_fees.main([]) == 0
+    assert captured["engine"] is dummy
+    assert captured["testing"]
+    assert len(captured["rows"]) >= 1
+    assert dummy.disposed

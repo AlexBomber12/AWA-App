@@ -80,25 +80,28 @@ def test_sp_network_timeout_and_bad_json_do_not_write(
     pg_engine, ensure_test_fees_raw_table, monkeypatch
 ):
     _env()
-    try:
-        from services.etl import sp_fees_ingestor as spfi
-    except Exception:
-        pytest.skip("sp_fees_ingestor not present")
+    import httpx
 
-    def boom(*a, **kw):
-        raise TimeoutError("network timeout")
+    from services.etl import sp_fees as spfi
 
-    if hasattr(spfi, "fetch_fees"):
-        monkeypatch.setattr(spfi, "fetch_fees", boom, raising=False)
-    else:
-        monkeypatch.setattr(spfi, "run", boom, raising=False)
+    os.environ["ENABLE_LIVE"] = "1"
+    with pg_engine.begin() as conn:
+        conn.execute(text("TRUNCATE test_fees_raw;"))
+    dummy = type("DummyEngine", (), {"dispose": lambda self: None})()
+    monkeypatch.setattr("services.etl.sp_fees.create_engine", lambda dsn: dummy)
+    called = {"n": 0}
+    monkeypatch.setattr(
+        spfi.repo,
+        "upsert_fees_raw",
+        lambda *a, **k: called.__setitem__("n", called["n"] + 1),
+    )
 
-    with pg_engine.begin() as c:
-        c.execute(text("TRUNCATE test_fees_raw;"))
-    try:
-        pass
-    except Exception:
-        pass
+    def boom(*_args, **_kwargs):
+        raise httpx.TimeoutException("network timeout")
+
+    monkeypatch.setattr(spfi, "build_rows_from_live", boom)
+    assert spfi.main([]) == 1
     with pg_engine.connect() as c:
         count = c.execute(text("SELECT COUNT(*) FROM test_fees_raw")).scalar_one()
     assert count == 0
+    assert called["n"] == 0

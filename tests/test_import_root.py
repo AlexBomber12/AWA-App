@@ -1,8 +1,14 @@
 import importlib
 
-MODULES = ["db", "helium_fees"]
+MODULES = [
+    "db",
+    "services.etl.helium_fees",
+    "services.etl.keepa_ingestor",
+    "services.etl.keepa_etl",
+    "services.etl.sp_fees",
+]
 
 
-def test_import_root_modules() -> None:
+def test_import_canonical_modules() -> None:
     for mod in MODULES:
         importlib.import_module(mod)
