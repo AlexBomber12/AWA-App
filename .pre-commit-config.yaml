@@ -101,3 +101,27 @@ repos:
             fi
           '
         stages: [commit]
+      - id: forbid-legacy-imports
+        name: Forbid imports from legacy package
+        language: system
+        entry: |-
+          bash -lc '
+            set -euo pipefail
+            mapfile -t files < <(git diff --cached --name-only --diff-filter=ACM -- "*.py")
+            bad=()
+            for f in "${files[@]}"; do
+              [[ "$f" == legacy/* ]] && continue
+              [[ -f "$f" ]] || continue
+              if grep -nE "^(from|import)\s+legacy(\.|(\s|$))" "$f" >/dev/null; then
+                bad+=("$f")
+              fi
+            done
+            if ((${#bad[@]})); then
+              echo "❌ legacy/ imports detected:"
+              printf "  - %s\n" "${bad[@]}"
+              echo "Remove imports from legacy/ modules."
+              exit 1
+            fi
+          '
+        pass_filenames: false
+        stages: [commit]
