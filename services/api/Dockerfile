@@ -10,4 +10,4 @@ COPY packages ./packages
 COPY services/api ./services/api
 RUN pip install --no-cache-dir -e ./packages/awa_common
 EXPOSE 8000
-CMD ["uvicorn", "services.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+ENTRYPOINT ["./services/api/docker-entrypoint.sh"]

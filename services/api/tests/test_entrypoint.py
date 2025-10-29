@@ -8,7 +8,7 @@ def test_entrypoint_executes_without_env() -> None:
     if sys.platform.startswith("win"):
         return
 
-    script = Path(__file__).resolve().parents[1] / "entrypoint.sh"
+    script = Path(__file__).resolve().parents[1] / "docker-entrypoint.sh"
     if not script.exists():
         return
 
@@ -21,7 +21,7 @@ def test_entrypoint_passthrough_exec() -> None:
     if sys.platform.startswith("win"):
         return
 
-    script = Path(__file__).resolve().parents[1] / "entrypoint.sh"
+    script = Path(__file__).resolve().parents[1] / "docker-entrypoint.sh"
     if not script.exists():
         return
 
