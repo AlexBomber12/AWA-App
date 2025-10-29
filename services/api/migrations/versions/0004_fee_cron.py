@@ -1,7 +1,6 @@
 import sqlalchemy as sa
-from sqlalchemy import inspect
-
 from alembic import op  # type: ignore[attr-defined]
+from sqlalchemy import inspect
 
 revision = "0004_fee_cron"
 down_revision = "0003_vendor_prices"

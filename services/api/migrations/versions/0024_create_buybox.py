@@ -1,5 +1,4 @@
 import sqlalchemy as sa
-
 from alembic import op
 
 revision = "0024_create_buybox"

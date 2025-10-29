@@ -1,9 +1,8 @@
 from textwrap import dedent
 
 import sqlalchemy as sa
-from sqlalchemy import inspect
-
 from alembic import op  # type: ignore[attr-defined]
+from sqlalchemy import inspect
 
 revision = "0003_vendor_prices"
 down_revision = "3e9d5c5aff2c"
