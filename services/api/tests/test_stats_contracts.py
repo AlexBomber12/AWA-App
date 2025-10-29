@@ -32,7 +32,7 @@ def test_kpi_contract():
         assert "kpi" in data and {"roi_avg", "products", "vendors"} <= set(
             data["kpi"].keys()
         )
-        assert isinstance(data["kpi"]["roi_avg"], (int, float))
+        assert isinstance(data["kpi"]["roi_avg"], int | float)
 
 
 def test_roi_by_vendor_contract():

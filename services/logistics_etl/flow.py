@@ -24,7 +24,7 @@ async def full(dry_run: bool = False) -> list[dict[str, Any]]:
             uri = str(uri_value) if uri_value is not None else "unknown"
 
             raw_value = snapshot.get("raw")
-            has_raw = isinstance(raw_value, (bytes, bytearray))
+            has_raw = isinstance(raw_value, bytes | bytearray)
             if isinstance(raw_value, bytearray):
                 raw = bytes(raw_value)
             elif isinstance(raw_value, bytes):

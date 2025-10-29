@@ -83,7 +83,7 @@ class Settings(BaseSettings):
             if not isinstance(internal_role, str):
                 continue
             values: set[str] = set()
-            if isinstance(external_values, (list, tuple, set)):
+            if isinstance(external_values, list | tuple | set):
                 values = {str(value) for value in external_values}
             elif isinstance(external_values, str):
                 values = {external_values}

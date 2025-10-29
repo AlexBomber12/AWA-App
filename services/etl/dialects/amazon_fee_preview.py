@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from datetime import UTC
+
 import numpy as np
 import pandas as pd
 from pandas import DataFrame
@@ -50,7 +52,7 @@ def normalise(df: DataFrame) -> DataFrame:
                 df = df.rename(columns={lower[opt]: key})
                 break
     if "captured_at" not in df.columns:
-        df["captured_at"] = pd.Timestamp.utcnow()
+        df["captured_at"] = pd.Timestamp.now(tz=UTC)
     for col in TARGET_COLUMNS:
         if col not in df.columns:
             if col in {

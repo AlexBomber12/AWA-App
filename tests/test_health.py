@@ -21,9 +21,9 @@ def test_health(monkeypatch, _):
         async def execute(self, query):
             class R:
                 def scalar(self):
-                    import datetime
+                    from datetime import UTC, datetime
 
-                    return datetime.datetime.utcnow()
+                    return datetime.now(UTC)
 
             return R()
 
