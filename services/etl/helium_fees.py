@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from services.etl import sp_fees
+from services.etl import fba_fee_ingestor
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    return sp_fees.main(argv)
+    return fba_fee_ingestor.main(argv)
 
 
 if __name__ == "__main__":
