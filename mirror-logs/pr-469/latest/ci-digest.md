@@ -7,13 +7,13 @@
 
 | Job | Conclusion | URL |
 | --- | ---------- | --- |
-| unit | ❌ Failure | [Logs](https://github.com/AlexBomber12/AWA-App/actions/runs/18917768859/job/54006812995) |
-| secrets scan (gitleaks) | ✅ Success | [Logs](https://github.com/AlexBomber12/AWA-App/actions/runs/18917768859/job/54006812996) |
-| k6 smoke (non-blocking) | ⚪ Skipped | [Logs](https://github.com/AlexBomber12/AWA-App/actions/runs/18917768859/job/54007007118) |
-| integration | ⚪ Skipped | [Logs](https://github.com/AlexBomber12/AWA-App/actions/runs/18917768859/job/54007007196) |
-| preview | ⚪ Skipped | [Logs](https://github.com/AlexBomber12/AWA-App/actions/runs/18917768859/job/54007007278) |
-| migrations | ⚪ Skipped | [Logs](https://github.com/AlexBomber12/AWA-App/actions/runs/18917768859/job/54007007344) |
-| mirror_logs | ⏳ In Progress | [Logs](https://github.com/AlexBomber12/AWA-App/actions/runs/18917768859/job/54007007249) |
+| secrets scan (gitleaks) | ✅ Success | [Logs](https://github.com/AlexBomber12/AWA-App/actions/runs/18917768859/job/54008899550) |
+| unit | ❌ Failure | [Logs](https://github.com/AlexBomber12/AWA-App/actions/runs/18917768859/job/54008899422) |
+| migrations | ⚪ Skipped | [Logs](https://github.com/AlexBomber12/AWA-App/actions/runs/18917768859/job/54009086542) |
+| integration | ⚪ Skipped | [Logs](https://github.com/AlexBomber12/AWA-App/actions/runs/18917768859/job/54009086568) |
+| k6 smoke (non-blocking) | ⚪ Skipped | [Logs](https://github.com/AlexBomber12/AWA-App/actions/runs/18917768859/job/54009086775) |
+| preview | ⚪ Skipped | [Logs](https://github.com/AlexBomber12/AWA-App/actions/runs/18917768859/job/54009086850) |
+| mirror_logs | ⏳ In Progress | [Logs](https://github.com/AlexBomber12/AWA-App/actions/runs/18917768859/job/54009086567) |
 
 ### Failed tails
 
@@ -162,7 +162,7 @@ Using cached rich-14.2.0-py3-none-any.whl (243 kB)
 Using cached markdown_it_py-4.0.0-py3-none-any.whl (87 kB)
 Using cached mdurl-0.1.2-py3-none-any.whl (10.0 kB)
 Downloading rignore-0.7.2-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (959 kB)
-   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 959.6/959.6 kB 58.6 MB/s  0:00:00
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 959.6/959.6 kB 42.3 MB/s  0:00:00
 Using cached sentry_sdk-2.20.0-py2.py3-none-any.whl (322 kB)
 Using cached six-1.17.0-py2.py3-none-any.whl (11 kB)
 Using cached sniffio-1.3.1-py3-none-any.whl (10 kB)
@@ -177,7 +177,7 @@ Using cached uvicorn-0.35.0-py3-none-any.whl (66 kB)
 Using cached httptools-0.7.1-cp311-cp311-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl (456 kB)
 Using cached uvloop-0.22.1-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl (3.8 MB)
 Downloading virtualenv-20.35.4-py3-none-any.whl (6.0 MB)
-   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 6.0/6.0 MB 211.4 MB/s  0:00:00
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 6.0/6.0 MB 90.7 MB/s  0:00:00
 Using cached distlib-0.4.0-py2.py3-none-any.whl (469 kB)
 Using cached filelock-3.20.0-py3-none-any.whl (16 kB)
 Using cached watchfiles-1.1.1-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl (456 kB)
@@ -216,7 +216,7 @@ Building wheels for collected packages: awa-common
   Building editable for awa-common (pyproject.toml): started
   Building editable for awa-common (pyproject.toml): finished with status 'done'
   Created wheel for awa-common: filename=awa_common-0.0.1-py3-none-any.whl size=986 sha256=c6310af8e5007b29b12eb82fcddba88773d429330b959c3ccb5f42a788487a78
-  Stored in directory: /tmp/pip-ephem-wheel-cache-bhtfaf10/wheels/58/da/3c/a7efd2bff9f1af19244156fcec46ad0dafb94fdf76dd747f48
+  Stored in directory: /tmp/pip-ephem-wheel-cache-rrp8dilk/wheels/58/da/3c/a7efd2bff9f1af19244156fcec46ad0dafb94fdf76dd747f48
 Successfully built awa-common
 Installing collected packages: awa-common
 Successfully installed awa-common-0.0.1
@@ -285,30 +285,30 @@ exit_code=1
 
 ```
 $ docker compose -f docker-compose.yml -f docker-compose.ci.yml -f docker-compose.postgres.yml -f docker-compose.dev.yml logs --no-color
-time="2025-10-29T18:24:16Z" level=warning msg="The \"PG_DATABASE\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:16Z" level=warning msg="The \"PG_PASSWORD\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:16Z" level=warning msg="The \"PG_USER\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:16Z" level=warning msg="The \"PG_PASSWORD\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:16Z" level=warning msg="The \"PG_DATABASE\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:16Z" level=warning msg="The \"PG_USER\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:16Z" level=warning msg="The \"PG_PASSWORD\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:16Z" level=warning msg="The \"PG_HOST\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:16Z" level=warning msg="The \"PG_PORT\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:16Z" level=warning msg="The \"PG_DATABASE\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:16Z" level=warning msg="The \"PG_HOST\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:16Z" level=warning msg="The \"PG_PORT\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:16Z" level=warning msg="The \"PG_USER\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:16Z" level=warning msg="The \"PG_PASSWORD\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:16Z" level=warning msg="The \"PG_PORT\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:16Z" level=warning msg="The \"PG_USER\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:16Z" level=warning msg="The \"PG_PASSWORD\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:16Z" level=warning msg="The \"PG_DATABASE\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:16Z" level=warning msg="The \"PG_USER\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:16Z" level=warning msg="The \"PG_PASSWORD\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:16Z" level=warning msg="The \"PG_HOST\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:16Z" level=warning msg="The \"PG_PORT\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:16Z" level=warning msg="The \"PG_DATABASE\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:16Z" level=warning msg="The \"PG_HOST\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:16Z" level=warning msg="The \"PG_USER\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:16Z" level=warning msg="The \"PG_PASSWORD\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:16Z" level=warning msg="The \"PG_DATABASE\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:16Z" level=warning msg="The \"PG_PASSWORD\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:16Z" level=warning msg="The \"PG_USER\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:16Z" level=warning msg="The \"PG_PASSWORD\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:16Z" level=warning msg="The \"PG_DATABASE\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:16Z" level=warning msg="The \"PG_USER\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:16Z" level=warning msg="The \"PG_PASSWORD\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:16Z" level=warning msg="The \"PG_HOST\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:16Z" level=warning msg="The \"PG_PORT\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:16Z" level=warning msg="The \"PG_DATABASE\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:16Z" level=warning msg="The \"PG_HOST\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:16Z" level=warning msg="The \"PG_PORT\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:16Z" level=warning msg="The \"PG_DATABASE\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:16Z" level=warning msg="The \"PG_USER\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:16Z" level=warning msg="The \"PG_PASSWORD\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:16Z" level=warning msg="The \"PG_HOST\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:16Z" level=warning msg="The \"PG_PORT\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:16Z" level=warning msg="The \"PG_DATABASE\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:16Z" level=warning msg="The \"PG_HOST\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:16Z" level=warning msg="The \"PG_PORT\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:16Z" level=warning msg="The \"PG_USER\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:16Z" level=warning msg="The \"PG_PASSWORD\" variable is not set. Defaulting to a blank string."
 env file /home/runner/work/AWA-App/AWA-App/.env.postgres not found: stat /home/runner/work/AWA-App/AWA-App/.env.postgres: no such file or directory
 exit_code=1
 ```
@@ -317,30 +317,30 @@ exit_code=1
 
 ```
 $ docker compose -f docker-compose.yml -f docker-compose.ci.yml -f docker-compose.postgres.yml -f docker-compose.dev.yml ps
-time="2025-10-29T18:24:15Z" level=warning msg="The \"PG_DATABASE\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:15Z" level=warning msg="The \"PG_USER\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:15Z" level=warning msg="The \"PG_PASSWORD\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:15Z" level=warning msg="The \"PG_HOST\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:15Z" level=warning msg="The \"PG_PORT\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:15Z" level=warning msg="The \"PG_DATABASE\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:15Z" level=warning msg="The \"PG_HOST\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:15Z" level=warning msg="The \"PG_PORT\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:15Z" level=warning msg="The \"PG_USER\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:15Z" level=warning msg="The \"PG_PASSWORD\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:15Z" level=warning msg="The \"PG_HOST\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:15Z" level=warning msg="The \"PG_PORT\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:15Z" level=warning msg="The \"PG_USER\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:15Z" level=warning msg="The \"PG_PASSWORD\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:15Z" level=warning msg="The \"PG_DATABASE\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:15Z" level=warning msg="The \"PG_USER\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:15Z" level=warning msg="The \"PG_PASSWORD\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:15Z" level=warning msg="The \"PG_HOST\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:15Z" level=warning msg="The \"PG_PORT\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:15Z" level=warning msg="The \"PG_DATABASE\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:15Z" level=warning msg="The \"PG_USER\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:15Z" level=warning msg="The \"PG_PASSWORD\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:15Z" level=warning msg="The \"PG_DATABASE\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:15Z" level=warning msg="The \"PG_PASSWORD\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:16Z" level=warning msg="The \"PG_PASSWORD\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:16Z" level=warning msg="The \"PG_DATABASE\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:16Z" level=warning msg="The \"PG_PASSWORD\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:16Z" level=warning msg="The \"PG_USER\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:16Z" level=warning msg="The \"PG_HOST\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:16Z" level=warning msg="The \"PG_PORT\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:16Z" level=warning msg="The \"PG_USER\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:16Z" level=warning msg="The \"PG_PASSWORD\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:16Z" level=warning msg="The \"PG_DATABASE\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:16Z" level=warning msg="The \"PG_USER\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:16Z" level=warning msg="The \"PG_PASSWORD\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:16Z" level=warning msg="The \"PG_HOST\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:16Z" level=warning msg="The \"PG_PORT\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:16Z" level=warning msg="The \"PG_DATABASE\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:16Z" level=warning msg="The \"PG_HOST\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:16Z" level=warning msg="The \"PG_PORT\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:16Z" level=warning msg="The \"PG_USER\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:16Z" level=warning msg="The \"PG_PASSWORD\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:16Z" level=warning msg="The \"PG_DATABASE\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:16Z" level=warning msg="The \"PG_USER\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:16Z" level=warning msg="The \"PG_PASSWORD\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:16Z" level=warning msg="The \"PG_HOST\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:16Z" level=warning msg="The \"PG_PORT\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:16Z" level=warning msg="The \"PG_DATABASE\" variable is not set. Defaulting to a blank string."
 env file /home/runner/work/AWA-App/AWA-App/.env.postgres not found: stat /home/runner/work/AWA-App/AWA-App/.env.postgres: no such file or directory
 exit_code=1
 ```
@@ -349,57 +349,57 @@ exit_code=1
 
 ```
 $ docker compose -f docker-compose.yml -f docker-compose.ci.yml -f docker-compose.postgres.yml -f docker-compose.dev.yml run --rm api alembic current
-time="2025-10-29T18:24:16Z" level=warning msg="The \"PG_PASSWORD\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:16Z" level=warning msg="The \"PG_USER\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:16Z" level=warning msg="The \"PG_PASSWORD\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:16Z" level=warning msg="The \"PG_DATABASE\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:16Z" level=warning msg="The \"PG_USER\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:16Z" level=warning msg="The \"PG_PASSWORD\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:16Z" level=warning msg="The \"PG_DATABASE\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:16Z" level=warning msg="The \"PG_USER\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:16Z" level=warning msg="The \"PG_PASSWORD\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:16Z" level=warning msg="The \"PG_HOST\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:16Z" level=warning msg="The \"PG_PORT\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:16Z" level=warning msg="The \"PG_DATABASE\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:16Z" level=warning msg="The \"PG_HOST\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:16Z" level=warning msg="The \"PG_PORT\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:16Z" level=warning msg="The \"PG_HOST\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:16Z" level=warning msg="The \"PG_PORT\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:16Z" level=warning msg="The \"PG_USER\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:16Z" level=warning msg="The \"PG_PASSWORD\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:16Z" level=warning msg="The \"PG_DATABASE\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:16Z" level=warning msg="The \"PG_USER\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:16Z" level=warning msg="The \"PG_PASSWORD\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:16Z" level=warning msg="The \"PG_HOST\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:16Z" level=warning msg="The \"PG_PORT\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:16Z" level=warning msg="The \"PG_DATABASE\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:16Z" level=warning msg="The \"PG_USER\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:16Z" level=warning msg="The \"PG_PASSWORD\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:16Z" level=warning msg="The \"PG_DATABASE\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:16Z" level=warning msg="The \"PG_PASSWORD\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:16Z" level=warning msg="The \"PG_HOST\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:16Z" level=warning msg="The \"PG_PORT\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:16Z" level=warning msg="The \"PG_USER\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:16Z" level=warning msg="The \"PG_PASSWORD\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:16Z" level=warning msg="The \"PG_DATABASE\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:16Z" level=warning msg="The \"PG_USER\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:16Z" level=warning msg="The \"PG_PASSWORD\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:16Z" level=warning msg="The \"PG_HOST\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:16Z" level=warning msg="The \"PG_PORT\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:16Z" level=warning msg="The \"PG_DATABASE\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:16Z" level=warning msg="The \"PG_PASSWORD\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:16Z" level=warning msg="The \"PG_DATABASE\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:16Z" level=warning msg="The \"PG_USER\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:16Z" level=warning msg="The \"PG_PASSWORD\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:16Z" level=warning msg="The \"PG_HOST\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:16Z" level=warning msg="The \"PG_PORT\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:16Z" level=warning msg="The \"PG_DATABASE\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:16Z" level=warning msg="The \"PG_HOST\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:16Z" level=warning msg="The \"PG_PORT\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:16Z" level=warning msg="The \"PG_USER\" variable is not set. Defaulting to a blank string."
 env file /home/runner/work/AWA-App/AWA-App/.env.postgres not found: stat /home/runner/work/AWA-App/AWA-App/.env.postgres: no such file or directory
 exit_code=1
 $ docker compose -f docker-compose.yml -f docker-compose.ci.yml -f docker-compose.postgres.yml -f docker-compose.dev.yml run --rm api alembic history -20
-time="2025-10-29T18:24:16Z" level=warning msg="The \"PG_USER\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:16Z" level=warning msg="The \"PG_PASSWORD\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:16Z" level=warning msg="The \"PG_DATABASE\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:16Z" level=warning msg="The \"PG_PASSWORD\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:16Z" level=warning msg="The \"PG_DATABASE\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:16Z" level=warning msg="The \"PG_USER\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:16Z" level=warning msg="The \"PG_PASSWORD\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:16Z" level=warning msg="The \"PG_HOST\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:16Z" level=warning msg="The \"PG_PORT\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:16Z" level=warning msg="The \"PG_DATABASE\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:16Z" level=warning msg="The \"PG_HOST\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:16Z" level=warning msg="The \"PG_PORT\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:16Z" level=warning msg="The \"PG_USER\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:16Z" level=warning msg="The \"PG_PASSWORD\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:16Z" level=warning msg="The \"PG_HOST\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:16Z" level=warning msg="The \"PG_PORT\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:16Z" level=warning msg="The \"PG_USER\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:16Z" level=warning msg="The \"PG_PASSWORD\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:16Z" level=warning msg="The \"PG_DATABASE\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:16Z" level=warning msg="The \"PG_USER\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:16Z" level=warning msg="The \"PG_PASSWORD\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:16Z" level=warning msg="The \"PG_HOST\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:16Z" level=warning msg="The \"PG_PORT\" variable is not set. Defaulting to a blank string."
-time="2025-10-29T18:24:16Z" level=warning msg="The \"PG_DATABASE\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:17Z" level=warning msg="The \"PG_USER\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:17Z" level=warning msg="The \"PG_PASSWORD\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:17Z" level=warning msg="The \"PG_HOST\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:17Z" level=warning msg="The \"PG_PORT\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:17Z" level=warning msg="The \"PG_DATABASE\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:17Z" level=warning msg="The \"PG_HOST\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:17Z" level=warning msg="The \"PG_PORT\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:17Z" level=warning msg="The \"PG_USER\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:17Z" level=warning msg="The \"PG_PASSWORD\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:17Z" level=warning msg="The \"PG_DATABASE\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:17Z" level=warning msg="The \"PG_USER\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:17Z" level=warning msg="The \"PG_PASSWORD\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:17Z" level=warning msg="The \"PG_DATABASE\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:17Z" level=warning msg="The \"PG_USER\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:17Z" level=warning msg="The \"PG_PASSWORD\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:17Z" level=warning msg="The \"PG_HOST\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:17Z" level=warning msg="The \"PG_PORT\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:17Z" level=warning msg="The \"PG_DATABASE\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:17Z" level=warning msg="The \"PG_HOST\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:17Z" level=warning msg="The \"PG_PORT\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:17Z" level=warning msg="The \"PG_USER\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:17Z" level=warning msg="The \"PG_PASSWORD\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:17Z" level=warning msg="The \"PG_DATABASE\" variable is not set. Defaulting to a blank string."
+time="2025-10-29T18:48:17Z" level=warning msg="The \"PG_PASSWORD\" variable is not set. Defaulting to a blank string."
 env file /home/runner/work/AWA-App/AWA-App/.env.postgres not found: stat /home/runner/work/AWA-App/AWA-App/.env.postgres: no such file or directory
 exit_code=1
 ```
@@ -639,14 +639,14 @@ GITHUB_ACTOR=AlexBomber12
 GITHUB_ACTOR_ID=48256657
 GITHUB_API_URL=https://api.github.com
 GITHUB_BASE_REF=main
-GITHUB_ENV=/home/runner/work/_temp/_runner_file_commands/set_env_1eedc133-b5f7-4bea-bb53-68a4f077f280
+GITHUB_ENV=/home/runner/work/_temp/_runner_file_commands/set_env_1c302a6b-f11b-4074-b4f8-72f5340d60cb
 GITHUB_EVENT_NAME=pull_request
 GITHUB_EVENT_PATH=/home/runner/work/_temp/_github_workflow/event.json
 GITHUB_GRAPHQL_URL=https://api.github.com/graphql
 GITHUB_HEAD_REF=PR-A
 GITHUB_JOB=unit
-GITHUB_OUTPUT=/home/runner/work/_temp/_runner_file_commands/set_output_1eedc133-b5f7-4bea-bb53-68a4f077f280
-GITHUB_PATH=/home/runner/work/_temp/_runner_file_commands/add_path_1eedc133-b5f7-4bea-bb53-68a4f077f280
+GITHUB_OUTPUT=/home/runner/work/_temp/_runner_file_commands/set_output_1c302a6b-f11b-4074-b4f8-72f5340d60cb
+GITHUB_PATH=/home/runner/work/_temp/_runner_file_commands/add_path_1c302a6b-f11b-4074-b4f8-72f5340d60cb
 GITHUB_REF=refs/pull/469/merge
 GITHUB_REF_NAME=469/merge
 GITHUB_REF_PROTECTED=false
@@ -656,13 +656,13 @@ GITHUB_REPOSITORY_ID=1011502908
 GITHUB_REPOSITORY_OWNER=AlexBomber12
 GITHUB_REPOSITORY_OWNER_ID=48256657
 GITHUB_RETENTION_DAYS=90
-GITHUB_RUN_ATTEMPT=3
+GITHUB_RUN_ATTEMPT=4
 GITHUB_RUN_ID=18917768859
 GITHUB_RUN_NUMBER=1277
 GITHUB_SERVER_URL=https://github.com
 GITHUB_SHA=e456fbaa3b67f090698dc3053bec974477077d96
-GITHUB_STATE=/home/runner/work/_temp/_runner_file_commands/save_state_1eedc133-b5f7-4bea-bb53-68a4f077f280
-GITHUB_STEP_SUMMARY=/home/runner/work/_temp/_runner_file_commands/step_summary_1eedc133-b5f7-4bea-bb53-68a4f077f280
+GITHUB_STATE=/home/runner/work/_temp/_runner_file_commands/save_state_1c302a6b-f11b-4074-b4f8-72f5340d60cb
+GITHUB_STEP_SUMMARY=/home/runner/work/_temp/_runner_file_commands/step_summary_1c302a6b-f11b-4074-b4f8-72f5340d60cb
 GITHUB_TRIGGERING_ACTOR=AlexBomber12
 GITHUB_WORKFLOW=ci
 GITHUB_WORKFLOW_REF=AlexBomber12/AWA-App/.github/workflows/ci.yml@refs/pull/469/merge
@@ -675,7 +675,7 @@ GRADLE_HOME=/usr/share/gradle-9.1.0
 HOME=/home/runner
 HOMEBREW_CLEANUP_PERIODIC_FULL_DAYS=3650
 HOMEBREW_NO_AUTO_UPDATE=1
-INVOCATION_ID=09e855d797ca4e13a3f82e2ab01f669b
+INVOCATION_ID=57bb0478df174f57a2caa169b0ddbfc1
 ImageOS=ubuntu24
 ImageVersion=20250929.60.1
 JAVA_HOME=/usr/lib/jvm/temurin-17-jdk-amd64
@@ -684,7 +684,7 @@ JAVA_HOME_17_X64=/usr/lib/jvm/temurin-17-jdk-amd64
 JAVA_HOME_21_X64=/usr/lib/jvm/temurin-21-jdk-amd64
 JAVA_HOME_25_X64=/usr/lib/jvm/temurin-25-jdk-amd64
 JAVA_HOME_8_X64=/usr/lib/jvm/temurin-8-jdk-amd64
-JOURNAL_STREAM=9:15426
+JOURNAL_STREAM=9:10861
 LANG=C.UTF-8
 LD_LIBRARY_PATH=/opt/hostedtoolcache/Python/3.11.13/x64/lib
 LOGNAME=runner
@@ -704,18 +704,18 @@ Python3_ROOT_DIR=/opt/hostedtoolcache/Python/3.11.13/x64
 Python_ROOT_DIR=/opt/hostedtoolcache/Python/3.11.13/x64
 RUNNER_ARCH=X64
 RUNNER_ENVIRONMENT=github-hosted
-RUNNER_NAME=GitHub Actions 1000008727
+RUNNER_NAME=GitHub Actions 1000008729
 RUNNER_OS=Linux
 RUNNER_TEMP=/home/runner/work/_temp
 RUNNER_TOOL_CACHE=/opt/hostedtoolcache
-RUNNER_TRACKING_ID=github_2b5f6528-bf9e-42f9-bb33-f6a65f4a405c
+RUNNER_TRACKING_ID=github_d3b6a824-d1c4-4ed7-af16-ac0ee2d8f264
 RUNNER_WORKSPACE=/home/runner/work/AWA-App
 SELENIUM_JAR_PATH=/usr/share/java/selenium-server.jar
 SGX_AESM_ADDR=1
 SHELL=/bin/bash
 SHLVL=2
 SWIFT_PATH=/usr/share/swift/usr/bin
-SYSTEMD_EXEC_PID=1925
+SYSTEMD_EXEC_PID=1880
 USER=runner
 VCPKG_INSTALLATION_ROOT=/usr/local/share/vcpkg
 XDG_CONFIG_HOME=/home/runner/.config
@@ -821,6 +821,6 @@ Collecting rich>=13.7.1 (from rich-toolkit>=0.14.8->fastapi-cli>=0.0.8->fastapi-
   Using cached rich-14.2.0-py3-none-any.whl.metadata (18 kB)
 Collecting markdown-it-py>=2.2.0 (from rich>=13.7.1->rich-toolkit>=0.14.8->fastapi-cli>=0.0.8->fastapi-cli[standard]>=0.0.8; extra == "all"->fastapi[all]==0.116.1->-r requirements-dev.txt (line 15))
   Using cached markdown_it_py-4.0.0-py3-none-any.whl.metadata (7.3 kB)
-Collecting mdurl~=0.1 (from markdown-it-py>=2.2.0->rich>=13.7.1->rich-toolkit>=0.14.8->fastapi-cli>=0.0.8->fastapi-cli[standard]>=0.0.8; extra == "all"->fastapi[all]==0.116.1->-r requirements-
+Collecting mdurl~=0.1 (from markdown-it-py>=2.2.0->rich>=13.7.1->rich-toolkit>=0.14.8->fastapi-cli>=0.0.8->fastapi-cli[standard]>=0.0.8; extra == "all"->fastapi[all]==0.116.1->-r requirements-d
 
 _Truncated digest: original length exceeded limit._
