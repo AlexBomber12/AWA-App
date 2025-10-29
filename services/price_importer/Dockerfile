@@ -6,7 +6,9 @@ COPY constraints.txt ./constraints.txt
 ENV PIP_CONSTRAINT=/app/constraints.txt
 COPY services/price_importer/requirements.txt ./services/price_importer/requirements.txt
 RUN pip install -r services/price_importer/requirements.txt
-COPY . .
+COPY services ./services
+COPY packages ./packages
+COPY services/price_importer ./price_importer
 
 FROM python:3.12-slim
 ENV PYTHONUNBUFFERED=1

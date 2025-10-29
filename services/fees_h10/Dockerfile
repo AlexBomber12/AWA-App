@@ -11,8 +11,10 @@ COPY services/fees_h10/requirements.txt ./fees_h10/requirements.txt
 RUN pip install -r fees_h10/requirements.txt
 # Copy the application code into a package directory and place the start
 # script at the image root.
-COPY . ./fees_h10
-COPY start.sh ./start.sh
+COPY services ./services
+COPY packages ./packages
+COPY services/fees_h10 ./fees_h10
+COPY services/fees_h10/start.sh ./start.sh
 
 FROM python:3.12-slim
 ENV PYTHONUNBUFFERED=1

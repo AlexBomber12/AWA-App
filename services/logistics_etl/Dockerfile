@@ -6,7 +6,9 @@ COPY constraints.txt ./constraints.txt
 ENV PIP_CONSTRAINT=/app/constraints.txt
 COPY services/logistics_etl/requirements.txt ./services/logistics_etl/requirements.txt
 RUN pip install -r services/logistics_etl/requirements.txt
-COPY . /app/logistics_etl
+COPY services ./services
+COPY packages ./packages
+COPY services/logistics_etl ./logistics_etl
 
 FROM python:3.12-slim
 ENV PYTHONUNBUFFERED=1

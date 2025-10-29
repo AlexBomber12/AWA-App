@@ -42,7 +42,7 @@ PY
 }
 
 COMPOSE_ARGS=()
-for file in docker-compose.yml docker-compose.ci.yml docker-compose.postgres.yml docker-compose.dev.yml; do
+for file in docker-compose.yml docker-compose.ci.yml; do
   if [ -f "$file" ]; then
     COMPOSE_ARGS+=("-f" "$file")
   fi
@@ -105,11 +105,13 @@ for file in "${LOG_FILES[@]}"; do
 done
 
 mkdir -p "$BUNDLE_ROOT/migrations"
-if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
-  capture_cmd "$BUNDLE_ROOT/migrations/alembic.txt" docker compose "${COMPOSE_ARGS[@]}" run --rm api alembic current
-  capture_cmd "$BUNDLE_ROOT/migrations/alembic.txt" docker compose "${COMPOSE_ARGS[@]}" run --rm api alembic history -20
-else
-  echo "docker compose not available" >"$BUNDLE_ROOT/migrations/alembic.txt"
+if [ "${SKIP_ALEMBIC_DEBUG:-0}" != "1" ]; then
+  if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
+    capture_cmd "$BUNDLE_ROOT/migrations/alembic.txt" docker compose "${COMPOSE_ARGS[@]}" run --rm api alembic current
+    capture_cmd "$BUNDLE_ROOT/migrations/alembic.txt" docker compose "${COMPOSE_ARGS[@]}" run --rm api alembic history -20
+  else
+    echo "docker compose not available" >"$BUNDLE_ROOT/migrations/alembic.txt"
+  fi
 fi
 
 tar -czf "$OUTPUT" -C "$TMP_DIR" debug-bundle
