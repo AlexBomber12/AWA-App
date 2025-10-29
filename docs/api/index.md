@@ -215,9 +215,9 @@ Returns {"status": "success"} when processing completes.
 
 # etl.db
 
-<a id="etl.sp_fees_ingestor"></a>
+<a id="etl.sp_fees"></a>
 
-# etl.sp\_fees\_ingestor
+# etl.sp\_fees
 
 <a id="api"></a>
 
