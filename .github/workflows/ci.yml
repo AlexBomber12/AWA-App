@@ -848,7 +848,21 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Start services
-        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d --wait db redis api
+        run: |
+          set -euo pipefail
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d --wait db redis api
+
+      - name: Wait for API readiness
+        run: |
+          set -euo pipefail
+          for i in {1..60}; do
+            if curl -fsS http://localhost:8000/ready >/dev/null 2>&1; then
+              exit 0
+            fi
+            sleep 2
+          done
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml logs api | tail -n 200 || true
+          exit 1
 
       - name: Setup k6
         uses: grafana/setup-k6-action@v1
@@ -857,6 +871,7 @@ jobs:
         run: k6 run --vus 1 --duration 30s --summary-export k6-summary.json ops/k6/api_ro/smoke.js
         env:
           API_BASE: http://localhost:8000
+          K6_BASE_URL: http://localhost:8000
 
       - name: Upload k6 summary
         if: always()

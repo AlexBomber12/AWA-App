@@ -9,5 +9,6 @@ RUN pip install --no-cache-dir -U pip && \
 COPY packages ./packages
 COPY services/api ./services/api
 RUN pip install --no-cache-dir -e ./packages/awa_common
+WORKDIR /app/services/api
 EXPOSE 8000
-ENTRYPOINT ["./services/api/docker-entrypoint.sh"]
+ENTRYPOINT ["./docker-entrypoint.sh"]
