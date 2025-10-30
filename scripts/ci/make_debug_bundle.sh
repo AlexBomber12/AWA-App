@@ -124,6 +124,12 @@ for file in "$ROOT_DIR"/coverage-*.xml "$ROOT_DIR"/coverage-*.txt; do
   fi
 done
 
+for file in "$ROOT_DIR"/.coverage*; do
+  if [ -f "$file" ]; then
+    cp "$file" "$BUNDLE_ROOT/$(basename "$file")"
+  fi
+done
+
 mkdir -p "$BUNDLE_ROOT/migrations"
 if [ "${SKIP_ALEMBIC_DEBUG:-0}" != "1" ]; then
   ALEMBIC_FILE="$BUNDLE_ROOT/migrations/alembic.txt"
