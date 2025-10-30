@@ -339,19 +339,42 @@ jobs:
             echo "No pytest targets resolved; defaulting to tests"
             TARGETS=("tests")
           fi
+          COV_OPTS=()
           if [ -d "services/${SERVICE_NAME}" ]; then
-            COV_TARGET="services/${SERVICE_NAME}"
-          else
-            COV_TARGET="services"
+            COV_OPTS+=(--cov="services/${SERVICE_NAME}")
+          elif [ -d "packages/${SERVICE_NAME}" ]; then
+            COV_OPTS+=(--cov="packages/${SERVICE_NAME}")
           fi
-          python -m pytest -q "${TARGETS[@]}" --cov="${COV_TARGET}" --cov-report=xml:"coverage-${SERVICE_NAME}.xml"
+          COV_OPTS+=(--cov="packages/awa_common")
+          python -m pytest -q "${TARGETS[@]}" \
+            "${COV_OPTS[@]}" \
+            --cov-config=.github/coverage.ini \
+            --cov-report=term-missing:skip-covered \
+            --cov-report=xml:"coverage-${SERVICE_NAME}.xml" \
+            --cov-fail-under=70
+
+      - name: Coverage summary
+        if: always()
+        env:
+          SERVICE_NAME: ${{ matrix.service }}
+        run: |
+          if [ -f ".coverage" ]; then
+            if ! python -m coverage report -m > "coverage-${SERVICE_NAME}.txt"; then
+              echo "coverage report unavailable" > "coverage-${SERVICE_NAME}.txt"
+            fi
+          else
+            echo "coverage data unavailable" > "coverage-${SERVICE_NAME}.txt"
+          fi
 
       - name: Upload coverage report
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: coverage-${{ matrix.service }}
-          path: coverage-${{ matrix.service }}.xml
-          if-no-files-found: error
+          path: |
+            coverage-${{ matrix.service }}.xml
+            coverage-${{ matrix.service }}.txt
+          if-no-files-found: ignore
 
       - name: Ensure debug bundle script executable
         if: always()
