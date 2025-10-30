@@ -332,6 +332,7 @@ jobs:
         env:
           SERVICE_NAME: ${{ matrix.service }}
           PYTEST_PATHS: ${{ steps.targets.outputs.paths }}
+          COVERAGE_FILE: .coverage.${{ matrix.service }}
         run: |
           set -euo pipefail
           mapfile -t TARGETS <<<"${PYTEST_PATHS}"
@@ -351,22 +352,14 @@ jobs:
             --cov-config=.github/coverage.ini \
             --cov-report=xml:"coverage-${SERVICE_NAME}.xml"
 
-      - name: Normalize coverage data filename
-        if: always()
-        env:
-          SERVICE_NAME: ${{ matrix.service }}
-        run: |
-          if [ -f ".coverage" ]; then
-            mv ".coverage" ".coverage.${SERVICE_NAME}"
-          fi
-
       - name: Coverage summary
         if: always()
         env:
           SERVICE_NAME: ${{ matrix.service }}
+          COVERAGE_FILE: .coverage.${{ matrix.service }}
         run: |
-          if [ -f ".coverage.${SERVICE_NAME}" ]; then
-            if ! COVERAGE_FILE=".coverage.${SERVICE_NAME}" python -m coverage report -m > "coverage-${SERVICE_NAME}.txt"; then
+          if [ -f "${COVERAGE_FILE}" ]; then
+            if ! COVERAGE_FILE="${COVERAGE_FILE}" python -m coverage report -m > "coverage-${SERVICE_NAME}.txt"; then
               echo "coverage report unavailable" > "coverage-${SERVICE_NAME}.txt"
             fi
           else
@@ -377,17 +370,20 @@ jobs:
         if: always()
         env:
           SERVICE_NAME: ${{ matrix.service }}
+          COVERAGE_FILE: .coverage.${{ matrix.service }}
         run: |
           mkdir -p "coverage-artifacts/${SERVICE_NAME}"
-          if [ -f ".coverage.${SERVICE_NAME}" ]; then
-            cp ".coverage.${SERVICE_NAME}" "coverage-artifacts/${SERVICE_NAME}/"
-          fi
+          shopt -s nullglob
+          for file in .coverage*; do
+            cp "$file" "coverage-artifacts/${SERVICE_NAME}/" || true
+          done
           if [ -f "coverage-${SERVICE_NAME}.xml" ]; then
             cp "coverage-${SERVICE_NAME}.xml" "coverage-artifacts/${SERVICE_NAME}/"
           fi
           if [ -f "coverage-${SERVICE_NAME}.txt" ]; then
             cp "coverage-${SERVICE_NAME}.txt" "coverage-artifacts/${SERVICE_NAME}/"
           fi
+          shopt -u nullglob
 
       - name: Upload coverage report
         if: always()
@@ -536,11 +532,10 @@ jobs:
           fi
           python -m coverage combine "${COVERAGE_FILES[@]}"
           set +e
-          python -m coverage report -m --fail-under=70 | tee coverage-aggregate.txt
+          python -m coverage report -m --rcfile=.github/coverage.ini --fail-under=70 | tee coverage-aggregate.txt
           STATUS=${PIPESTATUS[0]}
           set -e
-          python -m coverage xml -o coverage-aggregate.xml
-          cp coverage-aggregate.txt coverage.txt
+          python -m coverage xml --rcfile=.github/coverage.ini -o coverage-aggregate.xml
           exit "${STATUS}"
 
       - name: Upload aggregate coverage
@@ -551,7 +546,6 @@ jobs:
           path: |
             coverage-aggregate.txt
             coverage-aggregate.xml
-            coverage.txt
           if-no-files-found: ignore
 
       - name: Ensure debug bundle script executable
