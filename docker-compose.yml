@@ -33,6 +33,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-app}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-app}
       POSTGRES_DB: ${POSTGRES_DB:-app}
+      PORT: ${PORT:-8000}
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       SENTRY_DSN: ${SENTRY_DSN:-}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
@@ -40,12 +41,13 @@ services:
     depends_on:
       db: { condition: service_healthy }
       redis: { condition: service_healthy }
-    ports: ["8000:8000"]
+    ports:
+      - "${API_PORT:-8000}:8000"
     healthcheck:
       test: ["CMD","curl","-fsS","http://localhost:8000/ready"]
       interval: 5s
-      timeout: 3s
-      retries: 12
+      timeout: 2s
+      retries: 30
 
   worker:
     build: { context: ., dockerfile: services/worker/Dockerfile }

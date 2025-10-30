@@ -12,3 +12,4 @@ RUN pip install --no-cache-dir -e ./packages/awa_common
 WORKDIR /app/services/api
 EXPOSE 8000
 ENTRYPOINT ["./docker-entrypoint.sh"]
+HEALTHCHECK --interval=5s --timeout=2s --retries=30 CMD curl -fsS http://localhost:8000/ready || exit 1
