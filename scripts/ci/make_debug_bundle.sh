@@ -27,7 +27,11 @@ capture_cmd() {
 }
 
 sanitize_env() {
-  python - <<'PY'
+  if ! command -v python >/dev/null 2>&1; then
+    echo "python command not available"
+    return 0
+  fi
+  python - <<'PY' || true
 import os
 import re
 sensitive = re.compile(r'([A-Za-z0-9_]*?(?:TOKEN|SECRET|PASSWORD|API_KEY|DSN|AUTH|COOKIE)[A-Za-z0-9_]*=)(.*)', re.IGNORECASE)
@@ -130,8 +134,8 @@ if [ "${SKIP_ALEMBIC_DEBUG:-0}" != "1" ]; then
 fi
 
 if command -v curl >/dev/null 2>&1; then
-  capture_cmd "$BUNDLE_ROOT/http-ready.txt" curl -sv --max-time 5 http://localhost:8000/ready
-  capture_cmd "$BUNDLE_ROOT/http-metrics.txt" curl -sv --max-time 5 http://localhost:8000/metrics
+  capture_cmd "$BUNDLE_ROOT/http-ready.txt" bash -c 'curl -fsS --max-time 5 http://localhost:8000/ready || true'
+  capture_cmd "$BUNDLE_ROOT/http-metrics.txt" bash -c 'curl -fsS --max-time 5 http://localhost:8000/metrics || true'
 else
   echo "curl not available" >"$BUNDLE_ROOT/http-ready.txt"
   echo "curl not available" >"$BUNDLE_ROOT/http-metrics.txt"

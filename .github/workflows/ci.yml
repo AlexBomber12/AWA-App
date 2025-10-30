@@ -222,9 +222,16 @@ jobs:
       - name: Mypy
         run: mypy --install-types --non-interactive .
 
-      - name: Collect debug bundle
+      - name: Ensure debug bundle script executable
         if: always()
-        run: scripts/ci/make_debug_bundle.sh debug-bundle-lint.tar.gz
+        run: chmod +x scripts/ci/make_debug_bundle.sh || true
+
+      - name: Make debug bundle (lint)
+        if: always()
+        run: |
+          bash scripts/ci/make_debug_bundle.sh debug-bundle-lint.tar.gz \
+          || { echo "::warning::fallback debug bundle (lint)"; tar -czf debug-bundle-lint.tar.gz \
+               constraints.txt .github/workflows/ci.yml || true; }
 
       - name: Upload debug bundle
         if: always()
@@ -232,7 +239,7 @@ jobs:
         with:
           name: debug-bundle-lint
           path: debug-bundle-lint.tar.gz
-          if-no-files-found: error
+          if-no-files-found: ignore
 
   test:
     name: pytest (${{ matrix.service }})
@@ -346,9 +353,16 @@ jobs:
           path: coverage-${{ matrix.service }}.xml
           if-no-files-found: error
 
-      - name: Collect debug bundle
+      - name: Ensure debug bundle script executable
         if: always()
-        run: scripts/ci/make_debug_bundle.sh "debug-bundle-${{ matrix.service }}.tar.gz"
+        run: chmod +x scripts/ci/make_debug_bundle.sh || true
+
+      - name: Make debug bundle (test)
+        if: always()
+        run: |
+          bash scripts/ci/make_debug_bundle.sh debug-bundle-${{ matrix.service }}.tar.gz \
+          || { echo "::warning::fallback debug bundle (test:${{ matrix.service }})"; tar -czf debug-bundle-${{ matrix.service }}.tar.gz \
+               constraints.txt .github/workflows/ci.yml || true; }
 
       - name: Upload debug bundle
         if: always()
@@ -356,7 +370,7 @@ jobs:
         with:
           name: debug-bundle-${{ matrix.service }}
           path: debug-bundle-${{ matrix.service }}.tar.gz
-          if-no-files-found: error
+          if-no-files-found: ignore
 
   migrations:
     name: migrations
@@ -418,9 +432,16 @@ jobs:
       - name: Show alembic state
         run: alembic -c services/api/alembic.ini current -v
 
-      - name: Collect debug bundle
+      - name: Ensure debug bundle script executable
         if: always()
-        run: scripts/ci/make_debug_bundle.sh debug-bundle-migrations.tar.gz
+        run: chmod +x scripts/ci/make_debug_bundle.sh || true
+
+      - name: Make debug bundle (migrations)
+        if: always()
+        run: |
+          bash scripts/ci/make_debug_bundle.sh debug-bundle-migrations.tar.gz \
+          || { echo "::warning::fallback debug bundle (migrations)"; tar -czf debug-bundle-migrations.tar.gz \
+               constraints.txt .github/workflows/ci.yml || true; }
 
       - name: Upload debug bundle
         if: always()
@@ -428,4 +449,32 @@ jobs:
         with:
           name: debug-bundle-migrations
           path: debug-bundle-migrations.tar.gz
-          if-no-files-found: error
+          if-no-files-found: ignore
+
+  mirror-logs:
+    name: mirror-logs
+    runs-on: ubuntu-24.04
+    needs:
+      - lint
+      - test
+      - migrations
+    if: always()
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Summarize
+        run: |
+          ls -lah artifacts || true
+          echo "Collected bundles:" >> "$GITHUB_STEP_SUMMARY"
+          ls artifacts >> "$GITHUB_STEP_SUMMARY" || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mirror-logs
+          path: artifacts
+          if-no-files-found: ignore
