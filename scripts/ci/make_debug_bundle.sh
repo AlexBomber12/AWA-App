@@ -111,6 +111,8 @@ LOG_FILES=(
   preview-compose-up.log
   preview-ready.log
   preview-url.txt
+  artifacts/lint.log
+  artifacts/migrations.log
 )
 for file in "${LOG_FILES[@]}"; do
   if [ -f "$ROOT_DIR/$file" ]; then
@@ -125,6 +127,12 @@ for file in "$ROOT_DIR"/coverage-*.xml "$ROOT_DIR"/coverage-*.txt; do
 done
 
 for file in "$ROOT_DIR"/.coverage*; do
+  if [ -f "$file" ]; then
+    cp "$file" "$BUNDLE_ROOT/$(basename "$file")"
+  fi
+done
+
+for file in "$ROOT_DIR"/diff-coverage*.txt "$ROOT_DIR"/diff-base.txt; do
   if [ -f "$file" ]; then
     cp "$file" "$BUNDLE_ROOT/$(basename "$file")"
   fi

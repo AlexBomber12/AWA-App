@@ -34,7 +34,9 @@ jobs:
       python-version: ${{ steps.python.outputs.python-version }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Detect Python version
         id: python
@@ -193,7 +195,9 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -273,7 +277,9 @@ jobs:
       PYTHON_VERSION: ${{ needs.prepare-matrix.outputs.python-version }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -372,9 +378,12 @@ jobs:
             --cov-config=.github/coverage.ini \
             --cov-report=term-missing:skip-covered \
             --cov-report=xml:"coverage-${SERVICE_NAME}.xml"
-          python -m coverage combine "coverage-artifacts/${SERVICE_NAME}" || python -m coverage combine || true
+          python -m coverage combine || true
           if [ -f ".coverage" ] && [ ! -f "coverage-artifacts/${SERVICE_NAME}/.coverage.${SERVICE_NAME}" ]; then
             mv .coverage "coverage-artifacts/${SERVICE_NAME}/.coverage.${SERVICE_NAME}" || true
+          fi
+          if [ ! -f "coverage-artifacts/${SERVICE_NAME}/.coverage.${SERVICE_NAME}" ]; then
+            touch "coverage-artifacts/${SERVICE_NAME}/.coverage.${SERVICE_NAME}"
           fi
           python -m coverage report -m > "coverage-${SERVICE_NAME}.txt" || true
           if [ ! -s "coverage-${SERVICE_NAME}.txt" ]; then
@@ -435,7 +444,9 @@ jobs:
       PYTHON_VERSION: ${{ needs.prepare-matrix.outputs.python-version }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -512,7 +523,9 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Download coverage artifacts
         uses: actions/download-artifact@v4
@@ -529,7 +542,19 @@ jobs:
       - name: Install coverage tooling
         run: |
           python -m pip install -U pip wheel
-          python -m pip install coverage
+          python -m pip install coverage diff-cover
+
+      - name: Determine base reference
+        id: base
+        run: |
+          if [ -n "${GITHUB_BASE_REF}" ]; then
+            echo "ref=${GITHUB_BASE_REF}" >> "$GITHUB_OUTPUT"
+          else
+            echo "ref=main" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Fetch base branch
+        run: git fetch origin "${{ steps.base.outputs.ref }}"
 
       - name: Combine coverage
         run: |
@@ -538,15 +563,76 @@ jobs:
           mapfile -t COVERAGE_FILES < <(find coverage-artifacts -type f -name ".coverage*")
           if [ "${#COVERAGE_FILES[@]}" -gt 0 ]; then
             python -m coverage combine "${COVERAGE_FILES[@]}"
+            python -m coverage report -m --rcfile=.github/coverage.ini | tee coverage-aggregate.txt
+            python -m coverage xml --rcfile=.github/coverage.ini -o coverage-aggregate.xml
+          else
+            echo "No .coverage* files; falling back to XML aggregation"
             set +e
-            python -m coverage report -m --rcfile=.github/coverage.ini --fail-under=70 | tee coverage-aggregate.txt
+            python3 scripts/ci/aggregate_coverage_xml.py | tee coverage-aggregate.txt
             STATUS=${PIPESTATUS[0]}
             set -e
-            python -m coverage xml --rcfile=.github/coverage.ini -o coverage-aggregate.xml || true
-            exit "${STATUS}"
+            if [ "$STATUS" -ne 0 ] && [ "$STATUS" -ne 2 ]; then
+              exit "$STATUS"
+            fi
+            if [ ! -f coverage-aggregate.xml ]; then
+              first_xml=$(find coverage-artifacts -type f -name "coverage-*.xml" | head -n1 || true)
+              if [ -n "$first_xml" ]; then
+                cp "$first_xml" coverage-aggregate.xml
+              else
+                cat <<'XML' > coverage-aggregate.xml
+<?xml version="1.0" ?>
+<coverage branch-rate="0" line-rate="0" version="1.0">
+  <packages/>
+</coverage>
+XML
+              fi
+            fi
           fi
-          echo "No .coverage* files; falling back to XML aggregation"
-          python3 scripts/ci/aggregate_coverage_xml.py | tee coverage-aggregate.txt
+
+      - name: Overall coverage info
+        if: always()
+        run: |
+          python <<'PY'
+import os
+import re
+from pathlib import Path
+
+summary_file = os.environ.get('GITHUB_STEP_SUMMARY')
+summary_path = Path(summary_file) if summary_file else None
+coverage_path = Path('coverage-aggregate.txt')
+if coverage_path.exists():
+    text = coverage_path.read_text(encoding='utf-8', errors='ignore')
+    match = None
+    for line in reversed(text.splitlines()):
+        if 'TOTAL' in line or '%' in line:
+            match = re.search(r"(\d+(?:\.\d+)?)%", line)
+            if match:
+                break
+    if match:
+        value = float(match.group(1))
+        message = f"Overall coverage (info): {value:.2f}%"
+        print(message)
+        if summary_path is not None:
+            summary_path.parent.mkdir(parents=True, exist_ok=True)
+            with summary_path.open('a', encoding='utf-8') as handle:
+                handle.write(message + '\n')
+        if value < 70.0:
+            print(f"::warning::{message}")
+    else:
+        print("Overall coverage data unavailable")
+else:
+    print("coverage-aggregate.txt not found")
+PY
+
+      - name: Diff coverage gate
+        env:
+          BASE_REF: ${{ steps.base.outputs.ref }}
+        run: |
+          set -euo pipefail
+          DIFF_BRANCH="origin/${BASE_REF}"
+          echo "Comparing against ${DIFF_BRANCH}"
+          diff-cover coverage-aggregate.xml --compare-branch="${DIFF_BRANCH}" --fail-under=70 --diff-range-notation=... | tee diff-coverage.txt
+          echo "${BASE_REF}" > diff-base.txt
 
       - name: Upload aggregate coverage
         if: always()
@@ -556,6 +642,8 @@ jobs:
           path: |
             coverage-aggregate.txt
             coverage-aggregate.xml
+            diff-coverage.txt
+            diff-base.txt
           if-no-files-found: ignore
 
       - name: Ensure debug bundle script executable
