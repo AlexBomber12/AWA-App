@@ -6,5 +6,5 @@ ENV PIP_CONSTRAINT=/app/constraints.txt
 COPY requirements*.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
-ENTRYPOINT ["python", "keepa_ingestor.py"]
+ENTRYPOINT ["python", "-m", "services.etl.keepa_ingestor"]
 HEALTHCHECK CMD ["true"]

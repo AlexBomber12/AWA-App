@@ -3,6 +3,30 @@
 ---
 
 ## Failing workflows
+- **CI** workflow (integration job)
+- **CI** workflow (k6 smoke job)
+
+## Summary
+`docker compose up -d --build --wait db redis api` left the API container in
+`unhealthy` because the entrypoint skipped the database wait loop when
+`pg_isready` was unavailable. `python -m alembic -c services/api/alembic.ini
+upgrade head` then ran immediately and raised `psycopg.OperationalError:
+connection refused`, so the container exited before Uvicorn started. Both the
+integration tests and the k6 smoke check stalled on the missing `/ready` probe.
+
+## Fix
+- Add a psycopg-based fallback wait loop so the entrypoint blocks on the
+  database even when `pg_isready` is missing. The migrations step now runs only
+  after Postgres accepts connections, allowing the API container to reach
+  `healthy` status.
+
+## Logs
+- `ci-logs/latest/integration/integration-ready.log`
+- `ci-logs/latest/k6-smoke/compose.log`
+
+---
+
+## Failing workflows
 - **CI** workflow (migrations job)
 
 ## Summary
@@ -255,10 +279,10 @@ causing the script to crash.
 - **test** workflow (health-checks job)
 
 ## Summary
-`docker compose` reported `container awa-app-celery_worker-1 is unhealthy` because the ETL entrypoint always executed `keepa_ingestor.py`, ignoring the Celery command so the worker never started.
+`docker compose` reported `container awa-app-celery_worker-1 is unhealthy` because the ETL entrypoint always executed `python -m services.etl.keepa_ingestor`, ignoring the Celery command so the worker never started.
 
 ## Fix
-- Allow `services/etl/entrypoint.sh` to execute the provided command after waiting for PostgreSQL, falling back to `keepa_ingestor.py` when none is supplied.
+- Allow `services/etl/entrypoint.sh` to execute the provided command after waiting for PostgreSQL, falling back to `python -m services.etl.keepa_ingestor` when none is supplied.
 
 ## Logs
 - `ci-logs/latest/test/0_health-checks.txt`
@@ -582,7 +606,7 @@ Starting the ETL container crashed with `ModuleNotFoundError: No module named 's
 - **CI** workflow (compose-logs job)
 
 ## Summary
-`keepa_ingestor.py` crashed with `FileNotFoundError: [Errno 2] No such file or directory: 'tests/fixtures/keepa_sample.json'` when the ETL container started without the test fixtures present.
+`python -m services.etl.keepa_ingestor` crashed with `FileNotFoundError: [Errno 2] No such file or directory: 'tests/fixtures/keepa_sample.json'` when the ETL container started without the test fixtures present.
 
 ## Fix
 - Copy `tests/fixtures/keepa_sample.json` into the ETL image so the default ingest command finds the sample data.
@@ -610,7 +634,7 @@ Starting the ETL container crashed with `ModuleNotFoundError: No module named 's
 - **CI** workflow (compose-up job)
 
 ## Summary
-The ETL container exited during `docker compose up` because `keepa_ingestor.py` could not import `pg_utils`.
+The ETL container exited during `docker compose up` because `python -m services.etl.keepa_ingestor` could not import `pg_utils`.
 
 ## Fix
 - Export `PYTHONPATH` in `services/etl/entrypoint.sh` so bundled modules like `pg_utils` are discoverable.

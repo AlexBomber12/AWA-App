@@ -1,9 +1,10 @@
-import importlib
 import os
 import sys
 import types
 
 from awa_common.dsn import build_dsn
+
+from services.etl import helium_fees
 
 
 class FakeCursor:
@@ -36,18 +37,26 @@ def test_offline(monkeypatch):
     os.environ["DATABASE_URL"] = build_dsn(sync=True)
     called = {"n": 0}
 
-    def fake_get(url):
+    def fake_urlopen(request):
         called["n"] += 1
-        return types.SimpleNamespace(json=lambda: {})
+        return types.SimpleNamespace(
+            __enter__=lambda self: self, __exit__=lambda *a: None
+        )
 
-    monkeypatch.setitem(sys.modules, "requests", types.SimpleNamespace(get=fake_get))
+    monkeypatch.setitem(
+        sys.modules, "urllib.request", types.SimpleNamespace(urlopen=fake_urlopen)
+    )
     conn = FakeConn()
     monkeypatch.setitem(
-        sys.modules, "pg_utils", types.SimpleNamespace(connect=lambda dsn: conn)
+        sys.modules,
+        "pg_utils",
+        types.SimpleNamespace(connect=lambda dsn: conn),
     )
-    helium_fees = importlib.import_module("helium_fees")
+    monkeypatch.setattr(
+        "services.etl.fba_fee_ingestor.connect", lambda dsn: conn, raising=False
+    )
 
-    helium_fees.main()
+    assert helium_fees.main([]) == 0
 
     assert called["n"] == 0
     inserts = [q for q in conn.cur.queries if q[0].startswith("INSERT INTO fees_raw")]

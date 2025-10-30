@@ -14,7 +14,7 @@ def test_keepa_ingestor_main(tmp_path, monkeypatch):
     os.environ.pop("ENABLE_LIVE", None)
     sys.modules["keepa"] = types.SimpleNamespace(Keepa=lambda k: None)
     sys.modules["minio"] = types.SimpleNamespace(Minio=lambda *a, **k: None)
-    from keepa_ingestor import main
+    from services.etl import keepa_ingestor
 
-    assert main() is None
+    assert keepa_ingestor.main([]) == 0
     assert (tmp_path / "tmp/offline_asins.json").exists()

@@ -1,6 +1,6 @@
 FROM python:3.11-slim
 WORKDIR /app
-RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends bash curl postgresql-client && rm -rf /var/lib/apt/lists/*
 COPY constraints.txt ./constraints.txt
 ENV PIP_CONSTRAINT=/app/constraints.txt
 COPY services/api/requirements.txt ./services/api/requirements.txt
@@ -9,5 +9,9 @@ RUN pip install --no-cache-dir -U pip && \
 COPY packages ./packages
 COPY services/api ./services/api
 RUN pip install --no-cache-dir -e ./packages/awa_common
+COPY services/api/docker-entrypoint.sh /app/docker-entrypoint.sh
+RUN chmod +x /app/docker-entrypoint.sh
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
+WORKDIR /app/services/api
 EXPOSE 8000
-CMD ["uvicorn", "services.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+HEALTHCHECK --interval=5s --timeout=2s --retries=30 CMD curl -fsS http://localhost:8000/ready || exit 1

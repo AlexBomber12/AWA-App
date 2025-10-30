@@ -1,7 +1,7 @@
 import http from "k6/http";
 import { check, sleep } from "k6";
 
-const BASE = __ENV.API_BASE || "http://localhost:8000";
+const BASE = __ENV.K6_BASE_URL || __ENV.API_BASE || "http://localhost:8000";
 
 export const options = {
   thresholds: {

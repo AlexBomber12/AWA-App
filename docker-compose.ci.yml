@@ -7,10 +7,30 @@ services:
     ports: []
   logistics_etl:
     profiles: ["ci-skip"]
+  db:
+    environment:
+      POSTGRES_DB: app
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
   api:
+    environment:
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@db:5432/app
+      PORT: "8000"
+      POSTGRES_HOST: db
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: app
+      AUTO_CREATE_DB: "1"
     healthcheck:
       test: ["CMD", "curl", "-fsSL", "http://localhost:8000/ready"]
       start_period: 30s
       interval: 5s
-      timeout: 3s
-      retries: 20
+      timeout: 2s
+      retries: 30
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes: []

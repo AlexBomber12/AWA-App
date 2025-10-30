@@ -1,14 +1,22 @@
 from __future__ import annotations
 
 import os
+import pathlib
+import sys
 from logging.config import fileConfig
 
 from alembic import context
-from awa_common.base import Base
-from awa_common.settings import settings
 from sqlalchemy import create_engine, pool
 
-from services.db.utils import views as view_helpers
+ROOT_DIR = pathlib.Path(__file__).resolve().parents[3]
+ROOT_STR = str(ROOT_DIR)
+if ROOT_STR not in sys.path:
+    sys.path.insert(0, ROOT_STR)
+
+from awa_common.base import Base  # noqa: E402
+from awa_common.settings import settings  # noqa: E402
+
+from services.db.utils import views as view_helpers  # noqa: E402
 
 # Alembic config is only available when invoked by the CLI.
 try:
