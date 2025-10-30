@@ -47,11 +47,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
-      PG_HOST: postgres
+      PG_HOST: db
       PG_PORT: '5432'
       PG_USER: postgres
-      PG_PASSWORD: pass
-      PG_DATABASE: awa
+      PG_PASSWORD: postgres
+      PG_DATABASE: app
     steps:
       - uses: actions/checkout@v5
       - name: Prepare Postgres env
@@ -256,9 +256,8 @@ jobs:
       - name: Compose up api stack
         run: |
           set -euo pipefail
-          docker compose up -d --build --wait db redis
-          docker compose up -d --build --wait api worker
-          docker compose ps > integration-compose-up.log || true
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d --build --wait db redis api worker
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml ps > integration-compose-up.log || true
 
       - name: Wait API/Worker ready
         run: |
@@ -271,23 +270,32 @@ jobs:
             fi
             sleep 2
           done
-          docker compose logs api worker | tail -n 200 | tee -a integration-ready.log
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml logs api worker | tail -n 200 | tee -a integration-ready.log
           exit 1
 
       - name: API import smoke
         run: |
           set -euo pipefail
-          docker compose exec -T api python -c "import awa_common; import sys; print('import-ok', sys.version)"
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml exec -T api python -c "import awa_common; import sys; print('import-ok', sys.version)"
 
       - name: awa_common metadata
         run: |
-          docker compose exec -T api python -c "import awa_common, import importlib.metadata as m; print(m.version('awa_common'))" || true
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml exec -T api bash -lc "python - <<'PY'\nimport awa_common\nimport importlib.metadata as m\nprint(m.version('awa_common'))\nPY" || true
 
       - name: Collect integration logs
         if: always()
         run: |
           set -euo pipefail
-          docker compose logs db redis api worker > integration-services.log || true
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml logs db redis api worker > integration-services.log || true
+
+      - name: Integration diagnostics
+        if: failure()
+        run: |
+          set -euxo pipefail
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml ps || true
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml logs db api --tail=300 || true
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml exec -T db psql -U postgres -d app -c '\l' || true
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml run --rm api python -m alembic -c /app/services/api/alembic.ini current || true
 
       - name: Upload integration logs
         if: always()
@@ -319,86 +327,45 @@ jobs:
     timeout-minutes: 45
     needs:
       - unit
-    env:
-      ENV: test
-      PYTHON_VERSION: '3.11'
-      PYTHONPATH: ${{ github.workspace }}:${{ github.workspace }}/services
     steps:
       - uses: actions/checkout@v5
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          cache: pip
+      - name: Snapshot compose config
+        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml config > migrations-compose.yaml
 
-      - name: Install deps for Alembic
-        shell: bash
+      - name: Start database
+        run: |
+          set -euo pipefail
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d --wait db
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml ps > migrations-compose-ps.log || true
+
+      - name: Alembic upgrade head (api container)
+        run: |
+          set -euo pipefail
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml run --rm \
+            -e DATABASE_URL=postgresql+psycopg://postgres:postgres@db:5432/app \
+            api python -m alembic -c /app/services/api/alembic.ini upgrade head
+
+      - name: Alembic round trip verification
+        run: |
+          set -euo pipefail
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml run --rm \
+            api python -m alembic -c /app/services/api/alembic.ini current
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml run --rm \
+            api python -m alembic -c /app/services/api/alembic.ini downgrade -1 || true
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml run --rm \
+            api python -m alembic -c /app/services/api/alembic.ini upgrade head
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml run --rm \
+            api python -m alembic -c /app/services/api/alembic.ini current
+
+      - name: Collect migration diagnostics
+        if: failure()
         run: |
           set -euxo pipefail
-          python -m pip install -U pip wheel
-          if [ -f requirements.txt ]; then pip install -r requirements.txt -c constraints.txt || pip install -r requirements.txt ; fi
-          pip install -r requirements-dev.txt -c constraints.txt || pip install -r requirements-dev.txt
-          pip install -e packages/awa_common -c constraints.txt
-          python -c "import pkgutil; assert pkgutil.find_loader('awa_common'), 'awa_common not installed'"
-
-      - name: Bring up Postgres
-        shell: bash
-        run: |
-          set -euxo pipefail
-          docker compose up -d --build --wait db
-          docker compose exec -T db bash -lc 't=0; until pg_isready -U "${POSTGRES_USER:-app}" -d "${POSTGRES_DB:-app}" >/dev/null 2>&1; do sleep 1; if [ $((t+=1)) -gt 60 ]; then exit 1; fi; done'
-
-      - name: Resolve DB host port on the runner
-        id: dbport
-        shell: bash
-        run: |
-          set -euxo pipefail
-          OUT="$(docker compose port db 5432)"
-          echo "compose_port=$OUT"
-          PORT="$(echo "$OUT" | awk -F: '{print $NF}')"
-          test -n "$PORT"
-          echo "port=$PORT" >> "$GITHUB_OUTPUT"
-
-      - name: Show Alembic config & paths
-        shell: bash
-        env:
-          HOST_DB_PORT: ${{ steps.dbport.outputs.port }}
-        run: |
-          set -euxo pipefail
-          echo "PWD=$(pwd)"
-          echo "PYTHONPATH=${PYTHONPATH}"
-          echo "DATABASE_URL=${DATABASE_URL:-postgresql+psycopg://app:app@db:5432/app}"
-          echo "Resolved host DB port=${HOST_DB_PORT:-unset}"
-          grep -n '^script_location' services/api/alembic.ini || true
-          ls -la services/api | sed -n '1,120p'
-          [ -d services/api/migrations ] && ls -la services/api/migrations | sed -n '1,120p' || true
-
-      - name: Alembic upgrade/downgrade/upgrade (host → mapped port)
-        shell: bash
-        env:
-          DB_HOST: 127.0.0.1
-          DB_PORT: ${{ steps.dbport.outputs.port }}
-        run: |
-          set -euxo pipefail
-          test -f services/api/alembic.ini
-          export DATABASE_URL="postgresql+psycopg://app:app@${DB_HOST}:${DB_PORT}/app"
-          echo "Using DATABASE_URL=$DATABASE_URL (masked in logs)"
-          success=0
-          for i in $(seq 1 10); do
-            if alembic -c services/api/alembic.ini current; then
-              success=1
-              break
-            fi
-            sleep 1
-          done
-          if [ "$success" -ne 1 ]; then
-            echo "alembic current failed after retries" >&2
-            exit 1
-          fi
-          alembic -c services/api/alembic.ini upgrade head
-          alembic -c services/api/alembic.ini downgrade -1 || true
-          alembic -c services/api/alembic.ini upgrade head
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml ps || true
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml logs db api --tail=300 || true
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml exec -T db psql -U postgres -d app -c '\l' || true
+          docker compose -f docker-compose.yml -f docker-compose.ci.yml run --rm api python -m alembic -c /app/services/api/alembic.ini current || true
 
       - name: Make debug bundle
         if: always()
