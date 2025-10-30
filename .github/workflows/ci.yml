@@ -1,4 +1,4 @@
-name: ci
+name: CI
 
 on:
   pull_request:
@@ -13,841 +13,748 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
+  actions: read
   pull-requests: write
-  issues: write
-
-env:
-  PYTHON_VERSION: '3.11'
-  NODE_VERSION: '20'
-  DOCKER_BUILDKIT: '1'
-  COMPOSE_DOCKER_CLI_BUILD: '1'
 
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  DOCKER_BUILDKIT: "1"
+  COMPOSE_DOCKER_CLI_BUILD: "1"
+
 jobs:
-  secrets_scan:
-    name: secrets scan (gitleaks)
+  prepare-matrix:
+    name: prepare matrix
     runs-on: ubuntu-latest
-    needs: []
+    outputs:
+      services: ${{ steps.services.outputs.services }}
+      python-version: ${{ steps.python.outputs.python-version }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-      - name: Run gitleaks
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITLEAKS_CONFIG: .gitleaks.toml
-          GITLEAKS_DISABLE_COMMENTS: "true"
-  unit:
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    env:
-      PG_HOST: db
-      PG_PORT: '5432'
-      PG_USER: postgres
-      PG_PASSWORD: postgres
-      PG_DATABASE: app
-    steps:
-      - uses: actions/checkout@v5
-      - name: Prepare Postgres env
-        shell: bash
-        run: |
-          cp .env.postgres.example .env.postgres || true
-          cp .env.postgres.example .env || true
-      - name: Print checkout info
-        run: |
-          echo "GITHUB_REF=$GITHUB_REF"
-          echo "GITHUB_SHA=$GITHUB_SHA"
-          git rev-parse HEAD
-          git log -1 --oneline
-
-      - name: Verify constraints policy
-        run: python3 scripts/ci/check_constraints.py
-
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          cache: 'pip'
-
-      - name: Install Python deps
-        run: |
-          set -o pipefail
-          (
-            python -m pip install -U pip wheel
-            if [ -f requirements.txt ]; then python -m pip install -r requirements.txt -c constraints.txt || python -m pip install -r requirements.txt; fi
-            python -m pip install -r requirements-dev.txt -c constraints.txt || python -m pip install -r requirements-dev.txt
-            python -m pip install -e packages/awa_common -c constraints.txt
-            python -c "import pkgutil; assert pkgutil.find_loader('awa_common'), 'awa_common not installed'"
-          ) 2>&1 | tee unit-setup.log
-          status=${PIPESTATUS[0]}
-          if [ "$status" -ne 0 ]; then
-            exit "$status"
-          fi
-          pip freeze > pip-freeze.txt
-          tail -n 1000 unit-setup.log > unit-setup-tail.log || cp unit-setup.log unit-setup-tail.log
-
-      - name: Set up Node.js
-        if: ${{ hashFiles('webapp/package.json') != '' }}
-        uses: actions/setup-node@v6
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          cache-dependency-path: |
-            webapp/package-lock.json
-
-      - name: Install webapp dependencies
-        if: ${{ hashFiles('webapp/package.json') != '' }}
-        working-directory: webapp
-        run: npm ci
-
-      - name: Parse check
-        run: python -m compileall -q services tests
-
-      - name: Pre-commit
-        if: ${{ hashFiles('.pre-commit-config.yaml') != '' }}
-        run: |
-          set -o pipefail
-          python -m pre_commit run --all-files --show-diff-on-failure | tee pre-commit.log
-          status=${PIPESTATUS[0]}
-          if [ "$status" -ne 0 ]; then
-            exit "$status"
-          fi
-
-      - name: Ruff lint
-        run: |
-          set -o pipefail
-          python -m ruff check . | tee ruff.log
-          status=${PIPESTATUS[0]}
-          if [ "$status" -ne 0 ]; then
-            exit "$status"
-          fi
-
-      - name: Black check
-        run: |
-          set -o pipefail
-          python -m black --check . | tee black.log
-          status=${PIPESTATUS[0]}
-          if [ "$status" -ne 0 ]; then
-            exit "$status"
-          fi
-
-      - name: Mypy type check
-        run: |
-          set -o pipefail
-          python -m mypy . | tee mypy.log
-          status=${PIPESTATUS[0]}
-          if [ "$status" -ne 0 ]; then
-            exit "$status"
-          fi
-
-      - name: Webapp lint
-        if: ${{ hashFiles('webapp/package.json') != '' }}
-        working-directory: webapp
-        run: |
-          set -o pipefail
-          npm run lint | tee ../eslint.log
-          status=${PIPESTATUS[0]}
-          if [ "$status" -ne 0 ]; then
-            exit "$status"
-          fi
-
-      - name: Webapp type check
-        if: ${{ hashFiles('webapp/package.json') != '' }}
-        working-directory: webapp
-        run: |
-          set -o pipefail
-          npx tsc -p . | tee ../tsc.log
-          status=${PIPESTATUS[0]}
-          if [ "$status" -ne 0 ]; then
-            exit "$status"
-          fi
-
-      - name: Webapp unit tests
-        if: ${{ hashFiles('webapp/package.json') != '' }}
-        working-directory: webapp
-        run: |
-          set -o pipefail
-          npm run test:unit --if-present | tee ../vitest.log
-          status=${PIPESTATUS[0]}
-          if [ "$status" -ne 0 ]; then
-            exit "$status"
-          fi
-
-      - name: Pytest collect
-        run: pytest --collect-only -q -p no:cov --override-ini=addopts=
-
-      - name: Python unit tests
-        run: |
-          if [ -f pyproject.toml ] || [ -f pytest.ini ]; then
-            set -o pipefail
-            pytest -q --maxfail=1 --disable-warnings | tee unit.log
-            test ${PIPESTATUS[0]} -eq 0
-          else
-            echo "No pytest configuration detected; skipping."
-          fi
-
-      - name: Upload pip diagnostics
-        if: always()
-        uses: actions/upload-artifact@v5
-        with:
-          name: unit-pip-diagnostics-${{ github.run_id }}-${{ github.run_attempt }}
-          path: |
-            unit-setup.log
-            unit-setup-tail.log
-            pip-freeze.txt
-
-      - name: Make CI scripts executable
-        if: always()
-        run: chmod +x scripts/ci/*.sh
-
-      - name: Create debug bundle
-        if: always()
-        run: |
-          SKIP_ALEMBIC_DEBUG=1 ./scripts/ci/make_debug_bundle.sh "debug-bundle-unit-${{ github.run_id }}-${{ github.run_attempt }}.tar.gz"
-
-      - name: Upload unit bundle
-        if: always()
-        uses: actions/upload-artifact@v5
-        with:
-          name: debug-bundle-unit-${{ github.run_id }}-${{ github.run_attempt }}
-          path: debug-bundle-unit-${{ github.run_id }}-${{ github.run_attempt }}.tar.gz
-
-  integration:
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    needs: unit
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-          cache: 'pip'
-
-      - name: Upgrade pip and install requirements
-        run: |
-          python -m pip install -U pip
-          if [ -f requirements-dev.txt ]; then
-            python -m pip install -r requirements-dev.txt -c constraints.txt
-          fi
-          for file in services/*/requirements.txt; do
-            [ -f "$file" ] && python -m pip install -r "$file" -c constraints.txt
-          done
-
-      - name: Install awa_common (editable)
-        run: python -m pip install -e ./packages/awa_common -c constraints.txt
-
-      - name: Verify awa_common import
-        run: |
-          python -c "import awa_common, sys; import awa_common.dsn; print('awa_common OK', sys.version)"
-
-      - name: Prepare .env
-        run: |
-          [ -f .env.test ] && cp -f .env.test .env || true
-
-      - name: Compose up api stack
-        run: |
-          set -euo pipefail
-          docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d --build --wait db redis api worker
-          docker compose -f docker-compose.yml -f docker-compose.ci.yml ps > integration-compose-up.log || true
-
-      - name: Wait API/Worker ready
-        run: |
-          set -euo pipefail
-          : > integration-ready.log
-          for i in $(seq 1 60); do
-            if curl -fsS http://localhost:8000/ready >/dev/null 2>&1 && curl -fsS http://localhost:8001/ready >/dev/null 2>&1; then
-              echo "Services on ports 8000 and 8001 are ready" | tee -a integration-ready.log
-              exit 0
-            fi
-            sleep 2
-          done
-          docker compose -f docker-compose.yml -f docker-compose.ci.yml logs api worker | tail -n 200 | tee -a integration-ready.log
-          exit 1
-
-      - name: API import smoke
-        run: |
-          set -euo pipefail
-          docker compose -f docker-compose.yml -f docker-compose.ci.yml exec -T api python -c "import awa_common; import sys; print('import-ok', sys.version)"
-
-      - name: awa_common metadata
-        run: |
-          docker compose -f docker-compose.yml -f docker-compose.ci.yml exec -T api bash -lc "python - <<'PY'\nimport awa_common\nimport importlib.metadata as m\nprint(m.version('awa_common'))\nPY" || true
-
-      - name: Collect integration logs
-        if: always()
-        run: |
-          set -euo pipefail
-          docker compose -f docker-compose.yml -f docker-compose.ci.yml logs db redis api worker > integration-services.log || true
-
-      - name: Integration diagnostics
-        if: failure()
-        run: |
-          set -euxo pipefail
-          docker compose -f docker-compose.yml -f docker-compose.ci.yml ps || true
-          docker compose -f docker-compose.yml -f docker-compose.ci.yml logs db api --tail=300 || true
-          docker compose -f docker-compose.yml -f docker-compose.ci.yml exec -T db psql -U postgres -d app -c '\l' || true
-          docker compose -f docker-compose.yml -f docker-compose.ci.yml run --rm api python -m alembic -c /app/services/api/alembic.ini current || true
-
-      - name: Upload integration logs
-        if: always()
-        uses: actions/upload-artifact@v5
-        with:
-          name: debug-bundle-integration-${{ github.run_id }}-${{ github.run_attempt }}
-          path: |
-            .env
-            docker-compose.yml
-            docker-compose*.yml
-            **/*.log
-
-      - name: Integration tests
-        run: |
-          set -o pipefail
-          pytest -vv -m integration | tee integ.log || true
-
-      - name: Compose down
-        if: always()
-        run: |
-          COMPOSE_FILES=()
-          for file in docker-compose.yml docker-compose.ci.yml docker-compose.postgres.yml; do
-            [ -f "$file" ] && COMPOSE_FILES+=("-f" "$file")
-          done
-          docker compose "${COMPOSE_FILES[@]}" down -v || true
-
-  migrations:
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    needs:
-      - unit
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Snapshot compose config
-        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml config > migrations-compose.yaml
-
-      - name: Start database
-        run: |
-          set -euo pipefail
-          docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d --wait db
-          docker compose -f docker-compose.yml -f docker-compose.ci.yml ps > migrations-compose-ps.log || true
-
-      - name: Alembic upgrade head (api container)
-        run: |
-          set -euo pipefail
-          docker compose -f docker-compose.yml -f docker-compose.ci.yml run --rm \
-            -e DATABASE_URL=postgresql+psycopg://postgres:postgres@db:5432/app \
-            api python -m alembic -c /app/services/api/alembic.ini upgrade head
-
-      - name: Alembic round trip verification
-        run: |
-          set -euo pipefail
-          docker compose -f docker-compose.yml -f docker-compose.ci.yml run --rm \
-            api python -m alembic -c /app/services/api/alembic.ini current
-          docker compose -f docker-compose.yml -f docker-compose.ci.yml run --rm \
-            api python -m alembic -c /app/services/api/alembic.ini downgrade -1 || true
-          docker compose -f docker-compose.yml -f docker-compose.ci.yml run --rm \
-            api python -m alembic -c /app/services/api/alembic.ini upgrade head
-          docker compose -f docker-compose.yml -f docker-compose.ci.yml run --rm \
-            api python -m alembic -c /app/services/api/alembic.ini current
-
-      - name: Collect migration diagnostics
-        if: failure()
-        run: |
-          set -euxo pipefail
-          docker compose -f docker-compose.yml -f docker-compose.ci.yml ps || true
-          docker compose -f docker-compose.yml -f docker-compose.ci.yml logs db api --tail=300 || true
-          docker compose -f docker-compose.yml -f docker-compose.ci.yml exec -T db psql -U postgres -d app -c '\l' || true
-          docker compose -f docker-compose.yml -f docker-compose.ci.yml run --rm api python -m alembic -c /app/services/api/alembic.ini current || true
-
-      - name: Make debug bundle
-        if: always()
-        shell: bash
-        run: |
-          chmod +x scripts/ci/make_debug_bundle.sh || true
-          scripts/ci/make_debug_bundle.sh debug-bundle
-
-      - name: Upload debug bundle (migrations)
-        if: always()
-        uses: actions/upload-artifact@v5
-        with:
-          name: debug-bundle-migrations-${{ github.run_id }}-${{ github.run_attempt }}
-          path: debug-bundle.tar.gz
-          if-no-files-found: warn
-
-      - name: Compose down
-        if: always()
-        shell: bash
-        run: |
-          COMPOSE_FILES=()
-          for file in docker-compose.yml docker-compose.ci.yml docker-compose.postgres.yml; do
-            [ -f "$file" ] && COMPOSE_FILES+=("-f" "$file")
-          done
-          docker compose "${COMPOSE_FILES[@]}" down -v || true
-
-  preview:
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    needs:
-      - integration
-      - migrations
-    continue-on-error: true
-    env:
-      CF_TUNNEL_TOKEN: ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}
-      CF_TUNNEL_HOSTNAME: ${{ secrets.CLOUDFLARE_TUNNEL_HOSTNAME }}
-    if: ${{ github.event_name == 'pull_request' && vars.PREVIEW_ENABLED == '1' }}
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Launch preview stack
-        run: |
-          set -o pipefail
-          COMPOSE_FILES=()
-          for file in docker-compose.yml docker-compose.ci.yml docker-compose.postgres.yml; do
-            [ -f "$file" ] && COMPOSE_FILES+=("-f" "$file")
-          done
-          : > preview-compose-up.log
-          docker compose "${COMPOSE_FILES[@]}" up -d --build | tee -a preview-compose-up.log
-
-      - name: Wait for services
-        run: |
-          set -o pipefail
-          : > preview-ready.log
-          (
-            set -e
-            for service in 8000 8001; do
-              ok=0
-              for attempt in $(seq 1 60); do
-                if curl -fsS "http://localhost:${service}/ready" >/dev/null 2>&1; then
-                  ok=1
-                  echo "Service on port ${service} is ready"
-                  break
-                fi
-                sleep 2
-              done
-              if [ "$ok" -ne 1 ]; then
-                echo "Service on port ${service} did not become ready" >&2
-                exit 1
-              fi
-            done
-          ) 2>&1 | tee -a preview-ready.log
-          status=${PIPESTATUS[0]}
-          if [ "$status" -ne 0 ]; then
-            exit "$status"
-          fi
-
-      - name: Start Cloudflare tunnel
-        id: tunnel
-        if: ${{ env.CF_TUNNEL_TOKEN != '' && env.CF_TUNNEL_HOSTNAME != '' }}
-        continue-on-error: true
-        env:
-          CF_TUNNEL_TOKEN: ${{ env.CF_TUNNEL_TOKEN }}
-          CF_TUNNEL_HOSTNAME: ${{ env.CF_TUNNEL_HOSTNAME }}
-        run: |
-          docker run -d --name awa-preview-tunnel --network host cloudflare/cloudflared:2024.9.0 tunnel --no-autoupdate run --token "$CF_TUNNEL_TOKEN"
-          echo "url=${CF_TUNNEL_HOSTNAME}" >> "$GITHUB_OUTPUT"
-
-      - name: Publish preview URL
-        id: preview_url
-        run: |
-          if [ -n "${{ steps.tunnel.outputs.url }}" ]; then
-            echo "Preview URL: ${{ steps.tunnel.outputs.url }}" >> "$GITHUB_STEP_SUMMARY"
-            printf "%s" "${{ steps.tunnel.outputs.url }}" > preview-url.txt
-          else
-            echo "Preview URL: n/a" >> "$GITHUB_STEP_SUMMARY"
-            printf "n/a" > preview-url.txt
-          fi
-
-      - name: Ensure preview placeholder
-        if: always()
-        run: |
-          if [ ! -f preview-url.txt ]; then
-            printf "n/a" > preview-url.txt
-          fi
-
-      - name: Create debug bundle
-        if: always()
-        run: |
-          ./scripts/ci/make_debug_bundle.sh "debug-bundle-preview-${{ github.run_id }}-${{ github.run_attempt }}.tar.gz"
-
-      - name: Upload preview bundle
-        if: always()
-        uses: actions/upload-artifact@v5
-        with:
-          name: debug-bundle-preview-${{ github.run_id }}-${{ github.run_attempt }}
-          path: debug-bundle-preview-${{ github.run_id }}-${{ github.run_attempt }}.tar.gz
-
-      - name: Stop preview stack
-        if: always()
-        run: |
-          COMPOSE_FILES=()
-          for file in docker-compose.yml docker-compose.ci.yml docker-compose.postgres.yml; do
-            [ -f "$file" ] && COMPOSE_FILES+=("-f" "$file")
-          done
-          docker compose "${COMPOSE_FILES[@]}" down -v || true
-          if docker ps -a --format '{{.Names}}' | grep -q '^awa-preview-tunnel$'; then
-            docker rm -f awa-preview-tunnel >/dev/null 2>&1 || true
-          fi
-
-  mirror_logs:
-    runs-on: ubuntu-latest
-    needs:
-      - unit
-      - integration
-      - migrations
-    if: ${{ always() }}
-    steps:
-      - uses: actions/checkout@v5
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Wait for preview job
-        if: ${{ github.event_name == 'pull_request' && vars.PREVIEW_ENABLED == '1' }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_RUN_ID: ${{ github.run_id }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-        run: |
-          python - <<'PY'
-          import json
-          import os
-          import time
-          import urllib.error
-          import urllib.request
-
-          token = os.environ.get('GITHUB_TOKEN')
-          run_id = os.environ.get('GITHUB_RUN_ID')
-          repo = os.environ.get('GITHUB_REPOSITORY')
-          if not token or not run_id or not repo:
-              raise SystemExit(0)
-
-          def fetch_jobs(url):
-              request = urllib.request.Request(
-                  url,
-                  headers={
-                      'Authorization': f'Bearer {token}',
-                      'Accept': 'application/vnd.github+json',
-                  },
-              )
-              try:
-                  with urllib.request.urlopen(request, timeout=30) as response:
-                      payload = json.loads(response.read().decode('utf-8'))
-                      link_header = response.headers.get('Link') or ''
-              except urllib.error.HTTPError:
-                  return [], None
-              except urllib.error.URLError:
-                  return [], None
-              next_url = None
-              for part in link_header.split(','):
-                  part = part.strip()
-                  if part.endswith('rel="next"') and part.startswith('<'):
-                      next_url = part[1 : part.find('>')]
-                      break
-              return payload.get('jobs', []), next_url
-
-          base_url = f'https://api.github.com/repos/{repo}/actions/runs/{run_id}/jobs?per_page=100'
-          for attempt in range(60):
-              url = base_url
-              jobs = []
-              while url:
-                  batch, url = fetch_jobs(url)
-                  jobs.extend(batch)
-              preview_job = next((job for job in jobs if job.get('name') == 'preview'), None)
-              if not preview_job:
-                  time.sleep(10)
-                  continue
-              if preview_job.get('status') == 'completed':
-                  break
-              time.sleep(10)
-          PY
-
-      - name: Determine context
-        id: context
-        run: |
-          SHORT_SHA="${GITHUB_SHA::8}"
-          echo "short_sha=$SHORT_SHA" >> "$GITHUB_OUTPUT"
-          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
-            echo "event_type=pr" >> "$GITHUB_OUTPUT"
-            echo "pr_number=${{ github.event.pull_request.number || '' }}" >> "$GITHUB_OUTPUT"
-            if [ "${{ github.event.pull_request.head.repo.full_name || '' }}" = "${{ github.repository }}" ]; then
-              echo "is_fork=false" >> "$GITHUB_OUTPUT"
-            else
-              echo "is_fork=true" >> "$GITHUB_OUTPUT"
-            fi
-            echo "branch_name=${{ github.event.pull_request.head.ref || '' }}" >> "$GITHUB_OUTPUT"
-            MIRROR_PATH="ci-logs/mirror-logs/pr-${{ github.event.pull_request.number || '' }}/latest"
-            MIRROR_SUBDIR="mirror-logs/pr-${{ github.event.pull_request.number || '' }}/sha-$SHORT_SHA"
-            LATEST_SUBDIR="mirror-logs/pr-${{ github.event.pull_request.number || '' }}/latest"
-            echo "mirror_path=$MIRROR_PATH" >> "$GITHUB_OUTPUT"
-            echo "mirror_subdir=$MIRROR_SUBDIR" >> "$GITHUB_OUTPUT"
-            echo "latest_subdir=$LATEST_SUBDIR" >> "$GITHUB_OUTPUT"
-          else
-            echo "event_type=push" >> "$GITHUB_OUTPUT"
-            echo "is_fork=false" >> "$GITHUB_OUTPUT"
-            BRANCH="${GITHUB_REF_NAME:-${GITHUB_REF##*/}}"
-            echo "branch_name=$BRANCH" >> "$GITHUB_OUTPUT"
-            SAFE_BRANCH="${BRANCH//\//-}"
-            echo "branch_slug=$SAFE_BRANCH" >> "$GITHUB_OUTPUT"
-            MIRROR_PATH="ci-logs/mirror-logs/branch-${SAFE_BRANCH}/latest"
-            MIRROR_SUBDIR="mirror-logs/branch-${SAFE_BRANCH}/sha-$SHORT_SHA"
-            LATEST_SUBDIR="mirror-logs/branch-${SAFE_BRANCH}/latest"
-            echo "mirror_path=$MIRROR_PATH" >> "$GITHUB_OUTPUT"
-            echo "mirror_subdir=$MIRROR_SUBDIR" >> "$GITHUB_OUTPUT"
-            echo "latest_subdir=$LATEST_SUBDIR" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Download artifacts
-        uses: actions/download-artifact@v6
-        with:
-          pattern: "debug-bundle-*"
-          path: artifacts
-          merge-multiple: true
-
-      - name: Extract artifacts
-        id: extract
-        run: |
-          mkdir -p digest_logs mirror_ready
-          if [ ! -d artifacts ]; then
-            exit 0
-          fi
-          while IFS= read -r -d '' archive; do
-            base="$(basename "$archive" .tar.gz)"
-            stage="${base#debug-bundle-}"
-            stage="${stage%%-*}"
-            dest="mirror_ready/${stage}"
-            rm -rf "$dest"
-            mkdir -p "$dest"
-            tar -xzf "$archive" -C "$dest"
-            bundle_root="$dest/debug-bundle"
-            if [ ! -d "$bundle_root" ]; then
-              continue
-            fi
-            find "$bundle_root" -type f -print0 | while IFS= read -r -d '' file; do
-              rel="${file#$bundle_root/}"
-              case "$rel" in
-                *.log|*.txt|*.out|*.err|*.json|*.xml|*.junit|*.tap)
-                  :
-                  ;;
-                *)
-                  continue
-                  ;;
-              esac
-              base_name="$(basename "$rel")"
-              flat_rel="${rel//\//-}"
-              stage_flat="${stage}-${flat_rel}"
-              stage_base="${stage}-${base_name}"
-              dest_root="digest_logs/$base_name"
-              stage_dest="digest_logs/$stage_flat"
-              stage_base_dest="digest_logs/$stage_base"
-              tree_dest="digest_logs/${stage}/${rel}"
-              mkdir -p "$(dirname "$tree_dest")"
-              cp "$file" "$tree_dest"
-              if [ ! -f "$dest_root" ]; then
-                mkdir -p "$(dirname "$dest_root")"
-                cp "$file" "$dest_root"
-              fi
-              mkdir -p "$(dirname "$stage_dest")"
-              cp "$file" "$stage_dest"
-              if [ ! -f "$stage_base_dest" ]; then
-                cp "$file" "$stage_base_dest"
-              fi
-            done
-          done < <(find artifacts -type f -name '*.tar.gz' -print0)
-
-      - name: Sanitize logs
-        run: |
-          python - <<'PY'
-          import pathlib
-          import re
-
-          root_paths = [pathlib.Path('digest_logs'), pathlib.Path('mirror_ready')]
-          key_pattern = re.compile(r'([A-Za-z0-9_]*?(?:TOKEN|SECRET|PASSWORD|API_KEY|DSN|AUTH|COOKIE)[A-Za-z0-9_]*=)([^\s]+)', re.IGNORECASE)
-          url_pattern = re.compile(r'(://[^:@\s/]+:)([^@\s]+)(@)')
-
-          def sanitize(text: str) -> str:
-              for _ in range(2):
-                  text = key_pattern.sub(lambda m: m.group(1) + '<redacted>', text)
-                  text = url_pattern.sub(lambda m: m.group(1) + '****' + m.group(3), text)
-              return text
-
-          for base in root_paths:
-              if not base.exists():
-                  continue
-              for path in base.rglob('*'):
-                  if not path.is_file():
-                      continue
-                  if path.suffix.lower() not in {'.log', '.txt', '.out', '.err', '.json', '.xml', '.junit', '.tap'}:
-                      continue
-                  try:
-                      data = path.read_text(encoding='utf-8', errors='replace')
-                  except OSError:
-                      continue
-                  sanitized = sanitize(data)
-                  path.write_text(sanitized, encoding='utf-8')
-          PY
-
-      - name: Ensure preview placeholder artifact
-        run: |
-          mkdir -p digest_logs
-          if [ ! -f digest_logs/preview-url.txt ]; then
-            printf "n/a" > digest_logs/preview-url.txt
-          fi
-
-      - name: Make CI scripts executable
-        run: chmod +x scripts/ci/*.sh
-
-      - name: Build digest
-        id: digest
-        env:
-          MIRROR_PATH_VALUE: ${{ steps.context.outputs.mirror_path }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          PREVIEW="n/a"
-          if [ -f digest_logs/preview-url.txt ]; then
-            PREVIEW=$(tr -d '\r\n' < digest_logs/preview-url.txt)
-          fi
-          MIRROR_PATH="$MIRROR_PATH_VALUE" PREVIEW_URL="$PREVIEW" FAILED_TAIL_LINES=200 ./scripts/ci/make_pr_digest.sh digest_logs
-          cat digest_logs/ci-digest.md >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Stage digest for mirror
-        run: |
-          mkdir -p mirror_ready
-          if [ -f digest_logs/ci-digest.md ]; then
-            cp digest_logs/ci-digest.md mirror_ready/ci-digest.md
-          fi
-
-      - name: Prepare Codex mirror
-        run: |
-          set -euo pipefail
-          RUN_ID="${GITHUB_RUN_ID}"
-          OUT=".codex/mirror-logs/${RUN_ID}"
-          rm -rf "$OUT"
-          mkdir -p "$OUT"
-          if [ -d digest_logs ]; then
-            cp -r digest_logs/. "$OUT/"
-          fi
-          if [ -f digest_logs/ci-digest.md ]; then
-            cp digest_logs/ci-digest.md .codex/mirror-logs/latest.md
-          fi
-
-      - name: Push logs to ci-logs
-        if: ${{ steps.context.outputs.is_fork != 'true' }}
-        run: |
-          if [ ! -d mirror_ready ] || [ -z "$(find mirror_ready -type f -print -quit)" ]; then
-            echo "No logs to mirror"
-            exit 0
-          fi
-          MIRROR_SUBDIR="${{ steps.context.outputs.mirror_subdir }}"
-          LATEST_SUBDIR="${{ steps.context.outputs.latest_subdir }}"
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
-          git fetch origin ci-logs || true
-          if git show-ref --verify --quiet refs/remotes/origin/ci-logs; then
-            git worktree add --force ci-logs-worktree origin/ci-logs
-          else
-            git worktree add --force -b ci-logs ci-logs-worktree
-          fi
-          git config --global --add safe.directory "$(pwd)/ci-logs-worktree"
-          PARENT_DIR="$(dirname "$MIRROR_SUBDIR")"
-          mkdir -p "ci-logs-worktree/$PARENT_DIR"
-          rsync -a --delete mirror_ready/ "ci-logs-worktree/${MIRROR_SUBDIR}/"
-          rm -rf "ci-logs-worktree/${LATEST_SUBDIR}"
-          mkdir -p "ci-logs-worktree/${LATEST_SUBDIR}"
-          rsync -a mirror_ready/ "ci-logs-worktree/${LATEST_SUBDIR}/"
-          cd ci-logs-worktree
-          git add "${MIRROR_SUBDIR}" "${LATEST_SUBDIR}"
-          if git diff --staged --quiet; then
-            echo "No mirror changes"
-          else
-            if [ "${{ steps.context.outputs.event_type }}" = "pr" ]; then
-              CONTEXT="PR #${{ steps.context.outputs.pr_number }}"
-            else
-              CONTEXT="branch ${{ steps.context.outputs.branch_name }}"
-            fi
-            git commit -m "[skip ci] Mirror logs for ${CONTEXT}"
-            git push origin HEAD:ci-logs
-          fi
-
-      - name: Update PR digest comment
-        if: ${{ steps.context.outputs.event_type == 'pr' && steps.context.outputs.is_fork != 'true' }}
+      - name: Detect Python version
+        id: python
         uses: actions/github-script@v7
         with:
           script: |
             const fs = require('fs');
-            const { owner, repo } = context.repo;
-            const issue_number = Number('${{ steps.context.outputs.pr_number }}');
-            const marker = '<!-- AWA-CI-DIGEST -->';
-            const body = fs.readFileSync('digest_logs/ci-digest.md', 'utf8');
-            const comments = await github.rest.issues.listComments({ owner, repo, issue_number, per_page: 100 });
-            const existing = comments.data.find(comment => comment.body && comment.body.includes(marker));
-            const limit = 65000;
-            const note = '\n\n_Truncated digest: original length exceeded 65000 characters._\n';
-            let payload = body;
-            if (payload.length > limit) {
-              const sliceLength = Math.max(0, limit - note.length);
-              payload = payload.slice(0, sliceLength).trimEnd() + note;
-            }
-            if (existing) {
-              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body: payload });
-            } else {
-              await github.rest.issues.createComment({ owner, repo, issue_number, body: payload });
+            const path = require('path');
+
+            const readFile = (filePath) => {
+              try {
+                return fs.readFileSync(path.join(process.cwd(), filePath), 'utf8');
+              } catch (error) {
+                return null;
+              }
+            };
+
+            const parseRequiresPython = (content) => {
+              if (!content) {
+                return null;
+              }
+              const requiresMatch = content.match(/requires-python\s*=\s*["']([^"']+)["']/i);
+              if (requiresMatch && requiresMatch[1]) {
+                const versionMatch = requiresMatch[1].match(/(\d+\.\d+)/);
+                if (versionMatch) {
+                  return versionMatch[1];
+                }
+              }
+              const poetryMatch = content.match(/^\s*python\s*=\s*["']([^"']+)["']/im);
+              if (poetryMatch && poetryMatch[1]) {
+                const versionMatch = poetryMatch[1].match(/(\d+\.\d+)/);
+                if (versionMatch) {
+                  return versionMatch[1];
+                }
+              }
+              const targetMatches = [...content.matchAll(/target-version\s*=\s*\[\s*"py(\d{2,3})"\s*\]/gi)];
+              for (const match of targetMatches) {
+                const digits = match[1];
+                if (digits.length === 2) {
+                  return `${digits[0]}.${digits[1]}`;
+                }
+                if (digits.length === 3) {
+                  return `${digits[0]}.${digits.slice(1)}`;
+                }
+              }
+              return null;
+            };
+
+            const fromScripts = () => {
+              const scriptsDir = path.join(process.cwd(), 'scripts', 'ci');
+              try {
+                for (const entry of fs.readdirSync(scriptsDir)) {
+                  const filePath = path.join(scriptsDir, entry);
+                  if (!fs.statSync(filePath).isFile()) continue;
+                  const content = fs.readFileSync(filePath, 'utf8');
+                  const match = content.match(/PYTHON_VERSION\s*[:=]\s*["']?(\d+\.\d+)["']?/);
+                  if (match) {
+                    return match[1];
+                  }
+                }
+              } catch (error) {
+                // ignore
+              }
+              return null;
+            };
+
+            const candidates = [
+              parseRequiresPython(readFile('pyproject.toml')),
+              fromScripts(),
+            ].filter(Boolean);
+
+            const version = candidates.length > 0 ? candidates[0] : '3.11';
+            core.info(`Using Python ${version}`);
+            core.setOutput('python-version', version);
+
+      - name: Discover Python services
+        id: services
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+
+            const servicesDir = path.join(process.cwd(), 'services');
+            let detected = [];
+
+            const hasPythonFiles = (dir) => {
+              const queue = [dir];
+              while (queue.length) {
+                const current = queue.pop();
+                let entries = [];
+                try {
+                  entries = fs.readdirSync(current, { withFileTypes: true });
+                } catch (error) {
+                  continue;
+                }
+                for (const entry of entries) {
+                  if (entry.name.startsWith('.')) {
+                    continue;
+                  }
+                  const fullPath = path.join(current, entry.name);
+                  if (entry.isDirectory()) {
+                    queue.push(fullPath);
+                  } else if (entry.isFile() && entry.name.endsWith('.py')) {
+                    return true;
+                  }
+                }
+              }
+              return false;
+            };
+
+            try {
+              const entries = fs.readdirSync(servicesDir, { withFileTypes: true });
+              for (const entry of entries) {
+                if (!entry.isDirectory()) {
+                  continue;
+                }
+                if (entry.name.startsWith('.')) {
+                  continue;
+                }
+                const servicePath = path.join(servicesDir, entry.name);
+                let hasRequirements = false;
+                try {
+                  hasRequirements = fs
+                    .readdirSync(servicePath)
+                    .some((name) => /^requirements.*\.txt$/i.test(name));
+                } catch (error) {
+                  hasRequirements = false;
+                }
+                if (hasRequirements || hasPythonFiles(servicePath)) {
+                  detected.push(entry.name);
+                }
+              }
+            } catch (error) {
+              core.warning(`Unable to inspect services directory: ${error.message}`);
             }
 
-      - name: Fork notice
-        if: ${{ steps.context.outputs.is_fork == 'true' }}
+            detected = Array.from(new Set(detected)).sort();
+            if (detected.length === 0) {
+              detected = ['api'];
+              core.warning('No Python services found automatically, defaulting matrix to ["api"].');
+            }
+            const json = JSON.stringify(detected);
+            core.info(`Services matrix: ${json}`);
+            core.setOutput('services', json);
+
+      - name: Display matrix
         run: |
-          echo "PR originates from a fork; skipping mirror push and digest comment." >> "$GITHUB_STEP_SUMMARY"
+          echo "Python version: ${{ steps.python.outputs.python-version }}"
+          echo "Services: ${{ steps.services.outputs.services }}"
 
-  k6_smoke:
-    name: k6 smoke (non-blocking)
+  lint:
+    name: lint
     runs-on: ubuntu-latest
-    needs: [unit]
-    continue-on-error: true
+    needs: prepare-matrix
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: |
+            constraints.txt
+            services/**/requirements*.txt
+
+      - name: Upgrade pip tooling
+        run: python -m pip install -U pip wheel
+
+      - name: Install lint dependencies
+        run: |
+          python -m pip install -c constraints.txt -r requirements-dev.txt
+          python -m pip install -c constraints.txt pre-commit ruff mypy
+          python -m pip install -c constraints.txt -e packages/awa_common
+
+      - name: Prepare lint logs
+        run: mkdir -p artifacts
+
+      - name: pre-commit
+        run: |
+          set -o pipefail
+          pre-commit run --all-files | tee -a artifacts/lint.log
+
+      - name: Ruff
+        run: |
+          set -o pipefail
+          ruff check . | tee -a artifacts/lint.log
+
+      - name: Mypy
+        run: |
+          set -o pipefail
+          mypy --install-types --non-interactive . | tee -a artifacts/lint.log
+
+      - name: Upload lint logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-lint
+          path: artifacts/lint.log
+          if-no-files-found: ignore
+
+      - name: Ensure debug bundle script executable
+        if: always()
+        run: chmod +x scripts/ci/make_debug_bundle.sh || true
+
+      - name: Make debug bundle (lint)
+        if: always()
+        run: |
+          bash scripts/ci/make_debug_bundle.sh debug-bundle-lint.tar.gz \
+          || { echo "::warning::fallback debug bundle (lint)"; tar -czf debug-bundle-lint.tar.gz \
+               constraints.txt .github/workflows/ci.yml || true; }
+
+      - name: Upload debug bundle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-bundle-lint
+          path: debug-bundle-lint.tar.gz
+          if-no-files-found: ignore
+
+  test:
+    name: pytest (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    needs:
+      - prepare-matrix
+      - lint
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        service: ${{ fromJson(needs.prepare-matrix.outputs.services) }}
+    env:
+      PYTHON_VERSION: ${{ needs.prepare-matrix.outputs.python-version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ needs.prepare-matrix.outputs.python-version }}
+          cache: 'pip'
+          cache-dependency-path: |
+            constraints.txt
+            services/${{ matrix.service }}/requirements*.txt
+
+      - name: Upgrade pip tooling
+        run: python -m pip install -U pip wheel
+
+      - name: Install service dependencies
+        run: |
+          python -m pip install -c constraints.txt -r requirements-dev.txt
+          if ls services/${{ matrix.service }}/requirements*.txt >/dev/null 2>&1; then
+            for req in services/${{ matrix.service }}/requirements*.txt; do
+              python -m pip install -r "$req" -c constraints.txt
+            done
+          fi
+          python -m pip install -c constraints.txt -e packages/awa_common
+
+      - name: Determine pytest targets
+        id: targets
+        env:
+          SERVICE_NAME: ${{ matrix.service }}
+        run: |
+          python <<'PY'
+          import json
+          import glob
+          import os
+
+          service = os.environ["SERVICE_NAME"]
+          candidates = []
+
+          for path in (
+              f"tests/{service}",
+              f"services/{service}/tests",
+          ):
+              if os.path.isdir(path):
+                  candidates.append(path)
+
+          patterns = [
+              f"tests/test_{service}.py",
+              f"tests/test_{service}_*.py",
+              f"tests/{service}_test.py",
+              f"tests/{service}/*test*.py",
+          ]
+          for pattern in patterns:
+              for match in glob.glob(pattern):
+                  if os.path.isfile(match):
+                      candidates.append(match)
+
+          seen = set()
+          ordered = []
+          for candidate in candidates:
+              if candidate not in seen:
+                  seen.add(candidate)
+                  ordered.append(candidate)
+
+          if not ordered:
+              ordered = ["tests"]
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as handle:
+              handle.write("paths<<__PYTEST_PATHS__\n")
+              handle.write("\n".join(ordered))
+              handle.write("\n__PYTEST_PATHS__\n")
+              handle.write(f"json={json.dumps(ordered)}\n")
+          PY
+
+      - name: Ensure coverage data directory
+        run: mkdir -p "coverage-artifacts/${{ matrix.service }}"
+
+      - name: Run pytest
+        env:
+          SERVICE_NAME: ${{ matrix.service }}
+          PYTEST_PATHS: ${{ steps.targets.outputs.paths }}
+          COVERAGE_FILE: coverage-artifacts/${{ matrix.service }}/.coverage.${{ matrix.service }}
+        run: |
+          set -euo pipefail
+          mapfile -t TARGETS <<<"${PYTEST_PATHS}"
+          if [ "${#TARGETS[@]}" -eq 0 ]; then
+            echo "No pytest targets resolved; defaulting to tests"
+            TARGETS=("tests")
+          fi
+          COV_OPTS=()
+          if [ -d "services/${SERVICE_NAME}" ]; then
+            COV_OPTS+=(--cov="services/${SERVICE_NAME}")
+          elif [ -d "packages/${SERVICE_NAME}" ]; then
+            COV_OPTS+=(--cov="packages/${SERVICE_NAME}")
+          fi
+          COV_OPTS+=(--cov="packages/awa_common")
+          python -m pytest -q "${TARGETS[@]}" \
+            "${COV_OPTS[@]}" \
+            --cov-config=.github/coverage.ini \
+            --cov-report=term-missing:skip-covered \
+            --cov-report=xml:"coverage-${SERVICE_NAME}.xml"
+          python -m coverage combine || true
+          if [ -f ".coverage" ] && [ ! -f "coverage-artifacts/${SERVICE_NAME}/.coverage.${SERVICE_NAME}" ]; then
+            mv .coverage "coverage-artifacts/${SERVICE_NAME}/.coverage.${SERVICE_NAME}" || true
+          fi
+          if [ ! -f "coverage-artifacts/${SERVICE_NAME}/.coverage.${SERVICE_NAME}" ]; then
+            touch "coverage-artifacts/${SERVICE_NAME}/.coverage.${SERVICE_NAME}"
+          fi
+          python -m coverage report -m > "coverage-${SERVICE_NAME}.txt" || true
+          if [ ! -s "coverage-${SERVICE_NAME}.txt" ]; then
+            echo "coverage data unavailable" > "coverage-${SERVICE_NAME}.txt"
+          fi
+
+      - name: Upload coverage artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ matrix.service }}
+          path: |
+            coverage-artifacts/${{ matrix.service }}/.coverage*
+            coverage-${{ matrix.service }}.xml
+            coverage-${{ matrix.service }}.txt
+          if-no-files-found: ignore
+
+      - name: Ensure debug bundle script executable
+        if: always()
+        run: chmod +x scripts/ci/make_debug_bundle.sh || true
+
+      - name: Make debug bundle (test)
+        if: always()
+        run: |
+          bash scripts/ci/make_debug_bundle.sh debug-bundle-${{ matrix.service }}.tar.gz \
+          || { echo "::warning::fallback debug bundle (test:${{ matrix.service }})"; tar -czf debug-bundle-${{ matrix.service }}.tar.gz \
+               constraints.txt .github/workflows/ci.yml || true; }
+
+      - name: Upload debug bundle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-bundle-${{ matrix.service }}
+          path: debug-bundle-${{ matrix.service }}.tar.gz
+          if-no-files-found: ignore
+
+  migrations:
+    name: migrations
+    runs-on: ubuntu-latest
+    needs: test
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: awa
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d awa"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/awa
+      PYTHON_VERSION: ${{ needs.prepare-matrix.outputs.python-version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ needs.prepare-matrix.outputs.python-version }}
+          cache: 'pip'
+          cache-dependency-path: |
+            constraints.txt
+            services/api/requirements*.txt
+
+      - name: Upgrade pip tooling
+        run: python -m pip install -U pip wheel
+
+      - name: Install migration dependencies
+        run: |
+          python -m pip install -c constraints.txt -r requirements-dev.txt
+          if ls services/api/requirements*.txt >/dev/null 2>&1; then
+            for req in services/api/requirements*.txt; do
+              python -m pip install -r "$req" -c constraints.txt
+            done
+          fi
+          python -m pip install -c constraints.txt -e packages/awa_common
+
+      - name: Prepare migrations log
+        run: mkdir -p artifacts
+
+      - name: Run migrations round-trip
+        run: |
+          set -euo pipefail
+          {
+            echo "== alembic upgrade head =="
+            alembic -c services/api/alembic.ini upgrade head
+            echo "== alembic downgrade base =="
+            alembic -c services/api/alembic.ini downgrade base
+            echo "== alembic upgrade head =="
+            alembic -c services/api/alembic.ini upgrade head
+            echo "== alembic current -v =="
+            alembic -c services/api/alembic.ini current -v
+          } 2>&1 | tee -a artifacts/migrations.log
+
+      - name: Upload migrations logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-migrations
+          path: artifacts/migrations.log
+          if-no-files-found: ignore
+
+      - name: Ensure debug bundle script executable
+        if: always()
+        run: chmod +x scripts/ci/make_debug_bundle.sh || true
+
+      - name: Make debug bundle (migrations)
+        if: always()
+        run: |
+          bash scripts/ci/make_debug_bundle.sh debug-bundle-migrations.tar.gz \
+          || { echo "::warning::fallback debug bundle (migrations)"; tar -czf debug-bundle-migrations.tar.gz \
+               constraints.txt .github/workflows/ci.yml || true; }
+
+      - name: Upload debug bundle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-bundle-migrations
+          path: debug-bundle-migrations.tar.gz
+          if-no-files-found: ignore
+
+  coverage-aggregate:
+    name: coverage aggregate
+    runs-on: ubuntu-latest
+    needs:
+      - prepare-matrix
+      - test
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download coverage artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: coverage-artifacts
+          merge-multiple: true
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install coverage tooling
+        run: |
+          python -m pip install -U pip wheel
+          python -m pip install coverage diff-cover
+
+      - name: Determine base reference
+        id: base
+        run: |
+          if [ -n "${GITHUB_BASE_REF}" ]; then
+            echo "ref=${GITHUB_BASE_REF}" >> "$GITHUB_OUTPUT"
+          else
+            echo "ref=main" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Fetch base branch
+        run: git fetch origin "${{ steps.base.outputs.ref }}"
+
+      - name: Combine coverage
+        run: |
+          set -euo pipefail
+          python -m coverage erase
+          mapfile -t COVERAGE_FILES < <(find coverage-artifacts -type f -name ".coverage*")
+          if [ "${#COVERAGE_FILES[@]}" -gt 0 ]; then
+            python -m coverage combine "${COVERAGE_FILES[@]}"
+            python -m coverage report -m --rcfile=.github/coverage.ini | tee coverage-aggregate.txt
+            python -m coverage xml --rcfile=.github/coverage.ini -o coverage-aggregate.xml
+          else
+            echo "No .coverage* files; falling back to XML aggregation"
+            set +e
+            python3 scripts/ci/aggregate_coverage_xml.py | tee coverage-aggregate.txt
+            STATUS=${PIPESTATUS[0]}
+            set -e
+            if [ "$STATUS" -ne 0 ] && [ "$STATUS" -ne 2 ]; then
+              exit "$STATUS"
+            fi
+            if [ ! -f coverage-aggregate.xml ]; then
+              first_xml=$(find coverage-artifacts -type f -name "coverage-*.xml" | head -n1 || true)
+              if [ -n "$first_xml" ]; then
+                cp "$first_xml" coverage-aggregate.xml
+              else
+                printf '%s\n' '<?xml version="1.0" ?>' '<coverage branch-rate="0" line-rate="0" version="1.0">' '  <packages/>' '</coverage>' > coverage-aggregate.xml
+              fi
+            fi
+          fi
+
+      - name: Overall coverage info
+        if: always()
+        run: |
+          python <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          summary_file = os.environ.get('GITHUB_STEP_SUMMARY')
+          summary_path = Path(summary_file) if summary_file else None
+          coverage_path = Path('coverage-aggregate.txt')
+          if coverage_path.exists():
+              text = coverage_path.read_text(encoding='utf-8', errors='ignore')
+              match = None
+              for line in reversed(text.splitlines()):
+                  if 'TOTAL' in line or '%' in line:
+                      match = re.search(r"(\d+(?:\.\d+)?)%", line)
+                      if match:
+                          break
+              if match:
+                  value = float(match.group(1))
+                  message = f"Overall coverage (info): {value:.2f}%"
+                  print(message)
+                  if summary_path is not None:
+                      summary_path.parent.mkdir(parents=True, exist_ok=True)
+                      with summary_path.open('a', encoding='utf-8') as handle:
+                          handle.write(message + '\n')
+                  if value < 70.0:
+                      print(f"::warning::{message}")
+              else:
+                  print("Overall coverage data unavailable")
+          else:
+              print("coverage-aggregate.txt not found")
+          PY
+
+      - name: Diff coverage gate
+        env:
+          BASE_REF: ${{ steps.base.outputs.ref }}
+        run: |
+          set -euo pipefail
+          DIFF_BRANCH="origin/${BASE_REF}"
+          echo "Comparing against ${DIFF_BRANCH}"
+          diff-cover coverage-aggregate.xml --compare-branch="${DIFF_BRANCH}" --fail-under=70 --diff-range-notation=... | tee diff-coverage.txt
+          echo "${BASE_REF}" > diff-base.txt
+
+      - name: Upload aggregate coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-aggregate
+          path: |
+            coverage-aggregate.txt
+            coverage-aggregate.xml
+            diff-coverage.txt
+            diff-base.txt
+          if-no-files-found: ignore
+
+      - name: Ensure debug bundle script executable
+        if: always()
+        run: chmod +x scripts/ci/make_debug_bundle.sh || true
+
+      - name: Make debug bundle (coverage-aggregate)
+        if: always()
+        run: |
+          bash scripts/ci/make_debug_bundle.sh debug-bundle-coverage-aggregate.tar.gz || true
+
+      - name: Upload debug bundle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-bundle-coverage-aggregate
+          path: debug-bundle-coverage-aggregate.tar.gz
+          if-no-files-found: ignore
+
+  mirror-logs:
+    name: mirror-logs
+    runs-on: ubuntu-24.04
+    needs:
+      - lint
+      - test
+      - migrations
+      - coverage-aggregate
+    if: always()
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: write
     steps:
       - name: Checkout
         uses: actions/checkout@v5
 
-      - name: Start services
+      - name: Detect PR comment capability
+        id: cap
         run: |
-          set -euo pipefail
-          docker compose -f docker-compose.yml -f docker-compose.ci.yml up -d --wait db redis api
+          if [ "${{ github.event_name }}" = "pull_request" ] && [ "${{ github.event.pull_request.head.repo.fork }}" = "false" ]; then
+            echo "can_comment=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "can_comment=false" >> "$GITHUB_OUTPUT"
+          fi
 
-      - name: Wait for API readiness
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Fetch job URLs
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const run_id = context.runId;
+            const jobs = await github.paginate(
+              github.rest.actions.listJobsForWorkflowRun,
+              { owner, repo, run_id, per_page: 100 }
+            );
+            const out = jobs.map(job => ({
+              name: job.name,
+              url: job.html_url,
+              status: job.conclusion || job.status,
+              id: job.id,
+            }));
+            const fs = require('fs');
+            fs.mkdirSync('artifacts', { recursive: true });
+            fs.writeFileSync('artifacts/jobs.json', JSON.stringify(out, null, 2));
+
+      - name: Build PR summary
         run: |
-          set -euo pipefail
-          for i in {1..60}; do
-            if curl -fsS http://localhost:8000/ready >/dev/null 2>&1; then
-              exit 0
-            fi
-            sleep 2
-          done
-          docker compose -f docker-compose.yml -f docker-compose.ci.yml logs api | tail -n 200 || true
-          exit 1
+          python3 scripts/ci/make_pr_summary.py artifacts > artifacts/summary.md || echo "No summary" > artifacts/summary.md
 
-      - name: Setup k6
-        uses: grafana/setup-k6-action@v1
+      - name: Append summary to job summary
+        run: cat artifacts/summary.md >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Run k6 smoke test
-        run: k6 run --vus 1 --duration 30s --summary-export k6-summary.json ops/k6/api_ro/smoke.js
-        env:
-          API_BASE: http://localhost:8000
-          K6_BASE_URL: http://localhost:8000
+      - name: Update PR comment
+        if: steps.cap.outputs.can_comment == 'true'
+        uses: actions/github-script@v7
+        continue-on-error: true
+        with:
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- MIRROR_LOGS_SUMMARY -->';
+            const summary = fs.readFileSync('artifacts/summary.md','utf8');
+            const body = `${marker}\n${summary}\n${marker}`;
+            const {owner, repo} = context.repo;
+            const pr = context.payload.pull_request.number;
+            const { data: comments } = await github.rest.issues.listComments({ owner, repo, issue_number: pr, per_page: 100 });
+            const existing = comments.find(c => c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number: pr, body });
+            }
 
-      - name: Upload k6 summary
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mirror-logs
+          path: artifacts
+          if-no-files-found: ignore
+
+      - name: Ensure debug bundle script executable
+        if: always()
+        run: chmod +x scripts/ci/make_debug_bundle.sh || true
+
+      - name: Make debug bundle (mirror-logs)
+        if: always()
+        run: |
+          bash scripts/ci/make_debug_bundle.sh debug-bundle-mirror-logs.tar.gz || true
+
+      - name: Upload debug bundle
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: k6-summary
-          path: k6-summary.json
-          if-no-files-found: warn
-
-      - name: Tear down services
-        if: always()
-        run: docker compose -f docker-compose.yml -f docker-compose.ci.yml down
+          name: debug-bundle-mirror-logs
+          path: debug-bundle-mirror-logs.tar.gz
+          if-no-files-found: ignore
