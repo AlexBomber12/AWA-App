@@ -75,12 +75,22 @@ SYSTEM_FILE="$BUNDLE_ROOT/system.txt"
   fi
 } >"$SYSTEM_FILE"
 
-if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
-  capture_cmd "$BUNDLE_ROOT/compose-ps.txt" docker compose "${COMPOSE_ARGS[@]}" ps
-  capture_cmd "$BUNDLE_ROOT/compose-logs.txt" docker compose "${COMPOSE_ARGS[@]}" logs --no-color
+capture_cmd "$BUNDLE_ROOT/python-version.txt" python --version
+capture_cmd "$BUNDLE_ROOT/pip-freeze.txt" python -m pip freeze
+
+if command -v docker >/dev/null 2>&1; then
+  capture_cmd "$BUNDLE_ROOT/docker-ps.txt" docker ps -a
+  if docker compose version >/dev/null 2>&1; then
+    capture_cmd "$BUNDLE_ROOT/compose-ps.txt" docker compose "${COMPOSE_ARGS[@]}" ps
+    capture_cmd "$BUNDLE_ROOT/compose-logs.txt" docker compose "${COMPOSE_ARGS[@]}" logs --no-color
+  else
+    echo "docker compose not available" >"$BUNDLE_ROOT/compose-ps.txt"
+    echo "docker compose not available" >"$BUNDLE_ROOT/compose-logs.txt"
+  fi
 else
-  echo "docker compose not available" >"$BUNDLE_ROOT/compose-ps.txt"
-  echo "docker compose not available" >"$BUNDLE_ROOT/compose-logs.txt"
+  echo "docker not available" >"$BUNDLE_ROOT/docker-ps.txt"
+  echo "docker not available" >"$BUNDLE_ROOT/compose-ps.txt"
+  echo "docker not available" >"$BUNDLE_ROOT/compose-logs.txt"
 fi
 
 LOG_FILES=(
@@ -106,12 +116,25 @@ done
 
 mkdir -p "$BUNDLE_ROOT/migrations"
 if [ "${SKIP_ALEMBIC_DEBUG:-0}" != "1" ]; then
-  if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
-    capture_cmd "$BUNDLE_ROOT/migrations/alembic.txt" docker compose "${COMPOSE_ARGS[@]}" run --rm api alembic current
-    capture_cmd "$BUNDLE_ROOT/migrations/alembic.txt" docker compose "${COMPOSE_ARGS[@]}" run --rm api alembic history -20
+  ALEMBIC_FILE="$BUNDLE_ROOT/migrations/alembic.txt"
+  : >"$ALEMBIC_FILE"
+  if command -v alembic >/dev/null 2>&1 && [ -f "services/api/alembic.ini" ]; then
+    capture_cmd "$ALEMBIC_FILE" alembic -c services/api/alembic.ini current -v
+    capture_cmd "$ALEMBIC_FILE" alembic -c services/api/alembic.ini history -20
+  elif command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
+    capture_cmd "$ALEMBIC_FILE" docker compose "${COMPOSE_ARGS[@]}" run --rm api alembic current -v
+    capture_cmd "$ALEMBIC_FILE" docker compose "${COMPOSE_ARGS[@]}" run --rm api alembic history -20
   else
-    echo "docker compose not available" >"$BUNDLE_ROOT/migrations/alembic.txt"
+    echo "alembic not available in current environment" >"$ALEMBIC_FILE"
   fi
+fi
+
+if command -v curl >/dev/null 2>&1; then
+  capture_cmd "$BUNDLE_ROOT/http-ready.txt" curl -sv --max-time 5 http://localhost:8000/ready
+  capture_cmd "$BUNDLE_ROOT/http-metrics.txt" curl -sv --max-time 5 http://localhost:8000/metrics
+else
+  echo "curl not available" >"$BUNDLE_ROOT/http-ready.txt"
+  echo "curl not available" >"$BUNDLE_ROOT/http-metrics.txt"
 fi
 
 tar -czf "$OUTPUT" -C "$TMP_DIR" debug-bundle
