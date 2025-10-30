@@ -6,6 +6,7 @@ from __future__ import annotations
 import sys
 import tarfile
 import xml.etree.ElementTree as ET
+from contextlib import closing
 from pathlib import Path
 
 
@@ -67,11 +68,12 @@ def bundle_failed(bundle: Path) -> bool:
             for member in archive.getmembers():
                 if not member.isfile() or member.size == 0:
                     continue
-                with archive.extractfile(member) as extracted:
-                    if extracted is None:
-                        continue
+                extracted = archive.extractfile(member)
+                if extracted is None:
+                    continue
+                with closing(extracted) as fh:
                     try:
-                        content = extracted.read().decode("utf-8", errors="ignore")
+                        content = fh.read().decode("utf-8", errors="ignore")
                     except Exception:
                         continue
                     if "Process completed with exit code 1" in content:
