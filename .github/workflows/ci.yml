@@ -408,45 +408,7 @@ jobs:
         run: |
           set -euo pipefail
           if [ -f gitleaks.sarif ]; then
-            if command -v python3 >/dev/null 2>&1; then
-              python3 - <<'PY' > gitleaks.log
-import json
-import sys
-
-path = "gitleaks.sarif"
-try:
-    with open(path, "r", encoding="utf-8") as fh:
-        data = json.load(fh)
-except FileNotFoundError:
-    sys.exit(0)
-
-runs = data.get("runs", [])
-count = 0
-for run in runs:
-    for result in run.get("results", []):
-        level = result.get("level") or "unknown"
-        rule = result.get("ruleId") or ""
-        message = result.get("message", {}).get("text", "") or ""
-        location_desc = ""
-        locations = result.get("locations") or []
-        if locations:
-            physical = locations[0].get("physicalLocation", {})
-            artifact = physical.get("artifactLocation", {}).get("uri") or ""
-            region = physical.get("region") or {}
-            line = region.get("startLine")
-            if artifact and line:
-                location_desc = f"{artifact}:{line}"
-            else:
-                location_desc = artifact or ""
-        entry = f"[{level}] {rule} {location_desc} {message}".strip()
-        print(entry)
-        count += 1
-if count == 0:
-    print("No secrets detected.")
-PY
-            else
-              cp gitleaks.sarif gitleaks.log
-            fi
+            cp gitleaks.sarif gitleaks.log
           else
             echo "gitleaks.sarif not found" > gitleaks.log
           fi
