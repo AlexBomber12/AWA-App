@@ -7,6 +7,7 @@ ROOT_DIR="${2:-.}"
 TMP_DIR="$(mktemp -d)"
 BUNDLE_ROOT="$TMP_DIR/debug-bundle"
 mkdir -p "$BUNDLE_ROOT"
+mkdir -p "$BUNDLE_ROOT/artifacts"
 
 cleanup() {
   rm -rf "$TMP_DIR"
@@ -116,6 +117,7 @@ LOG_FILES=(
 )
 for file in "${LOG_FILES[@]}"; do
   if [ -f "$ROOT_DIR/$file" ]; then
+    mkdir -p "$(dirname "$BUNDLE_ROOT/$file")"
     cp "$ROOT_DIR/$file" "$BUNDLE_ROOT/$file"
   fi
 done

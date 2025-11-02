@@ -135,16 +135,6 @@ jobs:
           path: artifacts/unit-local.log
           if-no-files-found: ignore
 
-      - name: Diff coverage (80% gate)
-        env:
-          BASE_REF: ${{ github.base_ref || 'main' }}
-        run: |
-          set -euo pipefail
-          python -m pip install diff-cover
-          git fetch --no-tags --prune --depth=1 origin "${BASE_REF}:${BASE_REF}"
-          echo "${BASE_REF}" > diff-base.txt
-          diff-cover coverage.xml --compare-branch "origin/${BASE_REF}" --fail-under=80 --diff-range-notation=... | tee diff-coverage.txt
-
       - name: Upload coverage artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -155,6 +145,19 @@ jobs:
             coverage.xml
             coverage.txt
           if-no-files-found: warn
+
+      - name: Compute diff coverage (80% gate)
+        shell: bash
+        run: |
+          set -euo pipefail
+          pip install --disable-pip-version-check --no-input diff-cover
+          BASE="${{ github.base_ref || 'main' }}"
+          git fetch --no-tags --prune --depth=1 origin "${BASE}:${BASE}"
+          git rev-parse "origin/${BASE}" > diff-base.txt
+          diff-cover coverage.xml \
+            --compare-branch "origin/${BASE}" \
+            --fail-under=80 \
+            --diff-range-notation=... | tee diff-coverage.txt
 
       - name: Upload diff coverage artifact
         if: always()
@@ -377,43 +380,83 @@ jobs:
 
   secret-scan:
     name: secret-scan
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: lint
     timeout-minutes: 20
+    permissions:
+      contents: read
+      security-events: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Run gitleaks
+      - name: Gitleaks scan
+        uses: gitleaks/gitleaks-action@v2
+        with:
+          args: >-
+            detect
+            --verbose
+            --redact
+            --exit-code 1
+            --report-path gitleaks.sarif
+            --format sarif
+            --config .gitleaks.toml
+
+      - name: Generate gitleaks log
+        if: always()
+        shell: bash
         run: |
           set -euo pipefail
-          mkdir -p artifacts
-          status=0
-          docker run --rm -v "$PWD:/workspace" -w /workspace zricethezav/gitleaks:8.18.4 detect \
-            --source . \
-            --config=.gitleaks.toml \
-            --report-format json \
-            --report-path artifacts/gitleaks.json \
-            --log-level warn \
-            | tee artifacts/gitleaks.log || status=$?
-          docker run --rm -v "$PWD:/workspace" -w /workspace zricethezav/gitleaks:8.18.4 detect \
-            --source . \
-            --config=.gitleaks.toml \
-            --report-format sarif \
-            --report-path artifacts/gitleaks.sarif \
-            --log-level warn >> artifacts/gitleaks.log 2>&1 || true
-          exit $status
+          if [ -f gitleaks.sarif ]; then
+            if command -v python3 >/dev/null 2>&1; then
+              python3 - <<'PY' > gitleaks.log
+import json
+import sys
+
+path = "gitleaks.sarif"
+try:
+    with open(path, "r", encoding="utf-8") as fh:
+        data = json.load(fh)
+except FileNotFoundError:
+    sys.exit(0)
+
+runs = data.get("runs", [])
+count = 0
+for run in runs:
+    for result in run.get("results", []):
+        level = result.get("level") or "unknown"
+        rule = result.get("ruleId") or ""
+        message = result.get("message", {}).get("text", "") or ""
+        location_desc = ""
+        locations = result.get("locations") or []
+        if locations:
+            physical = locations[0].get("physicalLocation", {})
+            artifact = physical.get("artifactLocation", {}).get("uri") or ""
+            region = physical.get("region") or {}
+            line = region.get("startLine")
+            if artifact and line:
+                location_desc = f"{artifact}:{line}"
+            else:
+                location_desc = artifact or ""
+        entry = f"[{level}] {rule} {location_desc} {message}".strip()
+        print(entry)
+        count += 1
+if count == 0:
+    print("No secrets detected.")
+PY
+            else
+              cp gitleaks.sarif gitleaks.log
+            fi
+          else
+            echo "gitleaks.sarif not found" > gitleaks.log
+          fi
 
       - name: Upload gitleaks results
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: gitleaks-scan
-          path: |
-            artifacts/gitleaks.json
-            artifacts/gitleaks.sarif
+          path: gitleaks.sarif
           if-no-files-found: ignore
 
       - name: Upload secret-scan logs
@@ -421,7 +464,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: logs-secret-scan
-          path: artifacts/gitleaks.log
+          path: gitleaks.log
           if-no-files-found: ignore
 
       - name: Ensure debug bundle script executable
@@ -473,6 +516,17 @@ jobs:
         with:
           path: artifacts
           merge-multiple: true
+
+      - name: Prepare debug-bundle dirs
+        if: always()
+        run: mkdir -p debug-bundle/artifacts
+
+      - name: Collect lint/migrations logs into debug-bundle
+        if: always()
+        shell: bash
+        run: |
+          cp -f artifacts/lint.log debug-bundle/artifacts/lint.log 2>/dev/null || true
+          cp -f artifacts/migrations.log debug-bundle/artifacts/migrations.log 2>/dev/null || true
 
       - name: Fetch job URLs
         uses: actions/github-script@v7
