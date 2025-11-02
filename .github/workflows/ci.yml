@@ -385,60 +385,43 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: read
+      pull-requests: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Install gitleaks
-        run: |
-          set -euo pipefail
-          curl -sSL https://github.com/gitleaks/gitleaks/releases/download/v8.18.4/gitleaks_8.18.4_linux_x64.tar.gz -o gitleaks.tar.gz
-          tar -xzf gitleaks.tar.gz gitleaks
-          chmod +x gitleaks
-          sudo mv gitleaks /usr/local/bin/gitleaks
-          rm -f gitleaks.tar.gz
-
-      - name: Detect secrets (PR mode: no history, baseline gate)
+      - name: Gitleaks PR scan (fail on NEW leaks)
         if: ${{ github.event_name == 'pull_request' }}
-        run: |
-          set -euo pipefail
-          gitleaks detect \
-            --no-git \
-            --source . \
-            --config .gitleaks.toml \
-            --report-format json \
-            --report-path gitleaks-report.json \
-            --baseline-path .gitleaks-baseline.json \
-            --exit-code 1 \
-            2>&1 | tee gitleaks.log
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          args: >-
+            detect
+            --no-git
+            --source .
+            --config .gitleaks.toml
+            --report-format json
+            --report-path gitleaks-report.json
+            --baseline-path .gitleaks-baseline.json
+            --exit-code 1
 
-      - name: Detect secrets (default branch push: refresh baseline)
+      - name: Gitleaks baseline refresh on default branch
         if: ${{ github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
-        run: |
-          set -euo pipefail
-          gitleaks detect \
-            --no-git \
-            --source . \
-            --config .gitleaks.toml \
-            --report-format json \
-            --report-path .gitleaks-baseline.json \
-            --exit-code 0 \
-            2>&1 | tee gitleaks.log
-          # Leave the updated baseline as an artifact for manual review.
-
-      - name: Detect secrets (other events)
-        if: ${{ github.event_name != 'pull_request' && not (github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)) }}
-        run: |
-          set -euo pipefail
-          gitleaks detect \
-            --no-git \
-            --source . \
-            --config .gitleaks.toml \
-            --report-format json \
-            --report-path gitleaks-report.json \
-            --baseline-path .gitleaks-baseline.json \
-            --exit-code 1 \
-            2>&1 | tee gitleaks.log
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          args: >-
+            detect
+            --no-git
+            --source .
+            --config .gitleaks.toml
+            --report-format json
+            --report-path .gitleaks-baseline.json
+            --exit-code 0
 
       - name: Upload gitleaks artifacts
         if: always()
@@ -448,14 +431,6 @@ jobs:
           path: |
             gitleaks-report.json
             .gitleaks-baseline.json
-          if-no-files-found: ignore
-
-      - name: Upload secret-scan logs
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: logs-secret-scan
-          path: gitleaks.log
           if-no-files-found: ignore
 
       - name: Ensure debug bundle script executable
