@@ -49,6 +49,7 @@ jobs:
         run: python -m pip install -U pip wheel
 
       - name: Install lint dependencies
+        shell: bash
         run: |
           set -euo pipefail
           python -m pip install -c constraints.txt -r requirements-dev.txt
@@ -56,12 +57,31 @@ jobs:
           python -m pip install -c constraints.txt -e packages/awa_common
 
       - name: Run lint suite
+        shell: bash
         run: |
           set -euo pipefail
           mkdir -p artifacts
           pre-commit run --all-files | tee artifacts/lint.log
           ruff check . | tee -a artifacts/lint.log
           mypy --install-types --non-interactive . | tee -a artifacts/lint.log
+
+      - name: Yamllint (workflows)
+        if: always()
+        uses: ibiqlik/action-yamllint@v3
+        with:
+          config_data: |
+            extends: default
+            rules:
+              line-length: disable
+              truthy: disable
+
+      - name: actionlint (GitHub Actions workflow syntax)
+        if: always()
+        uses: reviewdog/action-actionlint@v1
+        with:
+          github_token: ${{ github.token }}
+          reporter: github-pr-check
+          fail_on_error: true
 
       - name: Upload lint logs
         if: always()
@@ -403,7 +423,7 @@ jobs:
             --report-format json --report-path gitleaks-report.json
             --baseline-path .gitleaks-baseline.json --exit-code 1
 
-      - name: Gitleaks baseline refresh on default branch
+      - name: Gitleaks baseline refresh
         if: ${{ github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
         uses: gitleaks/gitleaks-action@v2
         env:
