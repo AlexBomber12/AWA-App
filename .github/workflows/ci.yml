@@ -392,21 +392,16 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Gitleaks PR scan (fail on NEW leaks)
+      - name: Gitleaks PR scan (baseline)
         if: ${{ github.event_name == 'pull_request' }}
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ github.token }}
         with:
-          args: >-
-            detect
-            --no-git
-            --source .
-            --config .gitleaks.toml
-            --report-format json
-            --report-path gitleaks-report.json
-            --baseline-path .gitleaks-baseline.json
-            --exit-code 1
+          args: >
+            detect --no-git --source . --config .gitleaks.toml
+            --report-format json --report-path gitleaks-report.json
+            --baseline-path .gitleaks-baseline.json --exit-code 1
 
       - name: Gitleaks baseline refresh on default branch
         if: ${{ github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
@@ -414,13 +409,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
         with:
-          args: >-
-            detect
-            --no-git
-            --source .
-            --config .gitleaks.toml
-            --report-format json
-            --report-path .gitleaks-baseline.json
+          args: >
+            detect --no-git --source . --config .gitleaks.toml
+            --report-format json --report-path .gitleaks-baseline.json
             --exit-code 0
 
       - name: Upload gitleaks artifacts

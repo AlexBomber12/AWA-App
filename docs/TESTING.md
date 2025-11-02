@@ -37,3 +37,4 @@ All helpers rely solely on the standard library and `httpx`, so no additional te
 ## Coverage
 - Coverage settings live in `.github/coverage.ini` (`source = packages, services`). CI already passes `--cov-config` so local and remote runs stay aligned.
 - Generate a local report with `pytest -q --cov --cov-report=term-missing` if you need to inspect coverage deltas.
+- When editing GitHub workflows, run `pre-commit run --all-files` or `make ci-validate` to catch actionlint/yamllint issues before pushing.

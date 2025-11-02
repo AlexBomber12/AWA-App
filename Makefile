@@ -26,7 +26,7 @@ MYPY := $(PY) -m mypy
 RUFF := $(PY) -m ruff
 BLACK := $(PY) -m black
 
-.PHONY: up down logs sh fmt lint type test unit unit-all integ qa qa-fix install-dev bootstrap-dev ensure-bootstrap bootstrap ci-fast ci-local migrations-local integration-local ci-all doctor secrets.print-age-recipient secrets.encrypt secrets.decrypt backup-now restore-check
+.PHONY: up down logs sh fmt lint type test unit unit-all integ qa qa-fix install-dev bootstrap-dev ensure-bootstrap bootstrap ci-fast ci-local ci-validate migrations-local integration-local ci-all doctor secrets.print-age-recipient secrets.encrypt secrets.decrypt backup-now restore-check
 
 up:
 	docker compose up -d --build --wait db redis api worker
@@ -112,6 +112,10 @@ ci-local:
 ci-fast:
 	@echo "Unit only (fast)"
 	bash scripts/ci/unit.sh
+
+ci-validate:
+	actionlint -color
+	yamllint -d "extends: default, rules: {line-length: disable, truthy: disable}" .github/workflows
 
 migrations-local:
 	bash scripts/ci/migrations.sh
