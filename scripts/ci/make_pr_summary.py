@@ -195,7 +195,7 @@ def artifacts_for_service(service: str, index: dict[str, list[str]]) -> list[str
     if service == "unit-local":
         keys.update({"unit-local-coverage", "diff-coverage"})
     elif service == "secret-scan":
-        keys.add("gitleaks-scan")
+        keys.update({"gitleaks-scan", "secret-scan"})
     entries: set[str] = set()
     for key in keys:
         files = index.get(key)
