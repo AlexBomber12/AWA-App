@@ -65,23 +65,26 @@ jobs:
           ruff check . | tee -a artifacts/lint.log
           mypy --install-types --non-interactive . | tee -a artifacts/lint.log
 
-      - name: Yamllint (workflows)
+      - name: Yamllint (workflows only)
         if: always()
         uses: ibiqlik/action-yamllint@v3
         with:
+          file_or_dir: .github/workflows
           config_data: |
             extends: default
             rules:
               line-length: disable
               truthy: disable
 
-      - name: actionlint (GitHub Actions workflow syntax)
+      - name: actionlint (GitHub Actions syntax)
         if: always()
         uses: reviewdog/action-actionlint@v1
         with:
           github_token: ${{ github.token }}
           reporter: github-pr-check
-          fail_on_error: true
+          fail_level: error
+          filter_mode: nofilter
+          actionlint_flags: -color
 
       - name: Upload lint logs
         if: always()
