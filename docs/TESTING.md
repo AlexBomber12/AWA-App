@@ -26,9 +26,18 @@ All helpers rely solely on the standard library and `httpx`, so no additional te
 - Deterministic CSV/JSON fixtures live under `tests/fixtures/`. Recent additions include:
   - `fees_h10/sample.csv`
   - `price_importer/sample.csv`
+  - `email/body_template.txt`
   - `logistics_etl/sample.json`
 - Copy these into temp space with `tmp_path_helpers.copy_fixture(...)` rather than writing into the repository.
 - When adding new fixtures, prefer a handful of rows with clearly labeled invalid cases so they remain readable in reviews.
+
+## Service-focused unit slices
+- Targeted coverage suites live under `tests/unit/services/<service>/`. For example:
+  - `pytest -q tests/unit/services/alert_bot`
+  - `pytest -q tests/unit/services/emailer`
+  - `pytest -q tests/unit/services/fees_h10`
+  - `pytest -q tests/unit/services/price_importer`
+- Use the shared helpers from `tests/conftest.py` (`smtp_mock`, `http_mock`, `env_overrides`, `now_utc`) to isolate SMTP/HTTP/DB/time behaviour without hitting real services.
 
 ## Integration & live suites
 - `pytest -m integration` runs the Postgres-backed tests (ensure `TESTING=1` and supporting services are available).
