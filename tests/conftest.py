@@ -18,7 +18,7 @@ from awa_common.dsn import build_dsn
 from awa_common.settings import settings
 from fastapi import HTTPException
 
-from tests.fakes import InMemoryRateLimiter
+from tests.fakes import FakeRedis, InMemoryRateLimiter
 from tests.utils.strict_spy import StrictSpy
 
 pytest_plugins = tuple(
@@ -151,6 +151,31 @@ def _stub_prometheus_client():
 @pytest.fixture(scope="session")
 def audit_spy() -> StrictSpy:
     return StrictSpy()
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _unit_rate_limit_backend():
+    try:
+        from fastapi_limiter import FastAPILimiter
+    except Exception:
+        yield
+        return
+
+    try:
+        FastAPILimiter.redis = None
+    except Exception:
+        pass
+
+    fake = FakeRedis()
+    FastAPILimiter.redis = fake
+    FastAPILimiter.lua_sha = "fake-sha"
+    try:
+        yield
+    finally:
+        try:
+            FastAPILimiter.redis = None
+        except Exception:
+            pass
 
 
 @pytest.fixture(autouse=True)
