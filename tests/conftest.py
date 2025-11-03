@@ -131,6 +131,78 @@ def _stub_prometheus_client():
     yield
 
 
+@pytest.fixture(autouse=True, scope="session")
+def _disable_audit():
+    mp = pytest.MonkeyPatch()
+    try:
+        from services.api import audit as _audit
+    except Exception:
+        yield
+    else:
+
+        async def _noop(self, request, call_next):  # type: ignore[no-redef]
+            return await call_next(request)
+
+        mp.setattr(_audit.AuditMiddleware, "dispatch", _noop, raising=False)
+        yield
+    finally:
+        mp.undo()
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _disable_rate_limiter():
+    mp = pytest.MonkeyPatch()
+    try:
+        import fastapi_limiter.depends as _fld  # type: ignore
+    except Exception:
+        yield
+    else:
+
+        def _no_rate(*_a, **_k):
+            async def _dep(*__a, **__k):  # pragma: no cover
+                return None
+
+            return _dep
+
+        mp.setattr(_fld, "RateLimiter", lambda *a, **k: _no_rate(), raising=False)
+        yield
+    finally:
+        mp.undo()
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _unit_env():
+    mp = pytest.MonkeyPatch()
+    mp.setenv("RATE_LIMIT_ENABLED", "0")
+    mp.setenv("SENTRY_DSN", "")
+    mp.setenv("SENTRY_METRICS_ENABLED", "0")
+    yield
+    mp.undo()
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _fast_timeouts():
+    mp = pytest.MonkeyPatch()
+    for key in ("HTTP_TIMEOUT", "REQUEST_TIMEOUT", "RETRY_DELAY"):
+        mp.setenv(key, "0.01")
+    yield
+    mp.undo()
+
+
+@pytest.fixture(autouse=True)
+def _api_auth_basic(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("API_AUTH_MODE", "basic")
+    monkeypatch.setenv("API_BASIC_USER", "u")
+    monkeypatch.setenv("API_BASIC_PASS", "p")
+
+
+@pytest.fixture(autouse=True)
+def _no_sleep(monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest):
+    if request.node.get_closest_marker("real_sleep"):
+        return
+    monkeypatch.setattr(time, "sleep", lambda *_a, **_k: None)
+
+
 PG_HOST = os.getenv("PG_HOST", "localhost")
 PG_PORT = os.getenv("PG_PORT", "5432")
 PG_USER = os.getenv("PG_USER", "postgres")
