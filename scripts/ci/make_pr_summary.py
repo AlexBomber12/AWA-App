@@ -78,18 +78,14 @@ def gather_coverage(root: Path) -> tuple[dict[str, float], dict[str, set[str]]]:
         value = parse_coverage_xml(xml_path)
         if value is not None:
             coverage[service] = value
-        coverage_artifacts.setdefault(service, set()).add(
-            xml_path.relative_to(root).as_posix()
-        )
+        coverage_artifacts.setdefault(service, set()).add(xml_path.relative_to(root).as_posix())
     for txt_path in root.rglob("coverage*.txt"):
         service = coverage_service_name(txt_path.stem)
         if service not in coverage:
             value = parse_coverage_txt(txt_path)
             if value is not None:
                 coverage[service] = value
-        coverage_artifacts.setdefault(service, set()).add(
-            txt_path.relative_to(root).as_posix()
-        )
+        coverage_artifacts.setdefault(service, set()).add(txt_path.relative_to(root).as_posix())
     return coverage, coverage_artifacts
 
 
@@ -165,9 +161,7 @@ def resolve_status(
     return infer_status_from_bundle(root, service)
 
 
-def resolve_log_link(
-    job_map: dict[str, tuple[str | None, str | None]], service: str
-) -> str:
+def resolve_log_link(job_map: dict[str, tuple[str | None, str | None]], service: str) -> str:
     job_name = job_name_for_service(service)
     job = job_map.get(job_name)
     url = job[0] if job else None
@@ -182,9 +176,7 @@ def index_artifacts(root: Path) -> dict[str, list[str]]:
         if not child.is_dir():
             continue
         files = sorted(
-            path.relative_to(child).as_posix()
-            for path in child.rglob("*")
-            if path.is_file()
+            path.relative_to(child).as_posix() for path in child.rglob("*") if path.is_file()
         )
         index[child.name] = files
     return index
@@ -251,9 +243,7 @@ def build_table(
         coverage_entries = coverage_artifacts.get(service, set())
         artifact_entries = set(coverage_entries)
         artifact_entries.update(artifacts_for_service(service, artifact_index))
-        artifacts_display = (
-            ", ".join(sorted(artifact_entries)) if artifact_entries else "N/A"
-        )
+        artifacts_display = ", ".join(sorted(artifact_entries)) if artifact_entries else "N/A"
 
         lines.append(
             "| "
@@ -303,14 +293,10 @@ def main() -> int:
     if diff_value is not None:
         base_label = diff_base or "base"
         if diff_pass is None:
-            lines.append(
-                f"Diff coverage vs {base_label}: {diff_value:.2f}% (target 80%)"
-            )
+            lines.append(f"Diff coverage vs {base_label}: {diff_value:.2f}% (target 80%)")
         else:
             icon = "✅" if diff_pass else "❌"
-            lines.append(
-                f"Diff coverage vs {base_label}: {icon} {diff_value:.2f}% (target 80%)"
-            )
+            lines.append(f"Diff coverage vs {base_label}: {icon} {diff_value:.2f}% (target 80%)")
 
     if lines:
         lines.append("")

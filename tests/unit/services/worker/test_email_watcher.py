@@ -71,15 +71,11 @@ def test_email_watcher_main(monkeypatch):
     msg["From"] = "test@example.com"
     msg["To"] = "dest@example.com"
     msg.set_content("body")
-    msg.add_attachment(
-        b"col\n1\n", maintype="text", subtype="csv", filename="report.csv"
-    )
+    msg.add_attachment(b"col\n1\n", maintype="text", subtype="csv", filename="report.csv")
     raw = msg.as_bytes()
 
     dummy_s3 = DummyS3()
-    monkeypatch.setattr(
-        email_watcher.boto3, "client", lambda *_args, **_kwargs: dummy_s3
-    )
+    monkeypatch.setattr(email_watcher.boto3, "client", lambda *_args, **_kwargs: dummy_s3)
     dummy_engine = DummyEngine()
     monkeypatch.setattr(email_watcher, "create_engine", lambda *_: dummy_engine)
     monkeypatch.setattr(email_watcher.load_csv, "main", lambda args: ("load-1", 2))

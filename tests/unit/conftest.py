@@ -164,9 +164,7 @@ def api_app(settings_env, monkeypatch: pytest.MonkeyPatch):  # noqa: ANN001
 async def api_client(api_app):
     """HTTPX client backed by the FastAPI app."""
     transport = ASGITransport(app=api_app)
-    async with httpx.AsyncClient(
-        transport=transport, base_url="http://testserver"
-    ) as client:
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
         yield client
 
 

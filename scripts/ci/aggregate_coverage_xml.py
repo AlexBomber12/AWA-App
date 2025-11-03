@@ -31,10 +31,7 @@ def main() -> int:
         return 1
 
     percentage = 100.0 * total_covered / total_lines
-    print(
-        f"Aggregate coverage: {percentage:.2f}% "
-        f"(covered {total_covered} / {total_lines})"
-    )
+    print(f"Aggregate coverage: {percentage:.2f}% " f"(covered {total_covered} / {total_lines})")
 
     if percentage + 1e-9 < threshold:
         return 2

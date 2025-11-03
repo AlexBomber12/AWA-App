@@ -9,9 +9,7 @@ from etl.load_csv import _sha256_file, import_file
 
 pytestmark = [
     pytest.mark.integration,
-    pytest.mark.skipif(
-        not os.getenv("TEST_DATABASE_URL"), reason="TEST_DATABASE_URL not set"
-    ),
+    pytest.mark.skipif(not os.getenv("TEST_DATABASE_URL"), reason="TEST_DATABASE_URL not set"),
 ]
 
 

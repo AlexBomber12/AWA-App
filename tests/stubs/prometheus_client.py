@@ -149,12 +149,8 @@ class Histogram(_BaseMetric):
             for bucket in self.buckets:
                 bucket_labels = labels.copy()
                 bucket_labels["le"] = str(bucket)
-                bucket_count = float(
-                    sum(1 for value in observations if value <= bucket)
-                )
-                samples.append(
-                    _Sample(f"{self.name}_bucket", bucket_labels, bucket_count)
-                )
+                bucket_count = float(sum(1 for value in observations if value <= bucket))
+                samples.append(_Sample(f"{self.name}_bucket", bucket_labels, bucket_count))
             bucket_labels = labels.copy()
             bucket_labels["le"] = "+Inf"
             samples.append(_Sample(f"{self.name}_bucket", bucket_labels, count))

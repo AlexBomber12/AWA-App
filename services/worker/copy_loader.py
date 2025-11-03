@@ -77,9 +77,7 @@ def copy_df_via_temp(
                 if update_cols:
                     set_clause = sql.SQL(",").join(
                         [
-                            sql.SQL("{} = EXCLUDED.{}").format(
-                                _ensure_ident(c), _ensure_ident(c)
-                            )
+                            sql.SQL("{} = EXCLUDED.{}").format(_ensure_ident(c), _ensure_ident(c))
                             for c in update_cols
                         ]
                     )

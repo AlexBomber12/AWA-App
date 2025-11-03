@@ -31,12 +31,8 @@ async def test_job_inserts_and_affects_roi(postgresql_proc, tmp_path, monkeypatc
         f"postgresql+psycopg://{postgresql_proc.user}:{postgresql_proc.password or ''}"
         f"@{postgresql_proc.host}:{postgresql_proc.port}/{postgresql_proc.dbname}"
     )
-    monkeypatch.setattr(
-        db_url, "build_url", lambda async_=False: dsn_async if async_ else dsn_sync
-    )
-    monkeypatch.setattr(
-        dsn, "build_dsn", lambda sync=True: dsn_sync if sync else dsn_async
-    )
+    monkeypatch.setattr(db_url, "build_url", lambda async_=False: dsn_async if async_ else dsn_sync)
+    monkeypatch.setattr(dsn, "build_dsn", lambda sync=True: dsn_sync if sync else dsn_async)
     monkeypatch.setenv("DATABASE_URL", dsn_sync)
     settings.DATABASE_URL = dsn_sync  # type: ignore[attr-defined]
     importlib.reload(repository)
@@ -54,9 +50,7 @@ async def test_job_inserts_and_affects_roi(postgresql_proc, tmp_path, monkeypatc
                 "INSERT INTO vendor_prices(vendor_id, sku, cost, updated_at) VALUES (1,'A1',2,'2024-01-01')"
             )
         )
-        conn.execute(
-            text("INSERT INTO keepa_offers(asin, buybox_price) VALUES ('A1',10)")
-        )
+        conn.execute(text("INSERT INTO keepa_offers(asin, buybox_price) VALUES ('A1',10)"))
         conn.execute(
             text(
                 "INSERT INTO fees_raw(asin, fulfil_fee, referral_fee, storage_fee, currency, updated_at) VALUES ('A1',1,1,1,'EUR','2024-01-01')"
@@ -70,8 +64,6 @@ async def test_job_inserts_and_affects_roi(postgresql_proc, tmp_path, monkeypatc
 
     with engine.connect() as conn:
         cnt = conn.execute(text("SELECT count(*) FROM freight_rates")).scalar()
-        roi = conn.execute(
-            text("SELECT roi_pct FROM v_roi_full WHERE asin='A1'")
-        ).scalar()
+        roi = conn.execute(text("SELECT roi_pct FROM v_roi_full WHERE asin='A1'")).scalar()
     assert cnt == 1
     assert roi == 30.0

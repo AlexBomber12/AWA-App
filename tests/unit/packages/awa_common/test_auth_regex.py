@@ -30,8 +30,7 @@ def test_invalid_regex_fails_closed(caplog: pytest.LogCaptureFixture) -> None:
     with caplog.at_level(logging.WARNING):
         assert settings.should_protect_path("/any") is True
     assert any(
-        "Invalid AUTH_REQUIRED_ROUTES_REGEX" in record.getMessage()
-        for record in caplog.records
+        "Invalid AUTH_REQUIRED_ROUTES_REGEX" in record.getMessage() for record in caplog.records
     )
     previous_log_count = len(caplog.records)
     assert settings.should_protect_path("/other") is True

@@ -89,9 +89,7 @@ async def test_ready_db_success(monkeypatch, fake_db_session):
             return "head"
 
     monkeypatch.setattr(main, "Config", lambda path: types.SimpleNamespace())
-    monkeypatch.setattr(
-        main.ScriptDirectory, "from_config", lambda *args, **kwargs: DummyScript()
-    )
+    monkeypatch.setattr(main.ScriptDirectory, "from_config", lambda *args, **kwargs: DummyScript())
     result = await main.ready_db(session=session)
     assert result["status"] == "ready"
 
@@ -104,9 +102,7 @@ async def test_ready_db_pending(monkeypatch, fake_db_session):
         def get_current_head(self):
             return "head"
 
-    monkeypatch.setattr(
-        main.ScriptDirectory, "from_config", lambda *args, **kwargs: DummyScript()
-    )
+    monkeypatch.setattr(main.ScriptDirectory, "from_config", lambda *args, **kwargs: DummyScript())
     monkeypatch.setattr(main, "Config", lambda path: types.SimpleNamespace())
     with pytest.raises(main.HTTPException) as excinfo:
         await main.ready_db(session=session)

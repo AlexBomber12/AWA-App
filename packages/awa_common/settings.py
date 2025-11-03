@@ -97,9 +97,7 @@ class Settings(BaseSettings):
         if not claims_or_groups:
             claims_or_groups = set()
         mapping = self._load_role_map()
-        resolved = {
-            role for role, external in mapping.items() if external & claims_or_groups
-        }
+        resolved = {role for role, external in mapping.items() if external & claims_or_groups}
         # Allow explicit passthrough: if internal role directly referenced externally.
         direct = {role for role in mapping if role in claims_or_groups}
         resolved.update(direct)

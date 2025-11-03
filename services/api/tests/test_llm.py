@@ -21,9 +21,7 @@ async def test_check_llm_sets_fallback(monkeypatch) -> None:
         async def get(self, url):
             raise RuntimeError("boom")
 
-    monkeypatch.setattr(
-        "services.api.main.httpx.AsyncClient", lambda timeout=5: FakeClient()
-    )
+    monkeypatch.setattr("services.api.main.httpx.AsyncClient", lambda timeout=5: FakeClient())
     monkeypatch.setitem(
         sys.modules,
         "awa_common.llm",

@@ -34,9 +34,7 @@ def test_decide_price_returns_min_roi_when_no_buybox():
 
 
 def test_decide_price_uses_buybox_when_it_beats_min_roi():
-    price, explain = _decide(
-        cost=Decimal("10"), fees=Decimal("2"), buybox=Decimal("16")
-    )
+    price, explain = _decide(cost=Decimal("10"), fees=Decimal("2"), buybox=Decimal("16"))
     assert price == Decimal("15.68")
     assert explain["applied"] == ["min_roi", "buybox_gap"]
 
@@ -58,9 +56,7 @@ def test_decide_price_rounds_to_cents():
 
 
 def test_decide_price_explain_contains_candidates():
-    price, explain = _decide(
-        cost=Decimal("10"), fees=Decimal("2"), buybox=Decimal("16")
-    )
+    price, explain = _decide(cost=Decimal("10"), fees=Decimal("2"), buybox=Decimal("16"))
     assert price == explain["candidates"]["buybox_gap"]
     assert "min_roi" in explain["candidates"]
     assert explain["config"]["min_roi"] == DEFAULT_MIN_ROI

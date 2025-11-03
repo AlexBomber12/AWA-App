@@ -48,11 +48,7 @@ def require_basic_auth(
 ) -> None:
     user = os.getenv("API_BASIC_USER", "admin")
     password = os.getenv("API_BASIC_PASS", "admin")
-    if not (
-        credentials
-        and credentials.username == user
-        and credentials.password == password
-    ):
+    if not (credentials and credentials.username == user and credentials.password == password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Unauthorized",
@@ -198,9 +194,7 @@ async def get_principal(request: Request) -> Principal | None:
     if mode == "forward-auth":
         return _from_forward_auth(request.headers)
     if mode == "oidc":
-        auth_header = request.headers.get("authorization") or request.headers.get(
-            "Authorization"
-        )
+        auth_header = request.headers.get("authorization") or request.headers.get("Authorization")
         if not auth_header:
             return None
         scheme, _, token = auth_header.partition(" ")
@@ -238,17 +232,11 @@ def require_roles(*allowed: str) -> Callable[..., Awaitable[Principal]]:
             request.state.principal = fallback
             return fallback
         if principal is None:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden"
-            )
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
         if allowed_set and not (principal.roles & allowed_set):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden"
-            )
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
         if not principal.roles and allowed_set:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden"
-            )
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
         request.state.principal = principal
         return principal
 

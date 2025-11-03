@@ -8,9 +8,7 @@ try:
 except Exception:  # pragma: no cover - exercised when optional deps missing
 
     class _NoopMetricChild:
-        def __init__(
-            self, parent: _NoopMetric, key: tuple[Any, ...], kind: str
-        ) -> None:
+        def __init__(self, parent: _NoopMetric, key: tuple[Any, ...], kind: str) -> None:
             self._parent = parent
             self._key = key
             self._kind = kind
@@ -54,7 +52,5 @@ except Exception:  # pragma: no cover - exercised when optional deps missing
 
 
 etl_runs_total = _Counter("etl_runs_total", "ETL runs", ["source", "status"])
-etl_failures_total = _Counter(
-    "etl_failures_total", "ETL failures", ["source", "reason"]
-)
+etl_failures_total = _Counter("etl_failures_total", "ETL failures", ["source", "reason"])
 etl_latency_seconds = _Summary("etl_latency_seconds", "ETL latency", ["source"])

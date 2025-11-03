@@ -133,9 +133,7 @@ async def seen_load(source: str, sha256: str | None, seqno: str | None) -> bool:
         return result.scalar_one_or_none() is not None
 
 
-async def mark_load(
-    source: str, sha256: str | None, seqno: str | None, rows: int
-) -> None:
+async def mark_load(source: str, sha256: str | None, seqno: str | None, rows: int) -> None:
     engine = _get_engine()
     query = text(
         """
@@ -194,9 +192,7 @@ if os.getenv("TESTING") == "1":
         """
 
         set_assign = ", ".join([f"{c} = v.{c}" for c in upd])
-        is_changed = (
-            " OR ".join([f"t.{c} IS DISTINCT FROM v.{c}" for c in upd]) or "FALSE"
-        )
+        is_changed = " OR ".join([f"t.{c} IS DISTINCT FROM v.{c}" for c in upd]) or "FALSE"
         values_cols = ", ".join(cols)
         update_sql = f"""
         WITH v({values_cols}) AS (VALUES {values_sql})

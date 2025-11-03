@@ -20,9 +20,7 @@ def _client(monkeypatch):
     monkeypatch.setenv("PG_DATABASE", "awa")
     monkeypatch.setenv("PG_HOST", "localhost")
     monkeypatch.setenv("PG_PORT", "5432")
-    monkeypatch.setenv(
-        "DATABASE_URL", "postgresql+asyncpg://postgres:pass@localhost:5432/awa"
-    )
+    monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg://postgres:pass@localhost:5432/awa")
 
     from fastapi_limiter import FastAPILimiter
 

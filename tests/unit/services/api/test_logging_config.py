@@ -9,9 +9,7 @@ def test_request_id_injector_adds_header(monkeypatch):
     result = logging_config._request_id_injector(None, "info", event)
     assert result == {}
 
-    monkeypatch.setattr(
-        logging_config, "correlation_id", SimpleNamespace(get=lambda: "req-99")
-    )
+    monkeypatch.setattr(logging_config, "correlation_id", SimpleNamespace(get=lambda: "req-99"))
     output = logging_config._request_id_injector(None, "info", {})
     assert output["request_id"] == "req-99"
 

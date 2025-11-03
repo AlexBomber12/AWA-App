@@ -86,9 +86,7 @@ def upgrade() -> None:
             """
         )
     )
-    op.execute(
-        "CREATE OR REPLACE VIEW roi_view AS SELECT asin, roi_pct FROM v_roi_full;"
-    )
+    op.execute("CREATE OR REPLACE VIEW roi_view AS SELECT asin, roi_pct FROM v_roi_full;")
 
 
 def downgrade() -> None:

@@ -107,9 +107,7 @@ def test_mv_refresh_schedule_disabled(monkeypatch, reload_celery_module):
     assert "refresh-roi-fees-mvs" not in schedule
 
 
-def test_mv_refresh_and_nightly_merge_and_handle_import_error(
-    monkeypatch, reload_celery_module
-):
+def test_mv_refresh_and_nightly_merge_and_handle_import_error(monkeypatch, reload_celery_module):
     monkeypatch.setenv("SCHEDULE_NIGHTLY_MAINTENANCE", "true")
     monkeypatch.setenv("NIGHTLY_MAINTENANCE_CRON", "bad")
     monkeypatch.setenv("SCHEDULE_MV_REFRESH", "true")
@@ -127,9 +125,7 @@ def test_mv_refresh_and_nightly_merge_and_handle_import_error(
             raise RuntimeError("boom")
         return original_import(name, *args, **kwargs)
 
-    monkeypatch.setattr(
-        celery_module.importlib, "import_module", fake_import, raising=False
-    )
+    monkeypatch.setattr(celery_module.importlib, "import_module", fake_import, raising=False)
 
     module = reload_celery_module(celery_module)
     schedule = module.celery_app.conf.beat_schedule

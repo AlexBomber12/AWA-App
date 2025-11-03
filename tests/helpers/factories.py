@@ -76,10 +76,7 @@ def large_csv_factory(csv_file_factory) -> Callable[..., Path]:
         encoding: str = "utf-8",
     ) -> Path:
         headers = ["ASIN", "qty", "price"]
-        rows = (
-            {"ASIN": f"A{i:05d}", "qty": i % 5, "price": float(i % 100)}
-            for i in range(n)
-        )
+        rows = ({"ASIN": f"A{i:05d}", "qty": i % 5, "price": float(i % 100)} for i in range(n))
         return csv_file_factory(
             headers=headers,
             rows=rows,

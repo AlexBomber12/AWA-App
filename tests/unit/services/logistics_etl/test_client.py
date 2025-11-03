@@ -51,9 +51,7 @@ async def test_download_with_retries_http_recovers(monkeypatch):
         if attempts["count"] == 1:
             request = httpx.Request("GET", url)
             response = httpx.Response(503, request=request)
-            raise httpx.HTTPStatusError(
-                "server error", request=request, response=response
-            )
+            raise httpx.HTTPStatusError("server error", request=request, response=response)
         return b"ok", {}
 
     monkeypatch.setattr(client, "_download_http", fake_download)

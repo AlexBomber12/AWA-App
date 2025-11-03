@@ -69,9 +69,7 @@ def test_sp_fees_upsert_only_changes(pg_engine, ensure_test_fees_raw_table):
     assert s2["inserted"] == 1 and s2["updated"] == 1 and s2["skipped"] == 0
     with pg_engine.connect() as c:
         amt = c.execute(
-            text(
-                "SELECT amount FROM test_fees_raw WHERE asin='B2' AND fee_type='fba_pick_pack'"
-            )
+            text("SELECT amount FROM test_fees_raw WHERE asin='B2' AND fee_type='fba_pick_pack'")
         ).scalar_one()
     assert float(amt) == 2.50
 

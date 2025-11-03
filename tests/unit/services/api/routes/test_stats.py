@@ -73,9 +73,7 @@ def test_roi_trend_handles_multiple_columns(monkeypatch):
         def execute(self, stmt):
             text = str(stmt)
             if "snapshot_date" in text:
-                rows = [
-                    {"month": datetime.date(2024, 1, 1), "roi_avg": 1.2, "items": 5}
-                ]
+                rows = [{"month": datetime.date(2024, 1, 1), "roi_avg": 1.2, "items": 5}]
                 return DummyResult(rows)
             for key, exc in calls.items():
                 if key in text:

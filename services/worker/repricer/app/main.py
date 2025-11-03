@@ -11,13 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.api.db import get_session
 
-from .logic import (
-    DEFAULT_MIN_ROI,
-    DEFAULT_QUANT,
-    DEFAULT_UNDERCUT,
-    compute_price,
-    decide_price,
-)
+from .logic import DEFAULT_MIN_ROI, DEFAULT_QUANT, DEFAULT_UNDERCUT, compute_price, decide_price
 from .schemas import (
     ApplyRequest,
     ApplyResponse,
@@ -134,9 +128,7 @@ async def simulate(
     return SimulateResponse(results=results)
 
 
-def _prepare_context(
-    explain: dict, note: str | None, map_price: Decimal | None
-) -> dict:
+def _prepare_context(explain: dict, note: str | None, map_price: Decimal | None) -> dict:
     context = dict(explain)
     if note:
         context["note"] = note
@@ -235,9 +227,7 @@ async def apply_prices(
 
 
 async def full(session: AsyncSession) -> list[PriceResponse]:
-    result = await session.execute(
-        text("SELECT asin, our_cost, fee_estimate FROM repricer_input")
-    )
+    result = await session.execute(text("SELECT asin, our_cost, fee_estimate FROM repricer_input"))
     rows = result.fetchall()
     out: list[PriceResponse] = []
     for asin, cost, fee in rows:

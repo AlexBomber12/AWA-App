@@ -34,8 +34,6 @@ def test_main_worker_role(monkeypatch):
 
 def test_main_beat_missing_schedule(monkeypatch):
     monkeypatch.setattr(healthcheck, "_retry", lambda fn, **kwargs: True)
-    monkeypatch.setattr(
-        healthcheck.celery_app, "conf", types.SimpleNamespace(beat_schedule=None)
-    )
+    monkeypatch.setattr(healthcheck.celery_app, "conf", types.SimpleNamespace(beat_schedule=None))
     exit_code = healthcheck.main(["beat"])
     assert exit_code == 1

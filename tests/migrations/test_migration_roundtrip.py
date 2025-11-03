@@ -44,8 +44,6 @@ def test_migration_roundtrip(db_engine) -> None:
 
     with db_engine.connect() as conn:
         roi_view_exists = conn.execute(text("SELECT to_regclass('roi_view')")).scalar()
-        refunds_mv_exists = conn.execute(
-            text("SELECT to_regclass('v_refund_totals')")
-        ).scalar()
+        refunds_mv_exists = conn.execute(text("SELECT to_regclass('v_refund_totals')")).scalar()
         assert roi_view_exists
         assert refunds_mv_exists

@@ -56,13 +56,28 @@ jobs:
           python -m pip install -c constraints.txt pre-commit ruff mypy
           python -m pip install -c constraints.txt -e packages/awa_common
 
-      - name: Run lint suite
+      - name: Pre-commit (auto-fix, capture log)
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p artifacts
-          pre-commit run --all-files | tee artifacts/lint.log
-          ruff check . | tee -a artifacts/lint.log
+          set +e
+          pre-commit run --all-files --show-diff-on-failure | tee artifacts/lint.log
+          pc_status=${PIPESTATUS[0]}
+          set -e
+          if ! git diff --quiet; then
+            git diff > artifacts/precommit.patch
+            echo "::error::Pre-commit modified files. Apply artifacts/precommit.patch or run 'pre-commit run --all-files' locally and commit."
+            exit 1
+          fi
+          if [ "${pc_status}" -ne 0 ]; then
+            exit "${pc_status}"
+          fi
+
+      - name: Type check (mypy)
+        shell: bash
+        run: |
+          set -euo pipefail
           mypy --install-types --non-interactive . | tee -a artifacts/lint.log
 
       - name: Yamllint (workflows only)
@@ -91,7 +106,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: logs-lint
-          path: artifacts/lint.log
+          path: |
+            artifacts/lint.log
+            artifacts/precommit.patch
           if-no-files-found: ignore
 
       - name: Ensure debug bundle script executable

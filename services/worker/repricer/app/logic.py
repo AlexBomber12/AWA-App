@@ -21,9 +21,7 @@ def _strategy_order(key: str) -> int:
     return order.get(key, 99)
 
 
-def _applied_strategies(
-    candidates: dict[str, Decimal], chosen_value: Decimal
-) -> list[str]:
+def _applied_strategies(candidates: dict[str, Decimal], chosen_value: Decimal) -> list[str]:
     applied: list[str] = []
     if "min_roi" in candidates:
         applied.append("min_roi")
@@ -36,9 +34,7 @@ def _applied_strategies(
     return applied
 
 
-def _serialize_candidates(
-    candidates: dict[str, Decimal], quant: Decimal
-) -> dict[str, Decimal]:
+def _serialize_candidates(candidates: dict[str, Decimal], quant: Decimal) -> dict[str, Decimal]:
     quant = _normalize_quant(quant)
     return {key: value.quantize(quant) for key, value in candidates.items()}
 

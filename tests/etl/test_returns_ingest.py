@@ -19,9 +19,7 @@ def test_returns_ingest(tmp_path, refresh_mvs):
     engine = create_engine(build_dsn(sync=True))
     with engine.connect() as conn:
         cnt = conn.execute(text("SELECT count(*) FROM returns_raw")).scalar()
-        status = conn.execute(
-            text("SELECT status FROM load_log ORDER BY id DESC LIMIT 1")
-        ).scalar()
+        status = conn.execute(text("SELECT status FROM load_log ORDER BY id DESC LIMIT 1")).scalar()
 
     assert cnt == 2
     assert status == "success"

@@ -21,9 +21,7 @@ def check_db() -> None:
 
 
 def check_redis() -> None:
-    client = redis.Redis.from_url(
-        settings.REDIS_URL, socket_connect_timeout=2, socket_timeout=2
-    )
+    client = redis.Redis.from_url(settings.REDIS_URL, socket_connect_timeout=2, socket_timeout=2)
     client.ping()
 
 

@@ -24,18 +24,12 @@ def _api_fast_startup(monkeypatch, request):
             async def script_load(self, *_a, **_k):
                 return "noop"
 
-        monkeypatch.setattr(
-            fastapi_limiter.FastAPILimiter, "init", _noop_async, raising=True
-        )
-        monkeypatch.setattr(
-            fastapi_limiter.FastAPILimiter, "close", _noop_async, raising=False
-        )
+        monkeypatch.setattr(fastapi_limiter.FastAPILimiter, "init", _noop_async, raising=True)
+        monkeypatch.setattr(fastapi_limiter.FastAPILimiter, "close", _noop_async, raising=False)
         monkeypatch.setattr(
             fastapi_limiter.FastAPILimiter, "redis", _FakeLimiterRedis(), raising=False
         )
-        monkeypatch.setattr(
-            fastapi_limiter.FastAPILimiter, "lua_sha", "noop", raising=False
-        )
+        monkeypatch.setattr(fastapi_limiter.FastAPILimiter, "lua_sha", "noop", raising=False)
     except Exception:
         pass
 
@@ -49,9 +43,7 @@ def _api_fast_startup(monkeypatch, request):
             async def aclose(self):
                 return None
 
-        monkeypatch.setattr(
-            aioredis, "from_url", lambda *_a, **_k: _FakeRedis(), raising=True
-        )
+        monkeypatch.setattr(aioredis, "from_url", lambda *_a, **_k: _FakeRedis(), raising=True)
     except Exception:
         pass
 

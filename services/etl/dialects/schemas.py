@@ -69,13 +69,9 @@ ADS_SP_COST_DAILY_SCHEMA = DataFrameSchema(
         "impressions": Column(pa.Int64, Check.ge(0), nullable=False),
         "clicks": Column(pa.Int64, Check.ge(0), nullable=False),
         "spend": Column(pa.Float64, Check.ge(0), nullable=False),
-        "orders": Column(
-            pa.Int64, Check.ge(0), nullable=True, required=False, coerce=False
-        ),
+        "orders": Column(pa.Int64, Check.ge(0), nullable=True, required=False, coerce=False),
         "sales": Column(pa.Float64, Check.ge(0), nullable=True, required=False),
-        "currency": Column(
-            pa.String, Check.str_length(3, 3), nullable=True, required=False
-        ),
+        "currency": Column(pa.String, Check.str_length(3, 3), nullable=True, required=False),
     },
     coerce=True,
 )

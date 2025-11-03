@@ -56,9 +56,7 @@ from awa_common.settings import settings
 
 
 def pytest_configure(config):
-    config.addinivalue_line(
-        "markers", "integration: mark test that requires live Postgres"
-    )
+    config.addinivalue_line("markers", "integration: mark test that requires live Postgres")
 
 
 def _db_available() -> bool:
@@ -84,9 +82,7 @@ def pytest_collection_modifyitems(config, items):
         return
     if _db_available():
         return
-    skip_integration = pytest.mark.skip(
-        reason="Postgres not running – integration tests skipped"
-    )
+    skip_integration = pytest.mark.skip(reason="Postgres not running – integration tests skipped")
     for item in items:
         if "integration" in item.keywords:
             item.add_marker(skip_integration)
@@ -207,9 +203,7 @@ async def _migrate(_set_db_url):
         except Exception:
             await asyncio.sleep(2)
     else:
-        pytest.skip(
-            "Postgres not running – integration tests skipped", allow_module_level=True
-        )
+        pytest.skip("Postgres not running – integration tests skipped", allow_module_level=True)
     from alembic import command
     from alembic.config import Config
 
@@ -323,18 +317,12 @@ def _api_fast_startup_global(monkeypatch, request):
             async def script_load(self, *_a, **_k):
                 return "noop"
 
-        monkeypatch.setattr(
-            fastapi_limiter.FastAPILimiter, "init", _noop_async, raising=True
-        )
-        monkeypatch.setattr(
-            fastapi_limiter.FastAPILimiter, "close", _noop_async, raising=False
-        )
+        monkeypatch.setattr(fastapi_limiter.FastAPILimiter, "init", _noop_async, raising=True)
+        monkeypatch.setattr(fastapi_limiter.FastAPILimiter, "close", _noop_async, raising=False)
         monkeypatch.setattr(
             fastapi_limiter.FastAPILimiter, "redis", _FakeLimiterRedis(), raising=False
         )
-        monkeypatch.setattr(
-            fastapi_limiter.FastAPILimiter, "lua_sha", "noop", raising=False
-        )
+        monkeypatch.setattr(fastapi_limiter.FastAPILimiter, "lua_sha", "noop", raising=False)
     except Exception:
         pass
 
@@ -349,9 +337,7 @@ def _api_fast_startup_global(monkeypatch, request):
             async def aclose(self):
                 return None
 
-        monkeypatch.setattr(
-            aioredis, "from_url", lambda *_a, **_k: _FakeRedis(), raising=True
-        )
+        monkeypatch.setattr(aioredis, "from_url", lambda *_a, **_k: _FakeRedis(), raising=True)
     except Exception:
         pass
 
@@ -506,14 +492,10 @@ def http_mock(monkeypatch: pytest.MonkeyPatch):
             if httpx is None:  # pragma: no cover
                 raise RuntimeError("httpx is required for http_mock")
             key = (request.method.upper(), str(request.url))
-            self.calls.append(
-                {"method": request.method.upper(), "url": str(request.url)}
-            )
+            self.calls.append({"method": request.method.upper(), "url": str(request.url)})
             queue = self._routes.get(key)
             if not queue:
-                raise AssertionError(
-                    f"Unexpected HTTP request: {request.method} {request.url}"
-                )
+                raise AssertionError(f"Unexpected HTTP request: {request.method} {request.url}")
             spec = queue.pop(0)
             exc = spec.get("exception")
             if exc:
@@ -575,17 +557,11 @@ def smtp_mock(monkeypatch: pytest.MonkeyPatch):
             self.quit()
 
         def sendmail(self, from_addr, to_addrs, msg, *_args, **_kwargs):
-            recipients = (
-                list(to_addrs)
-                if isinstance(to_addrs, list | tuple | set)
-                else [to_addrs]
-            )
+            recipients = list(to_addrs) if isinstance(to_addrs, list | tuple | set) else [to_addrs]
             sent_messages.append({"from": from_addr, "to": recipients, "message": msg})
             return {}
 
-        def send_message(
-            self, message, from_addr=None, to_addrs=None, *_args, **_kwargs
-        ):
+        def send_message(self, message, from_addr=None, to_addrs=None, *_args, **_kwargs):
             if hasattr(message, "as_string"):
                 payload = message.as_string()
             else:
@@ -645,9 +621,7 @@ def tmp_path_helpers(tmp_path_factory: pytest.TempPathFactory):
         def __init__(self, root: Path):
             self.root = root
 
-        def make_file(
-            self, relative: str, contents: str = "", *, encoding: str = "utf-8"
-        ) -> Path:
+        def make_file(self, relative: str, contents: str = "", *, encoding: str = "utf-8") -> Path:
             path = self.root / relative
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(contents, encoding=encoding)

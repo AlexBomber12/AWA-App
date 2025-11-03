@@ -71,9 +71,7 @@ async def fetch_sources() -> list[dict[str, Any]]:
 
     for uri in uris:
         try:
-            raw, meta = await _download_with_retries(
-                uri, timeout_s=timeout_s, retries=retries
-            )
+            raw, meta = await _download_with_retries(uri, timeout_s=timeout_s, retries=retries)
             rows = _parse_rows(uri, raw, meta)
             snapshots.append(SourcePayload(uri, raw, meta, rows))
         except UnsupportedExcelError as exc:
@@ -139,9 +137,7 @@ async def _download_with_retries(
                 return await _download_s3(parsed, timeout_s)
             if scheme == "ftp":
                 return await _download_ftp(parsed, timeout_s)
-            raise ValueError(
-                f"Unsupported logistics source scheme: {scheme or 'unknown'}"
-            )
+            raise ValueError(f"Unsupported logistics source scheme: {scheme or 'unknown'}")
         except HTTPStatusError as exc:
             status = exc.response.status_code
             if 500 <= status < 600 and attempt < retries:

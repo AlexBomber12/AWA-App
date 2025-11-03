@@ -33,14 +33,10 @@ async def test_generate(monkeypatch, provider):
 
         async def acreate(**_):
             return types.SimpleNamespace(
-                choices=[
-                    types.SimpleNamespace(message=types.SimpleNamespace(content="hi"))
-                ]
+                choices=[types.SimpleNamespace(message=types.SimpleNamespace(content="hi"))]
             )
 
-        openai = types.SimpleNamespace(
-            ChatCompletion=types.SimpleNamespace(acreate=acreate)
-        )
+        openai = types.SimpleNamespace(ChatCompletion=types.SimpleNamespace(acreate=acreate))
         monkeypatch.setattr(llm.importlib, "import_module", lambda n: openai)
 
     res = await llm.generate("hi", provider=provider)
