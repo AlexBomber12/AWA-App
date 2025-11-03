@@ -1,3 +1,4 @@
+---
 name: CI
 
 on:
@@ -352,7 +353,9 @@ jobs:
           --health-timeout 5s
           --health-retries 12
     env:
-      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/awa
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/awa
+      REDIS_URL: redis://localhost:6379/0
+      RATE_LIMIT_REDIS_URL: redis://localhost:6379/0
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -380,17 +383,29 @@ jobs:
             python -m pip install -r "$req" -c constraints.txt
           done < <(find services -maxdepth 2 -name 'requirements*.txt' -print0)
 
-      - name: Run integration tests
+      - name: Run migrations and integration tests
+        shell: bash
         run: |
           set -euo pipefail
           mkdir -p artifacts
-          alembic -c services/api/alembic.ini upgrade head | tee artifacts/integration.log
-          if [ -d tests/integration ] && find tests/integration -type f -name '*.py' -print -quit | grep -q .; then
-            echo "== pytest tests/integration ==" | tee -a artifacts/integration.log
-            python -m pytest -q tests/integration | tee -a artifacts/integration.log
-          else
-            echo "no integration tests, skipping" | tee -a artifacts/integration.log
-          fi
+          {
+            echo "== alembic upgrade head =="
+            alembic -c services/api/alembic.ini upgrade head
+            echo "== alembic current -v =="
+            alembic -c services/api/alembic.ini current -v | tee alembic-current.txt
+            echo "== optional schema smoke =="
+            if ! python -c "import os, psycopg; dsn = os.environ['DATABASE_URL'].replace('postgresql+psycopg://', 'postgresql://');\nwith psycopg.connect(dsn, connect_timeout=5) as conn:\n    with conn.cursor() as cur:\n        cur.execute('select 1')" ; then
+              echo "::warning::Optional schema smoke check failed (non-blocking)."
+            fi
+            if [ -d tests/integration ] && [ -n "$(ls -A tests/integration)" ]; then
+              echo "== pytest tests/integration =="
+              python -m pytest -q tests/integration --maxfail=1 --timeout=60
+            else
+              echo "No integration tests, skipping."
+            fi
+          } 2>&1 | tee integration.log
+          cp integration.log artifacts/integration.log
+          cp alembic-current.txt artifacts/alembic-current.txt
 
       - name: Upload integration logs
         if: always()
@@ -398,6 +413,14 @@ jobs:
         with:
           name: logs-integration
           path: artifacts/integration.log
+          if-no-files-found: ignore
+
+      - name: Upload alembic current (integration)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: alembic-current-integration
+          path: alembic-current.txt
           if-no-files-found: ignore
 
       - name: Ensure debug bundle script executable

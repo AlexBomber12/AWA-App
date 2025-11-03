@@ -13,4 +13,4 @@ def test_replace_view_executes_drop_and_create(monkeypatch):
 
     replace_view("my_view", "SELECT 1")
 
-    assert executed == ["DROP VIEW IF EXISTS my_view CASCADE;", "SELECT 1"]
+    assert executed == ['DROP VIEW IF EXISTS "my_view" CASCADE;', "SELECT 1"]
