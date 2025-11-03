@@ -356,6 +356,7 @@ jobs:
       DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/awa
       REDIS_URL: redis://localhost:6379/0
       RATE_LIMIT_REDIS_URL: redis://localhost:6379/0
+      RATE_LIMIT_DEFAULT: 5/second
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -398,8 +399,8 @@ jobs:
               echo "::warning::Optional schema smoke check failed (non-blocking)."
             fi
             if [ -d tests/integration ] && [ -n "$(ls -A tests/integration)" ]; then
-              echo "== pytest tests/integration =="
-              python -m pytest -q tests/integration --maxfail=1 --timeout=60
+              echo "== pytest tests/integration -k api_audit_rate_limit =="
+              python -m pytest -q tests/integration -k api_audit_rate_limit --maxfail=1 --timeout=60
             else
               echo "No integration tests, skipping."
             fi

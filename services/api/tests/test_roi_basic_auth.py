@@ -8,6 +8,24 @@ from fastapi.testclient import TestClient
 pytestmark = pytest.mark.unit
 
 
+@pytest.fixture(autouse=True, scope="module")
+def _force_basic():
+    previous = {
+        key: os.environ.get(key) for key in ("API_AUTH_MODE", "API_BASIC_USER", "API_BASIC_PASS")
+    }
+    os.environ["API_AUTH_MODE"] = "basic"
+    os.environ["API_BASIC_USER"] = "u"
+    os.environ["API_BASIC_PASS"] = "p"
+    try:
+        yield
+    finally:
+        for key, value in previous.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
+
+
 def _auth_headers(u, p):
     token = base64.b64encode(f"{u}:{p}".encode()).decode()
     return {"Authorization": f"Basic {token}"}

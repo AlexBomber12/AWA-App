@@ -4,6 +4,7 @@ import asyncio
 import contextlib
 import datetime
 import importlib
+import inspect
 import os
 import random
 import sys
@@ -13,6 +14,24 @@ from pathlib import Path
 from typing import Any, Sequence
 
 import pytest
+from awa_common.dsn import build_dsn
+from awa_common.settings import settings
+from fastapi import HTTPException
+
+from tests.fakes import InMemoryRateLimiter
+from tests.utils.strict_spy import StrictSpy
+
+pytest_plugins = tuple(
+    sorted(
+        {
+            "tests.helpers.db",
+            "tests.helpers.factories",
+            "tests.helpers.fees_table",
+            "tests.helpers.logistics_table",
+            "tests.plugins.api_fixtures",
+        }
+    )
+)
 
 __all__ = [
     "pytest_configure",
@@ -36,6 +55,7 @@ __all__ = [
     "now_utc",
     "tmp_path_helpers",
     "_stub_prometheus_client",
+    "audit_spy",
 ]
 if importlib.util.find_spec("asyncpg") is not None:
     import asyncpg
@@ -50,9 +70,6 @@ if importlib.util.find_spec("sqlalchemy") is not None:
 else:  # pragma: no cover - exercised only when sqlalchemy is missing
     create_engine = None
     sessionmaker = None
-
-from awa_common.dsn import build_dsn
-from awa_common.settings import settings
 
 
 def pytest_configure(config):
@@ -131,74 +148,168 @@ def _stub_prometheus_client():
     yield
 
 
-@pytest.fixture(autouse=True, scope="session")
-def _disable_audit():
-    mp = pytest.MonkeyPatch()
-    try:
-        from services.api import audit as _audit
-    except Exception:
-        yield
-    else:
-
-        async def _noop(self, request, call_next):  # type: ignore[no-redef]
-            return await call_next(request)
-
-        mp.setattr(_audit.AuditMiddleware, "dispatch", _noop, raising=False)
-        yield
-    finally:
-        mp.undo()
-
-
-@pytest.fixture(autouse=True, scope="session")
-def _disable_rate_limiter():
-    mp = pytest.MonkeyPatch()
-    try:
-        import fastapi_limiter.depends as _fld  # type: ignore
-    except Exception:
-        yield
-    else:
-
-        def _no_rate(*_a, **_k):
-            async def _dep(*__a, **__k):  # pragma: no cover
-                return None
-
-            return _dep
-
-        mp.setattr(_fld, "RateLimiter", lambda *a, **k: _no_rate(), raising=False)
-        yield
-    finally:
-        mp.undo()
-
-
-@pytest.fixture(autouse=True, scope="session")
-def _unit_env():
-    mp = pytest.MonkeyPatch()
-    mp.setenv("RATE_LIMIT_ENABLED", "0")
-    mp.setenv("SENTRY_DSN", "")
-    mp.setenv("SENTRY_METRICS_ENABLED", "0")
-    yield
-    mp.undo()
-
-
-@pytest.fixture(autouse=True, scope="session")
-def _fast_timeouts():
-    mp = pytest.MonkeyPatch()
-    for key in ("HTTP_TIMEOUT", "REQUEST_TIMEOUT", "RETRY_DELAY"):
-        mp.setenv(key, "0.01")
-    yield
-    mp.undo()
+@pytest.fixture(scope="session")
+def audit_spy() -> StrictSpy:
+    return StrictSpy()
 
 
 @pytest.fixture(autouse=True)
-def _api_auth_basic(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setenv("API_AUTH_MODE", "basic")
-    monkeypatch.setenv("API_BASIC_USER", "u")
-    monkeypatch.setenv("API_BASIC_PASS", "p")
+def _strict_audit(
+    monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest, audit_spy: StrictSpy
+):
+    if "integration" in request.keywords:
+        return
+
+    try:
+        from services.api import audit as _audit
+    except Exception:
+        return
+
+    required_fields = {"method", "path", "route", "status"}
+
+    async def _strict_insert(_session, record):  # noqa: ANN001
+        missing = [
+            field for field in required_fields if field not in record or record.get(field) is None
+        ]
+        if missing:
+            raise AssertionError(f"audit record missing fields: {missing}")
+        if not isinstance(record.get("status"), int):
+            raise AssertionError("audit record status must be int")
+        audit_spy.record(
+            method=record["method"],
+            path=record["path"],
+            route=record["route"],
+            status=record["status"],
+            user_id=record.get("user_id"),
+            email=record.get("email"),
+            roles=record.get("roles"),
+            ip=record.get("ip"),
+            request_id=record.get("request_id"),
+        )
+        return True
+
+    monkeypatch.setattr(_audit, "insert_audit", _strict_insert, raising=False)
+
+    async def _strict_dispatch(self, request, call_next):  # noqa: ANN001
+        start = time.perf_counter()
+        response = await call_next(request)
+        latency_ms = int((time.perf_counter() - start) * 1000)
+
+        path = request.url.path
+        should_persist = settings.AUTH_MODE != "disabled" and settings.should_protect_path(path)
+        principal = getattr(request.state, "principal", None)
+        if not should_persist and principal is None:
+            return response
+
+        route = request.scope.get("route")
+        if route is not None:
+            route_pattern = getattr(route, "path_format", None) or getattr(route, "path", None)
+        else:
+            route_pattern = None
+
+        record = {
+            "user_id": getattr(principal, "id", None),
+            "email": getattr(principal, "email", None),
+            "roles": sorted(getattr(principal, "roles", []) or []) or None,
+            "method": request.method,
+            "path": path,
+            "route": route_pattern or path,
+            "status": getattr(response, "status_code", None),
+            "latency_ms": latency_ms,
+            "ip": _audit._extract_ip(request),
+            "ua": request.headers.get("user-agent"),
+            "request_id": _audit.correlation_id.get() or request.headers.get("X-Request-ID"),
+        }
+
+        await _strict_insert(None, record)
+        return response
+
+    monkeypatch.setattr(_audit.AuditMiddleware, "dispatch", _strict_dispatch, raising=False)
+
+
+@pytest.fixture(scope="session")
+def _rate_limiter_bucket() -> InMemoryRateLimiter:
+    return InMemoryRateLimiter()
+
+
+@pytest.fixture(autouse=True)
+def _inmemory_rate_limiter(
+    monkeypatch: pytest.MonkeyPatch,
+    request: pytest.FixtureRequest,
+    _rate_limiter_bucket: InMemoryRateLimiter,
+):
+    if "integration" in request.keywords:
+        return
+
+    try:
+        import fastapi_limiter
+        import fastapi_limiter.depends as _depends
+    except Exception:
+        return
+
+    monkeypatch.setattr(fastapi_limiter.FastAPILimiter, "redis", object(), raising=False)
+    monkeypatch.setattr(fastapi_limiter.FastAPILimiter, "lua_sha", "noop", raising=False)
+
+    async def _resolve_identifier(func, request):  # noqa: ANN001
+        if func is None:
+            client = request.client
+            return getattr(client, "host", "unknown") or "unknown"
+        result = func(request)
+        if inspect.isawaitable(result):
+            result = await result
+        return result
+
+    def _fake_rate_limiter(
+        times: int = 1,
+        milliseconds: int = 0,
+        seconds: int = 0,
+        minutes: int = 0,
+        hours: int = 0,
+        identifier=None,
+        callback=None,
+    ):
+        window = (milliseconds / 1000) + seconds + minutes * 60 + hours * 3600
+        if window <= 0:
+            window = _rate_limiter_bucket.default_window
+        limit = times if times > 0 else _rate_limiter_bucket.default_limit
+
+        async def _dependency(request, response):  # noqa: ANN001
+            key = await _resolve_identifier(identifier, request)
+            bucket_key = (key, request.url.path)
+            allowed = _rate_limiter_bucket.allow(bucket_key, limit=limit, window=window)
+            if allowed:
+                return None
+            if callback is not None:
+                result = callback(request, response)
+                if inspect.isawaitable(result):
+                    await result
+            raise HTTPException(status_code=429, detail="Too Many Requests")
+
+        return _dependency
+
+    monkeypatch.setattr(_depends, "RateLimiter", _fake_rate_limiter, raising=False)
+
+
+@pytest.fixture(autouse=True)
+def _unit_env(monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest):
+    if "integration" in request.keywords:
+        return
+    monkeypatch.setenv("RATE_LIMIT_ENABLED", "0")
+    monkeypatch.setenv("SENTRY_DSN", "")
+    monkeypatch.setenv("SENTRY_METRICS_ENABLED", "0")
+
+
+@pytest.fixture(autouse=True)
+def _fast_timeouts(monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest):
+    if "integration" in request.keywords:
+        return
+    for key in ("HTTP_TIMEOUT", "REQUEST_TIMEOUT", "RETRY_DELAY"):
+        monkeypatch.setenv(key, "0.01")
 
 
 @pytest.fixture(autouse=True)
 def _no_sleep(monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest):
-    if request.node.get_closest_marker("real_sleep"):
+    if "integration" in request.keywords or request.node.get_closest_marker("real_sleep"):
         return
     monkeypatch.setattr(time, "sleep", lambda *_a, **_k: None)
 
