@@ -26,4 +26,4 @@ fi
 echo "Executing: ${PYTEST_CMD[*]}"
 "${PYTEST_CMD[@]}"
 
-python -m coverage report -m > coverage.txt
+python -m coverage report -m --rcfile=.github/coverage.ini > coverage.txt
