@@ -24,7 +24,6 @@ PIP := $(PY) -m pip
 PYTEST := $(PY) -m pytest
 MYPY := $(PY) -m mypy
 RUFF := $(PY) -m ruff
-BLACK := $(PY) -m black
 
 .PHONY: up down logs sh fmt lint type test unit unit-all integ qa qa-fix install-dev bootstrap-dev ensure-bootstrap bootstrap ci-fast ci-local ci-validate migrations-local integration-local ci-all doctor secrets.print-age-recipient secrets.encrypt secrets.decrypt backup-now restore-check
 
@@ -41,11 +40,16 @@ sh:
 	docker compose exec api sh -lc "bash || sh"
 
 fmt:
-	$(BLACK) . || true
+	$(RUFF) format . || true
 
+.PHONY: lint lint-fix
 lint: ensure-bootstrap
-	@$(RUFF) check .
-	@$(BLACK) --check .
+	pre-commit run --all-files --show-diff-on-failure
+	@echo "All checks passed!"
+
+lint-fix: ensure-bootstrap
+	$(RUFF) format .
+	$(RUFF) check . --fix
 
 type: ensure-bootstrap
 	$(MYPY) .
@@ -82,8 +86,6 @@ install-dev: bootstrap-dev
 
 qa: ensure-bootstrap
 	mkdir -p $(ART)
-	pre-commit run --all-files --show-diff-on-failure || true
-	@git diff --quiet || (echo "✖ Pre-commit modified files. Commit baseline or run 'make qa-fix'."; exit 1)
 	$(MAKE) lint
 	$(MAKE) type
 	$(MAKE) unit
@@ -96,8 +98,8 @@ qa-fix: ensure-bootstrap
 	git add -A; \
 	pre-commit run --all-files --show-diff-on-failure 2>&1 | tee $(ART)/pre-commit.log || true; \
 	git add -A; \
+	$(RUFF) format . 2>&1 | tee $(ART)/ruff-format.log; \
 	$(RUFF) check . --fix 2>&1 | tee $(ART)/ruff.log; \
-	$(BLACK) . 2>&1 | tee $(ART)/black.log; \
 	$(MYPY) . 2>&1 | tee $(ART)/mypy.log; \
 	PYTHONUNBUFFERED=1 $(PYTEST) -vv -s -m "not integration and not slow" -n auto --dist=loadfile --durations=20 2>&1 | tee $(ART)/pytest-unit.log
 
