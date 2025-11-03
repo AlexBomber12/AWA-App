@@ -227,10 +227,15 @@ def _strict_audit(
         for field in ("method", "path", "status"):
             if field not in record:
                 raise AssertionError(f"audit payload missing field: {field}")
+        status = record["status"]
+        if not isinstance(status, int):
+            raise AssertionError("audit payload status must be an integer")
         audit_spy.record(
             method=record["method"],
             path=record["path"],
-            status=record["status"],
+            status=status,
+            route=record.get("route"),
+            request_id=record.get("request_id"),
         )
         return True
 
