@@ -6,6 +6,8 @@ import httpx
 import pytest
 from httpx import ASGITransport
 
+from tests.fakes import FakeRedis
+
 
 class _StubResult:
     def __init__(
@@ -135,7 +137,7 @@ def api_app(settings_env, monkeypatch: pytest.MonkeyPatch):  # noqa: ANN001
     monkeypatch.setattr(api_main, "_check_llm", _fake_check_llm)
 
     class DummyLimiter:
-        redis: Any | None = object()
+        redis: Any | None = FakeRedis()
         closed = False
 
         @staticmethod

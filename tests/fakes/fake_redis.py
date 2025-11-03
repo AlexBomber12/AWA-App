@@ -8,29 +8,23 @@ class FakeRedis:
 
     def __init__(self) -> None:
         # key -> (window_ms, reset_at_ms, count)
-        self._state: dict[str, tuple[int, float, int]] = {}
+        self._state: dict[str, tuple[int, int, int]] = {}
 
     async def evalsha(self, sha: str, numkeys: int, key: str, times: str, milliseconds: str) -> int:
         limit = int(times)
         window_ms = int(milliseconds)
         now_ms = int(time.monotonic() * 1000)
 
-        window_ms_existing, reset_at_ms, count = window_ms, 0.0, 0
-        st = self._state.get(key)
-        if st:
-            window_ms_existing, reset_at_ms, count = st
-            window_ms = window_ms_existing or window_ms
+        entry = self._state.get(key)
+        if entry is None or now_ms >= entry[1]:
+            entry = (window_ms, now_ms + window_ms, 0)
 
-        if not st or now_ms >= reset_at_ms:
-            reset_at_ms = now_ms + window_ms
-            count = 0
-
+        window_ms, reset_at_ms, count = entry
         if count < limit:
-            count += 1
-            self._state[key] = (window_ms, reset_at_ms, count)
+            self._state[key] = (window_ms, reset_at_ms, count + 1)
             return 0
 
-        ttl = max(1, int(reset_at_ms - now_ms))
+        ttl = max(1, reset_at_ms - now_ms)
         self._state[key] = (window_ms, reset_at_ms, count)
         return ttl
 

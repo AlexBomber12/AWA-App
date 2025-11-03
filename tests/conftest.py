@@ -4,7 +4,6 @@ import asyncio
 import contextlib
 import datetime
 import importlib
-import inspect
 import os
 import random
 import sys
@@ -16,9 +15,8 @@ from typing import Any, Sequence
 import pytest
 from awa_common.dsn import build_dsn
 from awa_common.settings import settings
-from fastapi import HTTPException
 
-from tests.fakes import FakeRedis, InMemoryRateLimiter
+from tests.fakes import FakeRedis
 from tests.utils.strict_spy import StrictSpy
 
 pytest_plugins = tuple(
@@ -154,28 +152,57 @@ def audit_spy() -> StrictSpy:
 
 
 @pytest.fixture(autouse=True, scope="session")
-def _unit_rate_limit_backend():
+def _install_rate_limit_fake(pytestconfig):
     try:
         from fastapi_limiter import FastAPILimiter
     except Exception:
         yield
         return
 
-    try:
-        FastAPILimiter.redis = None
-    except Exception:
-        pass
+    args = tuple(str(arg) for arg in pytestconfig.invocation_params.args)
+    if args and all(arg.startswith("tests/integration") for arg in args):
+        yield
+        return
 
     fake = FakeRedis()
+    original_init = getattr(FastAPILimiter, "init", None)
+
+    async def _init_override(*_args, **_kwargs):
+        FastAPILimiter.redis = fake
+        FastAPILimiter.lua_sha = "fake-sha"
+        return True
+
     FastAPILimiter.redis = fake
     FastAPILimiter.lua_sha = "fake-sha"
+    if original_init is not None:
+        FastAPILimiter.init = _init_override  # type: ignore[assignment]
+
+    redis = getattr(FastAPILimiter, "redis", None)
+    module = type(redis).__module__ if redis is not None else "<none>"
+    assert hasattr(redis, "evalsha"), (
+        "Unit test harness error: FastAPILimiter.redis lacks .evalsha (current client from "
+        f"{module}). Ensure the fake redis is installed before requests."
+    )
+
     try:
         yield
     finally:
-        try:
-            FastAPILimiter.redis = None
-        except Exception:
-            pass
+        if original_init is not None:
+            FastAPILimiter.init = original_init  # type: ignore[assignment]
+
+
+@pytest.fixture(autouse=True)
+def _assert_rate_limiter_client():
+    try:
+        from fastapi_limiter import FastAPILimiter
+    except Exception:
+        return
+
+    redis = getattr(FastAPILimiter, "redis", None)
+    module = type(redis).__module__ if redis is not None else "<none>"
+    assert hasattr(redis, "evalsha"), (
+        f"FastAPILimiter.redis missing .evalsha during test run (client from {module})."
+    )
 
 
 @pytest.fixture(autouse=True)
@@ -250,69 +277,6 @@ def _strict_audit(
         return response
 
     monkeypatch.setattr(_audit.AuditMiddleware, "dispatch", _strict_dispatch, raising=False)
-
-
-@pytest.fixture(scope="session")
-def _rate_limiter_bucket() -> InMemoryRateLimiter:
-    return InMemoryRateLimiter()
-
-
-@pytest.fixture(autouse=True)
-def _inmemory_rate_limiter(
-    monkeypatch: pytest.MonkeyPatch,
-    request: pytest.FixtureRequest,
-    _rate_limiter_bucket: InMemoryRateLimiter,
-):
-    if "integration" in request.keywords:
-        return
-
-    try:
-        import fastapi_limiter
-        import fastapi_limiter.depends as _depends
-    except Exception:
-        return
-
-    monkeypatch.setattr(fastapi_limiter.FastAPILimiter, "redis", object(), raising=False)
-    monkeypatch.setattr(fastapi_limiter.FastAPILimiter, "lua_sha", "noop", raising=False)
-
-    async def _resolve_identifier(func, request):  # noqa: ANN001
-        if func is None:
-            client = request.client
-            return getattr(client, "host", "unknown") or "unknown"
-        result = func(request)
-        if inspect.isawaitable(result):
-            result = await result
-        return result
-
-    def _fake_rate_limiter(
-        times: int = 1,
-        milliseconds: int = 0,
-        seconds: int = 0,
-        minutes: int = 0,
-        hours: int = 0,
-        identifier=None,
-        callback=None,
-    ):
-        window = (milliseconds / 1000) + seconds + minutes * 60 + hours * 3600
-        if window <= 0:
-            window = _rate_limiter_bucket.default_window
-        limit = times if times > 0 else _rate_limiter_bucket.default_limit
-
-        async def _dependency(request, response):  # noqa: ANN001
-            key = await _resolve_identifier(identifier, request)
-            bucket_key = (key, request.url.path)
-            allowed = _rate_limiter_bucket.allow(bucket_key, limit=limit, window=window)
-            if allowed:
-                return None
-            if callback is not None:
-                result = callback(request, response)
-                if inspect.isawaitable(result):
-                    await result
-            raise HTTPException(status_code=429, detail="Too Many Requests")
-
-        return _dependency
-
-    monkeypatch.setattr(_depends, "RateLimiter", _fake_rate_limiter, raising=False)
 
 
 @pytest.fixture(autouse=True)
@@ -511,26 +475,24 @@ def _api_fast_startup_global(monkeypatch, request):
     if request.node.get_closest_marker("real_lifespan"):
         return
 
-    # 1) limiter no-ops (always)
+    # 1) limiter uses deterministic FakeRedis
     try:
         import fastapi_limiter
 
-        async def _noop_async(*_a, **_k):
+        fake = FakeRedis()
+
+        async def _init_fake(*_a, **_k):
+            fastapi_limiter.FastAPILimiter.redis = fake
+            fastapi_limiter.FastAPILimiter.lua_sha = "fake-sha"
             return None
 
-        class _FakeLimiterRedis:
-            async def evalsha(self, *_a, **_k):
-                return 0
+        async def _close_fake(*_a, **_k):
+            return None
 
-            async def script_load(self, *_a, **_k):
-                return "noop"
-
-        monkeypatch.setattr(fastapi_limiter.FastAPILimiter, "init", _noop_async, raising=True)
-        monkeypatch.setattr(fastapi_limiter.FastAPILimiter, "close", _noop_async, raising=False)
-        monkeypatch.setattr(
-            fastapi_limiter.FastAPILimiter, "redis", _FakeLimiterRedis(), raising=False
-        )
-        monkeypatch.setattr(fastapi_limiter.FastAPILimiter, "lua_sha", "noop", raising=False)
+        monkeypatch.setattr(fastapi_limiter.FastAPILimiter, "init", _init_fake, raising=False)
+        monkeypatch.setattr(fastapi_limiter.FastAPILimiter, "close", _close_fake, raising=False)
+        monkeypatch.setattr(fastapi_limiter.FastAPILimiter, "redis", fake, raising=False)
+        monkeypatch.setattr(fastapi_limiter.FastAPILimiter, "lua_sha", "fake-sha", raising=False)
     except Exception:
         pass
 
