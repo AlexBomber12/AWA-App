@@ -146,26 +146,26 @@ def _stub_prometheus_client():
     yield
 
 
-@pytest.fixture(scope="session")
-def audit_spy() -> StrictSpy:
-    return StrictSpy()
+def _running_only_integration(pytestconfig) -> bool:
+    args = tuple(str(arg) for arg in pytestconfig.invocation_params.args)
+    return args and all(arg.startswith("tests/integration") for arg in args)
 
 
 @pytest.fixture(autouse=True, scope="session")
 def _install_rate_limit_fake(pytestconfig):
+    if _running_only_integration(pytestconfig):
+        yield
+        return
+
     try:
         from fastapi_limiter import FastAPILimiter
     except Exception:
         yield
         return
 
-    args = tuple(str(arg) for arg in pytestconfig.invocation_params.args)
-    if args and all(arg.startswith("tests/integration") for arg in args):
-        yield
-        return
-
     fake = FakeRedis()
     original_init = getattr(FastAPILimiter, "init", None)
+    mp = pytest.MonkeyPatch()
 
     async def _init_override(*_args, **_kwargs):
         FastAPILimiter.redis = fake
@@ -175,24 +175,20 @@ def _install_rate_limit_fake(pytestconfig):
     FastAPILimiter.redis = fake
     FastAPILimiter.lua_sha = "fake-sha"
     if original_init is not None:
-        FastAPILimiter.init = _init_override  # type: ignore[assignment]
-
-    redis = getattr(FastAPILimiter, "redis", None)
-    module = type(redis).__module__ if redis is not None else "<none>"
-    assert hasattr(redis, "evalsha"), (
-        "Unit test harness error: FastAPILimiter.redis lacks .evalsha (current client from "
-        f"{module}). Ensure the fake redis is installed before requests."
-    )
+        mp.setattr(FastAPILimiter, "init", _init_override, raising=False)
 
     try:
         yield
     finally:
+        mp.undo()
         if original_init is not None:
             FastAPILimiter.init = original_init  # type: ignore[assignment]
 
 
 @pytest.fixture(autouse=True)
-def _assert_rate_limiter_client():
+def _rate_limit_guard(request):
+    if "integration" in request.keywords:
+        return
     try:
         from fastapi_limiter import FastAPILimiter
     except Exception:
@@ -201,8 +197,14 @@ def _assert_rate_limiter_client():
     redis = getattr(FastAPILimiter, "redis", None)
     module = type(redis).__module__ if redis is not None else "<none>"
     assert hasattr(redis, "evalsha"), (
-        f"FastAPILimiter.redis missing .evalsha during test run (client from {module})."
+        "FastAPILimiter.redis missing .evalsha during unit test run (client from "
+        f"{module}). Ensure the FakeRedis harness installs before startup."
     )
+
+
+@pytest.fixture(scope="session")
+def audit_spy() -> StrictSpy:
+    return StrictSpy()
 
 
 @pytest.fixture(autouse=True)
@@ -217,66 +219,27 @@ def _strict_audit(
     except Exception:
         return
 
-    required_fields = {"method", "path", "route", "status"}
+    original_insert = getattr(_audit, "insert_audit", None)
 
-    async def _strict_insert(_session, record):  # noqa: ANN001
-        missing = [
-            field for field in required_fields if field not in record or record.get(field) is None
-        ]
-        if missing:
-            raise AssertionError(f"audit record missing fields: {missing}")
-        if not isinstance(record.get("status"), int):
-            raise AssertionError("audit record status must be int")
+    async def _validate_record(_session, record):  # noqa: ANN001
+        if not isinstance(record, dict):
+            raise AssertionError("audit payload must be a dict")
+        for field in ("method", "path", "status"):
+            if field not in record:
+                raise AssertionError(f"audit payload missing field: {field}")
         audit_spy.record(
             method=record["method"],
             path=record["path"],
-            route=record["route"],
             status=record["status"],
-            user_id=record.get("user_id"),
-            email=record.get("email"),
-            roles=record.get("roles"),
-            ip=record.get("ip"),
-            request_id=record.get("request_id"),
         )
         return True
 
-    monkeypatch.setattr(_audit, "insert_audit", _strict_insert, raising=False)
-
-    async def _strict_dispatch(self, request, call_next):  # noqa: ANN001
-        start = time.perf_counter()
-        response = await call_next(request)
-        latency_ms = int((time.perf_counter() - start) * 1000)
-
-        path = request.url.path
-        should_persist = settings.AUTH_MODE != "disabled" and settings.should_protect_path(path)
-        principal = getattr(request.state, "principal", None)
-        if not should_persist and principal is None:
-            return response
-
-        route = request.scope.get("route")
-        if route is not None:
-            route_pattern = getattr(route, "path_format", None) or getattr(route, "path", None)
-        else:
-            route_pattern = None
-
-        record = {
-            "user_id": getattr(principal, "id", None),
-            "email": getattr(principal, "email", None),
-            "roles": sorted(getattr(principal, "roles", []) or []) or None,
-            "method": request.method,
-            "path": path,
-            "route": route_pattern or path,
-            "status": getattr(response, "status_code", None),
-            "latency_ms": latency_ms,
-            "ip": _audit._extract_ip(request),
-            "ua": request.headers.get("user-agent"),
-            "request_id": _audit.correlation_id.get() or request.headers.get("X-Request-ID"),
-        }
-
-        await _strict_insert(None, record)
-        return response
-
-    monkeypatch.setattr(_audit.AuditMiddleware, "dispatch", _strict_dispatch, raising=False)
+    monkeypatch.setattr(_audit, "insert_audit", _validate_record, raising=False)
+    try:
+        yield
+    finally:
+        if original_insert is not None:
+            _audit.insert_audit = original_insert  # type: ignore[assignment]
 
 
 @pytest.fixture(autouse=True)

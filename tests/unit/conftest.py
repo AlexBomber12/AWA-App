@@ -118,46 +118,14 @@ def api_app(settings_env, monkeypatch: pytest.MonkeyPatch):  # noqa: ANN001
     """Return the FastAPI application with external dependencies stubbed."""
     import services.api.main as api_main
 
-    class DummyRedis:
-        def __init__(self, url: str):
-            self.url = url
-            self.pings = 0
-
-        async def ping(self) -> str:
-            self.pings += 1
-            return "PONG"
-
     async def _fake_wait_for_redis(url: str):
-        return DummyRedis(url)
+        return FakeRedis()
 
     async def _fake_check_llm() -> None:
         return None
 
     monkeypatch.setattr(api_main, "_wait_for_redis", _fake_wait_for_redis)
     monkeypatch.setattr(api_main, "_check_llm", _fake_check_llm)
-
-    class DummyLimiter:
-        redis: Any | None = FakeRedis()
-        closed = False
-
-        @staticmethod
-        async def init(redis_client: Any) -> None:
-            DummyLimiter.redis = redis_client
-
-        @staticmethod
-        async def close() -> None:
-            DummyLimiter.closed = True
-
-    class DummyRateLimiter:
-        def __init__(self, *args, **kwargs):
-            self.args = args
-            self.kwargs = kwargs
-
-        async def __call__(self, request, response) -> None:  # noqa: ANN001
-            request.state.rate_limited = True
-
-    monkeypatch.setattr(api_main, "FastAPILimiter", DummyLimiter)
-    monkeypatch.setattr(api_main, "RateLimiter", DummyRateLimiter)
 
     return api_main.app
 

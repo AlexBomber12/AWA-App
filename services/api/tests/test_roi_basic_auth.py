@@ -40,27 +40,13 @@ def _client(monkeypatch):
     monkeypatch.setenv("PG_PORT", "5432")
     monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg://postgres:pass@localhost:5432/awa")
 
-    from fastapi_limiter import FastAPILimiter
-
     import services.api.main as main
     from services.api import db
-
-    class _DummyRedis:
-        async def evalsha(self, *args, **kwargs):  # pragma: no cover - simple stub
-            return 0
 
     async def _noop(*args, **kwargs) -> None:  # pragma: no cover - simple stub
         return None
 
-    async def _fake_init(redis):  # pragma: no cover - simple stub
-        FastAPILimiter.redis = _DummyRedis()
-
-    async def _fake_close():  # pragma: no cover - simple stub
-        FastAPILimiter.redis = None
-
     monkeypatch.setattr(main, "_wait_for_db", _noop)
-    monkeypatch.setattr(FastAPILimiter, "init", _fake_init)
-    monkeypatch.setattr(FastAPILimiter, "close", _fake_close)
 
     class FakeSession:
         async def execute(self, query, params=None):  # pragma: no cover - simple stub
