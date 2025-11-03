@@ -10,6 +10,8 @@ import tarfile
 from contextlib import closing
 from pathlib import Path
 
+TRACKED_SERVICES = ["lint", "unit-local", "migrations", "integration", "secret-scan"]
+
 STATUS_ICONS: dict[str, str] = {
     "success": "✅",
     "completed": "✅",
@@ -24,6 +26,8 @@ STATUS_ICONS: dict[str, str] = {
 
 
 def coverage_service_name(stem: str) -> str:
+    if stem in {"coverage", "coverage-unit-local"}:
+        return "unit-local"
     if stem.startswith("coverage-"):
         stem = stem[len("coverage-") :]
     if stem == "aggregate":
@@ -69,23 +73,19 @@ def parse_coverage_txt(path: Path) -> float | None:
 def gather_coverage(root: Path) -> tuple[dict[str, float], dict[str, set[str]]]:
     coverage: dict[str, float] = {}
     coverage_artifacts: dict[str, set[str]] = {}
-    for xml_path in root.rglob("coverage-*.xml"):
+    for xml_path in root.rglob("coverage*.xml"):
         service = coverage_service_name(xml_path.stem)
         value = parse_coverage_xml(xml_path)
         if value is not None:
             coverage[service] = value
-        coverage_artifacts.setdefault(service, set()).add(
-            xml_path.relative_to(root).as_posix()
-        )
-    for txt_path in root.rglob("coverage-*.txt"):
+        coverage_artifacts.setdefault(service, set()).add(xml_path.relative_to(root).as_posix())
+    for txt_path in root.rglob("coverage*.txt"):
         service = coverage_service_name(txt_path.stem)
         if service not in coverage:
             value = parse_coverage_txt(txt_path)
             if value is not None:
                 coverage[service] = value
-        coverage_artifacts.setdefault(service, set()).add(
-            txt_path.relative_to(root).as_posix()
-        )
+        coverage_artifacts.setdefault(service, set()).add(txt_path.relative_to(root).as_posix())
     return coverage, coverage_artifacts
 
 
@@ -147,11 +147,7 @@ def status_icon(status: str | None) -> str | None:
 
 
 def job_name_for_service(service: str) -> str:
-    if service == "coverage-aggregate":
-        return "coverage aggregate"
-    if service in {"lint", "migrations"}:
-        return service
-    return f"pytest ({service})"
+    return service
 
 
 def resolve_status(
@@ -165,9 +161,7 @@ def resolve_status(
     return infer_status_from_bundle(root, service)
 
 
-def resolve_log_link(
-    job_map: dict[str, tuple[str | None, str | None]], service: str
-) -> str:
+def resolve_log_link(job_map: dict[str, tuple[str | None, str | None]], service: str) -> str:
     job_name = job_name_for_service(service)
     job = job_map.get(job_name)
     url = job[0] if job else None
@@ -182,9 +176,7 @@ def index_artifacts(root: Path) -> dict[str, list[str]]:
         if not child.is_dir():
             continue
         files = sorted(
-            path.relative_to(child).as_posix()
-            for path in child.rglob("*")
-            if path.is_file()
+            path.relative_to(child).as_posix() for path in child.rglob("*") if path.is_file()
         )
         index[child.name] = files
     return index
@@ -192,10 +184,10 @@ def index_artifacts(root: Path) -> dict[str, list[str]]:
 
 def artifacts_for_service(service: str, index: dict[str, list[str]]) -> list[str]:
     keys = {f"logs-{service}", f"debug-bundle-{service}"}
-    if service == "coverage-aggregate":
-        keys.add("coverage-aggregate")
-    else:
-        keys.add(f"coverage-{service}")
+    if service == "unit-local":
+        keys.update({"unit-local-coverage", "diff-coverage"})
+    elif service == "secret-scan":
+        keys.update({"gitleaks-scan", "secret-scan"})
     entries: set[str] = set()
     for key in keys:
         files = index.get(key)
@@ -209,12 +201,8 @@ def format_percentage(value: float | None) -> str:
     return f"{value:.2f}%" if value is not None else "N/A"
 
 
-def read_overall_coverage(root: Path) -> float | None:
-    for path in root.rglob("coverage-aggregate.txt"):
-        value = parse_coverage_txt(path)
-        if value is not None:
-            return value
-    return None
+def read_unit_coverage(coverage: dict[str, float]) -> float | None:
+    return coverage.get("unit-local")
 
 
 def read_diff_coverage(root: Path) -> tuple[float | None, str | None, bool | None]:
@@ -228,7 +216,7 @@ def read_diff_coverage(root: Path) -> tuple[float | None, str | None, bool | Non
     text = diff_path.read_text(encoding="utf-8", errors="ignore")
     matches = re.findall(r"(\d+(?:\.\d+)?)%", text)
     value = float(matches[-1]) if matches else None
-    passed = None if value is None else value >= 70.0 - 1e-9
+    passed = None if value is None else value >= 80.0 - 1e-9
     return value, base, passed
 
 
@@ -248,18 +236,14 @@ def build_table(
     lines = [header, separator]
 
     for service in services:
-        coverage_value = (
-            coverage.get(service) if service not in {"lint", "migrations"} else None
-        )
+        coverage_value = coverage.get(service) if service == "unit-local" else None
         status = resolve_status(root, job_map, service)
         logs = resolve_log_link(job_map, service)
 
         coverage_entries = coverage_artifacts.get(service, set())
         artifact_entries = set(coverage_entries)
         artifact_entries.update(artifacts_for_service(service, artifact_index))
-        artifacts_display = (
-            ", ".join(sorted(artifact_entries)) if artifact_entries else "N/A"
-        )
+        artifacts_display = ", ".join(sorted(artifact_entries)) if artifact_entries else "N/A"
 
         lines.append(
             "| "
@@ -284,30 +268,11 @@ def main() -> int:
     job_map = load_jobs(root)
     artifact_index = index_artifacts(root)
 
-    service_names: set[str] = set(coverage.keys())
-    for job_name in job_map:
-        if job_name.startswith("pytest (") and job_name.endswith(")"):
-            service_names.add(job_name[len("pytest (") : -1])
-        elif job_name in {"lint", "migrations", "coverage aggregate"}:
-            if job_name == "coverage aggregate":
-                service_names.add("coverage-aggregate")
-            else:
-                service_names.add(job_name)
+    service_names: set[str] = set(TRACKED_SERVICES)
+    service_names.update(coverage.keys())
+    service_names.update(name for name in job_map if name in TRACKED_SERVICES)
 
-    service_names.update({"lint", "migrations"})
-    if "coverage-aggregate" in coverage or "coverage aggregate" in job_map:
-        service_names.add("coverage-aggregate")
-
-    ordered_services = sorted(
-        name
-        for name in service_names
-        if name not in {"coverage-aggregate", "lint", "migrations"}
-    )
-    if "coverage-aggregate" in service_names:
-        ordered_services.append("coverage-aggregate")
-    for tail in ("lint", "migrations"):
-        if tail in service_names:
-            ordered_services.append(tail)
+    ordered_services = [name for name in TRACKED_SERVICES if name in service_names]
 
     table = build_table(
         ordered_services,
@@ -320,22 +285,18 @@ def main() -> int:
 
     lines: list[str] = []
 
-    overall = read_overall_coverage(root)
-    if overall is not None:
-        lines.append(f"Overall coverage (info): {overall:.2f}%")
+    unit_coverage = read_unit_coverage(coverage)
+    if unit_coverage is not None:
+        lines.append(f"Unit coverage: {unit_coverage:.2f}%")
 
     diff_value, diff_base, diff_pass = read_diff_coverage(root)
     if diff_value is not None:
         base_label = diff_base or "base"
         if diff_pass is None:
-            lines.append(
-                f"Diff coverage vs {base_label}: {diff_value:.2f}% (target 70%)"
-            )
+            lines.append(f"Diff coverage vs {base_label}: {diff_value:.2f}% (target 80%)")
         else:
             icon = "✅" if diff_pass else "❌"
-            lines.append(
-                f"Diff coverage vs {base_label}: {icon} {diff_value:.2f}% (target 70%)"
-            )
+            lines.append(f"Diff coverage vs {base_label}: {icon} {diff_value:.2f}% (target 80%)")
 
     if lines:
         lines.append("")

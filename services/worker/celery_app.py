@@ -37,9 +37,7 @@ def _init_sentry() -> None:
             integrations=[CeleryIntegration()],
         )
     except BadDsnT:
-        logging.getLogger(__name__).warning(
-            "Ignoring invalid SENTRY_DSN", exc_info=False
-        )
+        logging.getLogger(__name__).warning("Ignoring invalid SENTRY_DSN", exc_info=False)
     except Exception:
         logging.getLogger(__name__).debug(
             "Sentry init failed – continuing without telemetry", exc_info=True
@@ -55,17 +53,14 @@ def make_celery() -> Celery:
     app = Celery("awa_app", broker=broker, backend=backend)
     app.conf.update(
         task_acks_late=True,
-        worker_prefetch_multiplier=int(
-            os.getenv("CELERY_WORKER_PREFETCH_MULTIPLIER", "1")
-        ),
+        worker_prefetch_multiplier=int(os.getenv("CELERY_WORKER_PREFETCH_MULTIPLIER", "1")),
         task_time_limit=int(os.getenv("CELERY_TASK_TIME_LIMIT", "3600")),
         task_default_queue="ingest",
         task_default_rate_limit=None,
         task_ignore_result=False,
         task_track_started=True,
         task_store_eager_result=(
-            os.getenv("CELERY_TASK_STORE_EAGER_RESULT", "false").lower()
-            in ("1", "true", "yes")
+            os.getenv("CELERY_TASK_STORE_EAGER_RESULT", "false").lower() in ("1", "true", "yes")
         ),
         result_expires=int(os.getenv("CELERY_RESULT_EXPIRES", "86400")),
         timezone=os.getenv("TZ", "UTC"),

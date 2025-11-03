@@ -21,9 +21,7 @@ def test_validation_error_json() -> None:
     try:
         with TestClient(app) as client:
             auth = base64.b64encode(b"u:p").decode()
-            resp = client.get(
-                "/roi-review?vendor=abc", headers={"Authorization": f"Basic {auth}"}
-            )
+            resp = client.get("/roi-review?vendor=abc", headers={"Authorization": f"Basic {auth}"})
             assert resp.status_code == 422
             data = resp.json()
             assert data["error"]["type"] == "validation_error"

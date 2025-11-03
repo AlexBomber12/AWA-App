@@ -51,7 +51,5 @@ def detect(columns: list[str]) -> bool:
     cols = set(normalise_headers(columns))
     has_date = any(opt in cols for opt in SYNONYMS["event_date"])
     has_type = any(opt in cols for opt in SYNONYMS["event_type"])
-    has_id = any(
-        opt in cols for opt in SYNONYMS["fnsku"] + SYNONYMS["sku"] + SYNONYMS["asin"]
-    )
+    has_id = any(opt in cols for opt in SYNONYMS["fnsku"] + SYNONYMS["sku"] + SYNONYMS["asin"])
     return has_date and has_type and has_id

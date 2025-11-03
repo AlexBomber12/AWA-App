@@ -50,17 +50,13 @@ def dummy_logger(monkeypatch):
 @pytest.fixture
 def app_with_handlers(monkeypatch):
     app = FastAPI()
-    monkeypatch.setattr(
-        errors, "correlation_id", SimpleNamespace(get=lambda: "req-123")
-    )
+    monkeypatch.setattr(errors, "correlation_id", SimpleNamespace(get=lambda: "req-123"))
     errors.install_exception_handlers(app)
     return app
 
 
 @pytest.mark.asyncio
-async def test_validation_error_handler_returns_details(
-    app_with_handlers, dummy_logger
-):
+async def test_validation_error_handler_returns_details(app_with_handlers, dummy_logger):
     request = _make_request(app_with_handlers)
     handler = app_with_handlers.exception_handlers[RequestValidationError]
     exc = RequestValidationError([{"loc": ("body", "field"), "msg": "invalid"}])
@@ -72,9 +68,7 @@ async def test_validation_error_handler_returns_details(
 
 
 @pytest.mark.asyncio
-async def test_http_exception_handler_handles_rate_limit(
-    app_with_handlers, dummy_logger
-):
+async def test_http_exception_handler_handles_rate_limit(app_with_handlers, dummy_logger):
     request = _make_request(app_with_handlers)
     handler = app_with_handlers.exception_handlers[StarletteHTTPException]
     exc = HTTPException(status_code=429, detail="slow down")
@@ -86,9 +80,7 @@ async def test_http_exception_handler_handles_rate_limit(
 
 
 @pytest.mark.asyncio
-async def test_http_exception_handler_handles_other_errors(
-    app_with_handlers, dummy_logger
-):
+async def test_http_exception_handler_handles_other_errors(app_with_handlers, dummy_logger):
     request = _make_request(app_with_handlers)
     handler = app_with_handlers.exception_handlers[StarletteHTTPException]
     exc = HTTPException(status_code=404, detail="missing")

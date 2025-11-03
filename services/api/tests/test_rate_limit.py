@@ -7,13 +7,9 @@ pytestmark = pytest.mark.integration
 
 # Set env BEFORE importing app so the limiter initializes properly in this process.
 os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
-os.environ.setdefault(
-    "RATE_LIMIT_DEFAULT", "100/minute"
-)  # high enough to avoid interference
+os.environ.setdefault("RATE_LIMIT_DEFAULT", "100/minute")  # high enough to avoid interference
 os.environ.setdefault("TRUST_X_FORWARDED", "1")
-os.environ.setdefault(
-    "DATABASE_URL", "postgresql+asyncpg://postgres:pass@localhost:5432/awa"
-)
+os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://postgres:pass@localhost:5432/awa")
 
 from services.api import db as api_db  # noqa: E402
 from services.api import main as api_main  # noqa: E402

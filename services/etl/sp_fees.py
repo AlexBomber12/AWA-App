@@ -81,9 +81,9 @@ def build_rows_from_live(
     rows: list[dict[str, Any]] = []
     for asin in skus:
         response = api.get_my_fees_estimate_for_sku(asin)
-        amount = response["payload"]["FeesEstimateResult"]["FeesEstimate"][
-            "TotalFeesEstimate"
-        ]["Amount"]
+        amount = response["payload"]["FeesEstimateResult"]["FeesEstimate"]["TotalFeesEstimate"][
+            "Amount"
+        ]
         rows.append(
             {
                 "asin": asin,

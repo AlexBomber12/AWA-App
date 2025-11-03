@@ -29,9 +29,7 @@ def test_kpi_contract():
         r = client.get("/stats/kpi", headers=_auth_headers(*up))
         assert r.status_code == 200
         data = r.json()
-        assert "kpi" in data and {"roi_avg", "products", "vendors"} <= set(
-            data["kpi"].keys()
-        )
+        assert "kpi" in data and {"roi_avg", "products", "vendors"} <= set(data["kpi"].keys())
         assert isinstance(data["kpi"]["roi_avg"], int | float)
 
 

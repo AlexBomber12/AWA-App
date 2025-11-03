@@ -32,9 +32,7 @@ def _first_env(*names: str, default: str | None = None) -> str | None:
     return default
 
 
-def _normalize_driver(
-    sync: bool | None, driver: str | None
-) -> tuple[bool | None, str | None]:
+def _normalize_driver(sync: bool | None, driver: str | None) -> tuple[bool | None, str | None]:
     norm = driver.lower() if driver else None
     if norm in {_SYNC_DRIVER, _ASYNC_DRIVER}:
         sync = norm == _SYNC_DRIVER
@@ -92,9 +90,7 @@ def _build_from_parts(
     db_part = f"/{database}" if database else ""
     query_part = ""
     if params:
-        query_part = "?" + urlencode(
-            {k: v for k, v in params.items() if v is not None}, doseq=True
-        )
+        query_part = "?" + urlencode({k: v for k, v in params.items() if v is not None}, doseq=True)
     url = f"{scheme}://{auth}{host_part}{port_part}{db_part}{query_part}"
     if base_scheme.lower() in _POSTGRES_SCHEMES:
         return _apply_postgres_driver(url, sync, driver)
@@ -124,9 +120,7 @@ def _build_from_env(sync: bool | None, driver: str | None) -> str:
             return _apply_postgres_driver(value, sync, driver)
 
     host = _first_env("PG_HOST", "POSTGRES_HOST", default="localhost")
-    port = _first_env(
-        "PG_PORT", "POSTGRES_PORT", default=str(DEFAULT_PORT["postgresql"])
-    )
+    port = _first_env("PG_PORT", "POSTGRES_PORT", default=str(DEFAULT_PORT["postgresql"]))
     user = _first_env("PG_USER", "POSTGRES_USER")
     password = _first_env("PG_PASSWORD", "POSTGRES_PASSWORD")
     database = _first_env("PG_DATABASE", "POSTGRES_DB")

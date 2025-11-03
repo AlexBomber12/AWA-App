@@ -31,6 +31,7 @@ jobs:
 
       - name: Validate secrets
         run: |
+          set -euo pipefail
           : "${MINIO_ENDPOINT:?MINIO_ENDPOINT secret not set}"
           : "${MINIO_ACCESS_KEY:?MINIO_ACCESS_KEY secret not set}"
           : "${MINIO_SECRET_KEY:?MINIO_SECRET_KEY secret not set}"
@@ -38,16 +39,19 @@ jobs:
 
       - name: Build backup image
         run: |
+          set -euo pipefail
           docker compose -f docker-compose.yml -f ops/backup/docker-compose.backup.yml build db-pgbr
 
       - name: Start backup stack
         run: |
+          set -euo pipefail
           docker compose -f docker-compose.yml -f ops/backup/docker-compose.backup.yml up -d --wait minio db-pgbr
           docker compose -f docker-compose.yml -f ops/backup/docker-compose.backup.yml ps
 
       - name: Wait for PostgreSQL
         run: |
           set -euo pipefail
+          # shellcheck disable=SC2034
           for i in {1..40}; do
             if docker compose -f docker-compose.yml -f ops/backup/docker-compose.backup.yml exec -T db-pgbr pg_isready -U "${POSTGRES_USER}" -d "${POSTGRES_DB}" >/dev/null 2>&1; then
               exit 0
@@ -60,6 +64,7 @@ jobs:
       - name: Wait for MinIO
         run: |
           set -euo pipefail
+          # shellcheck disable=SC2034
           for i in {1..60}; do
             if docker compose -f docker-compose.yml -f ops/backup/docker-compose.backup.yml exec -T minio \
                  sh -lc 'curl -fsS http://localhost:9000/minio/health/ready >/dev/null'; then
@@ -90,13 +95,19 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p ops/backup/logs
-          docker compose -f docker-compose.yml -f ops/backup/docker-compose.backup.yml exec -T db-pgbr pgbackrest --config=/var/lib/postgresql/pgbackrest/pgbackrest.conf --stanza="${PGBACKREST_STANZA}" info > ops/backup/logs/pgbackrest-info.txt
-          docker compose -f docker-compose.yml -f ops/backup/docker-compose.backup.yml exec -T db-pgbr sh -c 'cat /var/log/pgbackrest/pgbackrest.log' > ops/backup/logs/pgbackrest.log || true
-          AWS_ARGS="--endpoint-url ${MINIO_ENDPOINT}"
-          if [ "${S3_VERIFY_TLS}" = "n" ] || [ "${S3_VERIFY_TLS}" = "N" ]; then
-            AWS_ARGS="${AWS_ARGS} --no-verify-ssl"
-          fi
-          docker compose -f docker-compose.yml -f ops/backup/docker-compose.backup.yml exec -T db-pgbr sh -c "aws ${AWS_ARGS} s3 ls s3://${MINIO_BUCKET} --recursive" > ops/backup/logs/minio-listing.txt || true
+          docker compose -f docker-compose.yml -f ops/backup/docker-compose.backup.yml exec -T db-pgbr sh -c "set -euo pipefail; pgbackrest --config=/var/lib/postgresql/pgbackrest/pgbackrest.conf --stanza='${PGBACKREST_STANZA}' info" > ops/backup/logs/pgbackrest-info.txt
+          docker compose -f docker-compose.yml -f ops/backup/docker-compose.backup.yml exec -T db-pgbr sh -c 'set -euo pipefail; cat /var/log/pgbackrest/pgbackrest.log' > ops/backup/logs/pgbackrest.log || true
+          docker compose -f docker-compose.yml -f ops/backup/docker-compose.backup.yml exec -T db-pgbr sh -c '
+            set -euo pipefail
+            AWS_ENDPOINT="$1"
+            VERIFY_TLS="$2"
+            BUCKET="$3"
+            AWS_ARGS=(--endpoint-url "$AWS_ENDPOINT")
+            if [ "$VERIFY_TLS" = "n" ] || [ "$VERIFY_TLS" = "N" ]; then
+              AWS_ARGS+=(--no-verify-ssl)
+            fi
+            aws "${AWS_ARGS[@]}" s3 ls "$BUCKET" --recursive
+          ' sh "${MINIO_ENDPOINT}" "${S3_VERIFY_TLS}" "s3://${MINIO_BUCKET}" > ops/backup/logs/minio-listing.txt || true
 
       - name: Upload artifacts
         if: always()
@@ -109,4 +120,5 @@ jobs:
       - name: Teardown
         if: always()
         run: |
+          set -euo pipefail
           docker compose -f docker-compose.yml -f ops/backup/docker-compose.backup.yml down -v

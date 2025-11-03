@@ -24,9 +24,7 @@ def test_before_send_adds_request_id(monkeypatch):
         },
         "extra": {"token": "abc"},
     }
-    monkeypatch.setattr(
-        sentry_config, "correlation_id", SimpleNamespace(get=lambda: "fallback")
-    )
+    monkeypatch.setattr(sentry_config, "correlation_id", SimpleNamespace(get=lambda: "fallback"))
     result = sentry_config.before_send(event, {})
     assert result["request"]["headers"]["Authorization"] == "[redacted]"
     assert result["request"]["data"]["password"] == "[redacted]"

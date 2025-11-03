@@ -1,120 +1,40 @@
 # Testing
 
-## Quick start
-```bash
-pytest
-```
+## Fast feedback loop
+- Run `pytest -q` from the repo root for the default unit-test slice (`-m "not integration and not live"` is applied in `pytest.ini`).
+- Unit tests must remain deterministic: seed random generators, keep fixtures tiny, and avoid shared state across tests.
+- Never hit real network, SMTP, or databases in the unit suite—these belong in the integration slice.
 
-By default only unit tests run (integration and live are excluded to keep CI fast).
+## Shared fixtures & helpers
+The root `tests/conftest.py` provides lightweight building blocks for pure unit tests:
+- `faker_seed()` seeds `random`, `numpy.random`, and `faker` (when installed) with a deterministic default. Call it with a different seed if a test needs new data.
+- `env_overrides(**env)` is a context manager that temporarily sets/clears environment variables while automatically restoring the previous state.
+- `dummy_user_ctx(roles=[...])` returns a ready-to-use `Principal` for API tests. Combine it with `fastapi_dep_overrides` to stub authentication.
+- `fastapi_dep_overrides(app, get_principal=...)` patches `app.dependency_overrides` inside a `with` block and restores the original wiring afterwards.
+- `http_mock()` queues canned HTTP responses using `httpx.MockTransport`. Register expectations with `mock.add("GET", "https://...", status_code=200, json={...})` and use `with mock.use(): ...` around code that instantiates `httpx` clients.
+- `smtp_mock()` captures calls to `smtplib.SMTP`/`SMTP_SSL` and yields an in-memory list of sent messages so tests can assert email payloads without opening sockets.
+- `now_utc(target="module.time_fn", value="2024-01-01T00:00:00Z")` patches a time provider to return a fixed UTC timestamp—no `freezegun` required.
+- `tmp_path_helpers` creates scratch directories/files outside the repo tree and can copy fixtures with `helpers.copy_fixture("fees_h10/sample.csv")`.
 
-## Dependencies
+All helpers rely solely on the standard library and `httpx`, so no additional test dependencies are required.
 
-All services share the root `constraints.txt`. Each `services/**/requirements.txt`
-includes a `-c ../../constraints.txt` header so installing from the repository root
-is reproducible:
+## Layout & naming
+- Unit tests live under `tests/unit/<service>/test_*.py`. Use descriptive module names and keep fixtures local to the service unless they belong in the shared `conftest.py`.
+- Integration tests continue to live alongside the existing suites; opt into them with `pytest -m integration`.
 
-```bash
-pip install -r services/api/requirements.txt
-```
+## Fixture data
+- Deterministic CSV/JSON fixtures live under `tests/fixtures/`. Recent additions include:
+  - `fees_h10/sample.csv`
+  - `price_importer/sample.csv`
+  - `logistics_etl/sample.json`
+- Copy these into temp space with `tmp_path_helpers.copy_fixture(...)` rather than writing into the repository.
+- When adding new fixtures, prefer a handful of rows with clearly labeled invalid cases so they remain readable in reviews.
 
-If you prefer to install from another directory, pass the constraint explicitly:
+## Integration & live suites
+- `pytest -m integration` runs the Postgres-backed tests (ensure `TESTING=1` and supporting services are available).
+- `pytest -m live` is reserved for explicit, real external calls; keep it opt-in.
 
-```bash
-pip install -r services/api/requirements.txt -c constraints.txt
-```
-
-The CI job runs `scripts/ci/check_constraints.py` to ensure no additional
-`constraints*.txt` files are introduced and that service requirements remain
-unpinned.
-
-Markers
-
-unit — fast, pure unit tests (default).
-
-integration — require services (Postgres/MinIO/etc.). Run explicitly:
-
-pytest -m integration
-
-
-live — real external calls; always opt-in:
-
-pytest -m live
-
-
-future — pins future behavior; often xfail.
-
-slow — long-running or large datasets.
-
-Coverage policy
-
-Coverage is measured on the services package and enforced via the configuration in
-`pyproject.toml` (default 45%):
-
-pytest -q --cov=services --cov-report=xml
-
-
-CI publishes coverage.xml for external tooling.
-
-Ingest / ETL integration tests
-
-Require Postgres and TESTING=1.
-
-export TESTING=1
-pytest -m integration tests/etl -q
-
-
-Tests use a test-only dialect test_generic; production data is untouched.
-
-API integration tests (ROI filters and /score)
-
-Point the API to a test ROI view/table via env.
-
-export TESTING=1
-export API_BASIC_USER=u
-export API_BASIC_PASS=p
-export ROI_VIEW_NAME=test_roi_view
-pytest -m integration services/api/tests/test_roi_filters.py -q
-pytest -m integration services/api/tests/test_score.py -q
-
-/stats in SQL mode
-
-Enable real aggregates with STATS_USE_SQL=1.
-
-export TESTING=1
-export STATS_USE_SQL=1
-export ROI_VIEW_NAME=test_roi_view
-export API_BASIC_USER=u
-export API_BASIC_PASS=p
-pytest -m integration services/api/tests/test_stats_sql.py -q
-
-
-With STATS_USE_SQL unset/0, /stats returns the stable placeholder contracts.
-
-Fees integrators (Helium10 / SP)
-
-Write to a dedicated test table via FEES_RAW_TABLE.
-
-export TESTING=1
-export FEES_RAW_TABLE=test_fees_raw
-pytest -m integration tests/fees -q
-
-Logistics ETL
-
-Generic upsert helper exists only when TESTING=1.
-
-export TESTING=1
-pytest -m integration tests/logistics -q
-
-LLM module tests and defaults
-
-Provider is selected at call time via LLM_PROVIDER; default is lan. Useful envs:
-
-LLM_PROVIDER — lan | local | openai | stub (default: lan)
-
-LLM_TIMEOUT_SECS — request timeout (seconds), default 60
-
-LLM_REMOTE_URL — override remote HTTP endpoint in tests
-
-Run:
-
-pytest tests/llm -q
+## Coverage
+- Coverage settings live in `.github/coverage.ini` (`source = packages, services`). CI already passes `--cov-config` so local and remote runs stay aligned.
+- Generate a local report with `pytest -q --cov --cov-report=term-missing` if you need to inspect coverage deltas.
+- When editing GitHub workflows, run `pre-commit run --all-files` or `make ci-validate` to catch actionlint/yamllint issues before pushing.

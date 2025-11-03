@@ -34,9 +34,7 @@ def upgrade() -> None:
     if "storage_fee" not in cols:
         op.add_column(
             "fees_raw",
-            sa.Column(
-                "storage_fee", sa.Numeric(10, 2), nullable=False, server_default="0"
-            ),
+            sa.Column("storage_fee", sa.Numeric(10, 2), nullable=False, server_default="0"),
         )
     if "currency" not in cols:
         op.add_column(

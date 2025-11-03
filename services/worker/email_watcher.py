@@ -55,15 +55,11 @@ def main() -> dict[str, str]:
                 today = datetime.date.today().strftime("%Y-%m")
                 dst = f"raw/amazon/{today}/{name}"
                 s3.upload_file(tmp_path, BUCKET, dst)
-                load_id, inserted = load_csv.main(
-                    ["--source", f"minio://{dst}", "--table", "auto"]
-                )
+                load_id, inserted = load_csv.main(["--source", f"minio://{dst}", "--table", "auto"])
                 engine = create_engine(settings.DATABASE_URL)
                 with engine.begin() as db:
                     db.execute(
-                        text(
-                            "UPDATE load_log SET status='success', inserted_rows=:n WHERE id=:id"
-                        ),
+                        text("UPDATE load_log SET status='success', inserted_rows=:n WHERE id=:id"),
                         {"n": inserted, "id": load_id},
                     )
                 engine.dispose()

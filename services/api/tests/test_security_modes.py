@@ -110,9 +110,7 @@ def _prepare_oidc(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(security, "_load_jwks", lambda *_a, **_k: jwks)
 
     monkeypatch.setattr(settings, "AUTH_MODE", "oidc", raising=False)
-    monkeypatch.setattr(
-        settings, "OIDC_ISSUER", "https://test.example/oidc", raising=False
-    )
+    monkeypatch.setattr(settings, "OIDC_ISSUER", "https://test.example/oidc", raising=False)
     monkeypatch.setattr(settings, "OIDC_AUDIENCE", "awa", raising=False)
     monkeypatch.setattr(settings, "OIDC_CLIENT_ID", None, raising=False)
     monkeypatch.setattr(settings, "OIDC_JWKS_URL", None, raising=False)
@@ -129,9 +127,7 @@ def _prepare_forward_auth(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(settings, "AUTH_MODE", "forward-auth", raising=False)
     monkeypatch.setattr(settings, "FA_USER_HEADER", "X-Forwarded-User", raising=False)
     monkeypatch.setattr(settings, "FA_EMAIL_HEADER", "X-Forwarded-Email", raising=False)
-    monkeypatch.setattr(
-        settings, "FA_GROUPS_HEADER", "X-Forwarded-Groups", raising=False
-    )
+    monkeypatch.setattr(settings, "FA_GROUPS_HEADER", "X-Forwarded-Groups", raising=False)
     monkeypatch.setattr(settings, "AUTH_REQUIRED_ROUTES_REGEX", ".*", raising=False)
     monkeypatch.setattr(settings, "_role_regex_cache", None, raising=False)
     monkeypatch.setattr(settings, "_role_regex_cache_key", None, raising=False)
@@ -150,9 +146,7 @@ def secured_app(audit_sink):
     return _build_app(factory)
 
 
-def test_oidc_bearer_honors_roles(
-    monkeypatch: pytest.MonkeyPatch, secured_app, audit_sink
-):
+def test_oidc_bearer_honors_roles(monkeypatch: pytest.MonkeyPatch, secured_app, audit_sink):
     token_ok, token_viewer, token_invalid = _prepare_oidc(monkeypatch)
 
     with TestClient(secured_app) as client:
@@ -180,9 +174,7 @@ def test_oidc_bearer_honors_roles(
         assert res_invalid.status_code == 401
 
 
-def test_forward_auth_enforces_groups(
-    monkeypatch: pytest.MonkeyPatch, secured_app, audit_sink
-):
+def test_forward_auth_enforces_groups(monkeypatch: pytest.MonkeyPatch, secured_app, audit_sink):
     _prepare_forward_auth(monkeypatch)
 
     with TestClient(secured_app) as client:

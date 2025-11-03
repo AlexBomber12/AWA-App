@@ -18,7 +18,7 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 env:
@@ -26,172 +26,9 @@ env:
   COMPOSE_DOCKER_CLI_BUILD: "1"
 
 jobs:
-  prepare-matrix:
-    name: prepare matrix
-    runs-on: ubuntu-latest
-    outputs:
-      services: ${{ steps.services.outputs.services }}
-      python-version: ${{ steps.python.outputs.python-version }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Detect Python version
-        id: python
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-            const path = require('path');
-
-            const readFile = (filePath) => {
-              try {
-                return fs.readFileSync(path.join(process.cwd(), filePath), 'utf8');
-              } catch (error) {
-                return null;
-              }
-            };
-
-            const parseRequiresPython = (content) => {
-              if (!content) {
-                return null;
-              }
-              const requiresMatch = content.match(/requires-python\s*=\s*["']([^"']+)["']/i);
-              if (requiresMatch && requiresMatch[1]) {
-                const versionMatch = requiresMatch[1].match(/(\d+\.\d+)/);
-                if (versionMatch) {
-                  return versionMatch[1];
-                }
-              }
-              const poetryMatch = content.match(/^\s*python\s*=\s*["']([^"']+)["']/im);
-              if (poetryMatch && poetryMatch[1]) {
-                const versionMatch = poetryMatch[1].match(/(\d+\.\d+)/);
-                if (versionMatch) {
-                  return versionMatch[1];
-                }
-              }
-              const targetMatches = [...content.matchAll(/target-version\s*=\s*\[\s*"py(\d{2,3})"\s*\]/gi)];
-              for (const match of targetMatches) {
-                const digits = match[1];
-                if (digits.length === 2) {
-                  return `${digits[0]}.${digits[1]}`;
-                }
-                if (digits.length === 3) {
-                  return `${digits[0]}.${digits.slice(1)}`;
-                }
-              }
-              return null;
-            };
-
-            const fromScripts = () => {
-              const scriptsDir = path.join(process.cwd(), 'scripts', 'ci');
-              try {
-                for (const entry of fs.readdirSync(scriptsDir)) {
-                  const filePath = path.join(scriptsDir, entry);
-                  if (!fs.statSync(filePath).isFile()) continue;
-                  const content = fs.readFileSync(filePath, 'utf8');
-                  const match = content.match(/PYTHON_VERSION\s*[:=]\s*["']?(\d+\.\d+)["']?/);
-                  if (match) {
-                    return match[1];
-                  }
-                }
-              } catch (error) {
-                // ignore
-              }
-              return null;
-            };
-
-            const candidates = [
-              parseRequiresPython(readFile('pyproject.toml')),
-              fromScripts(),
-            ].filter(Boolean);
-
-            const version = candidates.length > 0 ? candidates[0] : '3.11';
-            core.info(`Using Python ${version}`);
-            core.setOutput('python-version', version);
-
-      - name: Discover Python services
-        id: services
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-            const path = require('path');
-
-            const servicesDir = path.join(process.cwd(), 'services');
-            let detected = [];
-
-            const hasPythonFiles = (dir) => {
-              const queue = [dir];
-              while (queue.length) {
-                const current = queue.pop();
-                let entries = [];
-                try {
-                  entries = fs.readdirSync(current, { withFileTypes: true });
-                } catch (error) {
-                  continue;
-                }
-                for (const entry of entries) {
-                  if (entry.name.startsWith('.')) {
-                    continue;
-                  }
-                  const fullPath = path.join(current, entry.name);
-                  if (entry.isDirectory()) {
-                    queue.push(fullPath);
-                  } else if (entry.isFile() && entry.name.endsWith('.py')) {
-                    return true;
-                  }
-                }
-              }
-              return false;
-            };
-
-            try {
-              const entries = fs.readdirSync(servicesDir, { withFileTypes: true });
-              for (const entry of entries) {
-                if (!entry.isDirectory()) {
-                  continue;
-                }
-                if (entry.name.startsWith('.')) {
-                  continue;
-                }
-                const servicePath = path.join(servicesDir, entry.name);
-                let hasRequirements = false;
-                try {
-                  hasRequirements = fs
-                    .readdirSync(servicePath)
-                    .some((name) => /^requirements.*\.txt$/i.test(name));
-                } catch (error) {
-                  hasRequirements = false;
-                }
-                if (hasRequirements || hasPythonFiles(servicePath)) {
-                  detected.push(entry.name);
-                }
-              }
-            } catch (error) {
-              core.warning(`Unable to inspect services directory: ${error.message}`);
-            }
-
-            detected = Array.from(new Set(detected)).sort();
-            if (detected.length === 0) {
-              detected = ['api'];
-              core.warning('No Python services found automatically, defaulting matrix to ["api"].');
-            }
-            const json = JSON.stringify(detected);
-            core.info(`Services matrix: ${json}`);
-            core.setOutput('services', json);
-
-      - name: Display matrix
-        run: |
-          echo "Python version: ${{ steps.python.outputs.python-version }}"
-          echo "Services: ${{ steps.services.outputs.services }}"
-
   lint:
     name: lint
     runs-on: ubuntu-latest
-    needs: prepare-matrix
     timeout-minutes: 20
     steps:
       - name: Checkout
@@ -202,45 +39,76 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.12'
           cache: 'pip'
           cache-dependency-path: |
             constraints.txt
-            services/**/requirements*.txt
+            **/requirements*.txt
 
       - name: Upgrade pip tooling
         run: python -m pip install -U pip wheel
 
       - name: Install lint dependencies
+        shell: bash
         run: |
+          set -euo pipefail
           python -m pip install -c constraints.txt -r requirements-dev.txt
           python -m pip install -c constraints.txt pre-commit ruff mypy
           python -m pip install -c constraints.txt -e packages/awa_common
 
-      - name: Prepare lint logs
-        run: mkdir -p artifacts
-
-      - name: pre-commit
+      - name: Pre-commit (auto-fix, capture log)
+        shell: bash
         run: |
-          set -o pipefail
-          pre-commit run --all-files | tee -a artifacts/lint.log
+          set -euo pipefail
+          mkdir -p artifacts
+          set +e
+          pre-commit run --all-files --show-diff-on-failure | tee artifacts/lint.log
+          pc_status=${PIPESTATUS[0]}
+          set -e
+          if ! git diff --quiet; then
+            git diff > artifacts/precommit.patch
+            echo "::error::Pre-commit modified files. Apply artifacts/precommit.patch or run 'pre-commit run --all-files' locally and commit."
+            exit 1
+          fi
+          if [ "${pc_status}" -ne 0 ]; then
+            exit "${pc_status}"
+          fi
 
-      - name: Ruff
+      - name: Type check (mypy)
+        shell: bash
         run: |
-          set -o pipefail
-          ruff check . | tee -a artifacts/lint.log
-
-      - name: Mypy
-        run: |
-          set -o pipefail
+          set -euo pipefail
           mypy --install-types --non-interactive . | tee -a artifacts/lint.log
+
+      - name: Yamllint (workflows only)
+        if: always()
+        uses: ibiqlik/action-yamllint@v3
+        with:
+          file_or_dir: .github/workflows
+          config_data: |
+            extends: default
+            rules:
+              line-length: disable
+              truthy: disable
+
+      - name: actionlint (GitHub Actions syntax)
+        if: always()
+        uses: reviewdog/action-actionlint@v1
+        with:
+          github_token: ${{ github.token }}
+          reporter: github-pr-check
+          fail_level: error
+          filter_mode: nofilter
+          actionlint_flags: -color
 
       - name: Upload lint logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: logs-lint
-          path: artifacts/lint.log
+          path: |
+            artifacts/lint.log
+            artifacts/precommit.patch
           if-no-files-found: ignore
 
       - name: Ensure debug bundle script executable
@@ -251,8 +119,7 @@ jobs:
         if: always()
         run: |
           bash scripts/ci/make_debug_bundle.sh debug-bundle-lint.tar.gz \
-          || { echo "::warning::fallback debug bundle (lint)"; tar -czf debug-bundle-lint.tar.gz \
-               constraints.txt .github/workflows/ci.yml || true; }
+          || { echo "::warning::fallback debug bundle (lint)"; tar -czf debug-bundle-lint.tar.gz constraints.txt .github/workflows/ci.yml || true; }
 
       - name: Upload debug bundle
         if: always()
@@ -262,19 +129,11 @@ jobs:
           path: debug-bundle-lint.tar.gz
           if-no-files-found: ignore
 
-  test:
-    name: pytest (${{ matrix.service }})
+  unit-local:
+    name: unit-local
     runs-on: ubuntu-latest
-    needs:
-      - prepare-matrix
-      - lint
+    needs: lint
     timeout-minutes: 45
-    strategy:
-      fail-fast: false
-      matrix:
-        service: ${{ fromJson(needs.prepare-matrix.outputs.services) }}
-    env:
-      PYTHON_VERSION: ${{ needs.prepare-matrix.outputs.python-version }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -284,146 +143,94 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: ${{ needs.prepare-matrix.outputs.python-version }}
+          python-version: '3.12'
           cache: 'pip'
           cache-dependency-path: |
             constraints.txt
-            services/${{ matrix.service }}/requirements*.txt
+            **/requirements*.txt
 
       - name: Upgrade pip tooling
         run: python -m pip install -U pip wheel
 
-      - name: Install service dependencies
-        run: |
-          python -m pip install -c constraints.txt -r requirements-dev.txt
-          if ls services/${{ matrix.service }}/requirements*.txt >/dev/null 2>&1; then
-            for req in services/${{ matrix.service }}/requirements*.txt; do
-              python -m pip install -r "$req" -c constraints.txt
-            done
-          fi
-          python -m pip install -c constraints.txt -e packages/awa_common
-
-      - name: Determine pytest targets
-        id: targets
-        env:
-          SERVICE_NAME: ${{ matrix.service }}
-        run: |
-          python <<'PY'
-          import json
-          import glob
-          import os
-
-          service = os.environ["SERVICE_NAME"]
-          candidates = []
-
-          for path in (
-              f"tests/{service}",
-              f"services/{service}/tests",
-          ):
-              if os.path.isdir(path):
-                  candidates.append(path)
-
-          patterns = [
-              f"tests/test_{service}.py",
-              f"tests/test_{service}_*.py",
-              f"tests/{service}_test.py",
-              f"tests/{service}/*test*.py",
-          ]
-          for pattern in patterns:
-              for match in glob.glob(pattern):
-                  if os.path.isfile(match):
-                      candidates.append(match)
-
-          seen = set()
-          ordered = []
-          for candidate in candidates:
-              if candidate not in seen:
-                  seen.add(candidate)
-                  ordered.append(candidate)
-
-          if not ordered:
-              ordered = ["tests"]
-
-          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as handle:
-              handle.write("paths<<__PYTEST_PATHS__\n")
-              handle.write("\n".join(ordered))
-              handle.write("\n__PYTEST_PATHS__\n")
-              handle.write(f"json={json.dumps(ordered)}\n")
-          PY
-
-      - name: Ensure coverage data directory
-        run: mkdir -p "coverage-artifacts/${{ matrix.service }}"
-
-      - name: Run pytest
-        env:
-          SERVICE_NAME: ${{ matrix.service }}
-          PYTEST_PATHS: ${{ steps.targets.outputs.paths }}
-          COVERAGE_FILE: coverage-artifacts/${{ matrix.service }}/.coverage.${{ matrix.service }}
+      - name: Install test dependencies
         run: |
           set -euo pipefail
-          mapfile -t TARGETS <<<"${PYTEST_PATHS}"
-          if [ "${#TARGETS[@]}" -eq 0 ]; then
-            echo "No pytest targets resolved; defaulting to tests"
-            TARGETS=("tests")
-          fi
-          COV_OPTS=()
-          if [ -d "services/${SERVICE_NAME}" ]; then
-            COV_OPTS+=(--cov="services/${SERVICE_NAME}")
-          elif [ -d "packages/${SERVICE_NAME}" ]; then
-            COV_OPTS+=(--cov="packages/${SERVICE_NAME}")
-          fi
-          COV_OPTS+=(--cov="packages/awa_common")
-          python -m pytest -q "${TARGETS[@]}" \
-            "${COV_OPTS[@]}" \
-            --cov-config=.github/coverage.ini \
-            --cov-report=term-missing:skip-covered \
-            --cov-report=xml:"coverage-${SERVICE_NAME}.xml"
-          python -m coverage combine || true
-          if [ -f ".coverage" ] && [ ! -f "coverage-artifacts/${SERVICE_NAME}/.coverage.${SERVICE_NAME}" ]; then
-            mv .coverage "coverage-artifacts/${SERVICE_NAME}/.coverage.${SERVICE_NAME}" || true
-          fi
-          if [ ! -f "coverage-artifacts/${SERVICE_NAME}/.coverage.${SERVICE_NAME}" ]; then
-            touch "coverage-artifacts/${SERVICE_NAME}/.coverage.${SERVICE_NAME}"
-          fi
-          python -m coverage report -m > "coverage-${SERVICE_NAME}.txt" || true
-          if [ ! -s "coverage-${SERVICE_NAME}.txt" ]; then
-            echo "coverage data unavailable" > "coverage-${SERVICE_NAME}.txt"
-          fi
+          python -m pip install -c constraints.txt -r requirements-dev.txt
+          python -m pip install -c constraints.txt -e packages/awa_common
+          while IFS= read -r -d '' req; do
+            python -m pip install -r "$req" -c constraints.txt
+          done < <(find services -maxdepth 2 -name 'requirements*.txt' -print0)
+
+      - name: Run unit suite (coverage)
+        run: |
+          set -euo pipefail
+          mkdir -p artifacts
+          bash scripts/ci/run_unit.sh | tee artifacts/unit-local.log
+
+      - name: Upload unit-local logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-unit-local
+          path: artifacts/unit-local.log
+          if-no-files-found: ignore
 
       - name: Upload coverage artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: coverage-${{ matrix.service }}
+          name: unit-local-coverage
           path: |
-            coverage-artifacts/${{ matrix.service }}/.coverage*
-            coverage-${{ matrix.service }}.xml
-            coverage-${{ matrix.service }}.txt
+            .coverage
+            coverage.xml
+            coverage.txt
+          if-no-files-found: warn
+
+      - name: Compute diff coverage (80% gate)
+        shell: bash
+        run: |
+          set -euo pipefail
+          pip install --disable-pip-version-check --no-input diff-cover
+          BASE="${{ github.base_ref || 'main' }}"
+          git fetch --no-tags --prune --depth=1 origin "${BASE}:${BASE}"
+          git rev-parse "origin/${BASE}" > diff-base.txt
+          diff-cover coverage.xml \
+            --compare-branch "origin/${BASE}" \
+            --fail-under=80 \
+            --diff-range-notation=... | tee diff-coverage.txt
+
+      - name: Upload diff coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: diff-coverage
+          path: |
+            diff-coverage.txt
+            diff-base.txt
           if-no-files-found: ignore
 
       - name: Ensure debug bundle script executable
         if: always()
         run: chmod +x scripts/ci/make_debug_bundle.sh || true
 
-      - name: Make debug bundle (test)
+      - name: Make debug bundle (unit-local)
         if: always()
         run: |
-          bash scripts/ci/make_debug_bundle.sh debug-bundle-${{ matrix.service }}.tar.gz \
-          || { echo "::warning::fallback debug bundle (test:${{ matrix.service }})"; tar -czf debug-bundle-${{ matrix.service }}.tar.gz \
-               constraints.txt .github/workflows/ci.yml || true; }
+          bash scripts/ci/make_debug_bundle.sh debug-bundle-unit-local.tar.gz \
+          || { echo "::warning::fallback debug bundle (unit-local)"; tar -czf debug-bundle-unit-local.tar.gz constraints.txt .github/workflows/ci.yml || true; }
 
       - name: Upload debug bundle
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: debug-bundle-${{ matrix.service }}
-          path: debug-bundle-${{ matrix.service }}.tar.gz
+          name: debug-bundle-unit-local
+          path: debug-bundle-unit-local.tar.gz
           if-no-files-found: ignore
 
   migrations:
     name: migrations
     runs-on: ubuntu-latest
-    needs: test
+    needs: unit-local
     timeout-minutes: 30
     services:
       postgres:
@@ -441,7 +248,6 @@ jobs:
           --health-retries 12
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/awa
-      PYTHON_VERSION: ${{ needs.prepare-matrix.outputs.python-version }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -451,31 +257,28 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: ${{ needs.prepare-matrix.outputs.python-version }}
+          python-version: '3.12'
           cache: 'pip'
           cache-dependency-path: |
             constraints.txt
-            services/api/requirements*.txt
+            **/requirements*.txt
 
       - name: Upgrade pip tooling
         run: python -m pip install -U pip wheel
 
       - name: Install migration dependencies
         run: |
+          set -euo pipefail
           python -m pip install -c constraints.txt -r requirements-dev.txt
-          if ls services/api/requirements*.txt >/dev/null 2>&1; then
-            for req in services/api/requirements*.txt; do
-              python -m pip install -r "$req" -c constraints.txt
-            done
-          fi
           python -m pip install -c constraints.txt -e packages/awa_common
-
-      - name: Prepare migrations log
-        run: mkdir -p artifacts
+          while IFS= read -r -d '' req; do
+            python -m pip install -r "$req" -c constraints.txt
+          done < <(find services -maxdepth 2 -name 'requirements*.txt' -print0)
 
       - name: Run migrations round-trip
         run: |
           set -euo pipefail
+          mkdir -p artifacts
           {
             echo "== alembic upgrade head =="
             alembic -c services/api/alembic.ini upgrade head
@@ -483,9 +286,8 @@ jobs:
             alembic -c services/api/alembic.ini downgrade base
             echo "== alembic upgrade head =="
             alembic -c services/api/alembic.ini upgrade head
-            echo "== alembic current -v =="
-            alembic -c services/api/alembic.ini current -v
-          } 2>&1 | tee -a artifacts/migrations.log
+          } | tee artifacts/migrations.log
+          alembic -c services/api/alembic.ini current -v | tee alembic-current.txt | tee -a artifacts/migrations.log
 
       - name: Upload migrations logs
         if: always()
@@ -493,6 +295,14 @@ jobs:
         with:
           name: logs-migrations
           path: artifacts/migrations.log
+          if-no-files-found: ignore
+
+      - name: Upload alembic current
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: alembic-current
+          path: alembic-current.txt
           if-no-files-found: ignore
 
       - name: Ensure debug bundle script executable
@@ -503,8 +313,7 @@ jobs:
         if: always()
         run: |
           bash scripts/ci/make_debug_bundle.sh debug-bundle-migrations.tar.gz \
-          || { echo "::warning::fallback debug bundle (migrations)"; tar -czf debug-bundle-migrations.tar.gz \
-               constraints.txt .github/workflows/ci.yml || true; }
+          || { echo "::warning::fallback debug bundle (migrations)"; tar -czf debug-bundle-migrations.tar.gz constraints.txt .github/workflows/ci.yml || true; }
 
       - name: Upload debug bundle
         if: always()
@@ -514,148 +323,163 @@ jobs:
           path: debug-bundle-migrations.tar.gz
           if-no-files-found: ignore
 
-  coverage-aggregate:
-    name: coverage aggregate
+  integration:
+    name: integration
     runs-on: ubuntu-latest
-    needs:
-      - prepare-matrix
-      - test
-    timeout-minutes: 20
+    needs: migrations
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: awa
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d awa"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 12
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/awa
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Download coverage artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: coverage-artifacts
-          merge-multiple: true
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.12'
           cache: 'pip'
+          cache-dependency-path: |
+            constraints.txt
+            **/requirements*.txt
 
-      - name: Install coverage tooling
-        run: |
-          python -m pip install -U pip wheel
-          python -m pip install coverage diff-cover
+      - name: Upgrade pip tooling
+        run: python -m pip install -U pip wheel
 
-      - name: Determine base reference
-        id: base
-        run: |
-          if [ -n "${GITHUB_BASE_REF}" ]; then
-            echo "ref=${GITHUB_BASE_REF}" >> "$GITHUB_OUTPUT"
-          else
-            echo "ref=main" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Fetch base branch
-        run: git fetch origin "${{ steps.base.outputs.ref }}"
-
-      - name: Combine coverage
+      - name: Install integration dependencies
         run: |
           set -euo pipefail
-          python -m coverage erase
-          mapfile -t COVERAGE_FILES < <(find coverage-artifacts -type f -name ".coverage*")
-          if [ "${#COVERAGE_FILES[@]}" -gt 0 ]; then
-            python -m coverage combine "${COVERAGE_FILES[@]}"
-            python -m coverage report -m --rcfile=.github/coverage.ini | tee coverage-aggregate.txt
-            python -m coverage xml --rcfile=.github/coverage.ini -o coverage-aggregate.xml
-          else
-            echo "No .coverage* files; falling back to XML aggregation"
-            set +e
-            python3 scripts/ci/aggregate_coverage_xml.py | tee coverage-aggregate.txt
-            STATUS=${PIPESTATUS[0]}
-            set -e
-            if [ "$STATUS" -ne 0 ] && [ "$STATUS" -ne 2 ]; then
-              exit "$STATUS"
-            fi
-            if [ ! -f coverage-aggregate.xml ]; then
-              first_xml=$(find coverage-artifacts -type f -name "coverage-*.xml" | head -n1 || true)
-              if [ -n "$first_xml" ]; then
-                cp "$first_xml" coverage-aggregate.xml
-              else
-                printf '%s\n' '<?xml version="1.0" ?>' '<coverage branch-rate="0" line-rate="0" version="1.0">' '  <packages/>' '</coverage>' > coverage-aggregate.xml
-              fi
-            fi
-          fi
+          python -m pip install -c constraints.txt -r requirements-dev.txt
+          python -m pip install -c constraints.txt -e packages/awa_common
+          while IFS= read -r -d '' req; do
+            python -m pip install -r "$req" -c constraints.txt
+          done < <(find services -maxdepth 2 -name 'requirements*.txt' -print0)
 
-      - name: Overall coverage info
-        if: always()
-        run: |
-          python <<'PY'
-          import os
-          import re
-          from pathlib import Path
-
-          summary_file = os.environ.get('GITHUB_STEP_SUMMARY')
-          summary_path = Path(summary_file) if summary_file else None
-          coverage_path = Path('coverage-aggregate.txt')
-          if coverage_path.exists():
-              text = coverage_path.read_text(encoding='utf-8', errors='ignore')
-              match = None
-              for line in reversed(text.splitlines()):
-                  if 'TOTAL' in line or '%' in line:
-                      match = re.search(r"(\d+(?:\.\d+)?)%", line)
-                      if match:
-                          break
-              if match:
-                  value = float(match.group(1))
-                  message = f"Overall coverage (info): {value:.2f}%"
-                  print(message)
-                  if summary_path is not None:
-                      summary_path.parent.mkdir(parents=True, exist_ok=True)
-                      with summary_path.open('a', encoding='utf-8') as handle:
-                          handle.write(message + '\n')
-                  if value < 70.0:
-                      print(f"::warning::{message}")
-              else:
-                  print("Overall coverage data unavailable")
-          else:
-              print("coverage-aggregate.txt not found")
-          PY
-
-      - name: Diff coverage gate
-        env:
-          BASE_REF: ${{ steps.base.outputs.ref }}
+      - name: Run integration tests
         run: |
           set -euo pipefail
-          DIFF_BRANCH="origin/${BASE_REF}"
-          echo "Comparing against ${DIFF_BRANCH}"
-          diff-cover coverage-aggregate.xml --compare-branch="${DIFF_BRANCH}" --fail-under=70 --diff-range-notation=... | tee diff-coverage.txt
-          echo "${BASE_REF}" > diff-base.txt
+          mkdir -p artifacts
+          alembic -c services/api/alembic.ini upgrade head | tee artifacts/integration.log
+          if [ -d tests/integration ] && find tests/integration -type f -name '*.py' -print -quit | grep -q .; then
+            echo "== pytest tests/integration ==" | tee -a artifacts/integration.log
+            python -m pytest -q tests/integration | tee -a artifacts/integration.log
+          else
+            echo "no integration tests, skipping" | tee -a artifacts/integration.log
+          fi
 
-      - name: Upload aggregate coverage
+      - name: Upload integration logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: coverage-aggregate
-          path: |
-            coverage-aggregate.txt
-            coverage-aggregate.xml
-            diff-coverage.txt
-            diff-base.txt
+          name: logs-integration
+          path: artifacts/integration.log
           if-no-files-found: ignore
 
       - name: Ensure debug bundle script executable
         if: always()
         run: chmod +x scripts/ci/make_debug_bundle.sh || true
 
-      - name: Make debug bundle (coverage-aggregate)
+      - name: Make debug bundle (integration)
         if: always()
         run: |
-          bash scripts/ci/make_debug_bundle.sh debug-bundle-coverage-aggregate.tar.gz || true
+          bash scripts/ci/make_debug_bundle.sh debug-bundle-integration.tar.gz \
+          || { echo "::warning::fallback debug bundle (integration)"; tar -czf debug-bundle-integration.tar.gz constraints.txt .github/workflows/ci.yml || true; }
 
       - name: Upload debug bundle
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: debug-bundle-coverage-aggregate
-          path: debug-bundle-coverage-aggregate.tar.gz
+          name: debug-bundle-integration
+          path: debug-bundle-integration.tar.gz
+          if-no-files-found: ignore
+
+  secret-scan:
+    name: secret-scan
+    runs-on: ubuntu-24.04
+    needs: lint
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Gitleaks PR scan (baseline)
+        if: ${{ github.event_name == 'pull_request' }}
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          args: >
+            detect --no-git --source . --config .gitleaks.toml
+            --report-format json --report-path gitleaks-report.json
+            --baseline-path .gitleaks-baseline.json --exit-code 1
+
+      - name: Gitleaks baseline refresh
+        if: ${{ github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        with:
+          args: >
+            detect --no-git --source . --config .gitleaks.toml
+            --report-format json --report-path .gitleaks-baseline.json
+            --exit-code 0
+
+      - name: Upload gitleaks artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: secret-scan
+          path: |
+            gitleaks-report.json
+            .gitleaks-baseline.json
+          if-no-files-found: ignore
+
+      - name: Ensure debug bundle script executable
+        if: always()
+        run: chmod +x scripts/ci/make_debug_bundle.sh || true
+
+      - name: Make debug bundle (secret-scan)
+        if: always()
+        run: |
+          bash scripts/ci/make_debug_bundle.sh debug-bundle-secret-scan.tar.gz \
+          || { echo "::warning::fallback debug bundle (secret-scan)"; tar -czf debug-bundle-secret-scan.tar.gz constraints.txt .github/workflows/ci.yml || true; }
+
+      - name: Upload debug bundle
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-bundle-secret-scan
+          path: debug-bundle-secret-scan.tar.gz
           if-no-files-found: ignore
 
   mirror-logs:
@@ -663,9 +487,10 @@ jobs:
     runs-on: ubuntu-24.04
     needs:
       - lint
-      - test
+      - unit-local
       - migrations
-      - coverage-aggregate
+      - integration
+      - secret-scan
     if: always()
     permissions:
       contents: read
@@ -673,7 +498,7 @@ jobs:
       pull-requests: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
 
       - name: Detect PR comment capability
         id: cap
@@ -688,6 +513,17 @@ jobs:
         with:
           path: artifacts
           merge-multiple: true
+
+      - name: Prepare debug-bundle dirs
+        if: always()
+        run: mkdir -p debug-bundle/artifacts
+
+      - name: Collect lint/migrations logs into debug-bundle
+        if: always()
+        shell: bash
+        run: |
+          cp -f artifacts/lint.log debug-bundle/artifacts/lint.log 2>/dev/null || true
+          cp -f artifacts/migrations.log debug-bundle/artifacts/migrations.log 2>/dev/null || true
 
       - name: Fetch job URLs
         uses: actions/github-script@v7
@@ -758,3 +594,15 @@ jobs:
           name: debug-bundle-mirror-logs
           path: debug-bundle-mirror-logs.tar.gz
           if-no-files-found: ignore
+
+  legacy-prepare-matrix:
+    if: false
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Legacy matrix job disabled in favour of unit-local coverage."
+
+  legacy-test-matrix:
+    if: false
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Legacy per-service pytest matrix disabled."

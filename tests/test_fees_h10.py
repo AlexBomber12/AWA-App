@@ -16,9 +16,7 @@ from services.fees_h10 import client, repository, worker  # noqa: E402
 @respx.mock
 async def test_fetch_fees():
     route = respx.get(client.BASE.format("A1")).mock(
-        return_value=Response(
-            200, json={"fulfillmentFee": 1, "referralFee": 2, "storageFee": 0.5}
-        )
+        return_value=Response(200, json={"fulfillmentFee": 1, "referralFee": 2, "storageFee": 0.5})
     )
     os.environ["HELIUM10_KEY"] = "k"
     row = await client.fetch_fees("A1")
@@ -65,9 +63,7 @@ async def test_repository_upsert(tmp_path, monkeypatch, pg_pool):
     )
     with engine.connect() as conn:
         row = conn.execute(
-            text(
-                "SELECT fulfil_fee, referral_fee, storage_fee FROM fees_raw WHERE asin='A1'"
-            )
+            text("SELECT fulfil_fee, referral_fee, storage_fee FROM fees_raw WHERE asin='A1'")
         ).fetchone()
     assert row == (2.0, 3.0, 4.0)
 

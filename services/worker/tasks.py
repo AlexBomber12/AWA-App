@@ -27,9 +27,7 @@ def _download_minio_to_tmp(uri: str) -> Path:
     secure = os.getenv("MINIO_SECURE", "false").lower() in ("1", "true", "yes")
     access_key = os.getenv("MINIO_ACCESS_KEY")
     secret_key = os.getenv("MINIO_SECRET_KEY")
-    client = Minio(
-        endpoint, access_key=access_key, secret_key=secret_key, secure=secure
-    )
+    client = Minio(endpoint, access_key=access_key, secret_key=secret_key, secure=secure)
     tmpdir = Path(tempfile.mkdtemp(prefix="ingest_"))
     dst = tmpdir / Path(key).name
     client.fget_object(bucket, key, str(dst))

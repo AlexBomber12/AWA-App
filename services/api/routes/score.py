@@ -90,9 +90,7 @@ def score(body: ScoreRequest, db: Session | None = Depends(get_db)) -> ScoreResp
     if db is not None:
         for asin in body.asins:
             row = db.execute(
-                text(
-                    f"SELECT asin, vendor, category, roi FROM {view} WHERE asin = :asin"
-                ),
+                text(f"SELECT asin, vendor, category, roi FROM {view} WHERE asin = :asin"),
                 {"asin": asin},
             ).fetchone()
             if row:
@@ -100,11 +98,7 @@ def score(body: ScoreRequest, db: Session | None = Depends(get_db)) -> ScoreResp
                     "asin": row.asin,
                     "vendor": getattr(row, "vendor", None),
                     "category": getattr(row, "category", None),
-                    "roi": (
-                        float(row.roi)
-                        if getattr(row, "roi", None) is not None
-                        else None
-                    ),
+                    "roi": (float(row.roi) if getattr(row, "roi", None) is not None else None),
                 }
     items = []
     for asin in body.asins:

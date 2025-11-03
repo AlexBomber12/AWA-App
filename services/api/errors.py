@@ -41,19 +41,13 @@ def install_exception_handlers(app: FastAPI) -> None:
         return JSONResponse(status_code=exc.status_code, content=payload)
 
     @app.exception_handler(psycopg.Error)
-    async def _db_exception_handler(
-        request: Request, exc: psycopg.Error
-    ) -> JSONResponse:
+    async def _db_exception_handler(request: Request, exc: psycopg.Error) -> JSONResponse:
         structlog.get_logger().error("db_error", pgcode=getattr(exc, "pgcode", None))
-        payload = _payload(
-            "db_unavailable", "Database temporarily unavailable", request
-        )
+        payload = _payload("db_unavailable", "Database temporarily unavailable", request)
         return JSONResponse(status_code=500, content=payload)
 
     @app.exception_handler(Exception)
-    async def _unhandled_exception_handler(
-        request: Request, exc: Exception
-    ) -> JSONResponse:
+    async def _unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
         structlog.get_logger().exception("unhandled_error")
         sentry_sdk.capture_exception(exc)
         payload = _payload("internal_error", "Internal server error", request)

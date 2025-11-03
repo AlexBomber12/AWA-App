@@ -8,9 +8,7 @@ LEGACY_PATTERN = re.compile(r"^(?:from|import)\s+legacy(?:\.|\s|$)", re.MULTILIN
 
 
 def _tracked_python_files() -> list[Path]:
-    result = subprocess.run(
-        ["git", "ls-files", "*.py"], check=True, capture_output=True, text=True
-    )
+    result = subprocess.run(["git", "ls-files", "*.py"], check=True, capture_output=True, text=True)
     files = []
     for line in result.stdout.splitlines():
         path = Path(line.strip())
@@ -29,6 +27,4 @@ def test_no_legacy_imports() -> None:
             continue
         if LEGACY_PATTERN.search(content):
             offenders.append(path)
-    assert not offenders, "Legacy imports found:\n" + "\n".join(
-        str(p) for p in offenders
-    )
+    assert not offenders, "Legacy imports found:\n" + "\n".join(str(p) for p in offenders)

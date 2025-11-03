@@ -101,11 +101,7 @@ def test_h10_partial_success_and_idempotent_update(
     assert total == 3
 
     summary2 = repo.upsert_fees_raw(pg_engine, _rows_phase2(), testing=True)
-    assert (
-        summary2["inserted"] == 1
-        and summary2["updated"] == 1
-        and summary2["skipped"] == 1
-    )
+    assert summary2["inserted"] == 1 and summary2["updated"] == 1 and summary2["skipped"] == 1
     with pg_engine.connect() as c:
         amt = c.execute(
             text(
@@ -146,9 +142,7 @@ def test_h10_network_error_is_handled_without_partial_writes(
     assert count == 0
 
 
-def test_h10_invalid_payload_gracefully_errors(
-    pg_engine, ensure_test_fees_raw_table, monkeypatch
-):
+def test_h10_invalid_payload_gracefully_errors(pg_engine, ensure_test_fees_raw_table, monkeypatch):
     _auth_env()
     try:
         from services.fees_h10 import repository as repo

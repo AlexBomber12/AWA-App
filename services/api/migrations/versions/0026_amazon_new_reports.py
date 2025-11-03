@@ -25,9 +25,7 @@ def upgrade() -> None:
             nullable=False,
         ),
     )
-    op.create_index(
-        "idx_fee_preview_raw_asin", "fee_preview_raw", ["asin"], unique=False
-    )
+    op.create_index("idx_fee_preview_raw_asin", "fee_preview_raw", ["asin"], unique=False)
     op.execute(
         "CREATE INDEX IF NOT EXISTS brin_fee_preview_raw_captured_at ON fee_preview_raw USING brin (captured_at)"
     )
@@ -43,9 +41,7 @@ def upgrade() -> None:
         sa.Column("reference_id", sa.Text(), nullable=True),
         sa.Column("quantity", sa.Integer(), nullable=True),
     )
-    op.create_index(
-        "idx_inventory_ledger_raw_asin", "inventory_ledger_raw", ["asin"], unique=False
-    )
+    op.create_index("idx_inventory_ledger_raw_asin", "inventory_ledger_raw", ["asin"], unique=False)
     op.execute(
         "CREATE INDEX IF NOT EXISTS brin_inventory_ledger_raw_event_date ON inventory_ledger_raw USING brin (event_date)"
     )
@@ -151,7 +147,5 @@ def downgrade() -> None:
     op.drop_table("inventory_ledger_raw")
 
     op.execute("DROP INDEX IF EXISTS brin_fee_preview_raw_captured_at")
-    op.drop_index(
-        "idx_fee_preview_raw_asin", table_name="fee_preview_raw", if_exists=True
-    )
+    op.drop_index("idx_fee_preview_raw_asin", table_name="fee_preview_raw", if_exists=True)
     op.drop_table("fee_preview_raw")

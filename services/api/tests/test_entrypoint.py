@@ -25,7 +25,5 @@ def test_entrypoint_passthrough_exec() -> None:
     if not script.exists():
         return
 
-    result = subprocess.run(
-        ["bash", str(script), "echo", "hello"], capture_output=True, text=True
-    )
+    result = subprocess.run(["bash", str(script), "echo", "hello"], capture_output=True, text=True)
     assert result.stdout.strip() == "hello"

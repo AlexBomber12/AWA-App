@@ -94,9 +94,7 @@ def downgrade() -> None:
     op.execute("DROP INDEX IF EXISTS brin_returns_raw_return_date")
     op.execute("DROP INDEX IF EXISTS brin_returns_raw_processed_at")
     op.execute("DROP INDEX IF EXISTS idx_returns_raw_asin")
-    op.execute(
-        "ALTER TABLE reimbursements_raw DROP CONSTRAINT IF EXISTS reimbursements_raw_pkey"
-    )
+    op.execute("ALTER TABLE reimbursements_raw DROP CONSTRAINT IF EXISTS reimbursements_raw_pkey")
     op.execute("DROP INDEX IF EXISTS uq_reimbursements_raw_reimb_id")
     op.drop_index("idx_load_log_table_hash", table_name="load_log", if_exists=True)
     op.drop_index("idx_load_log_started_at", table_name="load_log", if_exists=True)

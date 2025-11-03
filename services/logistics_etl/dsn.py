@@ -35,9 +35,7 @@ def build_dsn(sync: bool = True) -> str:
     if url:
         if "+asyncpg" in url or "+psycopg" in url:
             return (
-                url.replace("+asyncpg", "+psycopg")
-                if sync
-                else url.replace("+psycopg", "+asyncpg")
+                url.replace("+asyncpg", "+psycopg") if sync else url.replace("+psycopg", "+asyncpg")
             )
         return url.replace(
             "postgresql://",

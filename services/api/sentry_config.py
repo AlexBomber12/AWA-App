@@ -42,11 +42,7 @@ def _scrub_mapping(d: Mapping[str, Any]) -> dict[str, Any]:
             red[k] = _scrub_mapping(v)
         elif isinstance(v, list):
             red[k] = [
-                (
-                    "[redacted]"
-                    if isinstance(x, str | bytes) and key in _SCRUB_FIELDS
-                    else x
-                )
+                ("[redacted]" if isinstance(x, str | bytes) and key in _SCRUB_FIELDS else x)
                 for x in v
             ]
         else:
@@ -73,13 +69,11 @@ def before_send(event: Event, _hint: Hint) -> Event | None:
     # scrub request headers/body
     if isinstance(headers, Mapping):
         req["headers"] = {
-            k: ("[redacted]" if str(k).lower() in _SCRUB_HEADERS else v)
-            for k, v in headers.items()
+            k: ("[redacted]" if str(k).lower() in _SCRUB_HEADERS else v) for k, v in headers.items()
         }
     elif isinstance(headers, list):
         req["headers"] = [
-            (k, "[redacted]" if str(k).lower() in _SCRUB_HEADERS else v)
-            for k, v in headers
+            (k, "[redacted]" if str(k).lower() in _SCRUB_HEADERS else v) for k, v in headers
         ]
     data = req.get("data")
     if isinstance(data, Mapping):
@@ -129,9 +123,7 @@ def init_sentry_if_configured() -> None:
             profiles_sample_rate=profiles_rate,
         )
     except BadDsnT:
-        logging.getLogger(__name__).warning(
-            "Ignoring invalid SENTRY_DSN", exc_info=False
-        )
+        logging.getLogger(__name__).warning("Ignoring invalid SENTRY_DSN", exc_info=False)
     except Exception:
         logging.getLogger(__name__).debug(
             "Sentry init failed – continuing without telemetry", exc_info=True

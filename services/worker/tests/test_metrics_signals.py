@@ -46,9 +46,7 @@ def test_metrics_signals_increment_and_time(monkeypatch: pytest.MonkeyPatch) -> 
     labels = {"task": "logistics.test"}
 
     assert (
-        _sample_value(
-            metrics.celery_task_started_total, "celery_task_started_total_total", labels
-        )
+        _sample_value(metrics.celery_task_started_total, "celery_task_started_total_total", labels)
         == 1.0
     )
     assert (
@@ -60,9 +58,7 @@ def test_metrics_signals_increment_and_time(monkeypatch: pytest.MonkeyPatch) -> 
         == 1.0
     )
     assert (
-        _sample_value(
-            metrics.celery_task_failed_total, "celery_task_failed_total_total", labels
-        )
+        _sample_value(metrics.celery_task_failed_total, "celery_task_failed_total_total", labels)
         == 1.0
     )
     assert metrics._start_times == {}  # type: ignore[attr-defined]

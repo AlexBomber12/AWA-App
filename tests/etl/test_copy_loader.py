@@ -26,9 +26,7 @@ def engine():
     engine = create_engine(TEST_DSN)
     with engine.begin() as conn:
         conn.execute(text("CREATE SCHEMA IF NOT EXISTS test_ingest"))
-        conn.execute(
-            text("DROP TABLE IF EXISTS test_ingest.reimbursements_raw CASCADE")
-        )
+        conn.execute(text("DROP TABLE IF EXISTS test_ingest.reimbursements_raw CASCADE"))
         conn.execute(
             text(
                 """
@@ -75,9 +73,7 @@ def engine():
                 """
             )
         )
-        conn.execute(
-            text("DROP TABLE IF EXISTS test_ingest.inventory_ledger_raw CASCADE")
-        )
+        conn.execute(text("DROP TABLE IF EXISTS test_ingest.inventory_ledger_raw CASCADE"))
         conn.execute(
             text(
                 """
@@ -94,9 +90,7 @@ def engine():
                 """
             )
         )
-        conn.execute(
-            text("DROP TABLE IF EXISTS test_ingest.ads_sp_cost_daily_raw CASCADE")
-        )
+        conn.execute(text("DROP TABLE IF EXISTS test_ingest.ads_sp_cost_daily_raw CASCADE"))
         conn.execute(
             text(
                 """
@@ -117,9 +111,7 @@ def engine():
                 """
             )
         )
-        conn.execute(
-            text("DROP TABLE IF EXISTS test_ingest.settlements_txn_raw CASCADE")
-        )
+        conn.execute(text("DROP TABLE IF EXISTS test_ingest.settlements_txn_raw CASCADE"))
         conn.execute(
             text(
                 """
@@ -207,13 +199,9 @@ def test_upsert(engine):
     )
 
     with engine.connect() as conn:
-        cnt = conn.execute(
-            text("SELECT count(*) FROM test_ingest.reimbursements_raw")
-        ).scalar()
+        cnt = conn.execute(text("SELECT count(*) FROM test_ingest.reimbursements_raw")).scalar()
         amt = conn.execute(
-            text(
-                "SELECT amount FROM test_ingest.reimbursements_raw WHERE reimb_id='r1'"
-            )
+            text("SELECT amount FROM test_ingest.reimbursements_raw WHERE reimb_id='r1'")
         ).scalar()
     assert cnt == 2
     assert amt == 30.0
@@ -254,9 +242,7 @@ def test_append_only(engine):
         columns=cols,
     )
     with engine.connect() as conn:
-        cnt = conn.execute(
-            text("SELECT count(*) FROM test_ingest.returns_raw")
-        ).scalar()
+        cnt = conn.execute(text("SELECT count(*) FROM test_ingest.returns_raw")).scalar()
     assert cnt == 4
 
 
@@ -293,9 +279,7 @@ def test_null_handling(engine):
 
 
 def test_fee_preview_append(engine):
-    df = pd.DataFrame(
-        {"asin": ["A1"], "estimated_fee_total": [1.0], "currency": ["USD"]}
-    )
+    df = pd.DataFrame({"asin": ["A1"], "estimated_fee_total": [1.0], "currency": ["USD"]})
     copy_df_via_temp(
         engine,
         amazon_fee_preview.normalise(df),
@@ -311,9 +295,7 @@ def test_fee_preview_append(engine):
         columns=amazon_fee_preview.TARGET_COLUMNS,
     )
     with engine.connect() as conn:
-        cnt = conn.execute(
-            text("SELECT count(*) FROM test_ingest.fee_preview_raw")
-        ).scalar()
+        cnt = conn.execute(text("SELECT count(*) FROM test_ingest.fee_preview_raw")).scalar()
     assert cnt == 2
 
 
@@ -334,9 +316,7 @@ def test_inventory_ledger_append(engine):
         columns=amazon_inventory_ledger.TARGET_COLUMNS,
     )
     with engine.connect() as conn:
-        cnt = conn.execute(
-            text("SELECT count(*) FROM test_ingest.inventory_ledger_raw")
-        ).scalar()
+        cnt = conn.execute(text("SELECT count(*) FROM test_ingest.inventory_ledger_raw")).scalar()
     assert cnt == 1
 
 
@@ -371,9 +351,7 @@ def test_ads_sp_cost_upsert(engine):
         conflict_cols=amazon_ads_sp_cost.CONFLICT_COLS,
     )
     with engine.connect() as conn:
-        row = conn.execute(
-            text("SELECT spend FROM test_ingest.ads_sp_cost_daily_raw")
-        ).scalar()
+        row = conn.execute(text("SELECT spend FROM test_ingest.ads_sp_cost_daily_raw")).scalar()
     assert row == 1.0
 
 
@@ -408,7 +386,5 @@ def test_settlements_txn_upsert(engine):
         conflict_cols=amazon_settlements.CONFLICT_COLS,
     )
     with engine.connect() as conn:
-        amt = conn.execute(
-            text("SELECT amount FROM test_ingest.settlements_txn_raw")
-        ).scalar()
+        amt = conn.execute(text("SELECT amount FROM test_ingest.settlements_txn_raw")).scalar()
     assert amt == 10.0

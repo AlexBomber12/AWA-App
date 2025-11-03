@@ -37,13 +37,9 @@ def test_csv_delimiters_and_encodings(
     assert count == 5
 
 
-def test_xlsx_happy_path(
-    xlsx_file_factory, ensure_test_generic_table, pg_engine, tmp_path
-):
+def test_xlsx_happy_path(xlsx_file_factory, ensure_test_generic_table, pg_engine, tmp_path):
     os.environ["TESTING"] = "1"
-    p = xlsx_file_factory(
-        headers=["ASIN", "qty", "price"], rows=_rows(4), name="sample.xlsx"
-    )
+    p = xlsx_file_factory(headers=["ASIN", "qty", "price"], rows=_rows(4), name="sample.xlsx")
     lc.import_file(str(p), dialect="test_generic")
     with pg_engine.connect() as c:
         count = c.execute("SELECT COUNT(*) FROM test_generic_raw").scalar_one()
@@ -61,9 +57,7 @@ def test_empty_file_raises_value_error(tmp_path):
 
 def test_missing_required_columns_gives_informative_error(csv_file_factory):
     os.environ["TESTING"] = "1"
-    p = csv_file_factory(
-        headers=["ASIN", "qty"], rows=[{"ASIN": "A1", "qty": 1}], name="bad.csv"
-    )
+    p = csv_file_factory(headers=["ASIN", "qty"], rows=[{"ASIN": "A1", "qty": 1}], name="bad.csv")
     with pytest.raises(ValueError) as ei:
         lc.import_file(str(p), dialect="test_generic")
     assert "missing required columns" in str(ei.value)

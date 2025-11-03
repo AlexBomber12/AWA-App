@@ -85,9 +85,9 @@ async def full(dry_run: bool = False) -> list[dict[str, Any]]:
                                     "updated_at",
                                 ],
                             )
-                        rows_upserted = (summary or {}).get("inserted", 0) + (
-                            summary or {}
-                        ).get("updated", 0)
+                        rows_upserted = (summary or {}).get("inserted", 0) + (summary or {}).get(
+                            "updated", 0
+                        )
                         if sha256 is not None or seqno is not None:
                             await repository.mark_load(src, sha256, seqno, len(rows))
             except Exception as exc:
@@ -101,21 +101,15 @@ async def full(dry_run: bool = False) -> list[dict[str, Any]]:
 
             duration = time.monotonic() - start
             status_label = "skipped" if skipped else status
-            metrics.etl_runs_total.labels(
-                source=uri or "unknown", status=status_label
-            ).inc()
-            metrics.etl_latency_seconds.labels(source=uri or "unknown").observe(
-                duration
-            )
+            metrics.etl_runs_total.labels(source=uri or "unknown", status=status_label).inc()
+            metrics.etl_latency_seconds.labels(source=uri or "unknown").observe(duration)
 
             results.append(
                 {
                     "source": uri,
                     "rows_in": len(rows),
                     "rows_upserted": (
-                        0
-                        if skipped or dry_run or status != "success"
-                        else rows_upserted
+                        0 if skipped or dry_run or status != "success" else rows_upserted
                     ),
                     "skipped": skipped,
                     "sha256": sha256,

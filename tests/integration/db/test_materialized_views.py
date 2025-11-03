@@ -19,17 +19,11 @@ def test_materialized_views_are_materialized_and_indexed(db_engine):
     asin = "MVTEST001"
 
     with db_engine.begin() as conn:
-        conn.execute(
-            text("DELETE FROM vendor_prices WHERE sku = :asin"), {"asin": asin}
-        )
+        conn.execute(text("DELETE FROM vendor_prices WHERE sku = :asin"), {"asin": asin})
         conn.execute(text("DELETE FROM fees_raw WHERE asin = :asin"), {"asin": asin})
-        conn.execute(
-            text("DELETE FROM keepa_offers WHERE asin = :asin"), {"asin": asin}
-        )
+        conn.execute(text("DELETE FROM keepa_offers WHERE asin = :asin"), {"asin": asin})
         conn.execute(text("DELETE FROM returns_raw WHERE asin = :asin"), {"asin": asin})
-        conn.execute(
-            text("DELETE FROM reimbursements_raw WHERE asin = :asin"), {"asin": asin}
-        )
+        conn.execute(text("DELETE FROM reimbursements_raw WHERE asin = :asin"), {"asin": asin})
         conn.execute(text("DELETE FROM products WHERE asin = :asin"), {"asin": asin})
 
         conn.execute(
@@ -110,9 +104,7 @@ def test_materialized_views_are_materialized_and_indexed(db_engine):
 
     with db_engine.connect() as conn:
         assert _select_scalar(conn, "SELECT to_regclass('mat_v_roi_full')") is not None
-        assert (
-            _select_scalar(conn, "SELECT to_regclass('mat_fees_expanded')") is not None
-        )
+        assert _select_scalar(conn, "SELECT to_regclass('mat_fees_expanded')") is not None
 
         roi_index_exists = _select_scalar(
             conn,

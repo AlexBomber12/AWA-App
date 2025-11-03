@@ -9,9 +9,7 @@ from tests.unit.conftest import _StubResult, _StubSession
 
 @pytest.mark.asyncio
 async def test_get_sku_200():
-    card_result = _StubResult(
-        mappings=[{"title": "Sample SKU", "roi_pct": 12.5, "fees": 3.25}]
-    )
+    card_result = _StubResult(mappings=[{"title": "Sample SKU", "roi_pct": 12.5, "fees": 3.25}])
     chart_result = _StubResult(
         mappings=[
             {"date": "2024-01-03T00:00:00Z", "price": 15.0},
@@ -57,9 +55,7 @@ async def test_approve_idempotent(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_get_sku_chart_empty_returns_empty_list():
-    card_result = _StubResult(
-        mappings=[{"title": "Empty SKU", "roi_pct": 5.0, "fees": 1.0}]
-    )
+    card_result = _StubResult(mappings=[{"title": "Empty SKU", "roi_pct": 5.0, "fees": 1.0}])
     session = _StubSession(card_result, _StubResult(mappings=[]))
 
     payload = await sku_module.get_sku("B000EMPTY", session=session)
@@ -70,9 +66,7 @@ async def test_get_sku_chart_empty_returns_empty_list():
 @pytest.mark.asyncio
 async def test_get_sku_chart_datetime_serialization():
     dt = datetime(2024, 1, 5, 12, 30, 0)
-    card_result = _StubResult(
-        mappings=[{"title": "Time SKU", "roi_pct": 8.0, "fees": 2.0}]
-    )
+    card_result = _StubResult(mappings=[{"title": "Time SKU", "roi_pct": 8.0, "fees": 2.0}])
     chart_result = _StubResult(mappings=[{"date": dt, "price": "17.5"}])
     session = _StubSession(card_result, chart_result)
 
@@ -88,9 +82,7 @@ def test_roi_view_name_fallback(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_get_sku_chart_handles_invalid_values():
-    card_result = _StubResult(
-        mappings=[{"title": "Odd SKU", "roi_pct": 4.0, "fees": 0.5}]
-    )
+    card_result = _StubResult(mappings=[{"title": "Odd SKU", "roi_pct": 4.0, "fees": 0.5}])
     chart_result = _StubResult(mappings=[{"date": None, "price": object()}])
     session = _StubSession(card_result, chart_result)
 

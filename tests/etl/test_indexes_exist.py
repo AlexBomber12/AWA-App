@@ -6,9 +6,7 @@ from sqlalchemy import create_engine, text
 
 pytestmark = [
     pytest.mark.integration,
-    pytest.mark.skipif(
-        not os.getenv("TEST_DATABASE_URL"), reason="TEST_DATABASE_URL not set"
-    ),
+    pytest.mark.skipif(not os.getenv("TEST_DATABASE_URL"), reason="TEST_DATABASE_URL not set"),
 ]
 
 
@@ -17,9 +15,7 @@ def test_indexes_exist():
     try:
         with engine.connect() as conn:
             pk = conn.execute(
-                text(
-                    "SELECT 1 FROM pg_constraint WHERE conname='reimbursements_raw_pkey'"
-                )
+                text("SELECT 1 FROM pg_constraint WHERE conname='reimbursements_raw_pkey'")
             ).scalar()
             idx = conn.execute(
                 text("SELECT 1 FROM pg_indexes WHERE indexname='idx_returns_raw_asin'")

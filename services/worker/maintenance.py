@@ -25,9 +25,7 @@ def task_analyze_table(table_fqname: str) -> dict[str, str]:
 
 @celery_app.task(name="ingest.maintenance_nightly")  # type: ignore[misc]
 def task_maintenance_nightly() -> dict[str, Any]:
-    tables_cfg = os.getenv(
-        "TABLE_MAINTENANCE_LIST", "public.reimbursements_raw,public.returns_raw"
-    )
+    tables_cfg = os.getenv("TABLE_MAINTENANCE_LIST", "public.reimbursements_raw,public.returns_raw")
     tables: list[str] = [t.strip() for t in tables_cfg.split(",") if t.strip()]
     vacuum = os.getenv("VACUUM_ENABLE", "false").lower() in ("1", "true", "yes")
     engine = create_engine(settings.DATABASE_URL)
@@ -49,9 +47,7 @@ def task_refresh_roi_mvs() -> dict[str, Any]:
     try:
         with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
             conn.execute(text("REFRESH MATERIALIZED VIEW CONCURRENTLY mat_v_roi_full"))
-            conn.execute(
-                text("REFRESH MATERIALIZED VIEW CONCURRENTLY mat_fees_expanded")
-            )
+            conn.execute(text("REFRESH MATERIALIZED VIEW CONCURRENTLY mat_fees_expanded"))
         return {"status": "success", "views": ["mat_v_roi_full", "mat_fees_expanded"]}
     finally:
         engine.dispose()

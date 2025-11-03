@@ -65,9 +65,7 @@ async def insert_audit(session: AsyncSession, record: Mapping[str, Any]) -> None
 
 
 class AuditMiddleware(BaseHTTPMiddleware):
-    def __init__(
-        self, app: ASGIApp, session_factory: async_sessionmaker[AsyncSession]
-    ) -> None:
+    def __init__(self, app: ASGIApp, session_factory: async_sessionmaker[AsyncSession]) -> None:
         super().__init__(app)
         self._session_factory = session_factory
 
@@ -81,18 +79,14 @@ class AuditMiddleware(BaseHTTPMiddleware):
         latency_ms = int((time.perf_counter() - start) * 1000)
 
         path = request.url.path
-        should_persist = (
-            settings.AUTH_MODE != "disabled" and settings.should_protect_path(path)
-        )
+        should_persist = settings.AUTH_MODE != "disabled" and settings.should_protect_path(path)
         principal: Principal | None = getattr(request.state, "principal", None)
         if not should_persist and principal is None:
             return response
 
         route = request.scope.get("route")
         if route is not None:
-            route_pattern = getattr(route, "path_format", None) or getattr(
-                route, "path", None
-            )
+            route_pattern = getattr(route, "path_format", None) or getattr(route, "path", None)
         else:
             route_pattern = None
 

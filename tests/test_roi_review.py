@@ -47,9 +47,7 @@ def _setup_db():
             )
         )
         conn.execute(
-            text(
-                "INSERT INTO vendors(id, name) VALUES (1,'ACME GmbH') ON CONFLICT DO NOTHING"
-            )
+            text("INSERT INTO vendors(id, name) VALUES (1,'ACME GmbH') ON CONFLICT DO NOTHING")
         )
         insert_keepa = "INSERT INTO keepa_offers(asin, buybox_price) VALUES (:asin,:price) ON CONFLICT (asin) DO UPDATE SET buybox_price=EXCLUDED.buybox_price"
         insert_fee = "INSERT INTO fees_raw(asin, fulfil_fee, referral_fee, storage_fee, currency) VALUES (:asin,1,1,1,'EUR') ON CONFLICT (asin) DO UPDATE SET updated_at=CURRENT_TIMESTAMP"
@@ -141,9 +139,7 @@ def test_bulk_approve(api_client, monkeypatch):
     engine = _setup_db()
     with engine.begin() as conn:
         conn.execute(text("INSERT INTO products(asin, status) VALUES ('B1','pending')"))
-    r = api_client.post(
-        "/roi-review/approve", data={"asins": ["A1", "B1"]}, auth=("admin", "pass")
-    )
+    r = api_client.post("/roi-review/approve", data={"asins": ["A1", "B1"]}, auth=("admin", "pass"))
     assert r.status_code == 200
     assert r.json()["updated"] >= 1
     with engine.connect() as conn:

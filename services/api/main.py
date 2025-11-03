@@ -136,9 +136,7 @@ _times, _seconds = _parse_rate_limit(_default)
 
 async def _rate_limit_dependency(request: Request, response: Response) -> None:
     if FastAPILimiter.redis:
-        limiter = RateLimiter(
-            times=_times, seconds=_seconds, identifier=client_ip_identifier
-        )
+        limiter = RateLimiter(times=_times, seconds=_seconds, identifier=client_ip_identifier)
         await limiter(request, response)
 
 
@@ -173,9 +171,7 @@ app.include_router(sku_router)
 app.include_router(health_router.router)
 
 
-async def _wait_for_db(
-    max_attempts: int | None = None, delay_s: float | None = None
-) -> None:
+async def _wait_for_db(max_attempts: int | None = None, delay_s: float | None = None) -> None:
     env = os.getenv("ENV", getattr(settings, "ENV", "local")).lower()
     if max_attempts is None:
         max_attempts = int(
@@ -186,9 +182,7 @@ async def _wait_for_db(
         )
     if delay_s is None:
         delay_s = float(
-            os.getenv(
-                "WAIT_FOR_DB_DELAY_S", "0.05" if env in {"local", "test"} else "0.2"
-            )
+            os.getenv("WAIT_FOR_DB_DELAY_S", "0.05" if env in {"local", "test"} else "0.2")
         )
     db_url = (
         (os.getenv("DATABASE_URL") or "").strip()
@@ -234,9 +228,7 @@ async def _check_llm() -> None:
     we fall back to the stub provider so the service can continue running.
     """
 
-    provider = os.getenv(
-        "LLM_PROVIDER", getattr(settings, "LLM_PROVIDER", "stub")
-    ).lower()
+    provider = os.getenv("LLM_PROVIDER", getattr(settings, "LLM_PROVIDER", "stub")).lower()
     lan_base = os.getenv("LAN_BASE", "http://lan-llm:8000")
     if provider != "lan":
         return

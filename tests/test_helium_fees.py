@@ -39,22 +39,16 @@ def test_offline(monkeypatch):
 
     def fake_urlopen(request):
         called["n"] += 1
-        return types.SimpleNamespace(
-            __enter__=lambda self: self, __exit__=lambda *a: None
-        )
+        return types.SimpleNamespace(__enter__=lambda self: self, __exit__=lambda *a: None)
 
-    monkeypatch.setitem(
-        sys.modules, "urllib.request", types.SimpleNamespace(urlopen=fake_urlopen)
-    )
+    monkeypatch.setitem(sys.modules, "urllib.request", types.SimpleNamespace(urlopen=fake_urlopen))
     conn = FakeConn()
     monkeypatch.setitem(
         sys.modules,
         "pg_utils",
         types.SimpleNamespace(connect=lambda dsn: conn),
     )
-    monkeypatch.setattr(
-        "services.etl.fba_fee_ingestor.connect", lambda dsn: conn, raising=False
-    )
+    monkeypatch.setattr("services.etl.fba_fee_ingestor.connect", lambda dsn: conn, raising=False)
 
     assert helium_fees.main([]) == 0
 

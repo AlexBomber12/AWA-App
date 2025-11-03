@@ -11,9 +11,7 @@ def test_resolve_uri_to_path_file(tmp_path):
 
 
 def test_resolve_uri_to_path_minio(monkeypatch):
-    monkeypatch.setattr(
-        tasks_module, "_download_minio_to_tmp", lambda uri: Path("/tmp/file")
-    )
+    monkeypatch.setattr(tasks_module, "_download_minio_to_tmp", lambda uri: Path("/tmp/file"))
     path = tasks_module._resolve_uri_to_path("minio://bucket/key")
     assert path == Path("/tmp/file")
 
@@ -46,9 +44,7 @@ def test_task_import_file_success(monkeypatch, tmp_path):
     def record_update(*args, **kwargs):
         updates.append(kwargs)
 
-    monkeypatch.setattr(
-        tasks_module.task_import_file, "update_state", record_update, raising=False
-    )
+    monkeypatch.setattr(tasks_module.task_import_file, "update_state", record_update, raising=False)
 
     result = tasks_module.task_import_file.run(uri="file://data.csv")
     assert result["status"] == "success"

@@ -30,9 +30,7 @@ def test_run_migrations(tmp_path, monkeypatch, pg_pool):
                 "INSERT INTO vendor_prices(vendor_id, sku, cost, updated_at) VALUES (1,'A1',5,'2024-01-01')"
             )
         )
-        conn.execute(
-            text("INSERT INTO keepa_offers(asin, buybox_price) VALUES ('A1', 25)")
-        )
+        conn.execute(text("INSERT INTO keepa_offers(asin, buybox_price) VALUES ('A1', 25)"))
         conn.execute(
             text(
                 "INSERT INTO fees_raw(asin, fulfil_fee, referral_fee, storage_fee, currency, captured_at, updated_at) VALUES ('A1',1,1,1,'EUR','2024-01-01','2024-01-01')"

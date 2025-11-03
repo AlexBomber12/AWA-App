@@ -46,9 +46,7 @@ async def _remote_generate(
         "max_tokens": max_tokens,
     }
     async with httpx.AsyncClient(timeout=60) as cli:
-        resp = await cli.post(
-            f"{base}/v1/chat/completions", json=payload, headers=headers
-        )
+        resp = await cli.post(f"{base}/v1/chat/completions", json=payload, headers=headers)
         resp.raise_for_status()
         data = resp.json()
         return cast(str, data["choices"][0]["message"]["content"]).strip()
@@ -64,7 +62,5 @@ async def generate(
     if prov == "openai":
         return await _openai_llm(prompt, temperature, max_tokens)
     if prov == "lan":
-        return await _remote_generate(
-            LAN_BASE, LAN_KEY or None, prompt, max_tokens, OPENAI_MODEL
-        )
+        return await _remote_generate(LAN_BASE, LAN_KEY or None, prompt, max_tokens, OPENAI_MODEL)
     return await _local_llm(prompt, temperature, max_tokens)

@@ -5,9 +5,7 @@ import pytest
 
 
 def test_build_sqlalchemy_url_uses_shared_builder(monkeypatch):
-    monkeypatch.setattr(
-        db_module, "build_dsn", lambda *args, **kwargs: "postgresql+psycopg://x"
-    )
+    monkeypatch.setattr(db_module, "build_dsn", lambda *args, **kwargs: "postgresql+psycopg://x")
     assert db_module.build_sqlalchemy_url() == "postgresql+psycopg://x"
 
 

@@ -23,9 +23,7 @@ class _DummyMetricChild:
 class _DummyMetric:
     def __init__(self) -> None:
         self._counters: dict[tuple[tuple[str, Any], ...], float] = defaultdict(float)
-        self._observations: dict[tuple[tuple[str, Any], ...], list[float]] = (
-            defaultdict(list)
-        )
+        self._observations: dict[tuple[tuple[str, Any], ...], list[float]] = defaultdict(list)
 
     def labels(self, **labels: Any) -> _DummyMetricChild:
         key = tuple(sorted(labels.items()))
@@ -74,9 +72,7 @@ async def test_full_idempotent_skips_second_run(monkeypatch):
             keys.append((source, seqno))
         return any(key in seen_pairs for key in keys)
 
-    async def fake_mark(
-        source: str, sha256: str | None, seqno: str | None, rows: int
-    ) -> None:
+    async def fake_mark(source: str, sha256: str | None, seqno: str | None, rows: int) -> None:
         if sha256:
             seen_pairs.add((source, sha256))
         if seqno:
@@ -148,9 +144,7 @@ async def test_full_records_failure(monkeypatch):
     failure_key = tuple(
         sorted([("source", "http://example.com/bad.csv"), ("reason", "RuntimeError")])
     )
-    status_key = tuple(
-        sorted([("source", "http://example.com/bad.csv"), ("status", "failure")])
-    )
+    status_key = tuple(sorted([("source", "http://example.com/bad.csv"), ("status", "failure")]))
     assert failures_metric._counters[failure_key] == 1
     assert runs_metric._counters[status_key] == 1
     assert latency_metric._observations

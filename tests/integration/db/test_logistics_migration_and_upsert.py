@@ -58,12 +58,8 @@ def test_logistics_tables_and_upsert(db_engine):
     asyncio.run(_run())
 
     with db_engine.connect() as conn:
-        rates_table = conn.execute(
-            text("SELECT to_regclass('logistics_rates')")
-        ).scalar()
-        loadlog_table = conn.execute(
-            text("SELECT to_regclass('logistics_loadlog')")
-        ).scalar()
+        rates_table = conn.execute(text("SELECT to_regclass('logistics_rates')")).scalar()
+        loadlog_table = conn.execute(text("SELECT to_regclass('logistics_loadlog')")).scalar()
         assert rates_table is not None
         assert loadlog_table is not None
 

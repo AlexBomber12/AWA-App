@@ -38,9 +38,7 @@ async def _local_llm(prompt: str, temp: float, max_toks: int, timeout: float) ->
             url, json={"prompt": prompt, "temperature": temp, "max_tokens": max_toks}
         )
         r.raise_for_status()
-        data = (
-            r.json() if "application/json" in r.headers.get("content-type", "") else {}
-        )
+        data = r.json() if "application/json" in r.headers.get("content-type", "") else {}
         return cast(
             str,
             data.get("completion") or data.get("text") or data.get("content") or r.text,
@@ -147,7 +145,5 @@ async def generate(
         except Exception as e:
             last_exc = e
     raise (
-        last_exc
-        if last_exc
-        else RuntimeError("LLM generation failed with no providers available")
+        last_exc if last_exc else RuntimeError("LLM generation failed with no providers available")
     )  # pragma: no cover
