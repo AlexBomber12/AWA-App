@@ -19,6 +19,15 @@ from awa_common.settings import settings
 from tests.fakes import FakeRedis
 from tests.utils.strict_spy import StrictSpy
 
+
+@pytest.fixture(autouse=True)
+def _test_env_defaults(monkeypatch: pytest.MonkeyPatch):
+    """Ensure deterministic baseline environment for tests."""
+    monkeypatch.setenv("LLM_PROVIDER", "STUB")
+    monkeypatch.setenv("SENTRY_DSN", "")
+    monkeypatch.setenv("SENTRY_METRICS_ENABLED", "0")
+
+
 AUDIT_SENTINEL_ATTR = "_strict_audit_patched"
 AUDIT_SPY_ATTR = "_strict_audit_spy"
 

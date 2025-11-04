@@ -21,14 +21,15 @@ def _force_basic_and_rewire():
     os.environ["API_AUTH_MODE"] = "basic"
     os.environ["API_BASIC_USER"] = "u"
     os.environ["API_BASIC_PASS"] = "p"
+    # LLM_PROVIDER is pinned globally via tests.conftest._test_env_defaults
     importlib.reload(_settings)
     importlib.reload(_sec)
     try:
-        import services.api.routes.roi as _roi  # noqa: F401
+        import services.api.routes.roi as _roi
+
+        importlib.reload(_roi)
     except Exception:
         pass
-    else:
-        importlib.reload(_roi)
     importlib.reload(_main)
     try:
         yield
