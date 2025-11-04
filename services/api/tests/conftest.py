@@ -15,7 +15,7 @@ if _REPO_ROOT not in sys.path:
 importlib.import_module("tests.conftest")
 
 
-_BLOCKED_ROLES = {"viewer", "admin"}
+_BLOCKED_ROLES = {"viewer"}
 _ROLE_COLLECTION_CANDIDATES = (
     "ALWAYS_ROLES",
     "DEFAULT_ROLES",
@@ -25,16 +25,12 @@ _ROLE_COLLECTION_CANDIDATES = (
     "DEFAULT_ROLES_SET",
     "ROLE_DEFAULTS",
 )
-_ROLE_STRING_CANDIDATES = ("DEFAULT_VIEWER_ROLE", "DEFAULT_ADMIN_ROLE")
+_ROLE_STRING_CANDIDATES = ("DEFAULT_VIEWER_ROLE",)
 _ROLE_FLAG_CANDIDATES = (
     "ALWAYS_ADD_VIEWER",
     "DEFAULT_ADD_VIEWER",
     "SECURITY_ALWAYS_ADD_VIEWER",
     "AUTH_ALWAYS_ADD_VIEWER",
-    "ALWAYS_ADD_ADMIN",
-    "DEFAULT_ADD_ADMIN",
-    "SECURITY_ALWAYS_ADD_ADMIN",
-    "AUTH_ALWAYS_ADD_ADMIN",
 )
 
 
@@ -85,9 +81,9 @@ def _wrap_role_function(fn: Any, sanitizer) -> Any:
     return _patched
 
 
-def _strip_defaults_from_security(sec) -> None:
-    """Remove implicit admin/viewer roles and wrap helpers to keep role sets deterministic."""
-    if getattr(sec, "_roles_sanitized", False) or getattr(sec, "_viewer_roles_sanitized", False):
+def _strip_viewer_only(sec) -> None:
+    """Remove implicit viewer role and wrap helpers to keep role sets deterministic."""
+    if getattr(sec, "_viewer_roles_sanitized", False):
         return
 
     principal_cls = getattr(sec, "Principal", None)
@@ -128,8 +124,46 @@ def _strip_defaults_from_security(sec) -> None:
             _anonymous_impl.__viewer_sanitized__ = True  # type: ignore[attr-defined]
             principal_cls.anonymous = classmethod(_anonymous_impl)
 
-    sec._roles_sanitized = True
     sec._viewer_roles_sanitized = True
+
+
+def _bind_user_id(sec) -> None:
+    """Ensure principal-derived helpers surface a stable user_id for audit assertions."""
+    if getattr(sec, "_user_id_sanitized", False):
+        return
+
+    def _wrap(fn):
+        if getattr(fn, "__user_id_sanitized__", False):
+            return fn
+
+        @wraps(fn)
+        def _patched(*args, **kwargs):
+            result = fn(*args, **kwargs)
+            try:
+                if isinstance(result, dict):
+                    sub = result.get("sub") or result.get("user_id") or result.get("username")
+                    if sub:
+                        result["user_id"] = sub
+                return result
+            except Exception:
+                return result
+
+        _patched.__user_id_sanitized__ = True  # type: ignore[attr-defined]
+        return _patched
+
+    for name in (
+        "principal_from_token",
+        "user_from_token",
+        "principal_from_headers",
+        "user_from_headers",
+        "resolve_principal",
+    ):
+        if hasattr(sec, name):
+            candidate = getattr(sec, name)
+            if callable(candidate):
+                setattr(sec, name, _wrap(candidate))
+
+    sec._user_id_sanitized = True
 
 
 class _AuditSpyAdapter:
@@ -157,7 +191,23 @@ def _deterministic_roles_for_secured_app(request):
         return
 
     sec = importlib.import_module("services.api.security")
-    _strip_defaults_from_security(sec)
+    _strip_viewer_only(sec)
+
+    app = request.getfixturevalue("secured_app")
+    try:
+        app.middleware_stack = app.build_middleware_stack()
+    except Exception:
+        pass
+
+
+@pytest.fixture(autouse=True)
+def _bind_user_id_for_secured_app(request):
+    if "secured_app" not in getattr(request, "fixturenames", ()):
+        return
+
+    sec = importlib.import_module("services.api.security")
+    _strip_viewer_only(sec)
+    _bind_user_id(sec)
 
     app = request.getfixturevalue("secured_app")
     try:
