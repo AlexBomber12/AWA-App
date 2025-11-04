@@ -14,6 +14,23 @@ importlib.import_module("tests.conftest")
 
 
 @pytest.fixture(autouse=True)
+def _rebind_audit_for_secured_app(request, audit_spy):
+    if "secured_app" not in getattr(request, "fixturenames", ()):
+        return
+
+    app = request.getfixturevalue("secured_app")
+    audit = importlib.import_module("services.api.audit")
+    from tests.conftest import _apply_strict_audit_patch  # type: ignore
+
+    _apply_strict_audit_patch(audit, audit_spy)
+
+    try:
+        app.middleware_stack = app.build_middleware_stack()
+    except Exception:
+        pass
+
+
+@pytest.fixture(autouse=True)
 def _api_fast_startup(monkeypatch, request):
     """
     Neutralize blocking startup for API tests that construct TestClient(main.app):
