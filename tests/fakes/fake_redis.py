@@ -31,7 +31,7 @@ class FakeRedis:
     async def ping(self) -> bool:
         return True
 
-    async def script_load(self, *_args, **_kwargs) -> str:
+    async def script_load(self, script: str) -> str:  # noqa: ARG002 - parity with redis
         return "fake-sha"
 
     def reset(self) -> None:

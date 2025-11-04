@@ -163,27 +163,30 @@ jobs:
           done < <(find services -maxdepth 2 -name 'requirements*.txt' -print0)
 
       - name: Harness sanity (no cov, no plugins)
+        shell: bash
         run: |
           set -euo pipefail
           PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PYTEST_ADDOPTS='' \
           pytest -q -p no:cov -o addopts='' tests/unit/test_harness_sanity.py
 
       - name: Reset coverage state
+        shell: bash
         run: |
           python - <<'PY'
-          import coverage, os, glob
-          try:
-              coverage.Coverage(config_file=".github/coverage.ini").erase()
-          except Exception:
-              pass
-          for filename in [".coverage", *glob.glob(".coverage.*")]:
-              try:
-                  os.remove(filename)
-              except FileNotFoundError:
-                  pass
+            import coverage, glob, os
+            try:
+                coverage.Coverage(config_file=".github/coverage.ini").erase()
+            except Exception:
+                pass
+            for filename in [".coverage", *glob.glob(".coverage.*")]:
+                try:
+                    os.remove(filename)
+                except FileNotFoundError:
+                    pass
           PY
 
       - name: Unit tests (single source of truth)
+        shell: bash
         run: |
           set -euo pipefail
           mkdir -p artifacts

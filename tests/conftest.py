@@ -19,6 +19,35 @@ from awa_common.settings import settings
 from tests.fakes import FakeRedis
 from tests.utils.strict_spy import StrictSpy
 
+AUDIT_SENTINEL_ATTR = "_strict_audit_patched"
+
+
+def _apply_strict_audit_patch(audit_mod: Any, audit_spy: StrictSpy) -> None:
+    if getattr(audit_mod, AUDIT_SENTINEL_ATTR, False):
+        return
+
+    original_insert = getattr(audit_mod, "insert_audit", None)
+
+    async def _validate_and_record(_session, record):  # noqa: ANN001
+        if not isinstance(record, dict):
+            raise AssertionError("audit payload must be dict")
+        for key in ("method", "path", "status"):
+            if key not in record:
+                raise AssertionError(f"missing audit field: {key}")
+        if not isinstance(record["status"], int):
+            raise AssertionError("status must be int")
+        audit_spy.record(
+            method=record["method"],
+            path=record["path"],
+            status=record["status"],
+        )
+        return True
+
+    audit_mod.insert_audit = _validate_and_record  # type: ignore[assignment]
+    setattr(audit_mod, AUDIT_SENTINEL_ATTR, True)
+    audit_mod._insert_audit_original = original_insert
+
+
 pytest_plugins = tuple(
     sorted(
         {
@@ -208,41 +237,14 @@ def audit_spy() -> StrictSpy:
 
 
 @pytest.fixture(autouse=True)
-def _strict_audit(
-    monkeypatch: pytest.MonkeyPatch,
-    request: pytest.FixtureRequest,
-    audit_spy: StrictSpy,
-):
+def _strict_audit_guard(request: pytest.FixtureRequest, audit_spy: StrictSpy):
     if "integration" in request.keywords:
+        yield
         return
 
-    _audit = importlib.import_module("services.api.audit")
-    original_insert = getattr(_audit, "insert_audit", None)
-
-    async def _validate_record(_session, record):  # noqa: ANN001
-        if not isinstance(record, dict):
-            raise AssertionError("audit payload must be a dict")
-        for field in ("method", "path", "status"):
-            if field not in record:
-                raise AssertionError(f"audit payload missing field: {field}")
-        status = record["status"]
-        if not isinstance(status, int):
-            raise AssertionError("audit payload status must be an integer")
-        audit_spy.record(
-            method=record["method"],
-            path=record["path"],
-            status=status,
-            route=record.get("route"),
-            request_id=record.get("request_id"),
-        )
-        return True
-
-    monkeypatch.setattr(_audit, "insert_audit", _validate_record, raising=False)
-    try:
-        yield
-    finally:
-        if original_insert is not None:
-            _audit.insert_audit = original_insert  # type: ignore[assignment]
+    audit = importlib.import_module("services.api.audit")
+    _apply_strict_audit_patch(audit, audit_spy)
+    yield
 
 
 @pytest.fixture(autouse=True)
