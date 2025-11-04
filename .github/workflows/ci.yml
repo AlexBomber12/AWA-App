@@ -162,25 +162,33 @@ jobs:
             python -m pip install --disable-pip-version-check --no-input -q -c constraints.txt -r "$req"
           done < <(find services -maxdepth 2 -name 'requirements*.txt' -print0)
 
-      - name: Harness sanity
+      - name: Harness sanity (no cov, no plugins)
         run: |
           set -euo pipefail
-          PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest -q tests/unit/test_harness_sanity.py
+          PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 \
+          PYTEST_ADDOPTS= \
+          pytest -q -p no:cov -o addopts="" tests/unit/test_harness_sanity.py
 
-      - name: Reset coverage artifacts
+      - name: Reset coverage state
         run: |
           python - <<'PY'
-          import coverage
-          import os
+            import coverage
+            import glob
+            import os
 
-          cov = coverage.Coverage(config_file=".github/coverage.ini")
-          cov.erase()
-          for filename in (".coverage",):
-              if os.path.exists(filename):
-                  os.remove(filename)
+            try:
+                coverage.Coverage(config_file=".github/coverage.ini").erase()
+            except Exception:
+                pass
+
+            for filename in [".coverage", *glob.glob(".coverage.*")]:
+                try:
+                    os.remove(filename)
+                except FileNotFoundError:
+                    pass
           PY
 
-      - name: Run unit suite (coverage)
+      - name: Unit tests (single source of truth)
         run: |
           set -euo pipefail
           mkdir -p artifacts
@@ -210,6 +218,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          if [ ! -f coverage.xml ]; then
+            echo "coverage.xml is missing; emitting stub diff-coverage.txt."
+            echo "NO_COVERAGE_XML" > diff-coverage.txt
+            exit 1
+          fi
           pip install --disable-pip-version-check --no-input diff-cover
           BASE="${{ github.base_ref || 'main' }}"
           git fetch --no-tags --prune --depth=1 origin "${BASE}:${BASE}"
