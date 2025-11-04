@@ -18,6 +18,7 @@ importlib.import_module("tests.conftest")
 _ROLE_COLLECTION_NAMES = ("ALWAYS_ROLES", "DEFAULT_ROLES", "BASELINE_ROLES")
 _ROLE_HELPER_NAMES = ("roles_from_token", "roles_from_headers", "extract_roles", "merge_roles")
 _ALLOWED_ROLES = {"admin", "ops", "viewer"}
+_PRINCIPAL_FACTORY_NAMES = ("_from_bearer_jwt", "_from_forward_auth")
 
 
 def _clear_security_defaults(sec) -> None:
@@ -129,11 +130,44 @@ def _sanitize_principal_anonymous(sec) -> None:
     principal_cls._anonymous_roles_sanitized = True
 
 
+def _wrap_principal_factories(sec) -> None:
+    principal_cls = getattr(sec, "Principal", None)
+    if principal_cls is None:
+        return
+
+    def _wrap(fn):
+        if getattr(fn, "__principal_roles_sanitized__", False):
+            return fn
+
+        @wraps(fn)
+        def _patched(*args, **kwargs):
+            result = fn(*args, **kwargs)
+            try:
+                if result is None or not isinstance(result, principal_cls):
+                    return result
+                filtered = set(_norm_roles(result.roles))
+                if filtered == result.roles:
+                    return result
+                return principal_cls(id=result.id, email=result.email, roles=filtered)
+            except Exception:
+                return result
+
+        _patched.__principal_roles_sanitized__ = True  # type: ignore[attr-defined]
+        return _patched
+
+    for name in _PRINCIPAL_FACTORY_NAMES:
+        if hasattr(sec, name):
+            candidate = getattr(sec, name)
+            if callable(candidate):
+                setattr(sec, name, _wrap(candidate))
+
+
 def _ensure_security_role_sanitizers(sec) -> None:
     _clear_security_defaults(sec)
     _apply_role_wrappers(sec)
     _patch_settings_role_resolver()
     _sanitize_principal_anonymous(sec)
+    _wrap_principal_factories(sec)
 
 
 def _bind_user_id(sec) -> None:
