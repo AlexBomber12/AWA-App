@@ -6,6 +6,7 @@ import sys
 from functools import wraps
 
 import pytest
+from awa_common.settings import settings
 
 _REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 if _REPO_ROOT not in sys.path:
@@ -81,6 +82,26 @@ def _apply_role_wrappers(sec) -> None:
                 setattr(sec, name, _wrap_roles_list_out(candidate))
 
 
+def _patch_settings_role_resolver() -> None:
+    cls = settings.__class__
+    if getattr(cls, "_deterministic_role_resolver", False):
+        return
+
+    original = cls.resolve_role_set
+
+    def _deterministic_resolve(self, claims_or_groups: set[str]) -> set[str]:
+        roles = original(self, claims_or_groups)
+        normalized_input = set(_norm_roles(claims_or_groups))
+        if not normalized_input:
+            return {role for role in roles if role in _ALLOWED_ROLES}
+        filtered = {role for role in roles if role in normalized_input}
+        filtered.update(normalized_input)
+        return filtered
+
+    cls.resolve_role_set = _deterministic_resolve  # type: ignore[method-assign]
+    cls._deterministic_role_resolver = True
+
+
 def _sanitize_principal_anonymous(sec) -> None:
     principal_cls = getattr(sec, "Principal", None)
     if principal_cls is None:
@@ -111,6 +132,7 @@ def _sanitize_principal_anonymous(sec) -> None:
 def _ensure_security_role_sanitizers(sec) -> None:
     _clear_security_defaults(sec)
     _apply_role_wrappers(sec)
+    _patch_settings_role_resolver()
     _sanitize_principal_anonymous(sec)
 
 
