@@ -169,18 +169,19 @@ jobs:
           PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PYTEST_ADDOPTS='' \
           pytest -q -p no:cov -o addopts='' tests/unit/test_harness_sanity.py
 
-      - name: Reset coverage state
+      - name: Reset coverage state (clean & non-fatal)
         shell: bash
         run: |
-          python - <<'PY'
+          set -euo pipefail
+          python - <<'PY' || true
             import coverage, glob, os
             try:
                 coverage.Coverage(config_file=".github/coverage.ini").erase()
             except Exception:
                 pass
-            for filename in [".coverage", *glob.glob(".coverage.*")]:
+            for f in [".coverage", *glob.glob(".coverage.*")]:
                 try:
-                    os.remove(filename)
+                    os.remove(f)
                 except FileNotFoundError:
                     pass
           PY
