@@ -20,9 +20,11 @@ from tests.fakes import FakeRedis
 from tests.utils.strict_spy import StrictSpy
 
 AUDIT_SENTINEL_ATTR = "_strict_audit_patched"
+AUDIT_SPY_ATTR = "_strict_audit_spy"
 
 
 def _apply_strict_audit_patch(audit_mod: Any, audit_spy: StrictSpy) -> None:
+    setattr(audit_mod, AUDIT_SPY_ATTR, audit_spy)
     if getattr(audit_mod, AUDIT_SENTINEL_ATTR, False):
         return
 
@@ -36,11 +38,10 @@ def _apply_strict_audit_patch(audit_mod: Any, audit_spy: StrictSpy) -> None:
                 raise AssertionError(f"missing audit field: {key}")
         if not isinstance(record["status"], int):
             raise AssertionError("status must be int")
-        audit_spy.record(
-            method=record["method"],
-            path=record["path"],
-            status=record["status"],
-        )
+        spy = getattr(audit_mod, AUDIT_SPY_ATTR, None)
+        if spy is None:
+            raise AssertionError("Strict audit spy missing")
+        spy.record(**record)
         return True
 
     audit_mod.insert_audit = _validate_and_record  # type: ignore[assignment]

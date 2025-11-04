@@ -32,10 +32,11 @@ def audit_spy(audit_sink):
 
 
 @pytest.fixture(autouse=True)
-def _rebind_audit_for_secured_app(request, audit_spy):
+def _rebind_audit_for_secured_app(request):
     if "secured_app" not in getattr(request, "fixturenames", ()):
         return
 
+    audit_spy = request.getfixturevalue("audit_spy")
     app = request.getfixturevalue("secured_app")
     audit = importlib.import_module("services.api.audit")
     from tests.conftest import _apply_strict_audit_patch  # type: ignore
