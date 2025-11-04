@@ -6,7 +6,6 @@ import sys
 from functools import wraps
 
 import pytest
-from awa_common.settings import settings
 
 _REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 if _REPO_ROOT not in sys.path:
@@ -84,7 +83,9 @@ def _apply_role_wrappers(sec) -> None:
 
 
 def _patch_settings_role_resolver() -> None:
-    cls = settings.__class__
+    settings_mod = importlib.import_module("awa_common.settings")
+    settings_obj = settings_mod.settings
+    cls = settings_obj.__class__
     if getattr(cls, "_deterministic_role_resolver", False):
         return
 
