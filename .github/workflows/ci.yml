@@ -165,27 +165,22 @@ jobs:
       - name: Harness sanity (no cov, no plugins)
         run: |
           set -euo pipefail
-          PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 \
-          PYTEST_ADDOPTS= \
-          pytest -q -p no:cov -o addopts="" tests/unit/test_harness_sanity.py
+          PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PYTEST_ADDOPTS='' \
+          pytest -q -p no:cov -o addopts='' tests/unit/test_harness_sanity.py
 
       - name: Reset coverage state
         run: |
           python - <<'PY'
-            import coverage
-            import glob
-            import os
-
-            try:
-                coverage.Coverage(config_file=".github/coverage.ini").erase()
-            except Exception:
-                pass
-
-            for filename in [".coverage", *glob.glob(".coverage.*")]:
-                try:
-                    os.remove(filename)
-                except FileNotFoundError:
-                    pass
+          import coverage, os, glob
+          try:
+              coverage.Coverage(config_file=".github/coverage.ini").erase()
+          except Exception:
+              pass
+          for filename in [".coverage", *glob.glob(".coverage.*")]:
+              try:
+                  os.remove(filename)
+              except FileNotFoundError:
+                  pass
           PY
 
       - name: Unit tests (single source of truth)
