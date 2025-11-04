@@ -15,7 +15,7 @@ if _REPO_ROOT not in sys.path:
 importlib.import_module("tests.conftest")
 
 
-_VIEWER_ROLE = "viewer"
+_BLOCKED_ROLES = {"viewer", "admin"}
 _ROLE_COLLECTION_CANDIDATES = (
     "ALWAYS_ROLES",
     "DEFAULT_ROLES",
@@ -25,29 +25,33 @@ _ROLE_COLLECTION_CANDIDATES = (
     "DEFAULT_ROLES_SET",
     "ROLE_DEFAULTS",
 )
-_ROLE_STRING_CANDIDATES = ("DEFAULT_VIEWER_ROLE",)
+_ROLE_STRING_CANDIDATES = ("DEFAULT_VIEWER_ROLE", "DEFAULT_ADMIN_ROLE")
 _ROLE_FLAG_CANDIDATES = (
     "ALWAYS_ADD_VIEWER",
     "DEFAULT_ADD_VIEWER",
     "SECURITY_ALWAYS_ADD_VIEWER",
     "AUTH_ALWAYS_ADD_VIEWER",
+    "ALWAYS_ADD_ADMIN",
+    "DEFAULT_ADD_ADMIN",
+    "SECURITY_ALWAYS_ADD_ADMIN",
+    "AUTH_ALWAYS_ADD_ADMIN",
 )
 
 
 def _strip_role_collection(collection: Any) -> Any:
     if isinstance(collection, set):
-        return {role for role in collection if role != _VIEWER_ROLE}
+        return {role for role in collection if role not in _BLOCKED_ROLES}
     if isinstance(collection, list):
-        return [role for role in collection if role != _VIEWER_ROLE]
+        return [role for role in collection if role not in _BLOCKED_ROLES]
     if isinstance(collection, tuple):
-        return tuple(role for role in collection if role != _VIEWER_ROLE)
+        return tuple(role for role in collection if role not in _BLOCKED_ROLES)
     return collection
 
 
 def _build_roles_sanitizer(principal_cls: Any):
     def _sanitize(payload: Any) -> Any:
         if principal_cls is not None and isinstance(payload, principal_cls):
-            filtered = {role for role in payload.roles if role != _VIEWER_ROLE}
+            filtered = {role for role in payload.roles if role not in _BLOCKED_ROLES}
             if filtered != payload.roles:
                 return principal_cls(id=payload.id, email=payload.email, roles=filtered)
             return payload
@@ -81,8 +85,9 @@ def _wrap_role_function(fn: Any, sanitizer) -> Any:
     return _patched
 
 
-def _strip_viewer_from_module(sec) -> None:
-    if getattr(sec, "_viewer_roles_sanitized", False):
+def _strip_defaults_from_security(sec) -> None:
+    """Remove implicit admin/viewer roles and wrap helpers to keep role sets deterministic."""
+    if getattr(sec, "_roles_sanitized", False) or getattr(sec, "_viewer_roles_sanitized", False):
         return
 
     principal_cls = getattr(sec, "Principal", None)
@@ -96,7 +101,7 @@ def _strip_viewer_from_module(sec) -> None:
     for attr in _ROLE_STRING_CANDIDATES:
         if hasattr(sec, attr):
             value = getattr(sec, attr)
-            if isinstance(value, str) and value == _VIEWER_ROLE:
+            if isinstance(value, str) and value in _BLOCKED_ROLES:
                 setattr(sec, attr, "")
     for attr in _ROLE_FLAG_CANDIDATES:
         if hasattr(sec, attr):
@@ -123,6 +128,7 @@ def _strip_viewer_from_module(sec) -> None:
             _anonymous_impl.__viewer_sanitized__ = True  # type: ignore[attr-defined]
             principal_cls.anonymous = classmethod(_anonymous_impl)
 
+    sec._roles_sanitized = True
     sec._viewer_roles_sanitized = True
 
 
@@ -146,11 +152,12 @@ def audit_spy(audit_sink):
 
 @pytest.fixture(autouse=True)
 def _deterministic_roles_for_secured_app(request):
+    """Apply security role stripping whenever a test exercises the secured_app fixture."""
     if "secured_app" not in getattr(request, "fixturenames", ()):
         return
 
     sec = importlib.import_module("services.api.security")
-    _strip_viewer_from_module(sec)
+    _strip_defaults_from_security(sec)
 
     app = request.getfixturevalue("secured_app")
     try:
