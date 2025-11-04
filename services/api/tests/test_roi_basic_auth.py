@@ -1,4 +1,5 @@
 import base64
+import importlib
 import os
 from contextlib import contextmanager
 
@@ -16,6 +17,19 @@ def _force_basic():
     os.environ["API_AUTH_MODE"] = "basic"
     os.environ["API_BASIC_USER"] = "u"
     os.environ["API_BASIC_PASS"] = "p"
+
+    try:
+        import awa_common.settings as _settings
+
+        import services.api.main as _main
+        import services.api.security as _security
+
+        importlib.reload(_settings)
+        importlib.reload(_security)
+        importlib.reload(_main)
+    except Exception:
+        pass
+
     try:
         yield
     finally:

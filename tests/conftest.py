@@ -209,16 +209,14 @@ def audit_spy() -> StrictSpy:
 
 @pytest.fixture(autouse=True)
 def _strict_audit(
-    monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest, audit_spy: StrictSpy
+    monkeypatch: pytest.MonkeyPatch,
+    request: pytest.FixtureRequest,
+    audit_spy: StrictSpy,
 ):
     if "integration" in request.keywords:
         return
 
-    try:
-        from services.api import audit as _audit
-    except Exception:
-        return
-
+    _audit = importlib.import_module("services.api.audit")
     original_insert = getattr(_audit, "insert_audit", None)
 
     async def _validate_record(_session, record):  # noqa: ANN001

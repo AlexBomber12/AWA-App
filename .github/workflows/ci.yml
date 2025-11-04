@@ -165,7 +165,20 @@ jobs:
       - name: Harness sanity
         run: |
           set -euo pipefail
-          python -m pytest -q tests/unit/test_harness_sanity.py
+          PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest -q tests/unit/test_harness_sanity.py
+
+      - name: Reset coverage artifacts
+        run: |
+          python - <<'PY'
+          import coverage
+          import os
+
+          cov = coverage.Coverage(config_file=".github/coverage.ini")
+          cov.erase()
+          for filename in (".coverage",):
+              if os.path.exists(filename):
+                  os.remove(filename)
+          PY
 
       - name: Run unit suite (coverage)
         run: |
@@ -193,6 +206,7 @@ jobs:
           if-no-files-found: warn
 
       - name: Compute diff coverage (80% gate)
+        if: always()
         shell: bash
         run: |
           set -euo pipefail
