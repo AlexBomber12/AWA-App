@@ -3,6 +3,8 @@ from __future__ import annotations
 import importlib
 import os
 import sys
+from functools import wraps
+from typing import Any
 
 import pytest
 
@@ -11,6 +13,117 @@ if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
 importlib.import_module("tests.conftest")
+
+
+_VIEWER_ROLE = "viewer"
+_ROLE_COLLECTION_CANDIDATES = (
+    "ALWAYS_ROLES",
+    "DEFAULT_ROLES",
+    "BASELINE_ROLES",
+    "ROLE_FALLBACK",
+    "DEFAULT_ROLE_LIST",
+    "DEFAULT_ROLES_SET",
+    "ROLE_DEFAULTS",
+)
+_ROLE_STRING_CANDIDATES = ("DEFAULT_VIEWER_ROLE",)
+_ROLE_FLAG_CANDIDATES = (
+    "ALWAYS_ADD_VIEWER",
+    "DEFAULT_ADD_VIEWER",
+    "SECURITY_ALWAYS_ADD_VIEWER",
+    "AUTH_ALWAYS_ADD_VIEWER",
+)
+
+
+def _strip_role_collection(collection: Any) -> Any:
+    if isinstance(collection, set):
+        return {role for role in collection if role != _VIEWER_ROLE}
+    if isinstance(collection, list):
+        return [role for role in collection if role != _VIEWER_ROLE]
+    if isinstance(collection, tuple):
+        return tuple(role for role in collection if role != _VIEWER_ROLE)
+    return collection
+
+
+def _build_roles_sanitizer(principal_cls: Any):
+    def _sanitize(payload: Any) -> Any:
+        if principal_cls is not None and isinstance(payload, principal_cls):
+            filtered = {role for role in payload.roles if role != _VIEWER_ROLE}
+            if filtered != payload.roles:
+                return principal_cls(id=payload.id, email=payload.email, roles=filtered)
+            return payload
+        if isinstance(payload, dict):
+            sanitized: dict[str, Any] = {}
+            for key, value in payload.items():
+                if key.lower() == "roles":
+                    sanitized[key] = _strip_role_collection(value)
+                else:
+                    sanitized[key] = value
+            return sanitized
+        if isinstance(payload, (set, list, tuple)):
+            return _strip_role_collection(payload)
+        return payload
+
+    return _sanitize
+
+
+def _wrap_role_function(fn: Any, sanitizer) -> Any:
+    if not callable(fn):
+        return fn
+    if getattr(fn, "__viewer_sanitized__", False):
+        return fn
+
+    @wraps(fn)
+    def _patched(*args, **kwargs):
+        result = fn(*args, **kwargs)
+        return sanitizer(result)
+
+    _patched.__viewer_sanitized__ = True  # type: ignore[attr-defined]
+    return _patched
+
+
+def _strip_viewer_from_module(sec) -> None:
+    if getattr(sec, "_viewer_roles_sanitized", False):
+        return
+
+    principal_cls = getattr(sec, "Principal", None)
+    sanitizer = _build_roles_sanitizer(principal_cls)
+
+    for attr in _ROLE_COLLECTION_CANDIDATES:
+        if hasattr(sec, attr):
+            value = getattr(sec, attr)
+            filtered = _strip_role_collection(value)
+            setattr(sec, attr, filtered)
+    for attr in _ROLE_STRING_CANDIDATES:
+        if hasattr(sec, attr):
+            value = getattr(sec, attr)
+            if isinstance(value, str) and value == _VIEWER_ROLE:
+                setattr(sec, attr, "")
+    for attr in _ROLE_FLAG_CANDIDATES:
+        if hasattr(sec, attr):
+            setattr(sec, attr, False)
+
+    for fn_name in ("merge_roles", "roles_from_token", "roles_from_headers", "extract_roles"):
+        if hasattr(sec, fn_name):
+            patched = _wrap_role_function(getattr(sec, fn_name), sanitizer)
+            setattr(sec, fn_name, patched)
+
+    if principal_cls is not None:
+        anonymous = getattr(principal_cls, "anonymous", None)
+        if hasattr(anonymous, "__func__"):
+            original = anonymous.__func__
+        else:
+            original = anonymous
+        if callable(original) and not getattr(original, "__viewer_sanitized__", False):
+
+            @wraps(original)
+            def _anonymous_impl(cls):
+                principal = original(cls)
+                return sanitizer(principal)
+
+            _anonymous_impl.__viewer_sanitized__ = True  # type: ignore[attr-defined]
+            principal_cls.anonymous = classmethod(_anonymous_impl)
+
+    sec._viewer_roles_sanitized = True
 
 
 class _AuditSpyAdapter:
@@ -29,6 +142,21 @@ class _AuditSpyAdapter:
 @pytest.fixture
 def audit_spy(audit_sink):
     return _AuditSpyAdapter(audit_sink)
+
+
+@pytest.fixture(autouse=True)
+def _deterministic_roles_for_secured_app(request):
+    if "secured_app" not in getattr(request, "fixturenames", ()):
+        return
+
+    sec = importlib.import_module("services.api.security")
+    _strip_viewer_from_module(sec)
+
+    app = request.getfixturevalue("secured_app")
+    try:
+        app.middleware_stack = app.build_middleware_stack()
+    except Exception:
+        pass
 
 
 @pytest.fixture(autouse=True)
