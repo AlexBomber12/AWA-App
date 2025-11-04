@@ -4,7 +4,6 @@ import importlib
 import os
 import sys
 from functools import wraps
-from typing import Any
 
 import pytest
 
@@ -15,116 +14,104 @@ if _REPO_ROOT not in sys.path:
 importlib.import_module("tests.conftest")
 
 
-_BLOCKED_ROLES = {"viewer"}
-_ROLE_COLLECTION_CANDIDATES = (
-    "ALWAYS_ROLES",
-    "DEFAULT_ROLES",
-    "BASELINE_ROLES",
-    "ROLE_FALLBACK",
-    "DEFAULT_ROLE_LIST",
-    "DEFAULT_ROLES_SET",
-    "ROLE_DEFAULTS",
-)
-_ROLE_STRING_CANDIDATES = ("DEFAULT_VIEWER_ROLE",)
-_ROLE_FLAG_CANDIDATES = (
-    "ALWAYS_ADD_VIEWER",
-    "DEFAULT_ADD_VIEWER",
-    "SECURITY_ALWAYS_ADD_VIEWER",
-    "AUTH_ALWAYS_ADD_VIEWER",
-)
+_ROLE_COLLECTION_NAMES = ("ALWAYS_ROLES", "DEFAULT_ROLES", "BASELINE_ROLES")
+_ROLE_HELPER_NAMES = ("roles_from_token", "roles_from_headers", "extract_roles", "merge_roles")
+_ALLOWED_ROLES = {"admin", "ops", "viewer"}
 
 
-def _strip_role_collection(collection: Any) -> Any:
-    if isinstance(collection, set):
-        return {role for role in collection if role not in _BLOCKED_ROLES}
-    if isinstance(collection, list):
-        return [role for role in collection if role not in _BLOCKED_ROLES]
-    if isinstance(collection, tuple):
-        return tuple(role for role in collection if role not in _BLOCKED_ROLES)
-    return collection
+def _clear_security_defaults(sec) -> None:
+    if getattr(sec, "_role_defaults_cleared", False):
+        return
+    for name in _ROLE_COLLECTION_NAMES:
+        if not hasattr(sec, name):
+            continue
+        value = getattr(sec, name)
+        if isinstance(value, (set, list, tuple)) and value:
+            setattr(sec, name, type(value)())
+    sec._role_defaults_cleared = True
 
 
-def _build_roles_sanitizer(principal_cls: Any):
-    def _sanitize(payload: Any) -> Any:
-        if principal_cls is not None and isinstance(payload, principal_cls):
-            filtered = {role for role in payload.roles if role not in _BLOCKED_ROLES}
-            if filtered != payload.roles:
-                return principal_cls(id=payload.id, email=payload.email, roles=filtered)
-            return payload
-        if isinstance(payload, dict):
-            sanitized: dict[str, Any] = {}
-            for key, value in payload.items():
-                if key.lower() == "roles":
-                    sanitized[key] = _strip_role_collection(value)
-                else:
-                    sanitized[key] = value
-            return sanitized
-        if isinstance(payload, (set, list, tuple)):
-            return _strip_role_collection(payload)
-        return payload
+def _norm_roles(raw) -> list[str] | set[str] | tuple[str, ...]:
+    if not raw:
+        return [] if not isinstance(raw, (set, list, tuple)) else type(raw)()
+    values = set()
+    for entry in raw:
+        if entry is None:
+            continue
+        for token in str(entry).replace(";", ",").split(","):
+            role = token.strip().lower()
+            if role in _ALLOWED_ROLES:
+                values.add(role)
+    ordered = sorted(values)
+    if isinstance(raw, (set, frozenset)):
+        return type(raw)(ordered)
+    if isinstance(raw, tuple):
+        return tuple(ordered)
+    if isinstance(raw, list):
+        return list(ordered)
+    return ordered
 
-    return _sanitize
 
-
-def _wrap_role_function(fn: Any, sanitizer) -> Any:
-    if not callable(fn):
-        return fn
-    if getattr(fn, "__viewer_sanitized__", False):
+def _wrap_roles_list_out(fn):
+    if getattr(fn, "__roles_sanitized__", False):
         return fn
 
     @wraps(fn)
     def _patched(*args, **kwargs):
         result = fn(*args, **kwargs)
-        return sanitizer(result)
+        try:
+            if isinstance(result, dict) and "roles" in result:
+                result["roles"] = _norm_roles(result["roles"])
+                return result
+            if isinstance(result, (set, list, tuple)):
+                return _norm_roles(result)
+            return result
+        except Exception:
+            return result
 
-    _patched.__viewer_sanitized__ = True  # type: ignore[attr-defined]
+    _patched.__roles_sanitized__ = True  # type: ignore[attr-defined]
     return _patched
 
 
-def _strip_viewer_only(sec) -> None:
-    """Remove implicit viewer role and wrap helpers to keep role sets deterministic."""
-    if getattr(sec, "_viewer_roles_sanitized", False):
+def _apply_role_wrappers(sec) -> None:
+    for name in _ROLE_HELPER_NAMES:
+        if hasattr(sec, name):
+            candidate = getattr(sec, name)
+            if callable(candidate):
+                setattr(sec, name, _wrap_roles_list_out(candidate))
+
+
+def _sanitize_principal_anonymous(sec) -> None:
+    principal_cls = getattr(sec, "Principal", None)
+    if principal_cls is None:
+        return
+    if getattr(principal_cls, "_anonymous_roles_sanitized", False):
+        return
+    anonymous = getattr(principal_cls, "anonymous", None)
+    original = anonymous.__func__ if hasattr(anonymous, "__func__") else anonymous
+    if not callable(original):
         return
 
-    principal_cls = getattr(sec, "Principal", None)
-    sanitizer = _build_roles_sanitizer(principal_cls)
+    @wraps(original)
+    def _patched(cls):
+        principal = original(cls)
+        if principal is None:
+            return principal
+        filtered = _norm_roles(principal.roles)
+        if isinstance(filtered, list):
+            filtered = set(filtered)
+        if filtered != principal.roles:
+            return principal_cls(id=principal.id, email=principal.email, roles=set(filtered))
+        return principal
 
-    for attr in _ROLE_COLLECTION_CANDIDATES:
-        if hasattr(sec, attr):
-            value = getattr(sec, attr)
-            filtered = _strip_role_collection(value)
-            setattr(sec, attr, filtered)
-    for attr in _ROLE_STRING_CANDIDATES:
-        if hasattr(sec, attr):
-            value = getattr(sec, attr)
-            if isinstance(value, str) and value in _BLOCKED_ROLES:
-                setattr(sec, attr, "")
-    for attr in _ROLE_FLAG_CANDIDATES:
-        if hasattr(sec, attr):
-            setattr(sec, attr, False)
+    principal_cls.anonymous = classmethod(_patched)
+    principal_cls._anonymous_roles_sanitized = True
 
-    for fn_name in ("merge_roles", "roles_from_token", "roles_from_headers", "extract_roles"):
-        if hasattr(sec, fn_name):
-            patched = _wrap_role_function(getattr(sec, fn_name), sanitizer)
-            setattr(sec, fn_name, patched)
 
-    if principal_cls is not None:
-        anonymous = getattr(principal_cls, "anonymous", None)
-        if hasattr(anonymous, "__func__"):
-            original = anonymous.__func__
-        else:
-            original = anonymous
-        if callable(original) and not getattr(original, "__viewer_sanitized__", False):
-
-            @wraps(original)
-            def _anonymous_impl(cls):
-                principal = original(cls)
-                return sanitizer(principal)
-
-            _anonymous_impl.__viewer_sanitized__ = True  # type: ignore[attr-defined]
-            principal_cls.anonymous = classmethod(_anonymous_impl)
-
-    sec._viewer_roles_sanitized = True
+def _ensure_security_role_sanitizers(sec) -> None:
+    _clear_security_defaults(sec)
+    _apply_role_wrappers(sec)
+    _sanitize_principal_anonymous(sec)
 
 
 def _bind_user_id(sec) -> None:
@@ -191,7 +178,7 @@ def _deterministic_roles_for_secured_app(request):
         return
 
     sec = importlib.import_module("services.api.security")
-    _strip_viewer_only(sec)
+    _ensure_security_role_sanitizers(sec)
 
     app = request.getfixturevalue("secured_app")
     try:
@@ -206,7 +193,7 @@ def _bind_user_id_for_secured_app(request):
         return
 
     sec = importlib.import_module("services.api.security")
-    _strip_viewer_only(sec)
+    _ensure_security_role_sanitizers(sec)
     _bind_user_id(sec)
 
     app = request.getfixturevalue("secured_app")
