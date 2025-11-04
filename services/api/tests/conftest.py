@@ -13,6 +13,24 @@ if _REPO_ROOT not in sys.path:
 importlib.import_module("tests.conftest")
 
 
+class _AuditSpyAdapter:
+    """
+    Minimal StrictSpy-compatible adapter over audit_sink (list of dicts).
+    Only implements .record(**vals), which the shared rebind helper uses.
+    """
+
+    def __init__(self, sink):
+        self._sink = sink
+
+    def record(self, **vals):
+        self._sink.append(vals)
+
+
+@pytest.fixture
+def audit_spy(audit_sink):
+    return _AuditSpyAdapter(audit_sink)
+
+
 @pytest.fixture(autouse=True)
 def _rebind_audit_for_secured_app(request, audit_spy):
     if "secured_app" not in getattr(request, "fixturenames", ()):
