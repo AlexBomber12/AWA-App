@@ -420,12 +420,12 @@ jobs:
             echo "== alembic current -v =="
             alembic -c services/api/alembic.ini current -v | tee alembic-current.txt
             echo "== optional schema smoke =="
-            if ! python -c "import os, psycopg; dsn = os.environ['DATABASE_URL'].replace('postgresql+psycopg://', 'postgresql://');\nwith psycopg.connect(dsn, connect_timeout=5) as conn:\n    with conn.cursor() as cur:\n        cur.execute('select 1')" ; then
+            if ! python -c $'import os\nimport psycopg\n\ndsn = os.environ["DATABASE_URL"].replace("postgresql+psycopg://", "postgresql://")\nwith psycopg.connect(dsn, connect_timeout=5) as conn:\n    with conn.cursor() as cur:\n        cur.execute("select 1")'; then
               echo "::warning::Optional schema smoke check failed (non-blocking)."
             fi
             if [ -d tests/integration ] && [ -n "$(ls -A tests/integration)" ]; then
               echo "== pytest tests/integration -k api_audit_rate_limit =="
-              python -m pytest -q tests/integration -k api_audit_rate_limit --maxfail=1 --timeout=60
+              PYTEST_ADDOPTS="" python -m pytest -q tests/integration -m integration -k api_audit_rate_limit --maxfail=1 --timeout=60
             else
               echo "No integration tests, skipping."
             fi
