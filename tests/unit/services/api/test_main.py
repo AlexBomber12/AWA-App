@@ -7,6 +7,7 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 import services.api.main as main
+from tests.fakes import FakeRedis
 from tests.unit.conftest import _StubResult
 
 
@@ -49,9 +50,13 @@ async def test_client_ip_identifier_fallback_client_host():
 async def test_rate_limit_dependency_skips_without_redis():
     request = _make_request()
     response = Response()
-    main.FastAPILimiter.redis = None
-    await main._rate_limit_dependency(request, response)
-    assert not hasattr(request.state, "rate_limited")
+    original = main.FastAPILimiter.redis
+    try:
+        main.FastAPILimiter.redis = None
+        await main._rate_limit_dependency(request, response)
+        assert not hasattr(request.state, "rate_limited")
+    finally:
+        main.FastAPILimiter.redis = original
 
 
 @pytest.mark.asyncio
@@ -65,12 +70,16 @@ async def test_rate_limit_dependency_invokes_limiter(monkeypatch):
         async def __call__(self, request, response):
             request.state.called = True
 
-    main.FastAPILimiter.redis = object()
+    original = main.FastAPILimiter.redis
+    main.FastAPILimiter.redis = FakeRedis()
     monkeypatch.setattr(main, "RateLimiter", DummyLimiter)
     request = _make_request()
     response = Response()
-    await main._rate_limit_dependency(request, response)
-    assert request.state.called is True
+    try:
+        await main._rate_limit_dependency(request, response)
+        assert request.state.called is True
+    finally:
+        main.FastAPILimiter.redis = original
 
 
 @pytest.mark.asyncio
@@ -224,7 +233,7 @@ async def test_lifespan_initialises_and_closes(monkeypatch):
         return None
 
     class DummyLimiter:
-        redis = None
+        redis = FakeRedis()
 
         @staticmethod
         async def init(redis_client):

@@ -13,6 +13,62 @@ from pathlib import Path
 from typing import Any, Sequence
 
 import pytest
+from awa_common.dsn import build_dsn
+from awa_common.settings import settings
+
+from tests.fakes import FakeRedis
+from tests.utils.strict_spy import StrictSpy
+
+
+@pytest.fixture(autouse=True)
+def _test_env_defaults(monkeypatch: pytest.MonkeyPatch):
+    """Ensure deterministic baseline environment for tests."""
+    monkeypatch.setenv("LLM_PROVIDER", "STUB")
+    monkeypatch.setenv("SENTRY_DSN", "")
+    monkeypatch.setenv("SENTRY_METRICS_ENABLED", "0")
+
+
+AUDIT_SENTINEL_ATTR = "_strict_audit_patched"
+AUDIT_SPY_ATTR = "_strict_audit_spy"
+
+
+def _apply_strict_audit_patch(audit_mod: Any, audit_spy: StrictSpy) -> None:
+    setattr(audit_mod, AUDIT_SPY_ATTR, audit_spy)
+    if getattr(audit_mod, AUDIT_SENTINEL_ATTR, False):
+        return
+
+    original_insert = getattr(audit_mod, "insert_audit", None)
+
+    async def _validate_and_record(_session, record):  # noqa: ANN001
+        if not isinstance(record, dict):
+            raise AssertionError("audit payload must be dict")
+        for key in ("method", "path", "status"):
+            if key not in record:
+                raise AssertionError(f"missing audit field: {key}")
+        if not isinstance(record["status"], int):
+            raise AssertionError("status must be int")
+        spy = getattr(audit_mod, AUDIT_SPY_ATTR, None)
+        if spy is None:
+            raise AssertionError("Strict audit spy missing")
+        spy.record(**record)
+        return True
+
+    audit_mod.insert_audit = _validate_and_record  # type: ignore[assignment]
+    setattr(audit_mod, AUDIT_SENTINEL_ATTR, True)
+    audit_mod._insert_audit_original = original_insert
+
+
+pytest_plugins = tuple(
+    sorted(
+        {
+            "tests.helpers.db",
+            "tests.helpers.factories",
+            "tests.helpers.fees_table",
+            "tests.helpers.logistics_table",
+            "tests.plugins.api_fixtures",
+        }
+    )
+)
 
 __all__ = [
     "pytest_configure",
@@ -36,6 +92,7 @@ __all__ = [
     "now_utc",
     "tmp_path_helpers",
     "_stub_prometheus_client",
+    "audit_spy",
 ]
 if importlib.util.find_spec("asyncpg") is not None:
     import asyncpg
@@ -50,9 +107,6 @@ if importlib.util.find_spec("sqlalchemy") is not None:
 else:  # pragma: no cover - exercised only when sqlalchemy is missing
     create_engine = None
     sessionmaker = None
-
-from awa_common.dsn import build_dsn
-from awa_common.settings import settings
 
 
 def pytest_configure(config):
@@ -129,6 +183,102 @@ def _stub_prometheus_client():
             except Exception:
                 pass
     yield
+
+
+def _running_only_integration(pytestconfig) -> bool:
+    args = tuple(str(arg) for arg in pytestconfig.invocation_params.args)
+    return args and all(arg.startswith("tests/integration") for arg in args)
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _install_rate_limit_fake(pytestconfig):
+    if _running_only_integration(pytestconfig):
+        yield
+        return
+
+    try:
+        from fastapi_limiter import FastAPILimiter
+    except Exception:
+        yield
+        return
+
+    fake = FakeRedis()
+    original_init = getattr(FastAPILimiter, "init", None)
+    mp = pytest.MonkeyPatch()
+
+    async def _init_override(*_args, **_kwargs):
+        FastAPILimiter.redis = fake
+        FastAPILimiter.lua_sha = "fake-sha"
+        return True
+
+    FastAPILimiter.redis = fake
+    FastAPILimiter.lua_sha = "fake-sha"
+    if original_init is not None:
+        mp.setattr(FastAPILimiter, "init", _init_override, raising=False)
+
+    try:
+        yield
+    finally:
+        mp.undo()
+        if original_init is not None:
+            FastAPILimiter.init = original_init  # type: ignore[assignment]
+
+
+@pytest.fixture(autouse=True)
+def _rate_limit_guard(request):
+    if "integration" in request.keywords:
+        return
+    try:
+        from fastapi_limiter import FastAPILimiter
+    except Exception:
+        return
+
+    redis = getattr(FastAPILimiter, "redis", None)
+    module = type(redis).__module__ if redis is not None else "<none>"
+    assert hasattr(redis, "evalsha"), (
+        "FastAPILimiter.redis missing .evalsha during unit test run (client from "
+        f"{module}). Ensure the FakeRedis harness installs before startup."
+    )
+
+
+@pytest.fixture(scope="session")
+def audit_spy() -> StrictSpy:
+    return StrictSpy()
+
+
+@pytest.fixture(autouse=True)
+def _strict_audit_guard(request: pytest.FixtureRequest, audit_spy: StrictSpy):
+    if "integration" in request.keywords:
+        yield
+        return
+
+    audit = importlib.import_module("services.api.audit")
+    _apply_strict_audit_patch(audit, audit_spy)
+    yield
+
+
+@pytest.fixture(autouse=True)
+def _unit_env(monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest):
+    if "integration" in request.keywords:
+        return
+    monkeypatch.setenv("RATE_LIMIT_ENABLED", "0")
+    monkeypatch.setenv("SENTRY_DSN", "")
+    monkeypatch.setenv("SENTRY_METRICS_ENABLED", "0")
+
+
+@pytest.fixture(autouse=True)
+def _fast_timeouts(monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest):
+    if "integration" in request.keywords:
+        return
+    for key in ("HTTP_TIMEOUT", "REQUEST_TIMEOUT", "RETRY_DELAY"):
+        monkeypatch.setenv(key, "0.01")
+
+
+@pytest.fixture(autouse=True)
+def _no_sleep(monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest):
+    if "integration" in request.keywords or request.node.get_closest_marker("real_sleep"):
+        return
+    monkeypatch.setattr(time, "sleep", lambda *_a, **_k: None)
 
 
 PG_HOST = os.getenv("PG_HOST", "localhost")
@@ -303,26 +453,24 @@ def _api_fast_startup_global(monkeypatch, request):
     if request.node.get_closest_marker("real_lifespan"):
         return
 
-    # 1) limiter no-ops (always)
+    # 1) limiter uses deterministic FakeRedis
     try:
         import fastapi_limiter
 
-        async def _noop_async(*_a, **_k):
+        fake = FakeRedis()
+
+        async def _init_fake(*_a, **_k):
+            fastapi_limiter.FastAPILimiter.redis = fake
+            fastapi_limiter.FastAPILimiter.lua_sha = "fake-sha"
             return None
 
-        class _FakeLimiterRedis:
-            async def evalsha(self, *_a, **_k):
-                return 0
+        async def _close_fake(*_a, **_k):
+            return None
 
-            async def script_load(self, *_a, **_k):
-                return "noop"
-
-        monkeypatch.setattr(fastapi_limiter.FastAPILimiter, "init", _noop_async, raising=True)
-        monkeypatch.setattr(fastapi_limiter.FastAPILimiter, "close", _noop_async, raising=False)
-        monkeypatch.setattr(
-            fastapi_limiter.FastAPILimiter, "redis", _FakeLimiterRedis(), raising=False
-        )
-        monkeypatch.setattr(fastapi_limiter.FastAPILimiter, "lua_sha", "noop", raising=False)
+        monkeypatch.setattr(fastapi_limiter.FastAPILimiter, "init", _init_fake, raising=False)
+        monkeypatch.setattr(fastapi_limiter.FastAPILimiter, "close", _close_fake, raising=False)
+        monkeypatch.setattr(fastapi_limiter.FastAPILimiter, "redis", fake, raising=False)
+        monkeypatch.setattr(fastapi_limiter.FastAPILimiter, "lua_sha", "fake-sha", raising=False)
     except Exception:
         pass
 

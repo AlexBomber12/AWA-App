@@ -28,6 +28,8 @@ All helpers rely solely on the standard library and `httpx`, so no additional te
   - `price_importer/sample.csv`
   - `email/body_template.txt`
   - `logistics_etl/sample.json`
+  - `logistics_etl/rates_sample.csv`
+  - `etl/returns_sample.csv`
 - Copy these into temp space with `tmp_path_helpers.copy_fixture(...)` rather than writing into the repository.
 - When adding new fixtures, prefer a handful of rows with clearly labeled invalid cases so they remain readable in reviews.
 
@@ -37,11 +39,25 @@ All helpers rely solely on the standard library and `httpx`, so no additional te
   - `pytest -q tests/unit/services/emailer`
   - `pytest -q tests/unit/services/fees_h10`
   - `pytest -q tests/unit/services/price_importer`
+- Core coverage additions:
+  - `pytest -q tests/unit/services/api/test_health_rbac_errors.py` exercises readiness probes, RBAC overrides, ROI/stats endpoints (including 422 errors), and API error handling without a real database.
+  - `pytest -q tests/unit/services/db/test_views_utils.py` validates the Alembic view helpers, quoting behaviour, and that `replace_view` issues drop/create statements atomically.
+  - `pytest -q tests/unit/services/etl/test_idempotency_retry.py` covers CSV ingestion idempotency (including `force=True` overrides) and the ETL healthcheck retry helper.
+  - `pytest -q tests/unit/services/logistics_etl/test_http_and_parse.py` mocks the logistics HTTP downloader, retry/backoff branches, CSV parsing, and `fetch_rates` post-processing.
+  - `pytest -q tests/unit/packages/awa_common/test_settings_metrics.py` verifies settings precedence, structured logging context, and the API metrics middleware.
 - Use the shared helpers from `tests/conftest.py` (`smtp_mock`, `http_mock`, `env_overrides`, `now_utc`) to isolate SMTP/HTTP/DB/time behaviour without hitting real services.
+- Unit fakes (see `tests/utils/strict_spy.py` and `tests/fakes/rate_limiter.py`) validate audit/rate-limit payloads—bad data raises immediately rather than being masked.
+- Declare `pytest_plugins` only in the root `tests/conftest.py`; pytest no longer supports defining them in nested `conftest.py` files.
 
 ## Integration & live suites
 - `pytest -m integration` runs the Postgres-backed tests (ensure `TESTING=1` and supporting services are available).
 - `pytest -m live` is reserved for explicit, real external calls; keep it opt-in.
+- GitHub Actions applies Alembic migrations inside the integration job before running tests, then captures `alembic-current.txt` and `integration.log` as artifacts. Local runs should mimic this order (`alembic -c services/api/alembic.ini upgrade head`) before invoking integration tests.
+
+## Unit vs integration layers
+- `pytest -m unit` runs hermetic tests with strict fakes—no Postgres, Redis, or real sleeps/timeouts.
+- `pytest -m integration` expects real Postgres + Redis and validates audit persistence plus rate-limit enforcement (mirroring CI’s short limiter window).
+- Keep all `pytest_plugins` declarations centralised in `tests/conftest.py` so pytest loads plugins deterministically.
 
 ## Coverage
 - Coverage settings live in `.github/coverage.ini` (`source = packages, services`). CI already passes `--cov-config` so local and remote runs stay aligned.

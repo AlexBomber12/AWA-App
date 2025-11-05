@@ -25,7 +25,7 @@ PYTEST := $(PY) -m pytest
 MYPY := $(PY) -m mypy
 RUFF := $(PY) -m ruff
 
-.PHONY: up down logs sh fmt lint type test unit unit-all integ qa qa-fix install-dev bootstrap-dev ensure-bootstrap bootstrap ci-fast ci-local ci-validate migrations-local integration-local ci-all doctor secrets.print-age-recipient secrets.encrypt secrets.decrypt backup-now restore-check
+.PHONY: up down logs sh fmt lint type test unit unit-fast unit-all integ qa qa-fix install-dev bootstrap-dev ensure-bootstrap bootstrap ci-fast ci-local ci-validate migrations-local integration-local ci-all doctor secrets.print-age-recipient secrets.encrypt secrets.decrypt backup-now restore-check
 
 up:
 	docker compose up -d --build --wait db redis api worker
@@ -59,6 +59,9 @@ unit: ensure-bootstrap
 	PYTHONUNBUFFERED=1 $(PYTEST) -vv -s -m "not integration and not slow" \
 	  -n auto --dist=loadfile --durations=20 \
 	| tee $(ART)/unit.log ; test $${PIPESTATUS[0]} -eq 0
+
+unit-fast:
+	PYTHONUNBUFFERED=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 $(PYTEST) -q -m "not integration"
 
 unit-all: ensure-bootstrap
 	@set -o pipefail; \

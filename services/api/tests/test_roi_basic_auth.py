@@ -1,11 +1,44 @@
 import base64
+import importlib
 import os
 from contextlib import contextmanager
 
+import awa_common.settings as _settings
 import pytest
 from fastapi.testclient import TestClient
 
+import services.api.main as _main
+import services.api.security as _sec
+
 pytestmark = pytest.mark.unit
+
+
+@pytest.fixture(autouse=True, scope="module")
+def _force_basic_and_rewire():
+    prev = {
+        key: os.environ.get(key) for key in ("API_AUTH_MODE", "API_BASIC_USER", "API_BASIC_PASS")
+    }
+    os.environ["API_AUTH_MODE"] = "basic"
+    os.environ["API_BASIC_USER"] = "u"
+    os.environ["API_BASIC_PASS"] = "p"
+    # LLM_PROVIDER is pinned globally via tests.conftest._test_env_defaults
+    importlib.reload(_settings)
+    importlib.reload(_sec)
+    try:
+        import services.api.routes.roi as _roi
+
+        importlib.reload(_roi)
+    except Exception:
+        pass
+    importlib.reload(_main)
+    try:
+        yield
+    finally:
+        for key, value in prev.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
 
 
 def _auth_headers(u, p):
@@ -22,27 +55,12 @@ def _client(monkeypatch):
     monkeypatch.setenv("PG_PORT", "5432")
     monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg://postgres:pass@localhost:5432/awa")
 
-    from fastapi_limiter import FastAPILimiter
-
-    import services.api.main as main
-    from services.api import db
-
-    class _DummyRedis:
-        async def evalsha(self, *args, **kwargs):  # pragma: no cover - simple stub
-            return 0
+    import services.api.db as _db
 
     async def _noop(*args, **kwargs) -> None:  # pragma: no cover - simple stub
         return None
 
-    async def _fake_init(redis):  # pragma: no cover - simple stub
-        FastAPILimiter.redis = _DummyRedis()
-
-    async def _fake_close():  # pragma: no cover - simple stub
-        FastAPILimiter.redis = None
-
-    monkeypatch.setattr(main, "_wait_for_db", _noop)
-    monkeypatch.setattr(FastAPILimiter, "init", _fake_init)
-    monkeypatch.setattr(FastAPILimiter, "close", _fake_close)
+    monkeypatch.setattr(_main, "_wait_for_db", _noop)
 
     class FakeSession:
         async def execute(self, query, params=None):  # pragma: no cover - simple stub
@@ -59,10 +77,10 @@ def _client(monkeypatch):
     async def fake_get_session():
         yield FakeSession()
 
-    main.app.dependency_overrides[db.get_session] = fake_get_session
-    with TestClient(main.app) as client:
+    _main.app.dependency_overrides[_db.get_session] = fake_get_session
+    with TestClient(_main.app) as client:
         yield client
-    main.app.dependency_overrides.clear()
+    _main.app.dependency_overrides.clear()
 
 
 def test_roi_needs_basic_auth(monkeypatch):

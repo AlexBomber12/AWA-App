@@ -1,4 +1,5 @@
 import datetime
+from dataclasses import dataclass
 
 from services.api.routes import stats as stats_module
 
@@ -82,3 +83,79 @@ def test_roi_trend_handles_multiple_columns(monkeypatch):
 
     resp = stats_module.roi_trend(db=DummyDB3())
     assert resp["points"][0]["month"] == "2024-01-01"
+
+
+@dataclass
+class _ScalarResult:
+    value: int
+
+    def scalar(self) -> int:
+        return self.value
+
+
+class _ReturnMappings:
+    def __init__(self, rows):
+        self._rows = rows
+
+    def all(self):
+        return list(self._rows)
+
+
+class _ReturnResult:
+    def __init__(self, rows):
+        self._rows = rows
+
+    def mappings(self):
+        return _ReturnMappings(self._rows)
+
+
+class _ReturnsDB:
+    def __init__(self, *, vendor_available: bool, rows: list[dict[str, object]]):
+        self.vendor_available = vendor_available
+        self.rows = rows
+        self.queries: list[tuple[str, dict[str, object]]] = []
+        self.schema_checks = 0
+
+    def execute(self, stmt, params=None):
+        sql = str(stmt)
+        if "information_schema.columns" in sql:
+            self.schema_checks += 1
+            return _ScalarResult(1 if self.vendor_available else 0)
+        self.queries.append((sql, dict(params or {})))
+        return _ReturnResult(self.rows)
+
+
+def test_returns_stats_includes_vendor_when_available(monkeypatch):
+    monkeypatch.setenv("STATS_USE_SQL", "1")
+    monkeypatch.setattr(stats_module, "_RETURNS_VENDOR_COLUMN", None)
+    rows = [{"asin": "A1", "qty": 3, "refund_amount": 12.5}]
+    db = _ReturnsDB(vendor_available=True, rows=rows)
+
+    resp = stats_module.returns_stats(
+        date_from="2024-01-01",
+        date_to="2024-02-01",
+        asin="A1",
+        vendor="Acme",
+        db=db,
+    )
+    assert resp["total_returns"] == 1
+    assert resp["items"][0]["qty"] == 3
+    sql, params = db.queries[0]
+    assert "vendor = :vendor" in sql
+    assert params["vendor"] == "Acme"
+    # global cache avoids re-checking schema
+    stats_module.returns_stats(vendor="Acme", db=db)
+    assert db.schema_checks == 1
+
+
+def test_returns_stats_ignores_vendor_when_column_missing(monkeypatch):
+    monkeypatch.setenv("STATS_USE_SQL", "1")
+    monkeypatch.setattr(stats_module, "_RETURNS_VENDOR_COLUMN", None)
+    rows = [{"asin": "B2", "qty": None, "refund_amount": None}]
+    db = _ReturnsDB(vendor_available=False, rows=rows)
+
+    resp = stats_module.returns_stats(vendor="Acme", db=db)
+    assert resp["total_returns"] == 1
+    sql, params = db.queries[0]
+    assert "vendor" not in params
+    assert "vendor = :vendor" not in sql
