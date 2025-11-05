@@ -229,38 +229,6 @@ def audit_spy(audit_sink):
 
 
 @pytest.fixture(autouse=True)
-def _deterministic_roles_for_secured_app(request):
-    """Apply security role stripping whenever a test exercises the secured_app fixture."""
-    if "secured_app" not in getattr(request, "fixturenames", ()):
-        return
-
-    sec = importlib.import_module("services.api.security")
-    _ensure_security_role_sanitizers(sec)
-
-    app = request.getfixturevalue("secured_app")
-    try:
-        app.middleware_stack = app.build_middleware_stack()
-    except Exception:
-        pass
-
-
-@pytest.fixture(autouse=True)
-def _bind_user_id_for_secured_app(request):
-    if "secured_app" not in getattr(request, "fixturenames", ()):
-        return
-
-    sec = importlib.import_module("services.api.security")
-    _ensure_security_role_sanitizers(sec)
-    _bind_user_id(sec)
-
-    app = request.getfixturevalue("secured_app")
-    try:
-        app.middleware_stack = app.build_middleware_stack()
-    except Exception:
-        pass
-
-
-@pytest.fixture(autouse=True)
 def _rebind_audit_for_secured_app(request):
     if "secured_app" not in getattr(request, "fixturenames", ()):
         return

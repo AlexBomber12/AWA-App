@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import base64
+import importlib
 import time
 from typing import Any, Callable
 
+import awa_common.settings as settings_mod
 import pytest
 from authlib.jose import JsonWebKey
-from awa_common.settings import settings
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi import Depends, FastAPI
@@ -103,6 +104,7 @@ def _generate_rsa_material() -> tuple[bytes, dict[str, Any]]:
 
 
 def _prepare_oidc(monkeypatch: pytest.MonkeyPatch):
+    settings = settings_mod.settings
     private_pem, public_jwk = _generate_rsa_material()
     jwks = JsonWebKey.import_key_set({"keys": [public_jwk]})
 
@@ -124,6 +126,7 @@ def _prepare_oidc(monkeypatch: pytest.MonkeyPatch):
 
 
 def _prepare_forward_auth(monkeypatch: pytest.MonkeyPatch):
+    settings = settings_mod.settings
     monkeypatch.setattr(settings, "AUTH_MODE", "forward-auth", raising=False)
     monkeypatch.setattr(settings, "FA_USER_HEADER", "X-Forwarded-User", raising=False)
     monkeypatch.setattr(settings, "FA_EMAIL_HEADER", "X-Forwarded-Email", raising=False)
@@ -140,10 +143,21 @@ def audit_sink():
 
 @pytest.fixture
 def secured_app(audit_sink):
+    from services.api.tests.conftest import _bind_user_id, _ensure_security_role_sanitizers
+
+    sec = importlib.import_module("services.api.security")
+    _ensure_security_role_sanitizers(sec)
+    _bind_user_id(sec)
+
     def factory():
         return _StubSessionCtx(audit_sink)
 
-    return _build_app(factory)
+    app = _build_app(factory)
+    try:
+        app.middleware_stack = app.build_middleware_stack()
+    except Exception:
+        pass
+    return app
 
 
 def test_oidc_bearer_honors_roles(monkeypatch: pytest.MonkeyPatch, secured_app, audit_sink):
