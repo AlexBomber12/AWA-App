@@ -1,8 +1,6 @@
 import types
 
 import pytest
-from fastapi import HTTPException
-from fastapi.security import HTTPBasicCredentials
 from starlette.requests import Request
 
 from services.api.routes import roi as roi_module
@@ -14,21 +12,6 @@ async def test_roi_returns_dict_rows(fake_db_session):
     session = fake_db_session(_StubResult(mappings=[{"asin": "A1", "roi_pct": 12.3}]))
     result = await roi_module.roi(session=session, roi_min=10)
     assert result == [{"asin": "A1", "roi_pct": 12.3}]
-
-
-def test_check_basic_auth_success(monkeypatch):
-    monkeypatch.setenv("BASIC_USER", "user")
-    monkeypatch.setenv("BASIC_PASS", "pass")
-    creds = HTTPBasicCredentials(username="user", password="pass")
-    assert roi_module._check_basic_auth(creds) == "user"
-
-
-def test_check_basic_auth_failure(monkeypatch):
-    monkeypatch.setenv("BASIC_USER", "user")
-    monkeypatch.setenv("BASIC_PASS", "pass")
-    creds = HTTPBasicCredentials(username="bad", password="pass")
-    with pytest.raises(HTTPException):
-        roi_module._check_basic_auth(creds)
 
 
 def test_build_pending_sql_adds_filters():

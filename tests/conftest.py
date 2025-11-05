@@ -14,6 +14,7 @@ from typing import Any, Sequence
 
 import pytest
 from awa_common.dsn import build_dsn
+from awa_common.security.models import Role
 from awa_common.settings import settings
 
 from tests.fakes import FakeRedis
@@ -564,20 +565,27 @@ def env_overrides(monkeypatch: pytest.MonkeyPatch):
 
 @pytest.fixture
 def dummy_user_ctx():
-    """Return a factory that builds lightweight Principal objects for tests."""
+    """Return a factory that builds lightweight UserCtx objects for tests."""
 
     def _factory(
-        roles: Sequence[str] | None = None,
+        roles: Sequence[str | Role] | None = None,
         *,
         user_id: str = "test-user",
         email: str | None = "test@example.com",
     ):
-        from services.api.security import Principal
+        from awa_common.security.models import UserCtx
 
-        assigned = set(roles or [])
-        if not assigned:
-            assigned.add("viewer")
-        return Principal(id=user_id, email=email, roles=assigned)
+        resolved: list[Role] = []
+        for role in roles or []:
+            if isinstance(role, Role):
+                resolved.append(role)
+            else:
+                parsed = Role.from_claim(str(role))
+                if parsed is not None:
+                    resolved.append(parsed)
+        if not resolved:
+            resolved = [Role.viewer]
+        return UserCtx(sub=user_id, email=email, roles=resolved, raw_claims={})
 
     return _factory
 
