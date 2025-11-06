@@ -159,6 +159,7 @@ def _install_prometheus_stub() -> None:
     mod.Histogram = stub.Histogram
     mod.Gauge = stub.Gauge
     mod.Summary = stub.Summary
+    mod.CollectorRegistry = stub.CollectorRegistry
     mod.generate_latest = stub.generate_latest
     mod.start_http_server = stub.start_http_server
     mod.CONTENT_TYPE_LATEST = stub.CONTENT_TYPE_LATEST

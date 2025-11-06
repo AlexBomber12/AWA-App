@@ -5,10 +5,17 @@ import json
 import logging
 import os
 
+from awa_common.logging import configure_logging
+from awa_common.metrics import enable_celery_metrics, start_worker_metrics_http_if_enabled
+from awa_common.metrics import init as metrics_init
 from awa_common.settings import settings
 from celery import Celery
 from celery.schedules import crontab
 
+_worker_version = getattr(settings, "APP_VERSION", "0.0.0")
+
+configure_logging(service="worker", env=settings.ENV, version=_worker_version)
+metrics_init(service="worker", env=settings.ENV, version=_worker_version)
 logging.getLogger(__name__).info("settings=%s", json.dumps(settings.redacted()))
 
 
@@ -81,10 +88,21 @@ celery_app = make_celery()
 _beat_schedule = dict(getattr(celery_app.conf, "beat_schedule", {}) or {})
 
 if os.getenv("ENABLE_METRICS", "1") != "0":
-    from services.worker.metrics import maybe_start_metrics_server  # noqa: E402
-
-    port = int(os.getenv("METRICS_PORT", "9097"))
-    maybe_start_metrics_server(port)
+    broker_url = getattr(settings, "BROKER_URL", None) or settings.REDIS_URL
+    queue_names_env = getattr(settings, "QUEUE_NAMES", None)
+    queue_names: list[str] | None
+    if isinstance(queue_names_env, str) and queue_names_env:
+        queue_names = [item.strip() for item in queue_names_env.split(",") if item.strip()]
+    else:
+        queue_names = None
+    interval_s = int(os.getenv("BACKLOG_PROBE_SECONDS", "15"))
+    enable_celery_metrics(
+        celery_app,
+        broker_url=broker_url,
+        queue_names=queue_names,
+        backlog_interval_s=interval_s,
+    )
+    start_worker_metrics_http_if_enabled()
 
 if os.getenv("SCHEDULE_NIGHTLY_MAINTENANCE", "true").lower() in ("1", "true", "yes"):
     cron_expr = os.getenv("NIGHTLY_MAINTENANCE_CRON", "30 2 * * *")

@@ -32,10 +32,13 @@ class Settings(BaseSettings):
     ENV: EnvName = "local"
     APP_NAME: str = "awa-app"
     APP_ENV: AppRuntimeEnv = "dev"
+    APP_VERSION: str = "0.0.0"
 
     # Database & cache
     DATABASE_URL: str = Field(default="postgresql+psycopg://app:app@db:5432/app")
     REDIS_URL: str = Field(default="redis://redis:6379/0")
+    BROKER_URL: str | None = None
+    QUEUE_NAMES: str | None = None
 
     # Observability / security
     LOG_LEVEL: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
@@ -82,8 +85,10 @@ class Settings(BaseSettings):
             "ENV": self.ENV,
             "APP_NAME": self.APP_NAME,
             "APP_ENV": self.APP_ENV,
+            "APP_VERSION": self.APP_VERSION,
             "DATABASE_URL": _mask(self.DATABASE_URL),
             "REDIS_URL": _mask(self.REDIS_URL),
+            "BROKER_URL": _mask(self.BROKER_URL),
             "SENTRY_DSN": "set" if bool(self.SENTRY_DSN) else None,
             "NEXT_PUBLIC_API_URL": self.NEXT_PUBLIC_API_URL,
             "CORS_ORIGINS": bool(self.CORS_ORIGINS),
@@ -93,6 +98,7 @@ class Settings(BaseSettings):
             "OPENAI_API_BASE": bool(self.OPENAI_API_BASE),
             "OPENAI_API_KEY": bool(self.OPENAI_API_KEY),
             "OIDC_ISSUER": self.OIDC_ISSUER,
+            "QUEUE_NAMES": self.QUEUE_NAMES,
         }
 
 
