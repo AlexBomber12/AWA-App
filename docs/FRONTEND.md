@@ -1,78 +1,78 @@
-# Frontend Overview
+# Frontend Guide
 
-The `webapp/` directory contains the Next.js console for AWA. The application authenticates users
-through Keycloak via NextAuth, shares the resulting roles with the API, and enforces strict
-environment-aware CORS settings.
+The web console lives under `webapp/` and is built with Next.js 14 (App Router) and NextAuth’s
+Keycloak provider. This section documents the required configuration and how it integrates with the
+API’s security model.
 
-## Auth flow
+## Structure
 
-1. A user navigates to `webapp/` and chooses **Login**.
-2. NextAuth redirects the browser to the configured Keycloak realm.
-3. After successful authentication, NextAuth receives the ID/Access tokens, extracts the `roles`
-   (or `realm_access.roles`) claim, and persists them in the session (`session.user.roles`).
-4. Subsequent requests from the webapp to the FastAPI backend include credentials (cookies)
-   protected by the CORS policy defined in the API.
-5. The API uses the same Keycloak roles to authorize endpoints, keeping the session and backend
-   in sync.
+- `webapp/app/` contains the App Router pages (`page.tsx`, `(auth)/login`, profile routes).
+- `webapp/lib/auth.ts` exports the canonical `authOptions` used by NextAuth, along with helpers to
+  decode Keycloak tokens and normalise roles.
+- Tooling is managed via `webapp/package.json` and `webapp/tsconfig.json`; the repo ships with
+  `package-lock.json`, so use `npm install` for deterministic installs.
 
-## Environment variables
+## Authentication Flow
 
-| Variable | Description | Default |
-| -------- | ----------- | ------- |
-| `NEXTAUTH_URL` | Public URL the webapp uses for callbacks. Must match load balancer or dev URL. | `http://localhost:3000` (dev template only) |
-| `KEYCLOAK_ISSUER` | OpenID Connect issuer URL for the AWA Keycloak realm. | `https://keycloak.example.com/realms/awa` |
-| `KEYCLOAK_CLIENT_ID` | Keycloak client configured for the webapp. | _(required)_ |
-| `KEYCLOAK_SECRET` | Client secret matching `KEYCLOAK_CLIENT_ID`. | _(required)_ |
-| `NEXTAUTH_SECRET` | Random secret for NextAuth session encryption. | _(required)_ |
-| `APP_ENV` | Runtime profile controlling CORS defaults. One of `dev`, `stage`, `prod`. | `dev` |
-| `CORS_ORIGINS` | Comma-separated list of trusted origins for the API. | Empty (defaults to `http://localhost:3000` when `APP_ENV=dev`) |
+1. A user visits the console and triggers **Sign in**.
+2. NextAuth redirects to the Keycloak realm configured by `KEYCLOAK_ISSUER`.
+3. After the user authenticates, NextAuth receives the tokens, calls
+   `rolesFromToken` (`webapp/lib/auth.ts`) to collect roles from the top-level `roles` claim,
+   `realm_access.roles`, or resource access entries, and stores them on `session.user.roles`.
+4. Subsequent API requests include session cookies; the FastAPI backend reads the same roles (see
+   `docs/SECURITY.md`) so RBAC stays aligned end-to-end.
 
-## Role mapping
+## Environment Variables
 
-Keycloak issues roles either in a top-level `roles` claim or within
-`realm_access.roles`. The helper in `webapp/lib/auth.ts` normalises both sources and attaches the
-resulting list of roles to `session.user.roles`. Typical roles are:
+| Variable | Description |
+| -------- | ----------- |
+| `NEXTAUTH_URL` | Public base URL for callbacks (e.g. `http://localhost:3000` in dev). |
+| `NEXTAUTH_SECRET` | Random 32+ byte secret for NextAuth session encryption. |
+| `KEYCLOAK_ISSUER` | Keycloak issuer, typically `https://<host>/realms/awa`. |
+| `KEYCLOAK_CLIENT_ID` | Keycloak client identifier for the webapp (`awa-webapp`). |
+| `KEYCLOAK_SECRET` | Client secret registered with the Keycloak client. |
+| `NEXT_PUBLIC_API_URL` | Base URL for API requests; defaults to `http://localhost:8000`. |
 
-- `viewer` — read-only dashboards.
-- `ops` — trigger ingestions and manage SKUs.
-- `admin` — elevated access for configuration changes.
+The API derives its own CORS origins from `CORS_ORIGINS` / `APP_ENV` (see `services/api/main.py`), so
+ensure the values above match the allowed origins in your deployment.
 
-Back-end guards expect the same set of roles. Providing consistent mapping ensures canaries and API
-tests can rely on the session for authorisation state.
+## CORS and API Interaction
 
-Example Keycloak token snippet:
+- Development (`APP_ENV=dev`): if `CORS_ORIGINS` is unset the API automatically allows
+  `http://localhost:3000`, which matches the Next.js dev server.
+- Stage/Prod: set `CORS_ORIGINS` explicitly (comma-separated list) and avoid wildcards. Startup fails
+  if the list is empty or contains `"*"`.
+- The webapp reads `NEXT_PUBLIC_API_URL` to call backend routes; keep this aligned with the API host
+  exposed to browsers.
 
-```json
-{
-  "sub": "7415f93a-b4e3-45ee-9c61-f38d3b1d1fc7",
-  "email": "ops@example.com",
-  "realm_access": {
-    "roles": ["ops", "viewer"]
-  }
-}
-```
+## Local Development
 
-## CORS policy
+1. Start the backend stack:
+   ```bash
+   docker compose up -d --build --wait db redis api worker
+   ```
+   or `make up` which wraps the same command.
+2. Create `webapp/.env.local` with the required variables, for example:
+   ```ini
+   NEXTAUTH_URL=http://localhost:3000
+   NEXTAUTH_SECRET=replace-with-generated-secret
+   KEYCLOAK_ISSUER=https://keycloak.local/realms/awa
+   KEYCLOAK_CLIENT_ID=awa-webapp
+   KEYCLOAK_SECRET=replace-with-dev-secret
+   NEXT_PUBLIC_API_URL=http://localhost:8000
+   ```
+3. Install dependencies and run the dev server:
+   ```bash
+   cd webapp
+   npm install
+   npm run dev
+   ```
+4. Navigate to `http://localhost:3000`. The profile page (`/profile`) shows the decoded roles and
+   helps verify Keycloak claims during setup.
+5. Confirm the API is reachable (`curl http://localhost:8000/ready`) before testing UI flows.
 
-- **dev**: If `CORS_ORIGINS` is unset, the API defaults to `http://localhost:3000`. Extra origins can
-  be added by setting the environment variable.
-- **stage / prod**: `CORS_ORIGINS` must be provided and may *not* include a wildcard (`*`). API
-  startup fails fast if the variable is missing, guaranteeing that only explicit origins gain access.
+## Role-Based UI Hints
 
-All environments use:
-
-- `allow_credentials=True`
-- Methods: `GET`, `POST`, `PUT`, `PATCH`, `DELETE`, `OPTIONS`
-- Headers: `*`
-- `max_age=600`
-
-## Local development checklist
-
-1. Copy `webapp/.env.local.template` to `webapp/.env.local` and fill in Keycloak credentials plus
-   `NEXTAUTH_SECRET`.
-2. Start the API (e.g. `docker compose -f docker-compose.dev.yml up api postgres`).
-3. In another terminal, run `npm install` then `npm run dev` inside `webapp/`.
-   - Alternatively, `docker compose -f docker-compose.dev.yml --profile webapp up webapp` will start
-     the Next.js dev server against the running API.
-4. Visit `http://localhost:3000`, log in, and navigate to `/profile` to confirm roles are visible.
-
+Components can inspect `session.user.roles` to conditionally render features. Align role names with
+those documented in `docs/SECURITY.md` (`viewer`, `ops`, `admin`) so backend enforcement and UI hints
+stay in sync. When adding new protected sections, guard both the API route and the React component.
