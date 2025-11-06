@@ -3,6 +3,7 @@ import json
 import logging
 import os
 from contextlib import asynccontextmanager
+from typing import Iterable
 
 import httpx
 import redis.asyncio as aioredis
@@ -39,6 +40,58 @@ init_sentry_if_configured()
 logging.getLogger(__name__).info("settings=%s", json.dumps(settings.redacted()))
 
 
+def _normalize_cors_origins(value: str | Iterable[str] | None) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        items = value.split(",")
+    else:
+        items = list(value)
+    origins = []
+    for item in items:
+        candidate = item.strip()
+        if candidate:
+            origins.append(candidate)
+    return origins
+
+
+def resolve_cors_origins(
+    app_env: str | None = None, configured_origins: str | Iterable[str] | None = None
+) -> list[str]:
+    env = (app_env or getattr(settings, "APP_ENV", "dev")).strip().lower()
+    raw_origins = configured_origins
+    if raw_origins is None:
+        raw_origins = getattr(settings, "CORS_ORIGINS", None)
+
+    origins = _normalize_cors_origins(raw_origins)
+
+    if not origins:
+        if env == "dev":
+            return ["http://localhost:3000"]
+        if env in {"stage", "staging", "prod", "production"}:
+            raise RuntimeError("CORS_ORIGINS must be set when APP_ENV is 'stage' or 'prod'.")
+        return []
+
+    if env in {"stage", "staging", "prod", "production"} and any(
+        origin == "*" for origin in origins
+    ):
+        raise RuntimeError("Wildcard origins are not permitted in stage or prod environments.")
+
+    return origins
+
+
+def install_cors(app: FastAPI) -> None:
+    origins = resolve_cors_origins()
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=origins,
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=["*"],
+        max_age=600,
+    )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await _wait_for_db()
@@ -68,25 +121,7 @@ install_security(app)
 app.add_middleware(AuditMiddleware, session_factory=async_session)
 install_exception_handlers(app)
 install_metrics(app)
-
-origins = [o.strip() for o in os.getenv("CORS_ORIGINS", "").split(",") if o.strip()]
-origin_regex = os.getenv("CORS_ALLOW_ORIGIN_REGEX", "").strip()
-allow_credentials = os.getenv("CORS_ALLOW_CREDENTIALS", "false").lower() in {
-    "1",
-    "true",
-    "yes",
-}
-
-if origins or origin_regex:
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=origins if origins else [],
-        allow_origin_regex=origin_regex if origin_regex else None,
-        allow_credentials=allow_credentials,
-        allow_methods=["*"],
-        allow_headers=["*"],
-        expose_headers=["*"],
-    )
+install_cors(app)
 
 
 @app.get("/ready_db", status_code=status.HTTP_200_OK, include_in_schema=False)
