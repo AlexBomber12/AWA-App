@@ -17,9 +17,7 @@ class Vendor(Base):
     locale: Mapped[str] = mapped_column(String(5), default="en")
     email: Mapped[str | None] = mapped_column(String(120))
 
-    prices: Mapped[list["VendorPrice"]] = relationship(
-        "VendorPrice", back_populates="vendor", cascade="all, delete"
-    )
+    prices: Mapped[list["VendorPrice"]] = relationship("VendorPrice", back_populates="vendor", cascade="all, delete")
 
 
 class VendorPrice(Base):
@@ -34,9 +32,7 @@ class VendorPrice(Base):
     moq: Mapped[int] = mapped_column(Integer, default=0)
     lead_time_days: Mapped[int] = mapped_column(Integer, default=0)
     currency: Mapped[str] = mapped_column(String(3), default="€")
-    updated_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     vendor: Mapped[Vendor] = relationship("Vendor", back_populates="prices")
 

@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Iterable, Mapping, Sequence
 from datetime import date, datetime
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any
 
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
@@ -40,7 +41,7 @@ def _prepare_row(row: Mapping[str, Any]) -> dict[str, Any]:
     return prepared
 
 
-async def upsert_many(
+async def upsert_many(  # noqa: C901
     *,
     table: str,
     key_cols: Sequence[str],
@@ -62,8 +63,7 @@ async def upsert_many(
             for key in key_cols:
                 if key == "effective_from":
                     where_clauses.append(
-                        "COALESCE(effective_from, DATE '1900-01-01') = "
-                        "COALESCE(:effective_from, DATE '1900-01-01')"
+                        "COALESCE(effective_from, DATE '1900-01-01') = COALESCE(:effective_from, DATE '1900-01-01')"
                     )
                 else:
                     where_clauses.append(f"{key} = :{key}")
@@ -143,9 +143,7 @@ async def mark_load(source: str, sha256: str | None, seqno: str | None, rows: in
         """
     )
     async with engine.begin() as conn:
-        await conn.execute(
-            query, {"source": source, "sha256": sha256, "seqno": seqno, "rows": rows}
-        )
+        await conn.execute(query, {"source": source, "sha256": sha256, "seqno": seqno, "rows": rows})
 
 
 if os.getenv("TESTING") == "1":

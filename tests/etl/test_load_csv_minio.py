@@ -7,9 +7,7 @@ from services.etl import load_csv as lc
 pytestmark = pytest.mark.integration
 
 
-def test_import_from_minio_uri_monkeypatched(
-    csv_file_factory, ensure_test_generic_table, pg_engine, monkeypatch
-):
+def test_import_from_minio_uri_monkeypatched(csv_file_factory, ensure_test_generic_table, pg_engine, monkeypatch):
     os.environ["TESTING"] = "1"
     local = csv_file_factory(
         headers=["ASIN", "qty", "price"],

@@ -1,6 +1,7 @@
 import asyncio
 from collections import deque
-from typing import Any, AsyncIterator, Iterable
+from collections.abc import AsyncIterator, Iterable
+from typing import Any
 
 import httpx
 import pytest
@@ -64,9 +65,7 @@ def event_loop() -> AsyncIterator[asyncio.AbstractEventLoop]:
 
 
 @pytest.fixture(autouse=True)
-def _patch_wait_for_db_autouse(
-    monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest
-) -> None:
+def _patch_wait_for_db_autouse(monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest) -> None:
     """Provide a fast no-op wait_for_db unless a test opts out via marker."""
 
     if request.node.get_closest_marker("needs_wait_for_db"):

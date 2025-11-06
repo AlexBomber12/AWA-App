@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-from awa_common.security.headers import install_security_headers
-from awa_common.settings import settings
 from fastapi import FastAPI, Response
 from fastapi.testclient import TestClient
+
+from awa_common.security.headers import install_security_headers
+from awa_common.settings import settings
 
 
 def _build_app() -> FastAPI:
@@ -41,9 +42,7 @@ def test_hsts_only_in_stage_or_prod(monkeypatch):
     stage_app = _build_app()
     with TestClient(stage_app) as client:
         response = client.get("/sample")
-        assert response.headers.get("Strict-Transport-Security") == (
-            "max-age=31536000; includeSubDomains; preload"
-        )
+        assert response.headers.get("Strict-Transport-Security") == ("max-age=31536000; includeSubDomains; preload")
 
     monkeypatch.setattr(settings, "ENV", "local", raising=False)
     local_app = _build_app()

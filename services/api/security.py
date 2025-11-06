@@ -1,19 +1,21 @@
 from __future__ import annotations
 
 import uuid
-from typing import Any, Awaitable, Callable, cast
+from collections.abc import Awaitable, Callable
+from typing import Any, cast
 
 import structlog
 from asgi_correlation_id import correlation_id
+from fastapi import Depends, FastAPI, HTTPException, Request, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response
+
 from awa_common.logging import bind_user_sub
 from awa_common.security import oidc
 from awa_common.security.models import Role, UserCtx
 from awa_common.security.ratelimit import RoleBasedRateLimiter, no_rate_limit
 from awa_common.settings import settings
-from fastapi import Depends, FastAPI, HTTPException, Request, status
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import Response
 
 logger = structlog.get_logger(__name__)
 _bearer = HTTPBearer(auto_error=False)

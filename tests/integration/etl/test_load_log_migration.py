@@ -3,9 +3,10 @@ from __future__ import annotations
 import time
 
 import pytest
-from awa_common.dsn import build_dsn
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import IntegrityError
+
+from awa_common.dsn import build_dsn
 
 pytestmark = [pytest.mark.integration]
 

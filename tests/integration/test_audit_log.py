@@ -4,12 +4,12 @@ import os
 
 import psycopg
 import pytest
-from awa_common.security.models import Role, UserCtx
-from awa_common.settings import settings
 from fastapi import Request
 from fastapi.testclient import TestClient
 
 import services.api.main as api_main
+from awa_common.security.models import Role, UserCtx
+from awa_common.settings import settings
 from services.api import security
 
 pytestmark = pytest.mark.integration
@@ -57,9 +57,7 @@ def test_audit_log_records_authenticated_request(audit_client):
     assert resp.status_code == 200
 
     with _connect_db() as conn, conn.cursor() as cur:
-        cur.execute(
-            "SELECT user_id, email, roles, request_id FROM audit_log ORDER BY id DESC LIMIT 1"
-        )
+        cur.execute("SELECT user_id, email, roles, request_id FROM audit_log ORDER BY id DESC LIMIT 1")
         row = cur.fetchone()
         assert row is not None
         user_id, email, roles, request_id = row

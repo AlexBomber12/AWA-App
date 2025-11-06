@@ -1,11 +1,11 @@
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 from datetime import datetime
-from typing import Any, Iterable, Mapping, TypedDict
+from typing import Any, TypedDict
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import Integer, bindparam
-from sqlalchemy import text as sa_text
+from sqlalchemy import Integer, bindparam, text as sa_text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .. import roi_repository

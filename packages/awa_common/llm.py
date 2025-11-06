@@ -34,9 +34,7 @@ def _timeout_seconds(default: float = 60.0) -> float:
 async def _local_llm(prompt: str, temp: float, max_toks: int, timeout: float) -> str:
     url = os.getenv(_REMOTE_URL_ENV) or LOCAL_URL
     async with httpx.AsyncClient(timeout=timeout) as cli:
-        r = await cli.post(
-            url, json={"prompt": prompt, "temperature": temp, "max_tokens": max_toks}
-        )
+        r = await cli.post(url, json={"prompt": prompt, "temperature": temp, "max_tokens": max_toks})
         r.raise_for_status()
         data = r.json() if "application/json" in r.headers.get("content-type", "") else {}
         return cast(
@@ -58,9 +56,7 @@ async def _openai_llm(prompt: str, temp: float, max_toks: int, timeout: float) -
     return cast(str, rsp.choices[0].message.content).strip()  # pragma: no cover
 
 
-async def _remote_generate(
-    base: str, key: str | None, prompt: str, max_tokens: int, model: str, timeout: float
-) -> str:
+async def _remote_generate(base: str, key: str | None, prompt: str, max_tokens: int, model: str, timeout: float) -> str:
     headers = {"Authorization": f"Bearer {key}"} if key else {}
     payload = {
         "model": model,
@@ -85,7 +81,7 @@ async def _remote_generate(
         ).strip()
 
 
-async def _stub_llm(prompt: str, temp: float, max_toks: int) -> str:
+async def _stub_llm(prompt: str, _temp: float, _max_toks: int) -> str:
     return "[stub] " + (prompt[:64] if prompt else "")
 
 
@@ -101,9 +97,7 @@ async def _generate_with_provider(
     if provider == "lan":
         if httpx is None:  # pragma: no cover - dependency guard
             raise RuntimeError("httpx not available for lan provider")
-        return await _remote_generate(
-            LAN_BASE, LAN_KEY or None, prompt, max_tokens, OPENAI_MODEL, timeout=to
-        )
+        return await _remote_generate(LAN_BASE, LAN_KEY or None, prompt, max_tokens, OPENAI_MODEL, timeout=to)
     if provider == "local":
         if httpx is None:  # pragma: no cover - dependency guard
             raise RuntimeError("httpx not available for local provider")

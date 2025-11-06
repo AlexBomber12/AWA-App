@@ -94,9 +94,7 @@ async def fetch_rates() -> list[dict[str, object]]:
         return []
 
     try:
-        raw, _ = await _download_with_retries(
-            url, timeout_s=_timeout_setting(), retries=_retry_setting()
-        )
+        raw, _ = await _download_with_retries(url, timeout_s=_timeout_setting(), retries=_retry_setting())
     except Exception:
         return []
 
@@ -120,7 +118,7 @@ async def fetch_rates() -> list[dict[str, object]]:
     return rows
 
 
-async def _download_with_retries(
+async def _download_with_retries(  # noqa: C901
     url_or_uri: str, *, timeout_s: int, retries: int
 ) -> tuple[bytes, dict[str, Any]]:
     parsed = urlparse(url_or_uri)
@@ -299,9 +297,7 @@ def _parse_excel_rows(source: str, raw: bytes) -> list[dict[str, Any]]:
     try:
         from openpyxl import load_workbook  # type: ignore[import]
     except Exception as exc:
-        raise UnsupportedExcelError(
-            "openpyxl is required to process Excel logistics sources"
-        ) from exc
+        raise UnsupportedExcelError("openpyxl is required to process Excel logistics sources") from exc
 
     stream = io.BytesIO(raw)
     wb = load_workbook(stream, read_only=True, data_only=True)
@@ -321,7 +317,7 @@ def _parse_excel_rows(source: str, raw: bytes) -> list[dict[str, Any]]:
     return rows
 
 
-def _normalize_row(row: dict[str, Any], source: str) -> dict[str, Any]:
+def _normalize_row(row: dict[str, Any], source: str) -> dict[str, Any]:  # noqa: C901
     normalized = {((k or "").strip().lower()): v for k, v in row.items()}
 
     def _as_str(*keys: str) -> str:

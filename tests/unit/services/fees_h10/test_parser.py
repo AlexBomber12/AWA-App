@@ -150,9 +150,7 @@ def test_upsert_fees_raw_processes_fixture() -> None:
     with engine.connect() as conn:
         total_rows = conn.execute(text("SELECT COUNT(*) FROM fees_raw")).scalar_one()
         updated_amount = conn.execute(
-            text(
-                "SELECT amount FROM fees_raw WHERE asin = :asin AND marketplace = 'US' AND fee_type = :fee_type"
-            ),
+            text("SELECT amount FROM fees_raw WHERE asin = :asin AND marketplace = 'US' AND fee_type = :fee_type"),
             {"asin": rows[0]["asin"], "fee_type": rows[0]["fee_type"]},
         ).scalar_one()
 

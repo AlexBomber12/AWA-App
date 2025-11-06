@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import contextlib
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
-from typing import Any, Iterable, Iterator
+from typing import Any
 
 CONTENT_TYPE_LATEST = "text/plain; version=0.0.4; charset=utf-8"
 
@@ -188,9 +189,7 @@ class Summary(_BaseMetric):
         return samples
 
 
-def generate_latest(
-    registry: CollectorRegistry | None = None, *_args: Any, **_kwargs: Any
-) -> bytes:
+def generate_latest(registry: CollectorRegistry | None = None, *_args: Any, **_kwargs: Any) -> bytes:
     lines: list[str] = []
     reg = registry or _DEFAULT_REGISTRY
     for metric in reg.collect():

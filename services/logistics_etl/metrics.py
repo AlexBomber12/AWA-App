@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from typing import Any, Iterable
+from collections.abc import Iterable
+from typing import Any
 
 try:
-    from prometheus_client import Counter as _Counter
-    from prometheus_client import Summary as _Summary
+    from prometheus_client import Counter as _Counter, Summary as _Summary
 except Exception:  # pragma: no cover - exercised when optional deps missing
 
     class _NoopMetricChild:
@@ -26,9 +26,7 @@ except Exception:  # pragma: no cover - exercised when optional deps missing
             bucket.append(value)
 
     class _NoopMetric:
-        def __init__(
-            self, name: str, documentation: str, labelnames: Iterable[str], kind: str
-        ) -> None:
+        def __init__(self, name: str, documentation: str, labelnames: Iterable[str], kind: str) -> None:
             self._name = name
             self._documentation = documentation
             self._labelnames = tuple(labelnames)

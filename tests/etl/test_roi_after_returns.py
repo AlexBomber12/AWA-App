@@ -1,6 +1,7 @@
 import pytest
-from awa_common.dsn import build_dsn
 from sqlalchemy import create_engine, text
+
+from awa_common.dsn import build_dsn
 
 pytestmark = [pytest.mark.integration, pytest.mark.anyio]
 
@@ -19,12 +20,14 @@ def test_roi_after_returns(pg_pool, refresh_mvs):
         conn.execute(text("INSERT INTO keepa_offers(asin, buybox_price) VALUES ('A1',20)"))
         conn.execute(
             text(
-                "INSERT INTO returns_raw(asin, order_id, return_reason, return_date, qty, refund_amount, currency) VALUES ('A1','O1','damaged','2024-06-01',1,5,'EUR')"
+                "INSERT INTO returns_raw(asin, order_id, return_reason, return_date, qty, refund_amount, currency) "
+                "VALUES ('A1','O1','damaged','2024-06-01',1,5,'EUR')"
             )
         )
         conn.execute(
             text(
-                "INSERT INTO reimbursements_raw(asin, reimb_id, reimb_date, qty, amount, currency, reason_code) VALUES ('A1','R1','2024-06-02',1,3,'EUR','goodwill')"
+                "INSERT INTO reimbursements_raw(asin, reimb_id, reimb_date, qty, amount, currency, reason_code) "
+                "VALUES ('A1','R1','2024-06-02',1,3,'EUR','goodwill')"
             )
         )
 

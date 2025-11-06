@@ -47,9 +47,15 @@ def upgrade() -> None:
         """
         DO $$ BEGIN
             IF EXISTS (
-                SELECT 1 FROM information_schema.columns WHERE table_name='reimbursements_raw' AND column_name='reimb_id'
+                SELECT 1
+                FROM information_schema.columns
+                WHERE table_name='reimbursements_raw'
+                  AND column_name='reimb_id'
             ) AND NOT EXISTS (
-                SELECT 1 FROM pg_indexes WHERE schemaname='public' AND indexname='uq_reimbursements_raw_reimb_id'
+                SELECT 1
+                FROM pg_indexes
+                WHERE schemaname='public'
+                  AND indexname='uq_reimbursements_raw_reimb_id'
             ) THEN
                 CREATE UNIQUE INDEX uq_reimbursements_raw_reimb_id ON reimbursements_raw(reimb_id);
             END IF;
@@ -60,11 +66,18 @@ def upgrade() -> None:
         """
         DO $$ BEGIN
             IF EXISTS (
-                SELECT 1 FROM pg_indexes WHERE schemaname='public' AND indexname='uq_reimbursements_raw_reimb_id'
+                SELECT 1
+                FROM pg_indexes
+                WHERE schemaname='public'
+                  AND indexname='uq_reimbursements_raw_reimb_id'
             ) AND NOT EXISTS (
-                SELECT 1 FROM pg_constraint WHERE conname='reimbursements_raw_pkey'
+                SELECT 1
+                FROM pg_constraint
+                WHERE conname='reimbursements_raw_pkey'
             ) THEN
-                ALTER TABLE reimbursements_raw ADD CONSTRAINT reimbursements_raw_pkey PRIMARY KEY USING INDEX uq_reimbursements_raw_reimb_id;
+                ALTER TABLE reimbursements_raw
+                    ADD CONSTRAINT reimbursements_raw_pkey
+                    PRIMARY KEY USING INDEX uq_reimbursements_raw_reimb_id;
             END IF;
         END $$;
         """

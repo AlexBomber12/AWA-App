@@ -29,7 +29,7 @@ def _normalise_remote_meta(remote_meta: dict[str, Any]) -> _RemoteFingerprint | 
         value = normalised_source.get(key)
         if value is None:
             continue
-        if isinstance(value, (int, float)):
+        if isinstance(value, int | float):
             text = str(value)
         else:
             text = str(value).strip()
@@ -110,9 +110,7 @@ def build_payload_meta(
         for key, value in fingerprint.items:
             meta[key] = value
         for raw_key in ("etag", "last_modified", "content_length", "content_md5"):
-            normalised = _safe_str(remote_meta.get(raw_key)) or _safe_str(
-                remote_meta.get(raw_key.replace("_", "-"))
-            )
+            normalised = _safe_str(remote_meta.get(raw_key)) or _safe_str(remote_meta.get(raw_key.replace("_", "-")))
             if normalised:
                 meta.setdefault(raw_key, normalised)
     if source_url:

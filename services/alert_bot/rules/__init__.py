@@ -16,7 +16,7 @@ else:  # runtime import with fallback
             def __init__(self, _: str) -> None:  # noqa: D401 - simple stub
                 """Stub telegram.Bot when library is absent."""
 
-            async def send_message(self, *a: Any, **k: Any) -> None:
+            async def send_message(self, *_args: Any, **_kwargs: Any) -> None:
                 return None
 
     Bot = RuntimeBot
@@ -54,7 +54,7 @@ except Exception:
             """Stub telegram.Bot when initialisation fails."""
             pass
 
-        async def send_message(self, *a: Any, **k: Any) -> None:
+        async def send_message(self, *_args: Any, **_kwargs: Any) -> None:
             return None
 
     Bot = _BotStub  # type: ignore[assignment,misc]

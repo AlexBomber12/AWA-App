@@ -4,10 +4,11 @@ import sys
 from types import SimpleNamespace
 
 import pytest
-from awa_common import metrics
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from starlette.requests import Request
+
+from awa_common import metrics
 
 
 @pytest.fixture(autouse=True)
@@ -216,9 +217,7 @@ def test_task_signal_flow(monkeypatch):
 
 
 def test_backlog_probe_import_failure(monkeypatch):
-    metrics._maybe_start_backlog_probe(
-        broker_url="sqs://queue", queue_names=["primary"], interval=5
-    )
+    metrics._maybe_start_backlog_probe(broker_url="sqs://queue", queue_names=["primary"], interval=5)
 
     def fake_import(name, *args, **kwargs):
         if name == "redis":
@@ -226,9 +225,7 @@ def test_backlog_probe_import_failure(monkeypatch):
         return builtins.__import__(name, *args, **kwargs)
 
     monkeypatch.setattr(builtins, "__import__", fake_import)
-    metrics._maybe_start_backlog_probe(
-        broker_url="redis://localhost/0", queue_names=["primary"], interval=5
-    )
+    metrics._maybe_start_backlog_probe(broker_url="redis://localhost/0", queue_names=["primary"], interval=5)
     assert metrics._BACKLOG_THREAD is None
 
 
@@ -275,9 +272,7 @@ def test_backlog_probe_start_to_finish(monkeypatch):
 
     monkeypatch.setattr(metrics.threading, "Thread", FakeThread)
 
-    metrics._maybe_start_backlog_probe(
-        broker_url="redis://localhost/0", queue_names=["skip", "main"], interval=1
-    )
+    metrics._maybe_start_backlog_probe(broker_url="redis://localhost/0", queue_names=["skip", "main"], interval=1)
 
     assert isinstance(metrics._BACKLOG_THREAD, FakeThread)
     samples = metrics.QUEUE_BACKLOG.collect()[0].samples
@@ -289,17 +284,13 @@ def test_backlog_probe_start_to_finish(monkeypatch):
 def test_backlog_probe_when_thread_exists():
     sentinel = object()
     metrics._BACKLOG_THREAD = sentinel
-    metrics._maybe_start_backlog_probe(
-        broker_url="redis://localhost/0", queue_names=["main"], interval=5
-    )
+    metrics._maybe_start_backlog_probe(broker_url="redis://localhost/0", queue_names=["main"], interval=5)
     assert metrics._BACKLOG_THREAD is sentinel
     metrics._BACKLOG_THREAD = None
 
 
 def test_backlog_probe_empty_queue_list():
-    metrics._maybe_start_backlog_probe(
-        broker_url="redis://localhost/0", queue_names=["", None], interval=5
-    )
+    metrics._maybe_start_backlog_probe(broker_url="redis://localhost/0", queue_names=["", None], interval=5)
     assert metrics._BACKLOG_THREAD is None
 
 
@@ -312,9 +303,7 @@ def test_backlog_probe_handles_connection_error(monkeypatch):
                 raise RuntimeError("connection failed")
 
     monkeypatch.setitem(sys.modules, "redis", FailingRedisModule)
-    metrics._maybe_start_backlog_probe(
-        broker_url="redis://localhost/0", queue_names=["primary"], interval=5
-    )
+    metrics._maybe_start_backlog_probe(broker_url="redis://localhost/0", queue_names=["primary"], interval=5)
     assert metrics._BACKLOG_THREAD is not None
     sys.modules.pop("redis", None)
     metrics._BACKLOG_THREAD = None
@@ -371,9 +360,7 @@ def test_celery_queue_names_split(monkeypatch):
         captured["queue_names"] = queue_names
 
     monkeypatch.setattr(metrics, "enable_celery_metrics", fake_enable)
-    monkeypatch.setattr(
-        metrics, "start_worker_metrics_http_if_enabled", lambda *args, **kwargs: None
-    )
+    monkeypatch.setattr(metrics, "start_worker_metrics_http_if_enabled", lambda *args, **kwargs: None)
     from services.worker import celery_app
 
     monkeypatch.setattr(celery_app.settings, "QUEUE_NAMES", "ingest, priority")

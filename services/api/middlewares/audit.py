@@ -1,18 +1,19 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Awaitable, Callable, Mapping
 from datetime import UTC, datetime
-from typing import Any, Awaitable, Callable, Mapping
+from typing import Any
 
 import structlog
-from awa_common.security.models import UserCtx
-from awa_common.settings import settings
 from fastapi import Request, Response
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 
+from awa_common.security.models import UserCtx
+from awa_common.settings import settings
 from services.api.security import get_request_id
 
 logger = structlog.get_logger(__name__)

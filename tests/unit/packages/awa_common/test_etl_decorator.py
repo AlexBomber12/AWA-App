@@ -1,4 +1,5 @@
 import pytest
+
 from awa_common import metrics
 
 

@@ -8,6 +8,7 @@ import time
 
 import psycopg
 import redis
+
 from awa_common.settings import settings
 
 from .celery_app import celery_app

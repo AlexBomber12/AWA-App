@@ -5,8 +5,9 @@ import json
 import logging
 import threading
 import time
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from typing import Any, Iterable, Mapping
+from typing import Any
 
 import httpx
 from authlib.jose import JsonWebKey, JsonWebToken
@@ -71,9 +72,7 @@ def _import_key_set(uri: str) -> _JWKSCacheEntry:
     for key in key_set.keys:
         kid = getattr(key, "kid", None)
         keys_by_kid[str(kid) if kid is not None else None] = key
-    return _JWKSCacheEntry(
-        uri=uri, fetched_at=time.time(), key_set=key_set, keys_by_kid=keys_by_kid
-    )
+    return _JWKSCacheEntry(uri=uri, fetched_at=time.time(), key_set=key_set, keys_by_kid=keys_by_kid)
 
 
 def _get_jwks_entry(cfg: Settings) -> _JWKSCacheEntry:
@@ -105,7 +104,7 @@ def _decode_header(token: str) -> dict[str, Any]:
     return dict(header)
 
 
-def _select_key(entry: _JWKSCacheEntry, kid: str | None, cfg: Settings) -> Any:
+def _select_key(entry: _JWKSCacheEntry, kid: str | None, _cfg: Settings) -> Any:
     key = entry.keys_by_kid.get(kid)
     if key is not None:
         return key

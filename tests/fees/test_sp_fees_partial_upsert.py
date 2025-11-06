@@ -74,9 +74,7 @@ def test_sp_fees_upsert_only_changes(pg_engine, ensure_test_fees_raw_table):
     assert float(amt) == 2.50
 
 
-def test_sp_network_timeout_and_bad_json_do_not_write(
-    pg_engine, ensure_test_fees_raw_table, monkeypatch
-):
+def test_sp_network_timeout_and_bad_json_do_not_write(pg_engine, ensure_test_fees_raw_table, monkeypatch):
     _env()
     import httpx
 

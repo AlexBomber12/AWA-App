@@ -3,9 +3,9 @@ import os
 
 import boto3
 import pytest
-from awa_common.dsn import build_dsn
 from sqlalchemy import create_engine, text
 
+from awa_common.dsn import build_dsn
 from services.worker import email_watcher
 
 pytestmark = [pytest.mark.integration, pytest.mark.anyio]

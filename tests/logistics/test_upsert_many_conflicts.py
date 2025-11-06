@@ -43,11 +43,7 @@ def test_updates_only_whitelisted_columns(pg_engine, ensure_test_logistics_table
 
     with pg_engine.connect() as c:
         res = dict(
-            c.execute(
-                text(
-                    "SELECT lane_id, carrier, eur_per_kg FROM test_logistics_routes WHERE lane_id='L1'"
-                )
-            )
+            c.execute(text("SELECT lane_id, carrier, eur_per_kg FROM test_logistics_routes WHERE lane_id='L1'"))
             .mappings()
             .first()
         )

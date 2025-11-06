@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import pytest
-from awa_common.security.models import Role, UserCtx
 from fastapi import Depends, FastAPI
 from fastapi.testclient import TestClient
 
+from awa_common.security.models import Role, UserCtx
 from services.api import security
 
 

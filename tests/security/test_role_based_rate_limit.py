@@ -1,19 +1,20 @@
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Mapping
 from types import SimpleNamespace
-from typing import Any, Mapping
+from typing import Any
 
 import pytest
-from awa_common.security import ratelimit
-from awa_common.security.models import Role, UserCtx
-from awa_common.security.ratelimit import install_role_based_rate_limit
-from awa_common.settings import parse_rate_limit, settings
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.testclient import TestClient
 from fastapi_limiter import FastAPILimiter
 from starlette.requests import Request as StarletteRequest
 
+from awa_common.security import ratelimit
+from awa_common.security.models import Role, UserCtx
+from awa_common.security.ratelimit import install_role_based_rate_limit
+from awa_common.settings import parse_rate_limit, settings
 from services.api import security
 
 
@@ -21,7 +22,7 @@ def _auth_header(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
-def test_role_based_rate_limiter_enforces_by_role(monkeypatch):
+def test_role_based_rate_limiter_enforces_by_role(monkeypatch):  # noqa: C901
     call_log: list[str] = []
     counters: dict[tuple[str, int], int] = defaultdict(int)
 

@@ -72,7 +72,7 @@ def test_roi_review_renders(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_approve_updates_when_asins(monkeypatch):
+async def test_approve_updates_when_asins(monkeypatch):  # noqa: C901
     recorded = {}
 
     class DummyConn:

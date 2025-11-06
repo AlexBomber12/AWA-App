@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import contextlib
-from datetime import datetime, timezone
+from collections.abc import Callable
+from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 import httpx
 import structlog
@@ -79,9 +80,9 @@ def _parse_retry_after(value: str | None) -> float | None:
     with contextlib.suppress((TypeError, ValueError)):
         dt = parsedate_to_datetime(value)
         if dt:
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
+                dt = dt.replace(tzinfo=UTC)
             return max(0.0, (dt - now).total_seconds())
     return None
 
@@ -105,9 +106,7 @@ def _before_sleep(
                 metric_code = str(status_code)
             elif isinstance(exc, httpx.HTTPStatusError):
                 status_code = exc.response.status_code if exc.response is not None else None
-                metric_code = (
-                    str(status_code) if status_code is not None else exc.__class__.__name__
-                )
+                metric_code = str(status_code) if status_code is not None else exc.__class__.__name__
             else:
                 metric_code = exc.__class__.__name__
         else:
@@ -199,13 +198,9 @@ def _run_with_retries(
                     task_id=task_id,
                     request_id=request_id,
                 ) from exc
-        raise _wrap_with_context(
-            exc, source=source, url=url, task_id=task_id, request_id=request_id
-        ) from exc
+        raise _wrap_with_context(exc, source=source, url=url, task_id=task_id, request_id=request_id) from exc
     except Exception as exc:  # pragma: no cover - safeguard
-        raise _wrap_with_context(
-            exc, source=source, url=url, task_id=task_id, request_id=request_id
-        ) from exc
+        raise _wrap_with_context(exc, source=source, url=url, task_id=task_id, request_id=request_id) from exc
 
 
 def _prepare_client(timeout: Any) -> httpx.Client:

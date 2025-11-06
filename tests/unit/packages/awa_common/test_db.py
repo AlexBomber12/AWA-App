@@ -1,7 +1,8 @@
 import asyncio
 
-import awa_common.db as db_module
 import pytest
+
+import awa_common.db as db_module
 
 
 def test_build_sqlalchemy_url_uses_shared_builder(monkeypatch):

@@ -3,12 +3,12 @@ from __future__ import annotations
 import os
 
 import pytest
-from awa_common.security.models import Role, UserCtx
-from awa_common.settings import settings
 from fastapi import Request
 from fastapi.testclient import TestClient
 
 import services.api.main as api_main
+from awa_common.security.models import Role, UserCtx
+from awa_common.settings import settings
 from services.api import security
 from tests.integration.test_audit_log import _connect_db
 
@@ -20,9 +20,7 @@ def test_api_audit_rate_limit_records_and_invokes_limiter():
     original_overrides = dict(app.dependency_overrides)
     original_audit_flag = settings.SECURITY_ENABLE_AUDIT
 
-    user = UserCtx(
-        sub="audit-rate", email="audit-rate@example.com", roles=[Role.viewer], raw_claims={}
-    )
+    user = UserCtx(sub="audit-rate", email="audit-rate@example.com", roles=[Role.viewer], raw_claims={})
     limiter_calls: list[str] = []
 
     def viewer_override(request: Request) -> UserCtx:

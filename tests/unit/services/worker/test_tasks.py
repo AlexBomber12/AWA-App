@@ -155,9 +155,7 @@ def test_task_import_file_forwards_force_flag(monkeypatch, tmp_path):
         return {}
 
     monkeypatch.setattr("etl.load_csv.import_file", fake_import)
-    monkeypatch.setattr(
-        tasks_module.task_import_file, "update_state", lambda *a, **k: None, raising=False
-    )
+    monkeypatch.setattr(tasks_module.task_import_file, "update_state", lambda *a, **k: None, raising=False)
 
     tasks_module.task_import_file.run(uri="file://data.csv", report_type="audit", force=True)
 

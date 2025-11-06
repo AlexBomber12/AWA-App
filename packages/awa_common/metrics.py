@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import threading
 import time
@@ -39,6 +40,7 @@ def _create_registry() -> CollectorRegistry:
 
 
 REGISTRY: CollectorRegistry = _create_registry()
+logger = logging.getLogger(__name__)
 
 
 def _default_labels(service: str | None, env: str | None, version: str | None) -> dict[str, str]:
@@ -46,9 +48,7 @@ def _default_labels(service: str | None, env: str | None, version: str | None) -
     if not resolved_service:
         resolved_service = "api"
     resolved_env = (env or os.getenv("APP_ENV") or os.getenv("ENV") or "").strip() or "local"
-    resolved_version = (
-        version or os.getenv("APP_VERSION") or os.getenv("RELEASE") or ""
-    ).strip() or "0.0.0"
+    resolved_version = (version or os.getenv("APP_VERSION") or os.getenv("RELEASE") or "").strip() or "0.0.0"
     return {
         "service": resolved_service,
         "env": resolved_env,
@@ -218,7 +218,7 @@ def _task_label(sender: Any) -> str:
 
 
 def enable_celery_metrics(
-    celery_app: Any,
+    _celery_app: Any,
     *,
     broker_url: str | None,
     queue_names: Iterable[str] | None = None,
@@ -238,9 +238,7 @@ def enable_celery_metrics(
     signals.task_postrun.connect(on_task_postrun, weak=False)
     signals.task_failure.connect(on_task_failure, weak=False)
 
-    _maybe_start_backlog_probe(
-        broker_url=broker_url, queue_names=queue_names, interval=backlog_interval_s
-    )
+    _maybe_start_backlog_probe(broker_url=broker_url, queue_names=queue_names, interval=backlog_interval_s)
     _CELERY_METRICS_ENABLED = True
 
 
@@ -271,18 +269,18 @@ def on_task_postrun(sender: Any, task_id: str, **kwargs: Any) -> None:
         TASK_DURATION_SECONDS.labels(**_with_base_labels(task_name=task_name)).observe(duration)
 
 
-def on_task_failure(
-    sender: Any, task_id: str, exception: BaseException | None = None, **_kwargs: Any
-) -> None:
+def on_task_failure(sender: Any, task_id: str, exception: BaseException | None = None, **_kwargs: Any) -> None:
     """Celery signal handler for task_failure."""
     task_name = _task_label(sender)
     exc_name = "unknown"
     if exception is not None:
         exc_name = exception.__class__.__name__
     TASK_FAILURES_TOTAL.labels(**_with_base_labels(task_name=task_name, exc_type=exc_name)).inc()
+    if task_id:
+        logger.debug("celery_task_failure", task_id=task_id)
 
 
-def _maybe_start_backlog_probe(
+def _maybe_start_backlog_probe(  # noqa: C901
     *,
     broker_url: str | None,
     queue_names: Iterable[str] | None,

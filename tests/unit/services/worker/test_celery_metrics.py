@@ -1,6 +1,7 @@
 from collections.abc import Iterator
 
 import pytest
+
 from awa_common import metrics
 
 

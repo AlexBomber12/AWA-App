@@ -2,8 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
 from functools import wraps
-from typing import Any, Awaitable, Callable, Iterable, Mapping, Sequence
+from typing import Any
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi_limiter import FastAPILimiter
@@ -11,8 +12,7 @@ from fastapi_limiter.depends import RateLimiter
 
 from awa_common.security import oidc
 from awa_common.security.models import Role, UserCtx
-from awa_common.settings import parse_rate_limit
-from awa_common.settings import settings as default_settings
+from awa_common.settings import parse_rate_limit, settings as default_settings
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +59,7 @@ def _rate_limit_identifier(request: Request) -> str:
 def _normalize_limit(value: Any, fallback: str) -> tuple[int, int]:
     if isinstance(value, tuple) and len(value) == 2:
         return int(value[0]), int(value[1])
-    if isinstance(value, (list, Sequence)) and len(value) == 2:
+    if isinstance(value, list | Sequence) and len(value) == 2:
         return int(value[0]), int(value[1])
     target = value if value is not None else fallback
     if not isinstance(target, str):
@@ -79,7 +79,7 @@ def _resolve_limit_for_role(
     return _normalize_limit(overrides.get(Role.viewer), cfg.RATE_LIMIT_VIEWER)
 
 
-def RoleBasedRateLimiter(
+def RoleBasedRateLimiter(  # noqa: C901
     viewer: Any = None,
     ops: Any = None,
     admin: Any = None,
@@ -97,7 +97,7 @@ def RoleBasedRateLimiter(
     env = env.lower()
     prod_like = {"stage", "prod"}
 
-    async def dependency(request: Request) -> None:
+    async def dependency(request: Request) -> None:  # noqa: C901
         if getattr(request.state, "skip_rate_limit", False):
             return
         if request.url.path in skip:

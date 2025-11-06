@@ -4,6 +4,7 @@ from copy import deepcopy
 from typing import Any
 
 from asgi_correlation_id import correlation_id
+
 from awa_common.security.pii import _breadcrumb_scrubber, _pii_scrubber
 
 

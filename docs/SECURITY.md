@@ -57,6 +57,11 @@ single source of truth reflected in the codebase.
   Referrer-Policy: strict-origin-when-cross-origin
   ```
 
+## Environment
+
+- Stage and production deployments must set `SECURITY_HSTS_ENABLED=true` to enforce HSTS middleware.
+- Stage and production deployments must configure `CORS_ORIGINS` with the allowed frontend domains.
+
 ## Rate Limits
 
 - Role-aware throttling uses Redis via `packages/awa_common/security/ratelimit.RoleBasedRateLimiter`.

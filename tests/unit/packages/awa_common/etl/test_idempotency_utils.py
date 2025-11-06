@@ -63,8 +63,6 @@ def test_build_payload_meta_combines_sources(tmp_path: Path) -> None:
 
 
 def test_build_payload_meta_handles_header_variants() -> None:
-    meta = idempotency.build_payload_meta(
-        remote_meta={"last-modified": "Mon", "content-md5": "deadbeef"}, extra={}
-    )
+    meta = idempotency.build_payload_meta(remote_meta={"last-modified": "Mon", "content-md5": "deadbeef"}, extra={})
     assert meta["last_modified"] == "Mon"
     assert meta["content_md5"] == "deadbeef"

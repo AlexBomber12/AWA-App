@@ -11,13 +11,14 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol, cast
 
 import structlog
+from minio import Minio
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
 from awa_common.dsn import build_dsn
 from awa_common.etl.guard import process_once
 from awa_common.etl.idempotency import build_payload_meta, compute_idempotency_key
 from awa_common.metrics import record_etl_run, record_etl_skip
-from minio import Minio
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 
 logger = structlog.get_logger(__name__)
 

@@ -3,16 +3,16 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-from awa_common.security.models import Role, UserCtx
 from fastapi import Depends, FastAPI, Request
 from fastapi.testclient import TestClient
 
+from awa_common.security.models import Role, UserCtx
 from services.api import security
 from services.api.middlewares.audit import AuditMiddleware
 
 
 @pytest.fixture
-def audit_app(monkeypatch: pytest.MonkeyPatch):
+def audit_app(monkeypatch: pytest.MonkeyPatch):  # noqa: C901
     sink: list[dict[str, Any]] = []
     state: dict[str, Any] = {"fail_once": False}
 

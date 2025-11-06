@@ -28,9 +28,7 @@ class SQLStub:
 
 
 def _patch_sql(monkeypatch):
-    module = types.SimpleNamespace(
-        SQL=lambda text: SQLStub(text), Identifier=lambda name: SQLStub(f'"{name}"')
-    )
+    module = types.SimpleNamespace(SQL=lambda text: SQLStub(text), Identifier=lambda name: SQLStub(f'"{name}"'))
     monkeypatch.setattr(copy_loader, "sql", module)
 
 

@@ -1,5 +1,6 @@
 import os
-from typing import Any, Dict, Iterable, Mapping
+from collections.abc import Iterable, Mapping
+from typing import Any
 
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
@@ -38,10 +39,8 @@ def upsert_fees_raw(
             return f"CAST(:{c}{i} AS DATE)"
         return f":{c}{i}"
 
-    values_sql = ", ".join(
-        [f"({', '.join([_param(c, i) for c in cols])})" for i in range(len(rows))]
-    )
-    params: Dict[str, Any] = {}
+    values_sql = ", ".join([f"({', '.join([_param(c, i) for c in cols])})" for i in range(len(rows))])
+    params: dict[str, Any] = {}
     for i, r in enumerate(rows):
         for c in cols:
             params[f"{c}{i}"] = r.get(c)
@@ -53,9 +52,7 @@ def upsert_fees_raw(
     """
 
     values_cols = ", ".join([f"{c}" for c in cols])
-    values_pairs = ", ".join(
-        [f"({', '.join([_param(c, i) for c in cols])})" for i in range(len(rows))]
-    )
+    values_pairs = ", ".join([f"({', '.join([_param(c, i) for c in cols])})" for i in range(len(rows))])
     set_assign = ", ".join([f"{m} = v.{m}" for m in mutable])
     is_changed = " OR ".join([f"t.{m} IS DISTINCT FROM v.{m}" for m in mutable])
 
