@@ -17,26 +17,6 @@ def test_settings_env_overrides(monkeypatch) -> None:
     assert s.DATABASE_URL.endswith("@db/app")
 
 
-def test_settings_role_resolution_and_configured_roles() -> None:
-    s = Settings(ROLE_MAP_JSON='{"admin":["admins"],"ops":["Ops"],"viewer":["viewers"]}')
-    resolved = s.resolve_role_set({"admins", "random"})
-    assert resolved == {"admin"}
-    resolved = s.resolve_role_set({"viewer"})
-    assert resolved == {"viewer"}
-    assert s.configured_roles() == {"admin", "ops", "viewer"}
-
-
-def test_settings_should_protect_path(monkeypatch) -> None:
-    s = Settings(AUTH_REQUIRED_ROUTES_REGEX=r"^/secure")
-    assert s.should_protect_path("/secure/report") is True
-    assert s.should_protect_path("/public") is False
-
-
-def test_settings_invalid_regex_falls_back_to_protect_all() -> None:
-    s = Settings(AUTH_REQUIRED_ROUTES_REGEX="*invalid[")
-    assert s.should_protect_path("/anything") is True
-
-
 def test_redacted_masks_credentials() -> None:
     s = Settings(DATABASE_URL="postgresql+psycopg://user:secret@db/app")
     red = s.redacted()

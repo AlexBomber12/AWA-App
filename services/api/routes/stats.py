@@ -9,16 +9,8 @@ try:
     from services.api.dependencies import get_db
 except Exception:
     get_db = None
-try:
-    from services.api.security import require_basic_auth, require_viewer
-except Exception:
 
-    def require_basic_auth():
-        return None
-
-    def require_viewer():
-        return None
-
+from services.api.security import limit_viewer, require_viewer
 
 try:
     from services.api import roi_repository as repo
@@ -61,7 +53,7 @@ def _roi_view_name():
 
 @router.get(
     "/kpi",
-    dependencies=[Depends(require_basic_auth), Depends(require_viewer)],
+    dependencies=[Depends(require_viewer), Depends(limit_viewer)],
 )
 def kpi(db=Depends(get_db) if get_db else None):
     if os.getenv("STATS_USE_SQL") == "1" and db is not None:
@@ -87,7 +79,7 @@ def kpi(db=Depends(get_db) if get_db else None):
 
 @router.get(
     "/roi_by_vendor",
-    dependencies=[Depends(require_basic_auth), Depends(require_viewer)],
+    dependencies=[Depends(require_viewer), Depends(limit_viewer)],
 )
 def roi_by_vendor(db=Depends(get_db) if get_db else None):
     if os.getenv("STATS_USE_SQL") == "1" and db is not None:
@@ -117,7 +109,7 @@ def roi_by_vendor(db=Depends(get_db) if get_db else None):
 
 @router.get(
     "/returns",
-    dependencies=[Depends(require_basic_auth), Depends(require_viewer)],
+    dependencies=[Depends(require_viewer), Depends(limit_viewer)],
 )
 def returns_stats(
     date_from: str | None = None,
@@ -170,7 +162,7 @@ def returns_stats(
 
 @router.get(
     "/roi_trend",
-    dependencies=[Depends(require_basic_auth), Depends(require_viewer)],
+    dependencies=[Depends(require_viewer), Depends(limit_viewer)],
 )
 def roi_trend(db=Depends(get_db) if get_db else None):
     if os.getenv("STATS_USE_SQL") == "1" and db is not None:

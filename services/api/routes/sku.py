@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from .. import roi_repository
 from ..db import get_session
-from ..security import require_ops, require_viewer
+from ..security import limit_ops, limit_viewer, require_ops, require_viewer
 
 router = APIRouter(tags=["sku"])
 
@@ -76,6 +76,7 @@ async def get_sku(
     asin: str,
     session: AsyncSession = Depends(get_session),
     _: object = Depends(require_viewer),
+    __: None = Depends(limit_viewer),
 ) -> dict[str, Any]:
     """Return title, ROI, fees, and recent price history for a SKU."""
     result = await session.execute(SKU_CARD_SQL, {"asin": asin})
@@ -97,6 +98,7 @@ async def approve_sku(
     asin: str,
     session: AsyncSession = Depends(get_session),
     _: object = Depends(require_ops),
+    __: None = Depends(limit_ops),
 ) -> dict[str, Any]:
     """Mark the SKU as approved if pending, returning the number of changes."""
     changed = await roi_repository.bulk_approve(session, [asin])

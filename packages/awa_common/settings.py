@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import json
-import logging
 import os
 import re
 from typing import Literal
@@ -52,77 +50,22 @@ class Settings(BaseSettings):
     OPENAI_API_BASE: str | None = None
     OPENAI_API_KEY: str | None = None
 
-    # Auth configuration
-    AUTH_MODE: Literal["disabled", "oidc", "forward-auth"] = "disabled"
-    OIDC_ISSUER: str | None = None
-    OIDC_AUDIENCE: str | None = None
-    OIDC_CLIENT_ID: str | None = None
+    # Auth configuration (Keycloak OIDC)
+    OIDC_ISSUER: str = Field(default="https://keycloak.local/realms/awa")
+    OIDC_AUDIENCE: str = Field(default="awa-webapp")
     OIDC_JWKS_URL: str | None = None
-    OIDC_ALGS: str = "RS256"
-    FA_USER_HEADER: str = "X-Forwarded-User"
-    FA_EMAIL_HEADER: str = "X-Forwarded-Email"
-    FA_GROUPS_HEADER: str = "X-Forwarded-Groups"
-    ROLE_MAP_JSON: str = '{"admin":["admin"],"ops":["ops"],"viewer":["viewer"]}'
-    AUTH_REQUIRED_ROUTES_REGEX: str = ""
+    OIDC_JWKS_TTL_SECONDS: int = 900
 
-    _role_map_cache: dict[str, set[str]] | None = None
-    _role_map_cache_key: str | None = None
-    _role_regex_cache: re.Pattern[str] | None = None
-    _role_regex_cache_key: str | None = None
+    # Per-role rate limiting windows
+    RATE_LIMIT_VIEWER_TIMES: int = 60
+    RATE_LIMIT_VIEWER_SECONDS: int = 60
+    RATE_LIMIT_OPS_TIMES: int = 120
+    RATE_LIMIT_OPS_SECONDS: int = 60
+    RATE_LIMIT_ADMIN_TIMES: int = 180
+    RATE_LIMIT_ADMIN_SECONDS: int = 60
 
-    def _load_role_map(self) -> dict[str, set[str]]:
-        raw_json = self.ROLE_MAP_JSON or "{}"
-        if self._role_map_cache is not None and self._role_map_cache_key == raw_json:
-            return self._role_map_cache
-        try:
-            raw = json.loads(raw_json)
-        except json.JSONDecodeError:
-            raw = {}
-        mapping: dict[str, set[str]] = {}
-        for internal_role, external_values in raw.items():
-            if not isinstance(internal_role, str):
-                continue
-            values: set[str] = set()
-            if isinstance(external_values, list | tuple | set):
-                values = {str(value) for value in external_values}
-            elif isinstance(external_values, str):
-                values = {external_values}
-            mapping[internal_role] = values
-        self._role_map_cache = mapping
-        self._role_map_cache_key = raw_json
-        return self._role_map_cache
-
-    def resolve_role_set(self, claims_or_groups: set[str]) -> set[str]:
-        """Map external IdP/forward-auth groups into internal role names."""
-        if not claims_or_groups:
-            claims_or_groups = set()
-        mapping = self._load_role_map()
-        resolved = {role for role, external in mapping.items() if external & claims_or_groups}
-        # Allow explicit passthrough: if internal role directly referenced externally.
-        direct = {role for role in mapping if role in claims_or_groups}
-        resolved.update(direct)
-        return resolved
-
-    def configured_roles(self) -> set[str]:
-        """Return all internal roles declared in ROLE_MAP_JSON."""
-        return set(self._load_role_map().keys())
-
-    def should_protect_path(self, path: str) -> bool:
-        regex = (self.AUTH_REQUIRED_ROUTES_REGEX or "").strip()
-        if not regex:
-            return False
-        if self._role_regex_cache is None or self._role_regex_cache_key != regex:
-            try:
-                compiled = re.compile(regex)
-            except re.error:
-                logging.getLogger(__name__).warning(
-                    "Invalid AUTH_REQUIRED_ROUTES_REGEX=%r — failing closed (protect all)",
-                    regex,
-                )
-                compiled = re.compile(".*")
-            self._role_regex_cache = compiled
-            self._role_regex_cache_key = regex
-        return bool(self._role_regex_cache.search(path))
+    # Audit trail
+    SECURITY_ENABLE_AUDIT: bool = True
 
     def redacted(self) -> dict:
         def _mask(url: str | None) -> str | None:
@@ -144,7 +87,7 @@ class Settings(BaseSettings):
             "LLM_PROVIDER": self.LLM_PROVIDER,
             "OPENAI_API_BASE": bool(self.OPENAI_API_BASE),
             "OPENAI_API_KEY": bool(self.OPENAI_API_KEY),
-            "AUTH_MODE": self.AUTH_MODE,
+            "OIDC_ISSUER": self.OIDC_ISSUER,
         }
 
 

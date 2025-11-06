@@ -15,16 +15,14 @@ from awa_common.settings import settings
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi_limiter import FastAPILimiter
-from fastapi_limiter.depends import RateLimiter
 from sqlalchemy import text as sa_text
 from sqlalchemy.ext.asyncio import AsyncSession
-from starlette.requests import Request
-from starlette.responses import Response
 
-from services.api.audit import AuditMiddleware
 from services.api.errors import install_exception_handlers
 from services.api.logging_config import configure_logging
 from services.api.metrics import install_metrics
+from services.api.middlewares.audit import AuditMiddleware
+from services.api.security import install_security
 from services.api.sentry_config import init_sentry_if_configured
 
 from .db import async_session, get_session
@@ -39,46 +37,6 @@ from .routes.upload import router as upload_router
 configure_logging()
 init_sentry_if_configured()
 logging.getLogger(__name__).info("settings=%s", json.dumps(settings.redacted()))
-
-
-def _is_truthy(v: str | None) -> bool:
-    return (v or "").strip().lower() in {"1", "true", "yes", "y"}
-
-
-async def client_ip_identifier(request: Request) -> str:
-    if _is_truthy(os.getenv("TRUST_X_FORWARDED", "1")):
-        xff = request.headers.get("x-forwarded-for")
-        if xff:
-            # first IP in the chain
-            ip = xff.split(",")[0].strip()
-            if ip:
-                return ip
-        xri = request.headers.get("x-real-ip")
-        if xri:
-            return xri.strip()
-    client = request.client
-    if not client or not getattr(client, "host", None):
-        return "unknown"
-    return client.host
-
-
-def _parse_rate_limit(s: str) -> tuple[int, int]:
-    # formats: "100/minute", "60/second", "1000/hour"
-    try:
-        n, unit = s.split("/", 1)
-        times = int(n.strip())
-        unit = unit.strip().lower()
-    except Exception:
-        return 100, 60
-    if unit.startswith("min"):
-        seconds = 60
-    elif unit.startswith("sec"):
-        seconds = 1
-    elif unit.startswith("hour"):
-        seconds = 3600
-    else:
-        seconds = 60
-    return max(times, 1), seconds
 
 
 @asynccontextmanager
@@ -106,6 +64,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(lifespan=lifespan)
 
 app.add_middleware(CorrelationIdMiddleware, header_name="X-Request-ID")
+install_security(app)
 app.add_middleware(AuditMiddleware, session_factory=async_session)
 install_exception_handlers(app)
 install_metrics(app)
@@ -128,20 +87,6 @@ if origins or origin_regex:
         allow_headers=["*"],
         expose_headers=["*"],
     )
-
-
-_default = os.getenv("RATE_LIMIT_DEFAULT", "100/minute")
-_times, _seconds = _parse_rate_limit(_default)
-
-
-async def _rate_limit_dependency(request: Request, response: Response) -> None:
-    if FastAPILimiter.redis:
-        limiter = RateLimiter(times=_times, seconds=_seconds, identifier=client_ip_identifier)
-        await limiter(request, response)
-
-
-_rate_limiter_dep = Depends(_rate_limit_dependency)
-app.router.dependencies.append(_rate_limiter_dep)
 
 
 @app.get("/ready_db", status_code=status.HTTP_200_OK, include_in_schema=False)

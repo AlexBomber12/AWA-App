@@ -3,10 +3,9 @@ from __future__ import annotations
 import importlib
 import os
 from types import ModuleType
-from typing import Annotated, Any, cast
+from typing import Annotated, cast
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from pydantic import BaseModel, BeforeValidator, Field
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -20,22 +19,7 @@ except Exception:  # pragma: no cover - fallback if dependencies missing
         return None
 
 
-try:
-    from services.api.security import (
-        require_basic_auth,  # dependency that raises on bad creds
-        require_viewer,
-    )
-except Exception:
-    _security = HTTPBasic()
-
-    def require_basic_auth(
-        credentials: HTTPBasicCredentials = Depends(_security),
-    ) -> None:  # no-op if project already handles auth globally
-        return None
-
-    async def require_viewer(*_args: Any, **_kwargs: Any) -> Any:
-        return None
-
+from services.api.security import limit_viewer, require_viewer
 
 # Fallback to repository helper if available
 repo: ModuleType | None
@@ -76,7 +60,7 @@ def _roi_view_name() -> str:
 @router.post(
     "",
     response_model=ScoreResponse,
-    dependencies=[Depends(require_basic_auth), Depends(require_viewer)],
+    dependencies=[Depends(require_viewer), Depends(limit_viewer)],
 )
 def score(body: ScoreRequest, db: Session | None = Depends(get_db)) -> ScoreResponse:
     if not body.asins:

@@ -8,7 +8,7 @@ from typing import Any
 from celery import states
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 
-from services.api.security import require_ops, require_viewer
+from services.api.security import limit_ops, limit_viewer, require_ops, require_viewer
 from services.worker.celery_app import celery_app
 from services.worker.tasks import task_import_file
 
@@ -23,6 +23,7 @@ async def submit_ingest(
     report_type: str | None = None,
     force: bool = False,
     _: object = Depends(require_ops),
+    __: None = Depends(limit_ops),
 ) -> dict[str, Any]:
     if not file and uri is None:
         try:
@@ -52,7 +53,11 @@ async def submit_ingest(
 
 
 @router.get("/jobs/{task_id}")
-async def get_job(task_id: str, _: object = Depends(require_viewer)) -> dict[str, Any]:
+async def get_job(
+    task_id: str,
+    _: object = Depends(require_viewer),
+    __: None = Depends(limit_viewer),
+) -> dict[str, Any]:
     res = celery_app.AsyncResult(task_id)
     try:
         state = res.state
