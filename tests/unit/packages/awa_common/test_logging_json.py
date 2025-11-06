@@ -57,3 +57,20 @@ def test_extract_trace_id_variants() -> None:
     good = "00-" + "a" * 32 + "-b7-01"
     assert logging_module._extract_trace_id(good) == "a" * 32  # type: ignore[attr-defined]
     assert logging_module._extract_trace_id("invalid") is None  # type: ignore[attr-defined]
+
+
+def test_bind_celery_task(monkeypatch, capsys) -> None:
+    configure_logging(service="worker", env="test", version="1.0.0")
+
+    class DummyRequest:
+        id = "task-123"
+
+    class DummyTask:
+        request = DummyRequest()
+
+    monkeypatch.setattr(logging_module, "current_task", DummyTask())
+    logging_module.bind_celery_task()
+    structlog.get_logger(__name__).info("celery_task")
+    payload = json.loads(capsys.readouterr().out.strip())
+    assert payload["task_id"] == "task-123"
+    clear_context()

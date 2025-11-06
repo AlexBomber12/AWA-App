@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from pathlib import Path
+from types import SimpleNamespace
+
 import httpx
 import pytest
 import respx
@@ -96,3 +99,32 @@ def test_request_raises_contextual_error(monkeypatch: pytest.MonkeyPatch) -> Non
     error = exc.value
     assert error.source == "etl"
     assert error.task_id == "task-4"
+
+
+def test_download_removes_partial_file_on_failure(tmp_path: Path, monkeypatch) -> None:
+    dest = tmp_path / "payload.bin"
+    dest.write_bytes(b"stale")
+
+    def boom(*_args, **_kwargs):
+        raise http.ETLHTTPError("boom", source="etl", url="https://files", task_id=None)
+
+    monkeypatch.setattr(http, "_run_with_retries", boom)
+
+    with pytest.raises(http.ETLHTTPError):
+        http.download("https://files/data", dest_path=dest, source="etl")
+    assert not dest.exists()
+
+
+def test_retry_wait_honours_retry_after_header() -> None:
+    response = httpx.Response(
+        429,
+        headers={"Retry-After": "5"},
+        request=httpx.Request("GET", "https://example.com"),
+    )
+    exc = http.RetryableHTTPStatusError(response, retry_after=5.0)
+    state = SimpleNamespace(
+        outcome=SimpleNamespace(failed=True, exception=lambda: exc),
+        next_action=SimpleNamespace(sleep=0.1),
+    )
+    wait = http._RetryWait(multiplier=0.01, max=10.0)
+    assert wait(state) == 5.0

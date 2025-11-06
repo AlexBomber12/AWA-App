@@ -401,3 +401,15 @@ def test_record_etl_run_tracks_success_and_failure(monkeypatch):
     assert failure.value == 1.0
     failures = metrics.ETL_FAILURES_TOTAL.collect()[0].samples
     assert any(sample.labels["reason"] == "RuntimeError" for sample in failures)
+
+
+def test_record_etl_skip_and_retry_counts() -> None:
+    metrics.ETL_RUNS_TOTAL.clear()
+    metrics.ETL_RETRY_TOTAL.clear()
+    metrics.record_etl_skip("demo")
+    metrics.record_etl_retry("demo", "429")
+    runs = metrics.ETL_RUNS_TOTAL.collect()[0].samples
+    skip = next(sample for sample in runs if sample.labels["status"] == "skipped")
+    assert skip.value == 1.0
+    retries = metrics.ETL_RETRY_TOTAL.collect()[0].samples
+    assert any(sample.labels["code"] == "429" for sample in retries)
