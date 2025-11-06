@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import copy
 import re
-from typing import Any, Mapping, MutableMapping, Sequence
+from typing import Any, Mapping, MutableMapping, Sequence, cast
 
 from asgi_correlation_id import correlation_id
 
@@ -114,8 +114,10 @@ def _attach_request_id(event: MutableMapping[str, Any]) -> None:
         event.setdefault("tags", {})["request_id"] = rid
 
 
-def _pii_scrubber(event: Mapping[str, Any], _hint: Any) -> Mapping[str, Any] | None:
-    event_copy = copy.deepcopy(event)
+def _pii_scrubber(
+    event: Mapping[str, Any], _hint: Any | None = None
+) -> MutableMapping[str, Any] | None:
+    event_copy = cast(MutableMapping[str, Any], copy.deepcopy(event))
     _attach_request_id(event_copy)
     request = event_copy.get("request")
     if isinstance(request, MutableMapping):
@@ -146,8 +148,10 @@ def _pii_scrubber(event: Mapping[str, Any], _hint: Any) -> Mapping[str, Any] | N
     return event_copy
 
 
-def _breadcrumb_scrubber(breadcrumb: Mapping[str, Any], _hint: Any) -> Mapping[str, Any] | None:
-    crumb_copy = copy.deepcopy(breadcrumb)
+def _breadcrumb_scrubber(
+    breadcrumb: Mapping[str, Any], _hint: Any | None = None
+) -> MutableMapping[str, Any] | None:
+    crumb_copy = cast(MutableMapping[str, Any], copy.deepcopy(breadcrumb))
     message = crumb_copy.get("message")
     if isinstance(message, str):
         crumb_copy["message"] = _mask_string(message)

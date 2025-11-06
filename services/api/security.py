@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from typing import Awaitable, Callable, cast
+from typing import Any, Awaitable, Callable, cast
 
 import structlog
 from asgi_correlation_id import correlation_id
@@ -99,17 +99,23 @@ require_viewer = require_roles(Role.viewer, Role.ops, Role.admin)
 require_ops = require_roles(Role.ops, Role.admin)
 require_admin = require_roles(Role.admin)
 
+RoleLimiter = Callable[[Request], Awaitable[None]]
+
+
+def _role_limiter(dependency: Any) -> RoleLimiter:
+    return cast(RoleLimiter, dependency)
+
 
 def limit_viewer() -> Callable[[Request], Awaitable[None]]:
-    return cast(Callable[[Request], Awaitable[None]], RoleBasedRateLimiter(settings=settings))
+    return _role_limiter(RoleBasedRateLimiter(settings=settings))
 
 
 def limit_ops() -> Callable[[Request], Awaitable[None]]:
-    return cast(Callable[[Request], Awaitable[None]], RoleBasedRateLimiter(settings=settings))
+    return _role_limiter(RoleBasedRateLimiter(settings=settings))
 
 
 def limit_admin() -> Callable[[Request], Awaitable[None]]:
-    return cast(Callable[[Request], Awaitable[None]], RoleBasedRateLimiter(settings=settings))
+    return _role_limiter(RoleBasedRateLimiter(settings=settings))
 
 
 def install_security(app: FastAPI) -> None:

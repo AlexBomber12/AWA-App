@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from typing import Any, Mapping, cast
 
 import sentry_sdk
 import structlog
@@ -10,9 +11,21 @@ from sentry_sdk.integrations.celery import CeleryIntegration
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 from sentry_sdk.integrations.logging import LoggingIntegration
 from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
+from sentry_sdk.types import Event, Hint
 
-before_send = _pii_scrubber
-before_breadcrumb = _breadcrumb_scrubber
+
+def before_send(event: Event, hint: Hint) -> Event | None:
+    sanitized = _pii_scrubber(cast(Mapping[str, Any], event), hint)
+    if sanitized is None:
+        return None
+    return cast(Event, dict(sanitized))
+
+
+def before_breadcrumb(breadcrumb: dict[str, Any], hint: dict[str, Any]) -> dict[str, Any] | None:
+    sanitized = _breadcrumb_scrubber(cast(Mapping[str, Any], breadcrumb), hint)
+    if sanitized is None:
+        return None
+    return dict(sanitized)
 
 
 def init_sentry_if_configured() -> None:
