@@ -8,6 +8,7 @@ from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 EnvName = Literal["local", "test", "staging", "prod"]
+AppRuntimeEnv = Literal["dev", "stage", "prod"]
 
 
 def _default_env_file() -> str | None:
@@ -30,6 +31,7 @@ class Settings(BaseSettings):
     # Core
     ENV: EnvName = "local"
     APP_NAME: str = "awa-app"
+    APP_ENV: AppRuntimeEnv = "dev"
 
     # Database & cache
     DATABASE_URL: str = Field(default="postgresql+psycopg://app:app@db:5432/app")
@@ -41,6 +43,7 @@ class Settings(BaseSettings):
 
     # Webapp
     NEXT_PUBLIC_API_URL: str = Field(default="http://localhost:8000")
+    CORS_ORIGINS: str | None = None
 
     # Timeouts
     REQUEST_TIMEOUT_S: int = 15
@@ -78,10 +81,12 @@ class Settings(BaseSettings):
         return {
             "ENV": self.ENV,
             "APP_NAME": self.APP_NAME,
+            "APP_ENV": self.APP_ENV,
             "DATABASE_URL": _mask(self.DATABASE_URL),
             "REDIS_URL": _mask(self.REDIS_URL),
             "SENTRY_DSN": "set" if bool(self.SENTRY_DSN) else None,
             "NEXT_PUBLIC_API_URL": self.NEXT_PUBLIC_API_URL,
+            "CORS_ORIGINS": bool(self.CORS_ORIGINS),
             "LOG_LEVEL": self.LOG_LEVEL,
             "REQUEST_TIMEOUT_S": self.REQUEST_TIMEOUT_S,
             "LLM_PROVIDER": self.LLM_PROVIDER,

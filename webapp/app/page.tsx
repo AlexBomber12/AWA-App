@@ -1,18 +1,24 @@
-import { Card } from "../components/Card";
-import { DataTable } from "../components/DataTable";
+import Link from "next/link";
 
-export const dynamic = 'force-dynamic';
-
-export default async function Dashboard() {
-  const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-  const res = await fetch(`${base}/score`, {
-    method: "POST",
-    body: JSON.stringify(["ALL"]),
-  });
-  const data = await res.json();
+export default function HomePage() {
   return (
-    <Card>
-      <DataTable data={data} />
-    </Card>
+    <main>
+      <h1>AWA Web Console</h1>
+      <p>
+        Sign in with your AWA Keycloak account to manage repricing, restock planning, and other
+        operational workflows.
+      </p>
+      <ul>
+        <li>
+          <Link href="/(auth)/login">Login</Link>
+        </li>
+        <li>
+          <Link href="/profile">View profile</Link>
+        </li>
+        <li>
+          <Link href="/(auth)/logout">Logout</Link>
+        </li>
+      </ul>
+    </main>
   );
 }
