@@ -3,10 +3,15 @@ from __future__ import annotations
 import importlib
 import os
 from types import ModuleType
-from typing import Annotated, cast
+from typing import TYPE_CHECKING, Annotated, cast
+
+if TYPE_CHECKING:
+    from pydantic import BaseModel as BaseStrictModel
+else:
+    from awa_common.schemas import BaseStrictModel
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, BeforeValidator, Field
+from pydantic import BeforeValidator, Field
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -29,14 +34,20 @@ except Exception:
     repo = None
 
 
-Asin = Annotated[str, BeforeValidator(lambda v: v.strip()), Field(min_length=1)]
+def _strip_asin(value: str) -> str:
+    if not isinstance(value, str):
+        raise ValueError("ASIN must be provided as a string.")
+    return value.strip()
 
 
-class ScoreRequest(BaseModel):
+Asin = Annotated[str, BeforeValidator(_strip_asin), Field(min_length=1)]
+
+
+class ScoreRequest(BaseStrictModel):
     asins: list[Asin] = Field(..., description="List of ASINs")
 
 
-class ScoreItem(BaseModel):
+class ScoreItem(BaseStrictModel):
     asin: str
     roi: float | None = None
     vendor: str | None = None
@@ -44,7 +55,7 @@ class ScoreItem(BaseModel):
     error: str | None = None
 
 
-class ScoreResponse(BaseModel):
+class ScoreResponse(BaseStrictModel):
     items: list[ScoreItem]
 
 

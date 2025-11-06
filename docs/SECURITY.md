@@ -27,13 +27,72 @@ Ensure that the realm issues tokens from:
 | `OIDC_AUDIENCE` | `awa-webapp` | Expected audience (`aud`) claim. |
 | `OIDC_JWKS_URL` | _(derived from discovery)_ | Optional override for the JWKS endpoint. |
 | `OIDC_JWKS_TTL_SECONDS` | `900` | Cache duration for JWKS responses. |
-| `RATE_LIMIT_VIEWER_TIMES` / `RATE_LIMIT_VIEWER_SECONDS` | `60` / `60` | Rate limit for viewer endpoints. |
-| `RATE_LIMIT_OPS_TIMES` / `RATE_LIMIT_OPS_SECONDS` | `120` / `60` | Rate limit for ops endpoints. |
-| `RATE_LIMIT_ADMIN_TIMES` / `RATE_LIMIT_ADMIN_SECONDS` | `180` / `60` | Rate limit for admin endpoints. |
+| `SECURITY_HSTS_ENABLED` | `false` | Emit HSTS when `ENV` is `stage` or `prod`. |
+| `SECURITY_REFERRER_POLICY` | `strict-origin-when-cross-origin` | Value for the `Referrer-Policy` response header. |
+| `SECURITY_FRAME_OPTIONS` | `DENY` | Value for the `X-Frame-Options` header. |
+| `SECURITY_X_CONTENT_TYPE_OPTIONS` | `nosniff` | Value for the `X-Content-Type-Options` header. |
+| `RATE_LIMIT_VIEWER` | `30/minute` | Rate limit window for viewer role. |
+| `RATE_LIMIT_OPS` | `120/minute` | Rate limit window for ops role. |
+| `RATE_LIMIT_ADMIN` | `240/minute` | Rate limit window for admin role. |
+| `MAX_REQUEST_BYTES` | `1048576` | Maximum allowed request body size in bytes. |
 | `SECURITY_ENABLE_AUDIT` | `true` | Toggle audit-log persistence. |
 
-The Redis URL (`REDIS_URL`) must be reachable so the per-role rate limiters can
-store counters.
+## Response Security Headers
+
+Every FastAPI response includes a standard set of defensive headers:
+
+* `X-Content-Type-Options`: prevents MIME-sniffing (`SECURITY_X_CONTENT_TYPE_OPTIONS`).
+* `X-Frame-Options`: clickjacking defence (`SECURITY_FRAME_OPTIONS`).
+* `Referrer-Policy`: controls outbound referrers (`SECURITY_REFERRER_POLICY`).
+* `Strict-Transport-Security`: enabled only when `SECURITY_HSTS_ENABLED=true`
+  **and** `ENV` is `stage` or `prod`, enforcing HTTPS for one year with the
+  `includeSubDomains; preload` directives.
+
+Routes can override headers explicitly; the middleware preserves values that are
+set within an endpoint.
+
+## Rate Limiting
+
+Role-aware throttling is enforced globally using Redis-backed counters. The
+defaults are:
+
+| Role | Default window |
+| ---- | -------------- |
+| `viewer` | `30/minute` |
+| `ops` | `120/minute` |
+| `admin` | `240/minute` |
+
+Values are configured via `RATE_LIMIT_<ROLE>` in a `requests/second|minute`
+string format, e.g. `45/sec` or `100/min`. When Redis is unavailable the limiter
+returns HTTP 503 in stage/prod, and logs a warning while allowing traffic in
+local/dev. The Redis URL (`REDIS_URL`) must therefore be reachable in deployed
+environments.
+
+The `@no_rate_limit` decorator exempts individual endpoints (for example
+`/ready`, `/health`, and `/metrics`), and per-route overrides may still be
+applied where tighter throttling is required.
+
+## Request Size Limits
+
+Incoming requests are capped by `MAX_REQUEST_BYTES` (default 1 MB). Requests
+declaring a larger `Content-Length` are rejected immediately with HTTP 413, and
+chunked uploads are streamed through a guard that stops reading once the limit
+is exceeded. Update the environment variable to relax or tighten the boundary.
+
+## Sentry PII Scrubbing
+
+Sentry telemetry is initialised with `send_default_pii=False` and custom
+scrubbers that:
+
+* Mask sensitive headers (`Authorization`, `Cookie`, `Set-Cookie`,
+  `X-API-Key`, `X-Amz-Security-Token`).
+* Redact obvious PII patterns (email addresses, North American phone numbers)
+  from event messages, request payloads, extras, contexts, and breadcrumbs.
+* Preserve key names while replacing values with `***`.
+* Attach the `request_id` tag when available from headers or correlation ID.
+
+These transformations run for both events and breadcrumbs, ensuring that secrets
+and user identifiers never reach Sentry.
 
 ## Token Validation
 

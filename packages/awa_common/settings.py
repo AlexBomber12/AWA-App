@@ -7,7 +7,8 @@ from typing import Literal
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-EnvName = Literal["local", "test", "staging", "prod"]
+# Preserve legacy values while supporting new stage/dev env conventions.
+EnvName = Literal["local", "test", "dev", "stage", "staging", "prod"]
 AppRuntimeEnv = Literal["dev", "stage", "prod"]
 
 
@@ -23,13 +24,41 @@ def _default_env_file() -> str | None:
     return None
 
 
+_RATE_UNIT_SECONDS: dict[str, int] = {
+    "second": 1,
+    "sec": 1,
+    "s": 1,
+    "minute": 60,
+    "min": 60,
+    "m": 60,
+}
+
+
+def parse_rate_limit(limit: str) -> tuple[int, int]:
+    """Parse a textual rate limit like ``\"30/min\"`` into (times, seconds)."""
+    value = (limit or "").strip()
+    if not value:
+        raise ValueError("Rate limit value must be non-empty.")
+    match = re.fullmatch(r"(?i)\s*(\d+)\s*/\s*([a-z]+)\s*", value)
+    if not match:
+        raise ValueError(f"Invalid rate limit format: {limit!r}")
+    times = int(match.group(1))
+    unit = match.group(2).lower()
+    seconds = _RATE_UNIT_SECONDS.get(unit)
+    if seconds is None:
+        raise ValueError(f"Unsupported rate limit unit: {unit!r}")
+    if times <= 0:
+        raise ValueError("Rate limit count must be positive.")
+    return times, seconds
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=_default_env_file(), env_file_encoding="utf-8", extra="ignore"
     )
 
     # Core
-    ENV: EnvName = "local"
+    ENV: str = "local"  # local|dev|stage|prod
     APP_NAME: str = "awa-app"
     APP_ENV: AppRuntimeEnv = "dev"
     APP_VERSION: str = "0.0.0"
@@ -43,6 +72,16 @@ class Settings(BaseSettings):
     # Observability / security
     LOG_LEVEL: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
     SENTRY_DSN: str | None = None
+
+    # Security headers / limits
+    SECURITY_HSTS_ENABLED: bool = False
+    SECURITY_REFERRER_POLICY: str = "strict-origin-when-cross-origin"
+    SECURITY_FRAME_OPTIONS: str = "DENY"
+    SECURITY_X_CONTENT_TYPE_OPTIONS: str = "nosniff"
+    RATE_LIMIT_VIEWER: str = "30/minute"
+    RATE_LIMIT_OPS: str = "120/minute"
+    RATE_LIMIT_ADMIN: str = "240/minute"
+    MAX_REQUEST_BYTES: int = 1_048_576  # 1 MB
 
     # Webapp
     NEXT_PUBLIC_API_URL: str = Field(default="http://localhost:8000")
@@ -61,14 +100,6 @@ class Settings(BaseSettings):
     OIDC_AUDIENCE: str = Field(default="awa-webapp")
     OIDC_JWKS_URL: str | None = None
     OIDC_JWKS_TTL_SECONDS: int = 900
-
-    # Per-role rate limiting windows
-    RATE_LIMIT_VIEWER_TIMES: int = 60
-    RATE_LIMIT_VIEWER_SECONDS: int = 60
-    RATE_LIMIT_OPS_TIMES: int = 120
-    RATE_LIMIT_OPS_SECONDS: int = 60
-    RATE_LIMIT_ADMIN_TIMES: int = 180
-    RATE_LIMIT_ADMIN_SECONDS: int = 60
 
     # Audit trail
     SECURITY_ENABLE_AUDIT: bool = True
@@ -99,6 +130,14 @@ class Settings(BaseSettings):
             "OPENAI_API_KEY": bool(self.OPENAI_API_KEY),
             "OIDC_ISSUER": self.OIDC_ISSUER,
             "QUEUE_NAMES": self.QUEUE_NAMES,
+            "SECURITY_REFERRER_POLICY": self.SECURITY_REFERRER_POLICY,
+            "SECURITY_FRAME_OPTIONS": self.SECURITY_FRAME_OPTIONS,
+            "SECURITY_X_CONTENT_TYPE_OPTIONS": self.SECURITY_X_CONTENT_TYPE_OPTIONS,
+            "SECURITY_HSTS_ENABLED": self.SECURITY_HSTS_ENABLED,
+            "RATE_LIMIT_VIEWER": self.RATE_LIMIT_VIEWER,
+            "RATE_LIMIT_OPS": self.RATE_LIMIT_OPS,
+            "RATE_LIMIT_ADMIN": self.RATE_LIMIT_ADMIN,
+            "MAX_REQUEST_BYTES": self.MAX_REQUEST_BYTES,
         }
 
 

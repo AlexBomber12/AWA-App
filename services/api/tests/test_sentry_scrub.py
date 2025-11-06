@@ -20,12 +20,12 @@ def test_before_send_scrubs_pii():
     }
     red = before_send(event, hint=None)
     req = red["request"]
-    assert req["headers"]["Authorization"] == "[redacted]"
-    assert req["headers"]["Cookie"] == "[redacted]"
+    assert req["headers"]["Authorization"] == "***"
+    assert req["headers"]["Cookie"] == "***"
     assert req["headers"]["X-Other"] == "ok"
-    assert req["data"]["password"] == "[redacted]"
-    assert req["data"]["email"] == "[redacted]"
+    assert req["data"]["password"] == "***"
+    assert req["data"]["email"] == "***"
     assert req["data"]["keep"] == "ok"
-    assert red["user"]["email"] == "[redacted]"
-    assert red["extra"]["token"] == "[redacted]"
+    assert red["user"]["email"] == "***"
+    assert red["extra"]["token"] == "***"
     assert red["extra"]["keep"] == "ok"
