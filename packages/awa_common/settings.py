@@ -62,6 +62,7 @@ class Settings(BaseSettings):
     APP_NAME: str = "awa-app"
     APP_ENV: AppRuntimeEnv = "dev"
     APP_VERSION: str = "0.0.0"
+    SERVICE_NAME: str = "api"
 
     # Database & cache
     DATABASE_URL: str = Field(default="postgresql+psycopg://app:app@db:5432/app")
@@ -90,6 +91,15 @@ class Settings(BaseSettings):
     # Timeouts
     REQUEST_TIMEOUT_S: int = 15
 
+    # ETL reliability defaults
+    ETL_CONNECT_TIMEOUT_S: float = 5.0
+    ETL_READ_TIMEOUT_S: float = 30.0
+    ETL_TOTAL_TIMEOUT_S: float = 60.0
+    ETL_MAX_RETRIES: int = 5
+    ETL_BACKOFF_BASE_S: float = 0.5
+    ETL_BACKOFF_MAX_S: float = 30.0
+    ETL_RETRY_STATUS_CODES: list[int] = Field(default_factory=lambda: [429, 500, 502, 503, 504])
+
     # Optional: LLM placeholders (no usage change in this PR)
     LLM_PROVIDER: Literal["STUB", "OPENAI", "VLLM"] = "STUB"
     OPENAI_API_BASE: str | None = None
@@ -117,6 +127,7 @@ class Settings(BaseSettings):
             "APP_NAME": self.APP_NAME,
             "APP_ENV": self.APP_ENV,
             "APP_VERSION": self.APP_VERSION,
+            "SERVICE_NAME": self.SERVICE_NAME,
             "DATABASE_URL": _mask(self.DATABASE_URL),
             "REDIS_URL": _mask(self.REDIS_URL),
             "BROKER_URL": _mask(self.BROKER_URL),

@@ -74,6 +74,23 @@ def clear_context() -> None:
         bind_contextvars(**STATIC_CONTEXT)
 
 
+def bind_celery_task() -> None:
+    """Bind Celery task metadata (task_id) into the logging context if available."""
+    try:
+        from celery import current_task  # type: ignore
+    except Exception:  # pragma: no cover - Celery optional
+        return
+    task = current_task
+    if task is None:
+        return
+    request = getattr(task, "request", None)
+    if request is None:
+        return
+    task_id = getattr(request, "id", None) or getattr(request, "task_id", None)
+    if task_id:
+        bind_contextvars(task_id=task_id)
+
+
 class RequestIdMiddleware(BaseHTTPMiddleware):
     """Ensure every request has correlation ids and propagate them."""
 
@@ -118,4 +135,5 @@ __all__ = [
     "bind_user_sub",
     "clear_context",
     "configure_logging",
+    "bind_celery_task",
 ]

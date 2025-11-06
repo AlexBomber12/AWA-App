@@ -655,3 +655,19 @@ The ETL container exited during `docker compose up` because `python -m services.
 
 ## Logs
 - `ci-logs/latest/unit-pytest.log`
+
+---
+
+## Failing workflows
+- **CI** workflow (unit-local job)
+
+## Summary
+The “Compute diff coverage (80% gate)” step invoked `git fetch --no-tags --prune --depth=1 origin "main:main"` while the workflow was already on `main`, so Git refused to update the checked-out branch and aborted with exit code 128.
+
+## Fix
+- Fetch the base branch without forcing it into the checked-out branch (`git fetch --no-tags --prune --depth=1 origin "${BASE}"`) so the remote-tracking ref refreshes cleanly on both PR and push-to-main runs.
+- Ignore the temporary `.codex-tmp/` directory where CI artifacts are downloaded for triage.
+
+## Logs
+- `.codex-tmp/ci-logs/19139382113/unit-local/11_Compute diff coverage (80% gate).txt`
+

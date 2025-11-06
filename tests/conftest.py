@@ -4,6 +4,7 @@ import asyncio
 import contextlib
 import datetime
 import importlib
+import itertools
 import os
 import random
 import sys
@@ -799,3 +800,156 @@ def tmp_path_helpers(tmp_path_factory: pytest.TempPathFactory):
             return destination
 
     return _TmpHelpers(base_dir)
+
+
+@pytest.fixture
+def stub_load_log(monkeypatch: pytest.MonkeyPatch):
+    """Stub load_log helpers to avoid real database access."""
+
+    store: dict[tuple[str, str], dict[str, Any]] = {}
+    id_counter = itertools.count(1)
+
+    def try_insert_load_log(
+        session: Any,
+        *,
+        source: str,
+        idempotency_key: str,
+        payload_meta: dict[str, Any] | None,
+        processed_by: str | None,
+        task_id: str | None,
+    ) -> str:
+        key = (source, idempotency_key)
+        if key in store:
+            return "duplicate"
+        store[key] = {
+            "id": next(id_counter),
+            "payload_meta": payload_meta or {},
+            "processed_by": processed_by,
+            "task_id": task_id,
+            "status": "pending",
+        }
+        return "inserted"
+
+    def get_load_log_id(session: Any, *, source: str, idempotency_key: str) -> int | None:
+        record = store.get((source, idempotency_key))
+        return None if record is None else int(record["id"])
+
+    def mark_success(session: Any, load_log_id: int, duration_ms: int | None) -> None:
+        for record in store.values():
+            if record["id"] == load_log_id:
+                record["status"] = "success"
+                record["duration_ms"] = duration_ms
+                break
+
+    def mark_failed(session: Any, load_log_id: int, error_message: str) -> None:
+        for record in store.values():
+            if record["id"] == load_log_id:
+                record["status"] = "failed"
+                record["error_message"] = error_message
+                break
+
+    def soft_update_meta_on_duplicate(
+        session: Any,
+        *,
+        source: str,
+        idempotency_key: str,
+        payload_meta: dict[str, Any],
+        processed_by: str | None = None,
+        task_id: str | None = None,
+    ) -> None:
+        key = (source, idempotency_key)
+        record = store.setdefault(
+            key,
+            {
+                "id": next(id_counter),
+                "payload_meta": {},
+                "processed_by": processed_by,
+                "task_id": task_id,
+                "status": "pending",
+            },
+        )
+        record["payload_meta"] = payload_meta
+        record["processed_by"] = processed_by
+        record["task_id"] = task_id
+        record["status"] = "skipped"
+
+    monkeypatch.setattr(
+        "awa_common.db.load_log.try_insert_load_log", try_insert_load_log, raising=False
+    )
+    monkeypatch.setattr(
+        "awa_common.etl.guard.try_insert_load_log", try_insert_load_log, raising=False
+    )
+    monkeypatch.setattr("awa_common.db.load_log.get_load_log_id", get_load_log_id, raising=False)
+    monkeypatch.setattr("awa_common.etl.guard.get_load_log_id", get_load_log_id, raising=False)
+    monkeypatch.setattr("awa_common.db.load_log.mark_success", mark_success, raising=False)
+    monkeypatch.setattr("awa_common.etl.guard.mark_success", mark_success, raising=False)
+    monkeypatch.setattr("awa_common.db.load_log.mark_failed", mark_failed, raising=False)
+    monkeypatch.setattr("awa_common.etl.guard.mark_failed", mark_failed, raising=False)
+    monkeypatch.setattr(
+        "awa_common.db.load_log.soft_update_meta_on_duplicate",
+        soft_update_meta_on_duplicate,
+        raising=False,
+    )
+    monkeypatch.setattr(
+        "awa_common.etl.guard.soft_update_meta_on_duplicate",
+        soft_update_meta_on_duplicate,
+        raising=False,
+    )
+    return store
+
+
+@pytest.fixture
+def patch_etl_session(monkeypatch: pytest.MonkeyPatch, stub_load_log):
+    """Patch ETL modules to use an in-memory session and engine."""
+
+    def _patch(module_path: str):
+        executed: list[tuple[str, Any]] = []
+        sessions: list[Any] = []
+
+        class FakeSession:
+            def __init__(self) -> None:
+                self.statements: list[tuple[str, Any]] = []
+
+            def execute(self, statement: Any, params: Any | None = None) -> None:
+                sql = getattr(statement, "text", None)
+                if sql is None:
+                    sql = str(statement)
+                sql = sql.strip()
+                self.statements.append((sql, params))
+                executed.append((sql, params))
+
+            def commit(self) -> None:
+                pass
+
+            def rollback(self) -> None:
+                pass
+
+            def close(self) -> None:
+                pass
+
+        class FakeEngine:
+            def __init__(self) -> None:
+                self.disposed = False
+
+            def dispose(self) -> None:
+                self.disposed = True
+
+        fake_engine = FakeEngine()
+
+        def _session_factory(*_args: Any, **_kwargs: Any) -> FakeSession:
+            session = FakeSession()
+            sessions.append(session)
+            return session
+
+        monkeypatch.setattr(
+            f"{module_path}.create_engine", lambda *args, **kwargs: fake_engine, raising=False
+        )
+        monkeypatch.setattr(
+            f"{module_path}.sessionmaker",
+            lambda *args, **kwargs: _session_factory,
+            raising=False,
+        )
+
+        return fake_engine, sessions, executed
+
+    return _patch

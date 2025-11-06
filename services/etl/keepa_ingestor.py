@@ -1,21 +1,29 @@
 from __future__ import annotations
 
 import argparse
-import datetime
+import datetime as dt
 import io
 import json
 import os
 import time
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, Protocol, cast
 
+import structlog
 from awa_common.dsn import build_dsn
+from awa_common.etl.guard import process_once
+from awa_common.etl.idempotency import build_payload_meta, compute_idempotency_key
+from awa_common.metrics import record_etl_run, record_etl_skip
+from minio import Minio
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
-from pg_utils import connect
+logger = structlog.get_logger(__name__)
 
 DEFAULT_FIXTURE_PATH = Path("tests/fixtures/keepa_sample.json")
 DEFAULT_OFFLINE_PATH = Path("tmp/offline_asins.json")
+SOURCE_NAME = "keepa_ingestor"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -56,9 +64,9 @@ def resolve_live(cli_live: bool | None) -> bool:
 
 
 def load_offline_fixture(path: Path) -> list[dict[str, Any]]:
-    with path.open() as fp:
+    with path.open("r", encoding="utf-8") as fp:
         data = json.load(fp)
-    return cast(list[dict[str, Any]], data)
+    return list(data)
 
 
 def write_offline_fixture(path: Path, data: object) -> None:
@@ -66,57 +74,145 @@ def write_offline_fixture(path: Path, data: object) -> None:
     path.write_text(json.dumps(data))
 
 
+def build_idempotency(
+    live: bool,
+    *,
+    fixture_path: Path,
+    offline_output: Path,
+) -> tuple[str, dict[str, Any]]:
+    if live:
+        today = dt.date.today().isoformat()
+        payload = json.dumps(
+            {"mode": "live", "date": today},
+            separators=(",", ":"),
+        ).encode("utf-8")
+        key = compute_idempotency_key(content=payload)
+        meta = build_payload_meta(
+            extra={"mode": "live", "date": today, "bucket": "keepa"},
+        )
+        return key, meta
+    key = compute_idempotency_key(path=fixture_path)
+    meta = build_payload_meta(
+        path=fixture_path,
+        extra={
+            "mode": "offline",
+            "offline_output": str(offline_output),
+        },
+    )
+    return key, meta
+
+
+class _KeepaClient(Protocol):
+    def product_finder(
+        self,
+        parameters: dict[str, Any],
+        *,
+        domain: str,
+        n_products: int,
+    ) -> list[Any]: ...
+
+
+if TYPE_CHECKING:  # pragma: no cover - import for typing only
+    from keepa import Keepa as _Keepa  # noqa: F401
+
+
+def _load_keepa_client(key: str) -> _KeepaClient:
+    import keepa
+
+    client = keepa.Keepa(key)
+    return cast(_KeepaClient, client)
+
+
+def _fetch_live_asins(key: str, *, task_id: str | None) -> list[Any]:
+    api = _load_keepa_client(key)
+    params = {
+        "sales_rank_lte": 80000,
+        "buybox_price_gte": 2000,
+        "num_offers_lte": 10,
+    }
+    return list(api.product_finder(params, domain="IT", n_products=20000))
+
+
+def _upload_to_minio(data: bytes, *, endpoint: str, access: str, secret: str) -> str:
+    client = Minio(endpoint, access_key=access, secret_key=secret, secure=False)
+    if not client.bucket_exists("keepa"):
+        client.make_bucket("keepa")
+    today = dt.date.today()
+    path = f"raw/{today:%Y/%m/%d}/asins.json"
+    client.put_object(
+        "keepa",
+        path,
+        io.BytesIO(data),
+        len(data),
+        content_type="application/json",
+    )
+    return path
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(list(argv) if argv is not None else [])
     live = resolve_live(args.live)
-    key = os.getenv("KEEPA_KEY")
-    endpoint = os.getenv("MINIO_ENDPOINT", "minio:9000")
-    access = os.getenv("MINIO_ACCESS_KEY", "minio")
-    secret = os.getenv("MINIO_SECRET_KEY", "minio123")
-    dsn = build_dsn()
-    start = time.time()
-    if live:
-        import keepa
+    fixture_path = Path(args.fixture_path)
+    offline_output = Path(args.offline_output)
+    idempotency_key, payload_meta = build_idempotency(
+        live,
+        fixture_path=fixture_path,
+        offline_output=offline_output,
+    )
+    task_id = os.getenv("TASK_ID")
 
-        if not key:
-            raise RuntimeError("KEEPA_KEY not set")
-        api = keepa.Keepa(key)
-        params = {
-            "sales_rank_lte": 80000,
-            "buybox_price_gte": 2000,
-            "num_offers_lte": 10,
-        }
-        asins = api.product_finder(params, domain="IT", n_products=20000)
-    else:
-        fixture_path = Path(args.fixture_path)
-        asins = load_offline_fixture(fixture_path)
-    duration = time.time() - start
-    today = datetime.date.today()
-    if live:
-        from minio import Minio
+    engine = create_engine(build_dsn(sync=True), future=True)
+    SessionLocal = sessionmaker(bind=engine, expire_on_commit=False, future=True)
+    try:
+        with process_once(
+            SessionLocal,
+            source=SOURCE_NAME,
+            payload_meta=payload_meta,
+            idempotency_key=idempotency_key,
+            task_id=task_id,
+        ) as handle:
+            if handle is None:
+                record_etl_skip(SOURCE_NAME)
+                logger.info(
+                    "etl.skipped",
+                    source=SOURCE_NAME,
+                    idempotency_key=idempotency_key,
+                )
+                return 0
 
-        path = f"raw/{today:%Y/%m/%d}/asins.json"
-        mc = Minio(endpoint, access_key=access, secret_key=secret, secure=False)
-        if not mc.bucket_exists("keepa"):
-            mc.make_bucket("keepa")
-        data = json.dumps(asins).encode()
-        mc.put_object("keepa", path, io.BytesIO(data), len(data), content_type="application/json")
-        conn = connect(dsn)
-        conn.autocommit = True
-        cur = conn.cursor()
-        cur.execute(
-            "CREATE TABLE IF NOT EXISTS etl_log(date date, asin_count int, duration_sec real)"
-        )
-        cur.execute(
-            "INSERT INTO etl_log(date, asin_count, duration_sec) VALUES (%s,%s,%s)",
-            (today, len(asins), duration),
-        )
-        cur.close()
-        conn.close()
-    else:
-        offline_path = Path(args.offline_output)
-        write_offline_fixture(offline_path, asins)
-    return 0
+            start = time.perf_counter()
+            with record_etl_run(SOURCE_NAME):
+                if live:
+                    keepa_key = os.getenv("KEEPA_KEY")
+                    if not keepa_key:
+                        raise RuntimeError("KEEPA_KEY not set")
+                    asins = _fetch_live_asins(keepa_key, task_id=task_id)
+                    data = json.dumps(asins).encode("utf-8")
+                    minio_path = _upload_to_minio(
+                        data,
+                        endpoint=os.getenv("MINIO_ENDPOINT", "minio:9000"),
+                        access=os.getenv("MINIO_ACCESS_KEY", "minio"),
+                        secret=os.getenv("MINIO_SECRET_KEY", "minio123"),
+                    )
+                    logger.info(
+                        "keepa.uploaded",
+                        source=SOURCE_NAME,
+                        minio_key=minio_path,
+                        asin_count=len(asins),
+                        duration_s=time.perf_counter() - start,
+                    )
+                else:
+                    asins = load_offline_fixture(fixture_path)
+                    write_offline_fixture(offline_output, asins)
+                    logger.info(
+                        "keepa.offline_written",
+                        source=SOURCE_NAME,
+                        output=str(offline_output),
+                        asin_count=len(asins),
+                    )
+        return 0
+    finally:
+        engine.dispose()
 
 
 if __name__ == "__main__":

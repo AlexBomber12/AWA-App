@@ -20,7 +20,8 @@ def _reset_metrics_globals():
     metrics.TASK_FAILURES_TOTAL.clear()
     metrics.ETL_RUNS_TOTAL.clear()
     metrics.ETL_FAILURES_TOTAL.clear()
-    metrics.ETL_LATENCY_SECONDS.clear()
+    metrics.ETL_RETRY_TOTAL.clear()
+    metrics.ETL_DURATION_SECONDS.clear()
     metrics.QUEUE_BACKLOG.clear()
     metrics._TASK_START.clear()
     metrics._BACKLOG_THREAD = None
@@ -394,6 +395,9 @@ def test_record_etl_run_tracks_success_and_failure(monkeypatch):
             raise RuntimeError("boom")
 
     runs = metrics.ETL_RUNS_TOTAL.collect()[0].samples
-    assert any(sample.labels["pipeline"] == "pipeline" for sample in runs)
+    success = next(sample for sample in runs if sample.labels["status"] == "success")
+    failure = next(sample for sample in runs if sample.labels["status"] == "failed")
+    assert success.value == 1.0
+    assert failure.value == 1.0
     failures = metrics.ETL_FAILURES_TOTAL.collect()[0].samples
-    assert any(sample.labels["pipeline"] == "pipeline" for sample in failures)
+    assert any(sample.labels["reason"] == "RuntimeError" for sample in failures)
