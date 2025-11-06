@@ -1,4 +1,6 @@
 import json
+import sys
+import types
 
 import awa_common.logging as logging_module
 import structlog
@@ -68,7 +70,7 @@ def test_bind_celery_task(monkeypatch, capsys) -> None:
     class DummyTask:
         request = DummyRequest()
 
-    monkeypatch.setattr(logging_module, "current_task", DummyTask())
+    monkeypatch.setitem(sys.modules, "celery", types.SimpleNamespace(current_task=DummyTask()))
     logging_module.bind_celery_task()
     structlog.get_logger(__name__).info("celery_task")
     payload = json.loads(capsys.readouterr().out.strip())

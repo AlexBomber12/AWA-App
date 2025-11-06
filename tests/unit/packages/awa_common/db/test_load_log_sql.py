@@ -9,7 +9,7 @@ from awa_common.db.load_log import (
     soft_update_meta_on_duplicate,
     try_insert_load_log,
 )
-from sqlalchemy import insert
+from sqlalchemy import Insert
 
 
 @dataclass
@@ -61,7 +61,7 @@ def test_try_insert_load_log_inserts_and_flushes() -> None:
     assert session.flushed
     stmt, params = session.executed[0]
     stmt = _unwrap_insert(stmt)
-    assert isinstance(stmt, insert)
+    assert isinstance(stmt, Insert)
     compiled = str(stmt)
     assert "load_log" in compiled
     assert params is None  # SQLAlchemy uses bound parameters inside statement
