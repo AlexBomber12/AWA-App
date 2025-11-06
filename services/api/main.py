@@ -11,7 +11,9 @@ import sqlalchemy
 import structlog
 from alembic.config import Config
 from alembic.script import ScriptDirectory
-from asgi_correlation_id import CorrelationIdMiddleware
+from awa_common.logging import RequestIdMiddleware, configure_logging
+from awa_common.metrics import MetricsMiddleware, register_metrics_endpoint
+from awa_common.metrics import init as metrics_init
 from awa_common.settings import settings
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -20,8 +22,6 @@ from sqlalchemy import text as sa_text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from services.api.errors import install_exception_handlers
-from services.api.logging_config import configure_logging
-from services.api.metrics import install_metrics
 from services.api.middlewares.audit import AuditMiddleware
 from services.api.security import install_security
 from services.api.sentry_config import init_sentry_if_configured
@@ -35,7 +35,10 @@ from .routes.sku import router as sku_router
 from .routes.stats import router as stats_router
 from .routes.upload import router as upload_router
 
-configure_logging()
+_app_version = getattr(settings, "APP_VERSION", "0.0.0")
+
+configure_logging(service="api", env=settings.ENV, version=_app_version)
+metrics_init(service="api", env=settings.ENV, version=_app_version)
 init_sentry_if_configured()
 logging.getLogger(__name__).info("settings=%s", json.dumps(settings.redacted()))
 
@@ -116,11 +119,12 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
-app.add_middleware(CorrelationIdMiddleware, header_name="X-Request-ID")
+app.add_middleware(RequestIdMiddleware)
+app.add_middleware(MetricsMiddleware)
 install_security(app)
 app.add_middleware(AuditMiddleware, session_factory=async_session)
 install_exception_handlers(app)
-install_metrics(app)
+register_metrics_endpoint(app)
 install_cors(app)
 
 

@@ -5,6 +5,7 @@ from typing import Awaitable, Callable
 
 import structlog
 from asgi_correlation_id import correlation_id
+from awa_common.logging import bind_user_sub
 from awa_common.security import oidc
 from awa_common.security.models import Role, UserCtx
 from awa_common.settings import settings
@@ -41,11 +42,8 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
     ) -> Response:
         request_id = get_request_id(request)
         structlog.contextvars.bind_contextvars(request_id=request_id)
-        try:
-            response = await call_next(request)
-            return response
-        finally:
-            structlog.contextvars.unbind_contextvars("request_id")
+        response = await call_next(request)
+        return response
 
 
 async def current_user(
@@ -76,6 +74,7 @@ async def current_user(
             headers=_AUTH_HEADERS,
         ) from exc
     request.state.user = user
+    bind_user_sub(user.sub)
     return user
 
 
