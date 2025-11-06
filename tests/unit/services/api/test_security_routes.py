@@ -4,6 +4,7 @@ from typing import Any
 
 import pytest
 from awa_common.security.models import Role, UserCtx
+from awa_common.settings import parse_rate_limit
 from fastapi import Depends, FastAPI, Request, Response
 from fastapi.testclient import TestClient
 from fastapi_limiter.depends import RateLimiter
@@ -149,18 +150,9 @@ def test_security_routes_behaviour(security_app):
     uuid.UUID(generated_id)
 
     expected_limits = {
-        "/viewer": (
-            security.settings.RATE_LIMIT_VIEWER_TIMES,  # type: ignore[attr-defined]
-            security.settings.RATE_LIMIT_VIEWER_SECONDS,  # type: ignore[attr-defined]
-        ),
-        "/ops": (
-            security.settings.RATE_LIMIT_OPS_TIMES,  # type: ignore[attr-defined]
-            security.settings.RATE_LIMIT_OPS_SECONDS,  # type: ignore[attr-defined]
-        ),
-        "/admin": (
-            security.settings.RATE_LIMIT_ADMIN_TIMES,  # type: ignore[attr-defined]
-            security.settings.RATE_LIMIT_ADMIN_SECONDS,  # type: ignore[attr-defined]
-        ),
+        "/viewer": parse_rate_limit(security.settings.RATE_LIMIT_VIEWER),
+        "/ops": parse_rate_limit(security.settings.RATE_LIMIT_OPS),
+        "/admin": parse_rate_limit(security.settings.RATE_LIMIT_ADMIN),
     }
 
     for path, (times, seconds) in expected_limits.items():

@@ -1,5 +1,4 @@
 import asyncio
-import json
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -14,6 +13,9 @@ from alembic.script import ScriptDirectory
 from awa_common.logging import RequestIdMiddleware, configure_logging
 from awa_common.metrics import MetricsMiddleware, register_metrics_endpoint
 from awa_common.metrics import init as metrics_init
+from awa_common.security.headers import install_security_headers
+from awa_common.security.ratelimit import install_role_based_rate_limit
+from awa_common.security.request_limits import install_body_size_limit
 from awa_common.settings import settings
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -35,12 +37,21 @@ from .routes.sku import router as sku_router
 from .routes.stats import router as stats_router
 from .routes.upload import router as upload_router
 
-_app_version = getattr(settings, "APP_VERSION", "0.0.0")
 
-configure_logging(service="api", env=settings.ENV, version=_app_version)
-metrics_init(service="api", env=settings.ENV, version=_app_version)
-init_sentry_if_configured()
-logging.getLogger(__name__).info("settings=%s", json.dumps(settings.redacted()))
+async def ready_db(session: AsyncSession = Depends(get_session)) -> dict[str, str]:
+    """Return 200 only when migrations are at head."""
+    alembic_config = os.getenv("ALEMBIC_CONFIG", "services/api/alembic.ini")
+    cfg = Config(alembic_config)
+    head = ScriptDirectory.from_config(cfg).get_current_head()
+    result = await session.execute(sa_text("SELECT version_num FROM alembic_version"))
+    current = result.scalar()
+    if current == head:
+        return {"status": "ready"}
+    raise HTTPException(status_code=503, detail="migrations pending")
+
+
+def ready() -> dict[str, str]:
+    return {"status": "ok", "env": settings.ENV}
 
 
 def _normalize_cors_origins(value: str | Iterable[str] | None) -> list[str]:
@@ -117,42 +128,47 @@ async def lifespan(app: FastAPI):
                 pass
 
 
-app = FastAPI(lifespan=lifespan)
+def create_app() -> FastAPI:
+    cfg = settings
+    app_version = getattr(cfg, "APP_VERSION", "0.0.0")
+    configure_logging(service="api", env=cfg.ENV, version=app_version)
+    metrics_init(service="api", env=cfg.ENV, version=app_version)
+    init_sentry_if_configured()
+    logging.getLogger(__name__).info("settings=%s", cfg.redacted())
 
-app.add_middleware(RequestIdMiddleware)
-app.add_middleware(MetricsMiddleware)
-install_security(app)
-app.add_middleware(AuditMiddleware, session_factory=async_session)
-install_exception_handlers(app)
-register_metrics_endpoint(app)
-install_cors(app)
+    app = FastAPI(lifespan=lifespan)
+
+    install_security_headers(app, cfg)
+    install_body_size_limit(app, cfg)
+    app.add_middleware(RequestIdMiddleware)
+    app.add_middleware(MetricsMiddleware)
+    install_security(app)
+    app.add_middleware(AuditMiddleware, session_factory=async_session)
+    install_exception_handlers(app)
+    register_metrics_endpoint(app)
+    install_cors(app)
+    install_role_based_rate_limit(app, cfg)
+
+    app.include_router(upload_router, prefix="/upload")
+    app.include_router(ingest_router)
+    app.include_router(roi_router)
+    app.include_router(stats_router)
+    app.include_router(score_router)
+    app.include_router(sku_router)
+    app.include_router(health_router.router)
+    app.add_api_route(
+        "/ready_db",
+        ready_db,
+        methods=["GET"],
+        status_code=status.HTTP_200_OK,
+        include_in_schema=False,
+    )
+    app.add_api_route("/ready", ready, methods=["GET"])
+
+    return app
 
 
-@app.get("/ready_db", status_code=status.HTTP_200_OK, include_in_schema=False)
-async def ready_db(session: AsyncSession = Depends(get_session)) -> dict[str, str]:
-    """Return 200 only when migrations are at head."""
-    alembic_config = os.getenv("ALEMBIC_CONFIG", "services/api/alembic.ini")
-    cfg = Config(alembic_config)
-    head = ScriptDirectory.from_config(cfg).get_current_head()
-    result = await session.execute(sa_text("SELECT version_num FROM alembic_version"))
-    current = result.scalar()
-    if current == head:
-        return {"status": "ready"}
-    raise HTTPException(status_code=503, detail="migrations pending")
-
-
-@app.get("/ready")
-def ready() -> dict[str, str]:
-    return {"status": "ok", "env": settings.ENV}
-
-
-app.include_router(upload_router, prefix="/upload")
-app.include_router(ingest_router)
-app.include_router(roi_router)
-app.include_router(stats_router)
-app.include_router(score_router)
-app.include_router(sku_router)
-app.include_router(health_router.router)
+app = create_app()
 
 
 async def _wait_for_db(max_attempts: int | None = None, delay_s: float | None = None) -> None:
@@ -228,4 +244,4 @@ async def _check_llm() -> None:
             pass
 
 
-__all__ = ["app", "ready"]
+__all__ = ["app", "create_app", "ready", "ready_db"]

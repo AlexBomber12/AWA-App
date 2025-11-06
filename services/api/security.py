@@ -1,17 +1,17 @@
 from __future__ import annotations
 
 import uuid
-from typing import Awaitable, Callable
+from typing import Awaitable, Callable, cast
 
 import structlog
 from asgi_correlation_id import correlation_id
 from awa_common.logging import bind_user_sub
 from awa_common.security import oidc
 from awa_common.security.models import Role, UserCtx
+from awa_common.security.ratelimit import RoleBasedRateLimiter, no_rate_limit
 from awa_common.settings import settings
 from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from fastapi_limiter.depends import RateLimiter
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
 
@@ -100,50 +100,16 @@ require_ops = require_roles(Role.ops, Role.admin)
 require_admin = require_roles(Role.admin)
 
 
-def _client_ip(request: Request) -> str:
-    xff = request.headers.get("x-forwarded-for")
-    if xff:
-        ip = xff.split(",")[0].strip()
-        if ip:
-            return ip
-    xri = request.headers.get("x-real-ip")
-    if xri:
-        return xri.strip()
-    client = request.client
-    if client and getattr(client, "host", None):
-        return client.host
-    return "unknown"
+def limit_viewer() -> Callable[[Request], Awaitable[None]]:
+    return cast(Callable[[Request], Awaitable[None]], RoleBasedRateLimiter(settings=settings))
 
 
-def _rate_limit_identifier(request: Request) -> str:
-    user: UserCtx | None = getattr(request.state, "user", None)
-    if user is not None:
-        return f"user:{user.sub}"
-    return f"ip:{_client_ip(request)}"
+def limit_ops() -> Callable[[Request], Awaitable[None]]:
+    return cast(Callable[[Request], Awaitable[None]], RoleBasedRateLimiter(settings=settings))
 
 
-def limit_viewer() -> RateLimiter:
-    return RateLimiter(
-        times=settings.RATE_LIMIT_VIEWER_TIMES,
-        seconds=settings.RATE_LIMIT_VIEWER_SECONDS,
-        identifier=_rate_limit_identifier,
-    )
-
-
-def limit_ops() -> RateLimiter:
-    return RateLimiter(
-        times=settings.RATE_LIMIT_OPS_TIMES,
-        seconds=settings.RATE_LIMIT_OPS_SECONDS,
-        identifier=_rate_limit_identifier,
-    )
-
-
-def limit_admin() -> RateLimiter:
-    return RateLimiter(
-        times=settings.RATE_LIMIT_ADMIN_TIMES,
-        seconds=settings.RATE_LIMIT_ADMIN_SECONDS,
-        identifier=_rate_limit_identifier,
-    )
+def limit_admin() -> Callable[[Request], Awaitable[None]]:
+    return cast(Callable[[Request], Awaitable[None]], RoleBasedRateLimiter(settings=settings))
 
 
 def install_security(app: FastAPI) -> None:
@@ -158,6 +124,7 @@ __all__ = [
     "limit_admin",
     "limit_ops",
     "limit_viewer",
+    "no_rate_limit",
     "require_admin",
     "require_ops",
     "require_roles",
