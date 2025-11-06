@@ -1,7 +1,6 @@
 import os
 
 from awa_common.dsn import build_dsn
-
 from services.etl import fba_fee_ingestor
 
 

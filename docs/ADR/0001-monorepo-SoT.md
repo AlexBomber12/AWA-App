@@ -60,6 +60,11 @@ rollouts and simpler incident response (logs, metrics, and configs line up acros
 must update this ADR when introducing new single-source components so future maintainers know where to
 look.
 
+## Status update
+
+The only active migration root is `services/api/migrations`, and `services/returns_etl/migrations/env.py`
+has been removed to enforce that single source of truth.
+
 ## Links
 
 - [Repository README](../../README.md)

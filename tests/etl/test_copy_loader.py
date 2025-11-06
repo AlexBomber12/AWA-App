@@ -200,9 +200,7 @@ def test_upsert(engine):
 
     with engine.connect() as conn:
         cnt = conn.execute(text("SELECT count(*) FROM test_ingest.reimbursements_raw")).scalar()
-        amt = conn.execute(
-            text("SELECT amount FROM test_ingest.reimbursements_raw WHERE reimb_id='r1'")
-        ).scalar()
+        amt = conn.execute(text("SELECT amount FROM test_ingest.reimbursements_raw WHERE reimb_id='r1'")).scalar()
     assert cnt == 2
     assert amt == 30.0
 
@@ -270,9 +268,7 @@ def test_null_handling(engine):
     )
     with engine.connect() as conn:
         row = conn.execute(
-            text(
-                "SELECT amount, currency FROM test_ingest.reimbursements_raw WHERE reimb_id='rnull'"
-            )
+            text("SELECT amount, currency FROM test_ingest.reimbursements_raw WHERE reimb_id='rnull'")
         ).one()
     assert row.amount is None
     assert row.currency is None

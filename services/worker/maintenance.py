@@ -3,9 +3,10 @@ from __future__ import annotations
 import os
 from typing import Any
 
-from awa_common.settings import settings
 from celery.utils.log import get_task_logger
 from sqlalchemy import create_engine, text
+
+from awa_common.settings import settings
 
 from .celery_app import celery_app
 

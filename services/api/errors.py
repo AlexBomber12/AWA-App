@@ -17,18 +17,14 @@ def _payload(error_type: str, message: str, request: Request) -> dict[str, Any]:
 
 def install_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(RequestValidationError)
-    async def _validation_error_handler(
-        request: Request, exc: RequestValidationError
-    ) -> JSONResponse:
+    async def _validation_error_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
         structlog.get_logger().info("validation_error", errors=exc.errors())
         payload = _payload("validation_error", "Invalid request", request)
         payload["details"] = exc.errors()
         return JSONResponse(status_code=422, content=payload)
 
     @app.exception_handler(StarletteHTTPException)
-    async def _http_exception_handler(
-        request: Request, exc: StarletteHTTPException
-    ) -> JSONResponse:
+    async def _http_exception_handler(request: Request, exc: StarletteHTTPException) -> JSONResponse:
         log = structlog.get_logger()
         if exc.status_code == 429:
             log.warning("rate_limited", detail=str(exc.detail))

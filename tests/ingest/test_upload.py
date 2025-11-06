@@ -2,8 +2,9 @@ import subprocess
 
 import boto3
 import pytest
-from awa_common.dsn import build_dsn
 from sqlalchemy import create_engine, text
+
+from awa_common.dsn import build_dsn
 
 pytestmark = pytest.mark.integration
 

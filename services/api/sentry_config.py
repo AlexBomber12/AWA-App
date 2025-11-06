@@ -1,17 +1,19 @@
 from __future__ import annotations
 
 import os
-from typing import Any, Mapping, cast
+from collections.abc import Mapping
+from typing import Any, cast
 
 import sentry_sdk
 import structlog
-from awa_common.security.pii import _breadcrumb_scrubber, _pii_scrubber
-from awa_common.settings import settings
 from sentry_sdk.integrations.celery import CeleryIntegration
 from sentry_sdk.integrations.fastapi import FastApiIntegration
 from sentry_sdk.integrations.logging import LoggingIntegration
 from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
 from sentry_sdk.types import Event, Hint
+
+from awa_common.security.pii import _breadcrumb_scrubber, _pii_scrubber
+from awa_common.settings import settings
 
 
 def before_send(event: Event, hint: Hint) -> Event | None:
@@ -55,9 +57,7 @@ def init_sentry_if_configured() -> None:
                 FastApiIntegration(),
                 SqlalchemyIntegration(),
                 CeleryIntegration(),
-                LoggingIntegration(
-                    level=None, event_level=None
-                ),  # breadcrumbs only; no log->event promotion
+                LoggingIntegration(level=None, event_level=None),  # breadcrumbs only; no log->event promotion
             ],
             traces_sample_rate=traces_rate,
             profiles_sample_rate=profiles_rate,
@@ -65,6 +65,4 @@ def init_sentry_if_configured() -> None:
     except BadDsnT:
         structlog.get_logger(__name__).warning("Ignoring invalid SENTRY_DSN", exc_info=False)
     except Exception:
-        structlog.get_logger(__name__).debug(
-            "Sentry init failed – continuing without telemetry", exc_info=True
-        )
+        structlog.get_logger(__name__).debug("Sentry init failed – continuing without telemetry", exc_info=True)

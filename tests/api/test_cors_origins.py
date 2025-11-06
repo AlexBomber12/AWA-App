@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import pytest
-from awa_common.settings import settings
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from awa_common.settings import settings
 from services.api.main import install_cors
 
 

@@ -8,13 +8,13 @@ from pathlib import Path
 from typing import Any
 
 import structlog
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+
 from awa_common.dsn import build_dsn
 from awa_common.etl.guard import process_once
 from awa_common.etl.idempotency import build_payload_meta, compute_idempotency_key
 from awa_common.metrics import record_etl_run, record_etl_skip
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-
 from services.fees_h10 import repository as repo
 
 logger = structlog.get_logger(__name__)
@@ -87,9 +87,7 @@ def build_rows_from_live(
     rows: list[dict[str, Any]] = []
     for asin in skus:
         response = api.get_my_fees_estimate_for_sku(asin)
-        total_fee = response["payload"]["FeesEstimateResult"]["FeesEstimate"]["TotalFeesEstimate"][
-            "Amount"
-        ]
+        total_fee = response["payload"]["FeesEstimateResult"]["FeesEstimate"]["TotalFeesEstimate"]["Amount"]
         rows.append(
             {
                 "asin": asin,
@@ -114,9 +112,7 @@ def build_rows_from_fixture(path: Path) -> list[dict[str, Any]]:
                 "asin": entry["asin"],
                 "marketplace": "US",
                 "fee_type": "fba_pick_pack",
-                "amount": entry["payload"]["FeesEstimateResult"]["FeesEstimate"][
-                    "TotalFeesEstimate"
-                ]["Amount"],
+                "amount": entry["payload"]["FeesEstimateResult"]["FeesEstimate"]["TotalFeesEstimate"]["Amount"],
                 "currency": "USD",
                 "source": "sp",
                 "effective_date": entry.get("date"),

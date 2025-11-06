@@ -50,4 +50,4 @@ def gen(r: Req) -> dict[str, str]:
         )
         return {"completion": out.strip()}
     except subprocess.CalledProcessError as e:
-        raise HTTPException(500, e.stderr)
+        raise HTTPException(500, e.stderr) from e

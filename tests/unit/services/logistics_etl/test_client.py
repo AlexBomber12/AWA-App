@@ -26,8 +26,7 @@ async def test_fetch_sources_csv_normalizes_rows(monkeypatch):
 
     async def fake_download(uri, timeout_s, retries):
         raw = (
-            b"carrier,origin,dest,service,eur_per_kg,effective_from,effective_to\n"
-            b"DHL,DE,FR,EXPRESS,1.25,2024-01-01,\n"
+            b"carrier,origin,dest,service,eur_per_kg,effective_from,effective_to\nDHL,DE,FR,EXPRESS,1.25,2024-01-01,\n"
         )
         return raw, {"content_type": "text/csv"}
 
@@ -55,9 +54,7 @@ async def test_download_with_retries_http_recovers(monkeypatch):
         return b"ok", {}
 
     monkeypatch.setattr(client, "_download_http", fake_download)
-    data, meta = await client._download_with_retries(
-        "http://logistics.example/rates.csv", timeout_s=1, retries=2
-    )
+    data, meta = await client._download_with_retries("http://logistics.example/rates.csv", timeout_s=1, retries=2)
     assert data == b"ok"
     assert meta == {}
     assert attempts["count"] == 2
@@ -165,9 +162,7 @@ async def test_fetch_sources_excel(monkeypatch):
     payload = buffer.getvalue()
 
     async def fake_download(uri, timeout_s, retries):
-        return payload, {
-            "content_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        }
+        return payload, {"content_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}
 
     monkeypatch.setattr(client, "_download_with_retries", fake_download)
     snapshots = await client.fetch_sources()

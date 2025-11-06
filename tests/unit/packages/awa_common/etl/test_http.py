@@ -6,6 +6,7 @@ from types import SimpleNamespace
 import httpx
 import pytest
 import respx
+
 from awa_common.etl import http
 
 
@@ -16,9 +17,7 @@ def _no_sleep(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_request_retries_on_429(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[tuple[str, str]] = []
-    monkeypatch.setattr(
-        http.metrics, "record_etl_retry", lambda source, code: calls.append((source, code))
-    )
+    monkeypatch.setattr(http.metrics, "record_etl_retry", lambda source, code: calls.append((source, code)))
 
     with respx.mock(base_url="https://example.com") as mock:
         route = mock.get("/fees")
@@ -37,9 +36,7 @@ def test_request_retries_on_429(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_request_recovers_from_multiple_500(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[tuple[str, str]] = []
-    monkeypatch.setattr(
-        http.metrics, "record_etl_retry", lambda source, code: calls.append((source, code))
-    )
+    monkeypatch.setattr(http.metrics, "record_etl_retry", lambda source, code: calls.append((source, code)))
 
     with respx.mock(base_url="https://api.example.com") as mock:
         route = mock.get("/data")
@@ -50,9 +47,7 @@ def test_request_recovers_from_multiple_500(monkeypatch: pytest.MonkeyPatch) -> 
                 httpx.Response(200, json={"value": 42}),
             ]
         )
-        response = http.request(
-            "GET", "https://api.example.com/data", source="etl", task_id="task-2"
-        )
+        response = http.request("GET", "https://api.example.com/data", source="etl", task_id="task-2")
 
     assert response.json() == {"value": 42}
     assert route.call_count == 3
@@ -61,9 +56,7 @@ def test_request_recovers_from_multiple_500(monkeypatch: pytest.MonkeyPatch) -> 
 
 def test_request_handles_network_error(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[tuple[str, str]] = []
-    monkeypatch.setattr(
-        http.metrics, "record_etl_retry", lambda source, code: calls.append((source, code))
-    )
+    monkeypatch.setattr(http.metrics, "record_etl_retry", lambda source, code: calls.append((source, code)))
 
     with respx.mock(base_url="https://net.example.com") as mock:
         route = mock.get("/data")
@@ -74,9 +67,7 @@ def test_request_handles_network_error(monkeypatch: pytest.MonkeyPatch) -> None:
             return httpx.Response(200, json={"status": "ok"})
 
         route.mock(side_effect=_side_effect)
-        response = http.request(
-            "GET", "https://net.example.com/data", source="etl", task_id="task-3"
-        )
+        response = http.request("GET", "https://net.example.com/data", source="etl", task_id="task-3")
 
     assert response.status_code == 200
     assert ("etl", "ConnectError") in calls

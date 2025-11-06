@@ -1,9 +1,9 @@
 from pathlib import Path
 
 import pytest
-from awa_common.dsn import build_dsn
 from sqlalchemy import create_engine, text
 
+from awa_common.dsn import build_dsn
 from services.returns_etl import loader
 
 pytestmark = pytest.mark.integration

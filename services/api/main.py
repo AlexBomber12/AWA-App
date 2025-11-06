@@ -1,8 +1,8 @@
 import asyncio
 import logging
 import os
+from collections.abc import Iterable
 from contextlib import asynccontextmanager
-from typing import Iterable
 
 import httpx
 import redis.asyncio as aioredis
@@ -10,19 +10,18 @@ import sqlalchemy
 import structlog
 from alembic.config import Config
 from alembic.script import ScriptDirectory
-from awa_common.logging import RequestIdMiddleware, configure_logging
-from awa_common.metrics import MetricsMiddleware, register_metrics_endpoint
-from awa_common.metrics import init as metrics_init
-from awa_common.security.headers import install_security_headers
-from awa_common.security.ratelimit import install_role_based_rate_limit
-from awa_common.security.request_limits import install_body_size_limit
-from awa_common.settings import settings
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi_limiter import FastAPILimiter
 from sqlalchemy import text as sa_text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from awa_common.logging import RequestIdMiddleware, configure_logging
+from awa_common.metrics import MetricsMiddleware, init as metrics_init, register_metrics_endpoint
+from awa_common.security.headers import install_security_headers
+from awa_common.security.ratelimit import install_role_based_rate_limit
+from awa_common.security.request_limits import install_body_size_limit
+from awa_common.settings import settings
 from services.api.errors import install_exception_handlers
 from services.api.middlewares.audit import AuditMiddleware
 from services.api.security import install_security
@@ -86,9 +85,7 @@ def resolve_cors_origins(
             raise RuntimeError("CORS_ORIGINS must be set when APP_ENV is 'stage' or 'prod'.")
         return []
 
-    if env in {"stage", "staging", "prod", "production"} and any(
-        origin == "*" for origin in origins
-    ):
+    if env in {"stage", "staging", "prod", "production"} and any(origin == "*" for origin in origins):
         raise RuntimeError("Wildcard origins are not permitted in stage or prod environments.")
 
     return origins
@@ -107,7 +104,7 @@ def install_cors(app: FastAPI) -> None:
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(_app: FastAPI):
     await _wait_for_db()
     await _check_llm()
     redis_url = settings.REDIS_URL
@@ -181,9 +178,7 @@ async def _wait_for_db(max_attempts: int | None = None, delay_s: float | None = 
             )
         )
     if delay_s is None:
-        delay_s = float(
-            os.getenv("WAIT_FOR_DB_DELAY_S", "0.05" if env in {"local", "test"} else "0.2")
-        )
+        delay_s = float(os.getenv("WAIT_FOR_DB_DELAY_S", "0.05" if env in {"local", "test"} else "0.2"))
     db_url = (
         (os.getenv("DATABASE_URL") or "").strip()
         or str(getattr(settings, "DATABASE_URL", "")).strip()

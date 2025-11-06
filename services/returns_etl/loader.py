@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pandas as pd
 import psycopg2
+
 from awa_common.dsn import build_dsn
 
 COPY_SQL = "COPY returns_raw (asin, qty, fee_eur, processed_at) FROM STDIN CSV HEADER"

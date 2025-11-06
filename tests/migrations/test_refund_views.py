@@ -22,17 +22,17 @@ def test_refund_views(db_engine) -> None:
         conn.execute(text("SELECT * FROM v_refunds_summary LIMIT 0"))
         conn.execute(
             text(
-                "INSERT INTO returns_raw (id, asin, qty, refund_amount, return_date) VALUES (1, 'A1', 1, 5.0, '2024-01-01')"
+                "INSERT INTO returns_raw (id, asin, qty, refund_amount, return_date) "
+                "VALUES (1, 'A1', 1, 5.0, '2024-01-01')"
             )
         )
         conn.execute(
-            text(
-                "INSERT INTO reimbursements_raw (id, asin, amount, reimb_date) VALUES (1, 'A1', 2.0, '2024-01-02')"
-            )
+            text("INSERT INTO reimbursements_raw (id, asin, amount, reimb_date) VALUES (1, 'A1', 2.0, '2024-01-02')")
         )
         conn.execute(
             text(
-                "INSERT INTO returns_raw (id, asin, qty, refund_amount, return_date) VALUES (2, 'A2', 1, 3.0, '2024-01-01')"
+                "INSERT INTO returns_raw (id, asin, qty, refund_amount, return_date) "
+                "VALUES (2, 'A2', 1, 3.0, '2024-01-01')"
             )
         )
 

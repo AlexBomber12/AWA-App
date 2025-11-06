@@ -61,7 +61,10 @@ def kpi(db=Depends(get_db) if get_db else None):
         row = (
             db.execute(
                 text(
-                    f"SELECT AVG(roi) AS roi_avg, COUNT(DISTINCT asin) AS products, COUNT(DISTINCT vendor) AS vendors FROM {view}"
+                    "SELECT AVG(roi) AS roi_avg, "
+                    "COUNT(DISTINCT asin) AS products, "
+                    "COUNT(DISTINCT vendor) AS vendors "
+                    f"FROM {view}"
                 )
             )
             .mappings()
@@ -172,7 +175,9 @@ def roi_trend(db=Depends(get_db) if get_db else None):
                 rows = (
                     db.execute(
                         text(
-                            f"SELECT date_trunc('month', {date_col})::date AS month, AVG(roi) AS roi_avg, COUNT(*) AS items FROM {view} GROUP BY 1 ORDER BY 1"
+                            f"SELECT date_trunc('month', {date_col})::date AS month, "
+                            "AVG(roi) AS roi_avg, COUNT(*) AS items "
+                            f"FROM {view} GROUP BY 1 ORDER BY 1"
                         )
                     )
                     .mappings()

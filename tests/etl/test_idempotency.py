@@ -2,9 +2,9 @@ import os
 from pathlib import Path
 
 import pytest
-from awa_common.dsn import build_dsn
 from sqlalchemy import create_engine, text
 
+from awa_common.dsn import build_dsn
 from etl.load_csv import _sha256_file, import_file
 
 pytestmark = [

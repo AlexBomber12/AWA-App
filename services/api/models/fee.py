@@ -1,5 +1,6 @@
-from awa_common.base import Base
 from sqlalchemy import Column, DateTime, Numeric, String, func
+
+from awa_common.base import Base
 
 
 class Fee(Base):

@@ -3,13 +3,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from sqlalchemy import Insert
+
 from awa_common.db.load_log import (
     mark_failed,
     mark_success,
     soft_update_meta_on_duplicate,
     try_insert_load_log,
 )
-from sqlalchemy import Insert
 
 
 @dataclass

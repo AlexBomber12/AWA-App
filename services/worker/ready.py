@@ -1,6 +1,7 @@
 import redis
-from awa_common.settings import settings
 from fastapi import FastAPI, status
+
+from awa_common.settings import settings
 
 # If Celery app is available:
 try:

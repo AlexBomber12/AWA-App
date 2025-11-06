@@ -4,6 +4,7 @@ from contextlib import AbstractContextManager
 from typing import Any
 
 import pytest
+
 from awa_common.etl import guard
 
 

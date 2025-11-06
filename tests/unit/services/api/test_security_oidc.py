@@ -5,6 +5,7 @@ from typing import Any
 
 import pytest
 from authlib.jose import JsonWebKey, JsonWebToken
+
 from awa_common.security import oidc
 from awa_common.security.models import Role
 from awa_common.settings import settings

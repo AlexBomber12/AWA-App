@@ -2,8 +2,9 @@ import json
 import sys
 import types
 
-import awa_common.logging as logging_module
 import structlog
+
+import awa_common.logging as logging_module
 from awa_common.logging import bind_request, bind_user_sub, clear_context, configure_logging
 
 

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import Iterable
 from decimal import Decimal, InvalidOperation
-from typing import Iterable
 
 from fastapi import Depends, FastAPI, HTTPException
 from sqlalchemy import text
@@ -95,9 +95,7 @@ async def price(req: PriceRequest):
     response_model=SimulateResponse,
     tags=["pricing"],
 )
-async def simulate(
-    req: SimulateRequest, session: AsyncSession = Depends(get_session)
-) -> SimulateResponse:
+async def simulate(req: SimulateRequest, session: AsyncSession = Depends(get_session)) -> SimulateResponse:
     items = _build_sim_request_items(req)
     if not items:
         raise HTTPException(status_code=400, detail="No ASINs provided")
@@ -182,9 +180,7 @@ async def _log_price_update(
     response_model=ApplyResponse,
     tags=["pricing"],
 )
-async def apply_prices(
-    req: ApplyRequest, session: AsyncSession = Depends(get_session)
-) -> ApplyResponse:
+async def apply_prices(req: ApplyRequest, session: AsyncSession = Depends(get_session)) -> ApplyResponse:
     if not req.items:
         raise HTTPException(status_code=400, detail="No ASINs provided")
 

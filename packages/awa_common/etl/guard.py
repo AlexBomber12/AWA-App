@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Any, Callable, Generator, Literal
+from typing import Any, Literal
 
 from sqlalchemy.orm import Session
 

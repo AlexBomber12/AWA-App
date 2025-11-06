@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import csv
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from pathlib import Path
-from typing import Callable, Iterable, Mapping, Sequence
 
 import pandas as pd
 import pytest

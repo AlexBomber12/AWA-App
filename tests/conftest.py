@@ -10,14 +10,15 @@ import random
 import sys
 import time
 import types
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
 
 import pytest
+
 from awa_common.dsn import build_dsn
 from awa_common.security.models import Role
 from awa_common.settings import settings
-
 from tests.fakes import FakeRedis
 from tests.utils.strict_spy import StrictSpy
 
@@ -120,9 +121,7 @@ def _db_available() -> bool:
         return False
 
     async def _check() -> None:
-        conn = await asyncpg.connect(
-            dsn=os.getenv("PG_ASYNC_DSN", build_dsn(sync=False)), timeout=1
-        )
+        conn = await asyncpg.connect(dsn=os.getenv("PG_ASYNC_DSN", build_dsn(sync=False)), timeout=1)
         await conn.close()
 
     try:
@@ -447,7 +446,7 @@ def _fast_sleep_all(monkeypatch, request):
 
 
 @pytest.fixture(autouse=True)
-def _api_fast_startup_global(monkeypatch, request):
+def _api_fast_startup_global(monkeypatch, request):  # noqa: C901
     """Fast lifespan for API tests using TestClient(main.app).
     Always no-op FastAPILimiter & Redis; only skip _wait_for_db patch if a test
     needs the real DB retry loop via @pytest.mark.needs_wait_for_db.
@@ -610,7 +609,7 @@ def fastapi_dep_overrides():
 
 
 @pytest.fixture
-def http_mock(monkeypatch: pytest.MonkeyPatch):
+def http_mock(monkeypatch: pytest.MonkeyPatch):  # noqa: C901
     """HTTP transport stub that routes httpx traffic to queued canned responses."""
 
     try:
@@ -659,9 +658,7 @@ def http_mock(monkeypatch: pytest.MonkeyPatch):
             if exc:
                 raise exc if isinstance(exc, Exception) else exc()
             if spec.get("json") is not None:
-                return httpx.Response(
-                    spec["status_code"], json=spec["json"], headers=spec["headers"]
-                )
+                return httpx.Response(spec["status_code"], json=spec["json"], headers=spec["headers"])
             return httpx.Response(
                 spec["status_code"],
                 text=spec.get("text") or "",
@@ -694,7 +691,7 @@ def http_mock(monkeypatch: pytest.MonkeyPatch):
 
 
 @pytest.fixture
-def smtp_mock(monkeypatch: pytest.MonkeyPatch):
+def smtp_mock(monkeypatch: pytest.MonkeyPatch):  # noqa: C901
     """Context manager that captures outbound SMTP traffic into an in-memory list."""
 
     import smtplib
@@ -803,7 +800,7 @@ def tmp_path_helpers(tmp_path_factory: pytest.TempPathFactory):
 
 
 @pytest.fixture
-def stub_load_log(monkeypatch: pytest.MonkeyPatch):
+def stub_load_log(monkeypatch: pytest.MonkeyPatch):  # noqa: C901
     """Stub load_log helpers to avoid real database access."""
 
     store: dict[tuple[str, str], dict[str, Any]] = {}
@@ -873,12 +870,8 @@ def stub_load_log(monkeypatch: pytest.MonkeyPatch):
         record["task_id"] = task_id
         record["status"] = "skipped"
 
-    monkeypatch.setattr(
-        "awa_common.db.load_log.try_insert_load_log", try_insert_load_log, raising=False
-    )
-    monkeypatch.setattr(
-        "awa_common.etl.guard.try_insert_load_log", try_insert_load_log, raising=False
-    )
+    monkeypatch.setattr("awa_common.db.load_log.try_insert_load_log", try_insert_load_log, raising=False)
+    monkeypatch.setattr("awa_common.etl.guard.try_insert_load_log", try_insert_load_log, raising=False)
     monkeypatch.setattr("awa_common.db.load_log.get_load_log_id", get_load_log_id, raising=False)
     monkeypatch.setattr("awa_common.etl.guard.get_load_log_id", get_load_log_id, raising=False)
     monkeypatch.setattr("awa_common.db.load_log.mark_success", mark_success, raising=False)
@@ -899,7 +892,7 @@ def stub_load_log(monkeypatch: pytest.MonkeyPatch):
 
 
 @pytest.fixture
-def patch_etl_session(monkeypatch: pytest.MonkeyPatch, stub_load_log):
+def patch_etl_session(monkeypatch: pytest.MonkeyPatch, stub_load_log):  # noqa: C901
     """Patch ETL modules to use an in-memory session and engine."""
 
     def _patch(module_path: str):
@@ -941,9 +934,7 @@ def patch_etl_session(monkeypatch: pytest.MonkeyPatch, stub_load_log):
             sessions.append(session)
             return session
 
-        monkeypatch.setattr(
-            f"{module_path}.create_engine", lambda *args, **kwargs: fake_engine, raising=False
-        )
+        monkeypatch.setattr(f"{module_path}.create_engine", lambda *args, **kwargs: fake_engine, raising=False)
         monkeypatch.setattr(
             f"{module_path}.sessionmaker",
             lambda *args, **kwargs: _session_factory,

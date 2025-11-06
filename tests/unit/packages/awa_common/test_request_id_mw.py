@@ -1,8 +1,9 @@
 import uuid
 
-from awa_common.logging import RequestIdMiddleware
 from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
+
+from awa_common.logging import RequestIdMiddleware
 
 
 def _build_app():

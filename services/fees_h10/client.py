@@ -1,5 +1,5 @@
 import os
-from typing import Any, Dict
+from typing import Any
 
 import httpx
 
@@ -7,7 +7,7 @@ BASE = "https://api.helium10.com/financials/fba-fees/{}"
 H10_KEY = os.getenv("HELIUM10_KEY", "")
 
 
-async def fetch_fees(asin: str) -> Dict[str, Any]:
+async def fetch_fees(asin: str) -> dict[str, Any]:
     headers = {"Authorization": f"Bearer {H10_KEY}"} if H10_KEY else {}
     async with httpx.AsyncClient(timeout=10) as client:
         r = await client.get(BASE.format(asin), headers=headers)

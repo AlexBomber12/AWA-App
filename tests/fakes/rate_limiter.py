@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import time
-from typing import Hashable
+from collections.abc import Hashable
 
 
 class InMemoryRateLimiter:
@@ -12,9 +12,7 @@ class InMemoryRateLimiter:
         self.default_window = default_window
         self._hits: dict[Hashable, list[float]] = {}
 
-    def allow(
-        self, key: Hashable, *, limit: int | None = None, window: float | None = None
-    ) -> bool:
+    def allow(self, key: Hashable, *, limit: int | None = None, window: float | None = None) -> bool:
         limit = limit or self.default_limit
         window = window or self.default_window
         if limit <= 0:

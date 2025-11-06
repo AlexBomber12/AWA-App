@@ -3,9 +3,9 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from awa_common.dsn import build_dsn
 from sqlalchemy import create_engine, text
 
+from awa_common.dsn import build_dsn
 from services.etl import fba_fee_ingestor
 
 pytestmark = [pytest.mark.integration]
@@ -30,9 +30,7 @@ def test_fba_ingestor_skips_duplicates(monkeypatch: pytest.MonkeyPatch, pg_pool)
             row_count = conn.execute(text("SELECT COUNT(*) FROM fees_raw")).scalar()
             assert row_count is not None and row_count > 0
 
-            statuses = conn.execute(
-                text("SELECT status FROM load_log WHERE source='fba_fee_ingestor'")
-            ).fetchall()
+            statuses = conn.execute(text("SELECT status FROM load_log WHERE source='fba_fee_ingestor'")).fetchall()
             assert len(statuses) == 1
             assert statuses[0].status == "success"
     finally:

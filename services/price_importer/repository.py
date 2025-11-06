@@ -1,10 +1,12 @@
 from __future__ import annotations
 
-from typing import Any, Iterable, cast
+from collections.abc import Iterable
+from typing import Any, cast
 
-from awa_common.dsn import build_dsn
 from sqlalchemy import create_engine, insert, select, update
 from sqlalchemy.engine import CursorResult, Engine
+
+from awa_common.dsn import build_dsn
 
 from .common import Base
 from .common.models_vendor import Vendor, VendorPrice
@@ -31,9 +33,7 @@ class Repository:
             res = conn.execute(insert(Vendor).values(name=name).returning(Vendor.id))
             return int(res.scalar())
 
-    def upsert_prices(
-        self, vendor_id: int, rows: Iterable[dict], dry_run: bool = False
-    ) -> tuple[int, int]:
+    def upsert_prices(self, vendor_id: int, rows: Iterable[dict], dry_run: bool = False) -> tuple[int, int]:
         inserted = 0
         updated = 0
         with self.engine.begin() as conn:

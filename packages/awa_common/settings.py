@@ -53,9 +53,7 @@ def parse_rate_limit(limit: str) -> tuple[int, int]:
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(
-        env_file=_default_env_file(), env_file_encoding="utf-8", extra="ignore"
-    )
+    model_config = SettingsConfigDict(env_file=_default_env_file(), env_file_encoding="utf-8", extra="ignore")
 
     # Core
     ENV: str = "local"  # local|dev|stage|prod

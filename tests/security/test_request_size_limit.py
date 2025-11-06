@@ -5,16 +5,17 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from fastapi import FastAPI, Request
+from fastapi.testclient import TestClient
+from starlette.requests import Request as StarletteRequest
+from starlette.responses import Response as StarletteResponse
+
 from awa_common.security.request_limits import (
     BodySizeLimitMiddleware,
     _RequestTooLarge,
     install_body_size_limit,
 )
 from awa_common.settings import settings
-from fastapi import FastAPI, Request
-from fastapi.testclient import TestClient
-from starlette.requests import Request as StarletteRequest
-from starlette.responses import Response as StarletteResponse
 
 
 def _build_echo_app() -> FastAPI:

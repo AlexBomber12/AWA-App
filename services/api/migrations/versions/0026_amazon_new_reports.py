@@ -27,7 +27,10 @@ def upgrade() -> None:
     )
     op.create_index("idx_fee_preview_raw_asin", "fee_preview_raw", ["asin"], unique=False)
     op.execute(
-        "CREATE INDEX IF NOT EXISTS brin_fee_preview_raw_captured_at ON fee_preview_raw USING brin (captured_at)"
+        """
+        CREATE INDEX IF NOT EXISTS brin_fee_preview_raw_captured_at
+        ON fee_preview_raw USING brin (captured_at)
+        """
     )
 
     op.create_table(
@@ -43,7 +46,10 @@ def upgrade() -> None:
     )
     op.create_index("idx_inventory_ledger_raw_asin", "inventory_ledger_raw", ["asin"], unique=False)
     op.execute(
-        "CREATE INDEX IF NOT EXISTS brin_inventory_ledger_raw_event_date ON inventory_ledger_raw USING brin (event_date)"
+        """
+        CREATE INDEX IF NOT EXISTS brin_inventory_ledger_raw_event_date
+        ON inventory_ledger_raw USING brin (event_date)
+        """
     )
 
     op.create_table(
@@ -73,7 +79,10 @@ def upgrade() -> None:
         unique=False,
     )
     op.execute(
-        "CREATE INDEX IF NOT EXISTS brin_ads_sp_cost_daily_raw_date ON ads_sp_cost_daily_raw USING brin (date)"
+        """
+        CREATE INDEX IF NOT EXISTS brin_ads_sp_cost_daily_raw_date
+        ON ads_sp_cost_daily_raw USING brin (date)
+        """
     )
     op.create_index(
         "uq_ads_sp_cost_daily_raw_key",
@@ -103,10 +112,17 @@ def upgrade() -> None:
         unique=False,
     )
     op.execute(
-        "CREATE INDEX IF NOT EXISTS brin_settlements_txn_raw_posted_date ON settlements_txn_raw USING brin (posted_date)"
+        """
+        CREATE INDEX IF NOT EXISTS brin_settlements_txn_raw_posted_date
+        ON settlements_txn_raw USING brin (posted_date)
+        """
     )
     op.execute(
-        "CREATE UNIQUE INDEX IF NOT EXISTS uq_settlements_txn_raw_transaction_id ON settlements_txn_raw(transaction_id) WHERE transaction_id IS NOT NULL"
+        """
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_settlements_txn_raw_transaction_id
+        ON settlements_txn_raw(transaction_id)
+        WHERE transaction_id IS NOT NULL
+        """
     )
 
 

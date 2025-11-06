@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from awa_common.dsn import build_dsn
 from fastapi import APIRouter, Depends, Request
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import String, bindparam, create_engine, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.types import Numeric
+
+from awa_common.dsn import build_dsn
 
 from .. import roi_repository
 from ..db import get_session

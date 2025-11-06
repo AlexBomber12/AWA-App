@@ -9,13 +9,14 @@ from pathlib import Path
 from typing import Any
 
 import structlog
+from sqlalchemy import create_engine, text
+from sqlalchemy.orm import Session, sessionmaker
+
 from awa_common.dsn import build_dsn
 from awa_common.etl.guard import process_once
 from awa_common.etl.http import request as http_request
 from awa_common.etl.idempotency import build_payload_meta, compute_idempotency_key
 from awa_common.metrics import record_etl_run, record_etl_skip
-from sqlalchemy import create_engine, text
-from sqlalchemy.orm import Session, sessionmaker
 
 logger = structlog.get_logger(__name__)
 
@@ -63,9 +64,7 @@ def resolve_live(cli_live: bool | None) -> bool:
     return os.getenv("ENABLE_LIVE") == "1"
 
 
-def fetch_live_fees(
-    asins: Iterable[str], api_key: str, *, task_id: str | None
-) -> list[tuple[str, float]]:
+def fetch_live_fees(asins: Iterable[str], api_key: str, *, task_id: str | None) -> list[tuple[str, float]]:
     if not api_key:
         raise RuntimeError("Missing HELIUM_API_KEY")
     results: list[tuple[str, float]] = []
@@ -181,9 +180,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             with record_etl_run(SOURCE_NAME):
                 ensure_table(session)
                 if live:
-                    rows = fetch_live_fees(
-                        args.asins, os.getenv("HELIUM_API_KEY", ""), task_id=task_id
-                    )
+                    rows = fetch_live_fees(args.asins, os.getenv("HELIUM_API_KEY", ""), task_id=task_id)
                 else:
                     rows = load_offline_fees(fixture_path)
                 upsert_fees(session, rows)

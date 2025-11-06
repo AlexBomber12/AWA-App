@@ -15,7 +15,6 @@ if ROOT_STR not in sys.path:
 
 from awa_common.base import Base  # noqa: E402
 from awa_common.settings import settings  # noqa: E402
-
 from services.db.utils import views as view_helpers  # noqa: E402
 
 # Alembic config is only available when invoked by the CLI.

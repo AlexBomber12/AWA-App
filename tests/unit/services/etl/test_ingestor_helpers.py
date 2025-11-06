@@ -31,9 +31,7 @@ def test_fba_fetch_live_fees(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_keepa_build_idempotency_live(monkeypatch: pytest.MonkeyPatch) -> None:
     fake_client = types.SimpleNamespace(product_finder=lambda *a, **k: [1, 2, 3])
     monkeypatch.setitem(sys.modules, "keepa", types.SimpleNamespace(Keepa=lambda key: fake_client))
-    key, meta = keepa_ingestor.build_idempotency(
-        True, fixture_path=Path("x"), offline_output=Path("y")
-    )
+    key, meta = keepa_ingestor.build_idempotency(True, fixture_path=Path("x"), offline_output=Path("y"))
     assert key.startswith("b2:")
     assert meta["mode"] == "live"
 
@@ -56,9 +54,7 @@ def test_keepa_build_idempotency_offline(tmp_path: Path) -> None:
     fixture = tmp_path / "sample.json"
     fixture.write_text("[]")
     offline = tmp_path / "output.json"
-    key, meta = keepa_ingestor.build_idempotency(
-        False, fixture_path=fixture, offline_output=offline
-    )
+    key, meta = keepa_ingestor.build_idempotency(False, fixture_path=fixture, offline_output=offline)
     assert key.startswith("b2:")
     assert meta["mode"] == "offline"
     assert meta["offline_output"] == str(offline)
@@ -74,11 +70,7 @@ def test_sp_build_idempotency_live(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_sp_build_rows_from_live(monkeypatch: pytest.MonkeyPatch) -> None:
     class FakeAPI:
         def get_my_fees_estimate_for_sku(self, sku):
-            return {
-                "payload": {
-                    "FeesEstimateResult": {"FeesEstimate": {"TotalFeesEstimate": {"Amount": 10.0}}}
-                }
-            }
+            return {"payload": {"FeesEstimateResult": {"FeesEstimate": {"TotalFeesEstimate": {"Amount": 10.0}}}}}
 
     monkeypatch.setitem(
         sys.modules,

@@ -4,14 +4,15 @@ import hashlib
 import json
 import os
 import tempfile
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 import boto3
 import pandas as pd
-from awa_common.dsn import build_dsn
 from sqlalchemy import create_engine, text
 
+from awa_common.dsn import build_dsn
 from services.etl.dialects import (
     amazon_ads_sp_cost,
     amazon_fee_preview,
@@ -83,7 +84,7 @@ def _open_uri(uri: str) -> Path:
     raise RuntimeError("S3/MinIO open is not available outside tests")
 
 
-def import_file(
+def import_file(  # noqa: C901
     path: str,
     report_type: str | None = None,
     celery_update: Callable[[dict[str, Any]], None] | None = None,
@@ -203,7 +204,11 @@ def import_file(
                 )
                 if cur.fetchone():
                     cur.execute(
-                        "INSERT INTO load_log (source_uri, target_table, dialect, file_hash, status, finished_at) VALUES (%s,%s,%s,%s,'skipped',now())",
+                        (
+                            "INSERT INTO load_log (source_uri, target_table, dialect, file_hash, "
+                            "status, finished_at) VALUES "
+                            "(%s,%s,%s,%s,'skipped',now())"
+                        ),
                         (str(file_path), target_table, dialect, file_hash),
                     )
                     conn.commit()
@@ -254,7 +259,10 @@ def import_file(
 
         with conn.cursor() as cur:
             cur.execute(
-                "INSERT INTO load_log (source_uri, target_table, dialect, file_hash, rows, status, warnings, finished_at) VALUES (%s,%s,%s,%s,%s,'success',%s,now())",
+                (
+                    "INSERT INTO load_log (source_uri, target_table, dialect, file_hash, rows, status, "
+                    "warnings, finished_at) VALUES (%s,%s,%s,%s,%s,'success',%s,now())"
+                ),
                 (
                     str(file_path),
                     target_table,
@@ -278,7 +286,10 @@ def import_file(
         conn.rollback()
         with conn.cursor() as cur:
             cur.execute(
-                "INSERT INTO load_log (source_uri, target_table, dialect, file_hash, status, error_summary, finished_at) VALUES (%s,%s,%s,%s,'error',%s,now())",
+                (
+                    "INSERT INTO load_log (source_uri, target_table, dialect, file_hash, status, "
+                    "error_summary, finished_at) VALUES (%s,%s,%s,%s,'error',%s,now())"
+                ),
                 (str(file_path), target_table, dialect, file_hash, str(exc)[:4000]),
             )
         conn.commit()
@@ -293,6 +304,6 @@ def import_uri(uri: str, **kwargs: Any) -> dict[str, Any]:
     return import_file(str(path), **kwargs)
 
 
-def main(args: list[str]) -> tuple[int, int]:
+def main(_args: list[str]) -> tuple[int, int]:
     """Placeholder CLI entrypoint for type checking."""
     return 0, 0
