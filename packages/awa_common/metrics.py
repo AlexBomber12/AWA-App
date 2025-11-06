@@ -19,6 +19,8 @@ from prometheus_client import (
 )
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from awa_common.logging import bind_celery_task
+
 try:  # pragma: no cover - optional runtime dependency
     from prometheus_client.multiprocess import MultiProcessCollector
 except Exception:  # pragma: no cover - multiprocess optional in tests
@@ -105,20 +107,26 @@ TASK_FAILURES_TOTAL = Counter(
 
 ETL_RUNS_TOTAL = Counter(
     "etl_runs_total",
-    "ETL pipeline executions",
-    ("pipeline", *BASE_LABELS),
+    "ETL pipeline executions by status",
+    ("source", "status", *BASE_LABELS),
     registry=REGISTRY,
 )
 ETL_FAILURES_TOTAL = Counter(
     "etl_failures_total",
-    "ETL pipeline failures",
-    ("pipeline", *BASE_LABELS),
+    "ETL pipeline failures by reason",
+    ("source", "reason", *BASE_LABELS),
     registry=REGISTRY,
 )
-ETL_LATENCY_SECONDS = Histogram(
-    "etl_latency_seconds",
-    "ETL pipeline latency in seconds",
-    ("pipeline", *BASE_LABELS),
+ETL_RETRY_TOTAL = Counter(
+    "etl_retry_total",
+    "Retry attempts during ETL HTTP calls",
+    ("source", "code", *BASE_LABELS),
+    registry=REGISTRY,
+)
+ETL_DURATION_SECONDS = Histogram(
+    "etl_duration_seconds",
+    "ETL pipeline duration in seconds",
+    ("source", *BASE_LABELS),
     buckets=HTTP_BUCKETS,
     registry=REGISTRY,
 )
@@ -240,6 +248,7 @@ def on_task_prerun(sender: Any, task_id: str, **_kwargs: Any) -> None:
     """Celery signal handler for task_prerun."""
     task_name = _task_label(sender)
     TASK_RUNS_TOTAL.labels(**_with_base_labels(task_name=task_name, outcome="start")).inc()
+    bind_celery_task()
     if not task_id:
         return
     with _TASK_LOCK:
@@ -319,21 +328,33 @@ def _maybe_start_backlog_probe(
 
 
 @contextmanager
-def record_etl_run(pipeline: str):
+def record_etl_run(source: str):
     """Record metrics for ETL pipelines."""
     start_time = time.perf_counter()
-    labels = _with_base_labels(pipeline=pipeline)
-    ETL_RUNS_TOTAL.labels(**labels).inc()
+    base_labels = _with_base_labels(source=source)
     try:
         yield
-    except Exception:
-        ETL_FAILURES_TOTAL.labels(**labels).inc()
+    except Exception as exc:
         duration = time.perf_counter() - start_time
-        ETL_LATENCY_SECONDS.labels(**labels).observe(duration)
+        failure_labels = {**base_labels, "reason": exc.__class__.__name__}
+        ETL_FAILURES_TOTAL.labels(**failure_labels).inc()
+        ETL_RUNS_TOTAL.labels(**{**base_labels, "status": "failed"}).inc()
+        ETL_DURATION_SECONDS.labels(**base_labels).observe(duration)
         raise
     else:
         duration = time.perf_counter() - start_time
-        ETL_LATENCY_SECONDS.labels(**labels).observe(duration)
+        ETL_RUNS_TOTAL.labels(**{**base_labels, "status": "success"}).inc()
+        ETL_DURATION_SECONDS.labels(**base_labels).observe(duration)
+
+
+def record_etl_skip(source: str) -> None:
+    """Increment skip counter for ETL runs that were deduplicated."""
+    ETL_RUNS_TOTAL.labels(**{**_with_base_labels(source=source), "status": "skipped"}).inc()
+
+
+def record_etl_retry(source: str, code: int | str) -> None:
+    """Increment retry counter for ETL HTTP attempts."""
+    ETL_RETRY_TOTAL.labels(**{**_with_base_labels(source=source), "code": str(code)}).inc()
 
 
 def start_worker_metrics_http_if_enabled(port_env: str = "WORKER_METRICS_PORT") -> None:
@@ -357,7 +378,8 @@ __all__ = [
     "TASK_FAILURES_TOTAL",
     "ETL_RUNS_TOTAL",
     "ETL_FAILURES_TOTAL",
-    "ETL_LATENCY_SECONDS",
+    "ETL_RETRY_TOTAL",
+    "ETL_DURATION_SECONDS",
     "QUEUE_BACKLOG",
     "MetricsMiddleware",
     "REGISTRY",
@@ -367,6 +389,8 @@ __all__ = [
     "on_task_postrun",
     "on_task_prerun",
     "record_etl_run",
+    "record_etl_skip",
+    "record_etl_retry",
     "register_metrics_endpoint",
     "start_worker_metrics_http_if_enabled",
 ]

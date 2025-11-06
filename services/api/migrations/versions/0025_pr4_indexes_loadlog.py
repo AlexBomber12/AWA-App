@@ -98,4 +98,4 @@ def downgrade() -> None:
     op.execute("DROP INDEX IF EXISTS uq_reimbursements_raw_reimb_id")
     op.drop_index("idx_load_log_table_hash", table_name="load_log", if_exists=True)
     op.drop_index("idx_load_log_started_at", table_name="load_log", if_exists=True)
-    op.drop_table("load_log")
+    op.drop_table("load_log", if_exists=True)

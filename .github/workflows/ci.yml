@@ -218,7 +218,7 @@ jobs:
           fi
           pip install --disable-pip-version-check --no-input diff-cover
           BASE="${{ github.base_ref || 'main' }}"
-          git fetch --no-tags --prune --depth=1 origin "${BASE}:${BASE}"
+          git fetch --no-tags --prune --depth=1 origin "${BASE}"
           git rev-parse "origin/${BASE}" > diff-base.txt
           diff-cover coverage.xml \
             --compare-branch "origin/${BASE}" \
@@ -671,6 +671,35 @@ jobs:
           name: debug-bundle-mirror-logs
           path: debug-bundle-mirror-logs.tar.gz
           if-no-files-found: ignore
+
+  docs:
+    if: ${{ github.event_name == 'pull_request' }}
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: ./.github/workflows/docs.yml
+    secrets: inherit
+    with:
+      deploy: false
+
+  docs-deploy:
+    if: ${{ github.ref == 'refs/heads/main' }}
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    needs:
+      - lint
+      - unit-local
+      - webapp-build
+      - migrations
+      - integration
+      - secret-scan
+    uses: ./.github/workflows/docs.yml
+    secrets: inherit
+    with:
+      deploy: true
 
   legacy-prepare-matrix:
     if: false

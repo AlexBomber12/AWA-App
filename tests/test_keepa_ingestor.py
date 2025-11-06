@@ -15,7 +15,8 @@ sys.modules["minio"] = types.SimpleNamespace(Minio=lambda *a, **k: None)
 from services.etl import keepa_ingestor
 
 
-def test_keepa_ingestor_offline(tmp_path, monkeypatch):
+def test_keepa_ingestor_offline(tmp_path, monkeypatch, patch_etl_session):
+    engine, sessions, _ = patch_etl_session("services.etl.keepa_ingestor")
     fixtures = Path(__file__).parent / "fixtures"
     dest = tmp_path / "tests/fixtures"
     dest.mkdir(parents=True)
@@ -24,3 +25,4 @@ def test_keepa_ingestor_offline(tmp_path, monkeypatch):
     os.environ.pop("ENABLE_LIVE", None)
     keepa_ingestor.main()
     assert Path("tmp/offline_asins.json").exists()
+    assert engine.disposed
