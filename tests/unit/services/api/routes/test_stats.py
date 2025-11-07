@@ -2,6 +2,12 @@ import datetime
 from dataclasses import dataclass
 
 from services.api.routes import stats as stats_module
+from services.api.schemas import (
+    ReturnsStatsResponse,
+    RoiByVendorResponse,
+    RoiTrendResponse,
+    StatsKPIResponse,
+)
 
 
 class DummyMappings:
@@ -45,7 +51,8 @@ def test_kpi_sql_branch(monkeypatch):
 
     db.execute = fake_execute
     result = stats_module.kpi(db=db)
-    assert result["kpi"]["roi_avg"] == 1.5
+    assert isinstance(result, StatsKPIResponse)
+    assert result.kpi.roi_avg == 1.5
 
 
 def test_roi_by_vendor_returns_items(monkeypatch):
@@ -61,8 +68,9 @@ def test_roi_by_vendor_returns_items(monkeypatch):
             return DummyResult(rows)
 
     resp = stats_module.roi_by_vendor(db=DummyDB2())
-    assert resp["total_vendors"] == 2
-    assert resp["items"][0]["vendor"] == "A"
+    assert isinstance(resp, RoiByVendorResponse)
+    assert resp.total_vendors == 2
+    assert resp.items[0].vendor == "A"
 
 
 def test_roi_trend_handles_multiple_columns(monkeypatch):
@@ -82,7 +90,8 @@ def test_roi_trend_handles_multiple_columns(monkeypatch):
             return DummyResult([])
 
     resp = stats_module.roi_trend(db=DummyDB3())
-    assert resp["points"][0]["month"] == "2024-01-01"
+    assert isinstance(resp, RoiTrendResponse)
+    assert resp.points[0].month == "2024-01-01"
 
 
 @dataclass
@@ -138,8 +147,9 @@ def test_returns_stats_includes_vendor_when_available(monkeypatch):
         vendor="Acme",
         db=db,
     )
-    assert resp["total_returns"] == 1
-    assert resp["items"][0]["qty"] == 3
+    assert isinstance(resp, ReturnsStatsResponse)
+    assert resp.total_returns == 1
+    assert resp.items[0].qty == 3
     sql, params = db.queries[0]
     assert "vendor = :vendor" in sql
     assert params["vendor"] == "Acme"
@@ -155,7 +165,8 @@ def test_returns_stats_ignores_vendor_when_column_missing(monkeypatch):
     db = _ReturnsDB(vendor_available=False, rows=rows)
 
     resp = stats_module.returns_stats(vendor="Acme", db=db)
-    assert resp["total_returns"] == 1
+    assert isinstance(resp, ReturnsStatsResponse)
+    assert resp.total_returns == 1
     sql, params = db.queries[0]
     assert "vendor" not in params
     assert "vendor = :vendor" not in sql

@@ -5,14 +5,17 @@ from fastapi import HTTPException
 from starlette.requests import Request
 
 from services.api.routes import roi as roi_module
+from services.api.schemas import RoiApprovalResponse, RoiRow
 from tests.unit.conftest import _StubResult
 
 
 @pytest.mark.asyncio
-async def test_roi_returns_dict_rows(fake_db_session):
+async def test_roi_returns_typed_rows(fake_db_session):
     session = fake_db_session(_StubResult(mappings=[{"asin": "A1", "roi_pct": 12.3}]))
     result = await roi_module.roi(session=session, roi_min=10)
-    assert result == [{"asin": "A1", "roi_pct": 12.3}]
+    assert len(result) == 1
+    assert isinstance(result[0], RoiRow)
+    assert result[0].roi_pct == 12.3
 
 
 @pytest.mark.asyncio
@@ -129,7 +132,8 @@ async def test_approve_updates_when_asins(monkeypatch):  # noqa: C901
     monkeypatch.setattr(roi_module, "create_engine", lambda *_: DummyEngine())
 
     result = await roi_module.approve(DummyRequest())
-    assert result == {"updated": 2}
+    assert isinstance(result, RoiApprovalResponse)
+    assert result.updated == 2
     assert recorded["params"]["asins"] == ["A1", "A2"]
 
 
@@ -145,4 +149,5 @@ async def test_approve_no_asins_returns_zero(monkeypatch):
             return types.SimpleNamespace(getlist=lambda key: [])
 
     result = await roi_module.approve(DummyRequest())
-    assert result == {"updated": 0}
+    assert isinstance(result, RoiApprovalResponse)
+    assert result.updated == 0

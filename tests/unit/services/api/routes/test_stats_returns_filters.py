@@ -5,6 +5,7 @@ from typing import Any
 import pytest
 
 from services.api.routes import stats
+from services.api.schemas import ReturnsStatsResponse
 
 
 class _FakeResult:
@@ -70,10 +71,11 @@ def test_returns_filters_apply(monkeypatch):
         "asin": "A1",
         "vendor": "V100",
     }
-    assert result["total_returns"] == 1
-    assert result["items"][0]["asin"] == "A1"
-    assert result["items"][0]["qty"] == 2
-    assert result["items"][0]["refund_amount"] == pytest.approx(5.5)
+    assert isinstance(result, ReturnsStatsResponse)
+    assert result.total_returns == 1
+    assert result.items[0].asin == "A1"
+    assert result.items[0].qty == 2
+    assert result.items[0].refund_amount == pytest.approx(5.5)
     monkeypatch.delenv("STATS_USE_SQL", raising=False)
 
 
@@ -87,8 +89,9 @@ def test_returns_no_filters_preserves_shape(monkeypatch):
 
     result = stats.returns_stats(db=fake_db)
     assert "WHERE" not in fake_db.last_query.upper()
-    assert result == {
-        "items": [{"asin": "B2", "qty": 1, "refund_amount": pytest.approx(1.2)}],
-        "total_returns": 1,
-    }
+    assert isinstance(result, ReturnsStatsResponse)
+    assert result.total_returns == 1
+    assert result.items[0].asin == "B2"
+    assert result.items[0].qty == 1
+    assert result.items[0].refund_amount == pytest.approx(1.2)
     monkeypatch.delenv("STATS_USE_SQL", raising=False)

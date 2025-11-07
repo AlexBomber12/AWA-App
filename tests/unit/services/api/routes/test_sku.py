@@ -4,6 +4,7 @@ import pytest
 from fastapi import HTTPException
 
 from services.api.routes import sku as sku_module
+from services.api.schemas import SkuApprovalResponse, SkuResponse
 from tests.unit.conftest import _StubResult, _StubSession
 
 
@@ -20,12 +21,13 @@ async def test_get_sku_200():
 
     payload = await sku_module.get_sku("B000TEST", session=session)
 
-    assert payload["title"] == "Sample SKU"
-    assert isinstance(payload["roi"], float) and payload["roi"] == pytest.approx(12.5)
-    assert isinstance(payload["fees"], float) and payload["fees"] == pytest.approx(3.25)
-    assert isinstance(payload["chartData"], list)
-    assert payload["chartData"][0]["date"] <= payload["chartData"][-1]["date"]
-    assert all("price" in point for point in payload["chartData"])
+    assert isinstance(payload, SkuResponse)
+    assert payload.title == "Sample SKU"
+    assert isinstance(payload.roi, float) and payload.roi == pytest.approx(12.5)
+    assert isinstance(payload.fees, float) and payload.fees == pytest.approx(3.25)
+    assert isinstance(payload.chartData, list)
+    assert payload.chartData[0].date <= payload.chartData[-1].date
+    assert all(point.price is not None for point in payload.chartData)
 
 
 @pytest.mark.asyncio
@@ -49,8 +51,10 @@ async def test_approve_idempotent(monkeypatch):
     first = await sku_module.approve_sku("B000TEST", session=session)
     second = await sku_module.approve_sku("B000TEST", session=session)
 
-    assert first == {"approved": True, "changed": 1}
-    assert second == {"approved": True, "changed": 0}
+    assert isinstance(first, SkuApprovalResponse)
+    assert isinstance(second, SkuApprovalResponse)
+    assert first.changed == 1 and first.approved is True
+    assert second.changed == 0 and second.approved is True
 
 
 @pytest.mark.asyncio
@@ -60,7 +64,8 @@ async def test_get_sku_chart_empty_returns_empty_list():
 
     payload = await sku_module.get_sku("B000EMPTY", session=session)
 
-    assert payload["chartData"] == []
+    assert isinstance(payload, SkuResponse)
+    assert payload.chartData == []
 
 
 @pytest.mark.asyncio
@@ -72,7 +77,7 @@ async def test_get_sku_chart_datetime_serialization():
 
     payload = await sku_module.get_sku("B000TIME", session=session)
 
-    assert payload["chartData"] == [{"date": dt.isoformat(), "price": 17.5}]
+    assert [point.model_dump() for point in payload.chartData] == [{"date": dt.isoformat(), "price": 17.5}]
 
 
 @pytest.mark.asyncio
@@ -95,4 +100,4 @@ async def test_get_sku_chart_handles_invalid_values():
 
     payload = await sku_module.get_sku("B000ODD", session=session)
 
-    assert payload["chartData"] == [{"date": "", "price": 0.0}]
+    assert [point.model_dump() for point in payload.chartData] == [{"date": "", "price": 0.0}]
