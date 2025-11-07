@@ -19,7 +19,7 @@ from tenacity import (
     wait_random_exponential,
 )
 
-from awa_common import metrics
+from awa_common.metrics import record_etl_retry
 from awa_common.settings import settings as SETTINGS
 
 logger = structlog.get_logger(__name__)
@@ -145,7 +145,7 @@ def _before_sleep(
         version=SETTINGS.APP_VERSION,
     )
     if source and metric_code:
-        metrics.record_etl_retry(source, metric_code)
+        record_etl_retry(source, metric_code)
 
 
 class _RetryWait(wait_random_exponential):
