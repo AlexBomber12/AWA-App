@@ -55,6 +55,11 @@ All helpers rely solely on the standard library and `httpx`, so no additional te
 - `pytest -m live` is reserved for explicit, real external calls; keep it opt-in.
 - GitHub Actions applies Alembic migrations inside the integration job before running tests, then captures `alembic-current.txt` and `integration.log` as artifacts. Local runs should mimic this order (`alembic -c services/api/alembic.ini upgrade head`) before invoking integration tests.
 
+## Migration currency test
+- Run `pytest -q tests/alembic/test_migration_current.py` whenever models or migrations change. The test creates a temporary database, applies every migration via `alembic upgrade head`, runs `alembic history --verbose`, and autogenerates a throwaway revision.
+- The helper `assert_no_schema_changes()` parses the generated script and fails when either `upgrade()` or `downgrade()` contains real operations. A failure means the codebase requires a new Alembic revision before merging.
+- The temporary revision file and temporary database are cleaned up automatically so the repository stays pristine.
+
 ## Unit vs integration layers
 - `pytest -m unit` runs hermetic tests with strict fakes—no Postgres, Redis, or real sleeps/timeouts.
 - `pytest -m integration` expects real Postgres + Redis and validates audit persistence plus rate-limit enforcement (mirroring CI’s short limiter window).

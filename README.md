@@ -116,6 +116,15 @@ pytest -q -m "not integration"
 pytest -q -m integration         # requires Postgres/Redis running
 ```
 
+#### Migration currency guard
+
+Run `pytest -q tests/alembic/test_migration_current.py` before pushing schema
+changes. The test provisions a throwaway Postgres database, runs `alembic
+upgrade head`, captures `alembic history --verbose`, and autogenerates a
+temporary revision. If Alembic detects any pending operations the test fails,
+indicating that a new migration must accompany the code changes. The temporary
+revision file is deleted automatically.
+
 ### Continuous Integration
 
 The GitHub Actions test workflow uses a Postgres service container. It waits
