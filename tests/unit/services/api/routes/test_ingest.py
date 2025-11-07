@@ -1,6 +1,7 @@
 from io import BytesIO
 
 import pytest
+from celery import states
 from fastapi import HTTPException, UploadFile
 from starlette.requests import Request
 
@@ -108,3 +109,47 @@ async def test_submit_ingest_eager_failure_propagates(monkeypatch):
         await ingest_module.submit_ingest(request, file=None)
     assert excinfo.value.status_code == 500
     assert "invalid" in excinfo.value.detail
+
+
+@pytest.mark.asyncio
+async def test_submit_ingest_eager_get_exception(monkeypatch):
+    class DummyAsync:
+        def __init__(self):
+            self.id = "ok-task"
+            self.info = {"status": "success"}
+
+        def get(self, propagate=False):
+            raise RuntimeError("transient")
+
+        def failed(self):
+            return False
+
+    monkeypatch.setattr(ingest_module.task_import_file, "apply_async", lambda *a, **k: DummyAsync())
+    monkeypatch.setattr(ingest_module.celery_app.conf, "task_always_eager", True, raising=False)
+
+    request = _make_request({"uri": "s3://bucket/file.csv"})
+    response = await ingest_module.submit_ingest(request, file=None)
+    assert response["task_id"] == "ok-task"
+
+
+def test_failure_status_handles_generic_exception():
+    status, detail = ingest_module._failure_status_and_detail(ValueError("oops"))
+    assert status == 500
+    assert detail == "oops"
+
+
+def test_failure_status_handles_unknown_type():
+    status, detail = ingest_module._failure_status_and_detail(None)
+    assert status == 500
+    assert detail == "ETL ingest failed"
+
+
+def test_meta_from_result_returns_dict_for_success():
+    info = {"status": "success"}
+    result = ingest_module._meta_from_result(states.SUCCESS, info)
+    assert result is info
+
+
+def test_meta_from_result_handles_non_failure_empty():
+    meta = ingest_module._meta_from_result(states.SUCCESS, None)
+    assert meta == {}
