@@ -30,6 +30,12 @@ Exposes a small FastAPI service that computes optimal prices. It is invoked ever
 ### restock_planner
 Generates a weekly CSV file containing recommended restock quantities. This agent monitors inventory levels and sales velocity to plan replenishment.
 
+## Large report streaming
+- `etl.load_csv.import_file` now accepts `streaming=True` plus an optional `chunk_size` to stream CSV or XLSX uploads through `copy_df_via_temp`. Leave the flag unset to preserve the legacy in-memory behaviour.
+- The new helper `etl.load_csv.load_large_csv(path, chunk_size=...)` exposes the chunked iterator used by the agents so other workflows can reuse the streaming reader.
+- Tune chunk sizing via `INGEST_STREAMING_CHUNK_SIZE` (default `50_000` rows) when deploying agents that process 100 MB+ datasets.
+- Run `python tests/performance/streaming_benchmark.py --size-mb 120` to verify peak RSS stays comfortably below a few hundred megabytes before enabling streaming mode in production.
+
 ## Lifecycle
 Agents are first added to the local docker-compose environment for development. Once verified they move to the STAGING stack where a cron schedule triggers them automatically. After tests pass in CI, the agent configuration is deployed to production.
 
