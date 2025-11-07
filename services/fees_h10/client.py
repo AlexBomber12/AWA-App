@@ -1,7 +1,7 @@
 import os
 from typing import Any
 
-import httpx
+from services.etl import http_client
 
 BASE = "https://api.helium10.com/financials/fba-fees/{}"
 H10_KEY = os.getenv("HELIUM10_KEY", "")
@@ -9,10 +9,12 @@ H10_KEY = os.getenv("HELIUM10_KEY", "")
 
 async def fetch_fees(asin: str) -> dict[str, Any]:
     headers = {"Authorization": f"Bearer {H10_KEY}"} if H10_KEY else {}
-    async with httpx.AsyncClient(timeout=10) as client:
-        r = await client.get(BASE.format(asin), headers=headers)
-        r.raise_for_status()
-        data = r.json()
+    data = await http_client.request_json(
+        "GET",
+        BASE.format(asin),
+        headers=headers,
+        source="helium10_client",
+    )
     return {
         "asin": asin,
         "fulfil_fee": float(data.get("fulfillmentFee", 0)),

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import os
 from typing import TYPE_CHECKING, Any, cast
 
@@ -22,6 +23,8 @@ else:  # runtime import with fallback
     Bot = RuntimeBot
 
 
+# Database connection settings -------------------------------------------------
+# Defaults keep cron jobs lightweight locally while allowing burstiness in prod.
 DSN = os.getenv("PG_ASYNC_DSN", "")
 TOKEN = os.getenv("TELEGRAM_TOKEN")
 CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
@@ -32,6 +35,36 @@ COST_DELTA_PCT = int(os.getenv("COST_DELTA_PCT", "10"))
 PRICE_DROP_PCT = int(os.getenv("PRICE_DROP_PCT", "15"))
 RETURNS_PCT = int(os.getenv("RETURNS_PCT", "5"))
 STALE_DAYS = int(os.getenv("STALE_DAYS", "30"))
+
+
+def _env_int(name: str, default: int) -> int:
+    try:
+        return int(os.getenv(name, str(default)))
+    except ValueError:
+        return default
+
+
+def _env_float(name: str, default: float) -> float:
+    try:
+        return float(os.getenv(name, str(default)))
+    except ValueError:
+        return default
+
+
+ALERT_DB_POOL_MIN_SIZE = _env_int("ALERT_DB_POOL_MIN_SIZE", 1)
+# Keep at most five concurrent rule queries by default to avoid starving API DB.
+ALERT_DB_POOL_MAX_SIZE = max(ALERT_DB_POOL_MIN_SIZE, _env_int("ALERT_DB_POOL_MAX_SIZE", 5))
+# Abort connect attempts after 10s by default—the cron job retries later anyway.
+ALERT_DB_POOL_TIMEOUT = _env_float("ALERT_DB_POOL_TIMEOUT", 10.0)
+# Wait up to 3s for a pooled connection before retrying (prevents deadlocks).
+ALERT_DB_POOL_ACQUIRE_TIMEOUT = _env_float("ALERT_DB_POOL_ACQUIRE_TIMEOUT", 3.0)
+# Retry pool acquisition three times by default so transient spikes are absorbed.
+ALERT_DB_POOL_ACQUIRE_RETRIES = max(1, _env_int("ALERT_DB_POOL_ACQUIRE_RETRIES", 3))
+# Short delay keeps pressure low when looping on pool contention.
+ALERT_DB_POOL_RETRY_DELAY = _env_float("ALERT_DB_POOL_RETRY_DELAY", 0.25)
+
+DB_POOL: asyncpg.Pool | None = None
+_POOL_LOCK = asyncio.Lock()
 
 # Telegram bot initialisation
 #
@@ -64,13 +97,54 @@ except Exception:
 MSG_ROI_DROP = "⚠️ Маржа по товару упала ниже 5 %. Проверьте цену и закупочную стоимость."
 
 
+async def init_db_pool() -> asyncpg.Pool:
+    """Initialise (or return) the shared asyncpg connection pool."""
+
+    global DB_POOL
+    if DB_POOL is not None:
+        return DB_POOL
+    if not DSN:
+        raise RuntimeError("PG_ASYNC_DSN is not configured")
+    async with _POOL_LOCK:
+        if DB_POOL is None:
+            DB_POOL = await asyncpg.create_pool(
+                dsn=DSN,
+                min_size=ALERT_DB_POOL_MIN_SIZE,
+                max_size=ALERT_DB_POOL_MAX_SIZE,
+                timeout=ALERT_DB_POOL_TIMEOUT,
+            )
+    if DB_POOL is None:  # pragma: no cover - defensive only
+        raise RuntimeError("Database pool initialisation failed")
+    return DB_POOL
+
+
+async def close_db_pool() -> None:
+    """Close the shared asyncpg pool when the bot shuts down."""
+
+    global DB_POOL
+    pool = DB_POOL
+    if pool is None:
+        return
+    DB_POOL = None
+    await pool.close()
+
+
 async def fetch_rows(query: str, *args: Any) -> list[asyncpg.Record]:
-    conn = await asyncpg.connect(dsn=DSN)
-    try:
-        rows = await conn.fetch(query, *args)
-    finally:
-        await conn.close()
-    return cast(list[asyncpg.Record], rows)
+    pool = await init_db_pool()
+    last_exc: Exception | None = None
+    for attempt in range(1, ALERT_DB_POOL_ACQUIRE_RETRIES + 1):
+        try:
+            async with pool.acquire(timeout=ALERT_DB_POOL_ACQUIRE_TIMEOUT) as conn:
+                rows = await conn.fetch(query, *args)
+                return cast(list[asyncpg.Record], rows)
+        except (TimeoutError, asyncpg.PostgresError) as exc:
+            last_exc = exc
+            if attempt >= ALERT_DB_POOL_ACQUIRE_RETRIES:
+                raise
+            await asyncio.sleep(ALERT_DB_POOL_RETRY_DELAY)
+    if last_exc:  # pragma: no cover - loop ensures raise above
+        raise last_exc
+    return []
 
 
 async def send(title: str, body: str) -> None:
