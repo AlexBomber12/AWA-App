@@ -48,11 +48,11 @@ Agents are first added to the local docker-compose environment for development. 
 Agent operating mode: log-driven debugging
 
 Goal
-Use the repository’s persisted CI logs to identify failing errors first, then implement the smallest safe code change to fix them.
+Use the repository’s mirrored CI logs (the `ci-logs` branch replicates outputs under `mirror-logs/<scope>/latest`, and failing workflows also expose a `ci-logs-<run_id>` artifact) to identify failing errors first, then implement the smallest safe code change to fix them.
 
 Primary inputs
-1) Directory ci-logs/latest containing unzipped logs from the most recent workflow run.
-2) If ci-logs/latest is missing, scan ci-logs for the most recently modified subfolder and use that instead.
+1) The mirrored log tree under `mirror-logs/<pr-or-branch>/latest` (fetch the `ci-logs` branch or use a workspace that already contains the mirror). These directories match the layout published by the CI mirror job.
+2) When the mirror directory is absent, download the `ci-logs-<run_id>` artifact referenced in the workflow summary and unpack it locally.
 3) Treat any files with extensions .log, .txt, .out, .err, .json, .xml, .junit, .tap as logs. Ignore archives because the workflow already unpacks artifacts.
 
 What to extract from logs
@@ -62,7 +62,7 @@ What to extract from logs
 4) If multiple independent failures exist, handle them one by one in chronological order of appearance in the logs.
 
 Procedure
-1) Locate logs: read ci-logs/latest. If empty or missing, report this and stop.
+1) Locate logs: inspect `mirror-logs/*/latest` (from the `ci-logs` branch) or the freshly downloaded artifact. If no logs are available anywhere, report that explicitly and stop.
 2) Parse logs and write a short triage summary in memory with keys: failure_kind, primary_file, line, failing_command, shortest_repro, stack_excerpt.
 3) Open the implicated source file(s) and reason about the smallest change that fixes the root cause without weakening tests.
 4) Implement the change. Do not change tests unless the test is objectively incorrect or contradicts the documented behavior.
@@ -71,11 +71,14 @@ Procedure
 7) Prepare a commit with a clear message and a concise PR body.
 
 Constraints
-1) Never delete or rewrite logs; do not commit changes under ci-logs.
+1) Never delete or rewrite logs; do not commit changes under mirrored log folders (`mirror-logs/**`) or extracted artifacts.
 2) Keep changes minimal and focused on the identified failure.
 3) Preserve code style and lint rules already used in the repo.
 4) Do not introduce secrets or modify CI triggers.
 5) Do not add [skip ci] to fix commits; it is only used by the log-publishing workflow.
+
+Migration guard
+- Run `pytest -q tests/alembic/test_migration_current.py` before submitting schema or API changes to ensure Alembic has no pending autogeneration output. The helper deletes the throwaway revision automatically; only genuine schema drifts should cause failures.
 
 Deliverables
 1) A single focused commit or PR that fixes the failure.
@@ -85,15 +88,15 @@ Deliverables
    Fix: bullet list of code changes.
    Repro steps: exact commands reproduced from logs to validate.
    Risk: potential side effects and why they are acceptable.
-   Links: paths to the log files used, for example ci-logs/latest/build.log.
+   Links: paths to the log files used, for example `mirror-logs/pr-123/latest/unit/unit.log` or the extracted artifact path.
 3) Add a triage note file at docs/ci-triage.md if the repo uses such docs; otherwise include the triage content in the PR body.
 
 Success criteria
-1) The specific failing error from ci-logs/latest is no longer present in the next CI run.
+1) The specific failing error from the mirrored logs is no longer present in the next CI run.
 2) All previously passing tests remain green.
 3) The PR body references the exact log filenames and contains a minimal excerpt of the failure.
 4) The fix is the smallest reasonable change and adheres to the project’s style.
-5) No files under ci-logs are modified by the fix.
+5) No mirrored log files (`mirror-logs/**`) are modified by the fix.
 
 Optional heuristics
 1) Prefer the newest timestamped log if multiple versions of the same tool exist.
