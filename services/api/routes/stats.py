@@ -18,6 +18,16 @@ except Exception:
     repo = None
 
 from services.api.roi_views import InvalidROIViewError, get_roi_view_name, quote_identifier
+from services.api.schemas import (
+    ReturnsStatsItem,
+    ReturnsStatsResponse,
+    RoiByVendorItem,
+    RoiByVendorResponse,
+    RoiTrendPoint,
+    RoiTrendResponse,
+    StatsKPI,
+    StatsKPIResponse,
+)
 
 router = APIRouter(prefix="/stats", tags=["stats"])
 
@@ -59,9 +69,10 @@ def _quoted_roi_view():
 
 @router.get(
     "/kpi",
+    response_model=StatsKPIResponse,
     dependencies=[Depends(require_viewer), Depends(limit_viewer)],
 )
-def kpi(db=Depends(get_db) if get_db else None):
+def kpi(db=Depends(get_db) if get_db else None) -> StatsKPIResponse:
     if os.getenv("STATS_USE_SQL") == "1" and db is not None:
         try:
             view = _quoted_roi_view()
@@ -79,21 +90,21 @@ def kpi(db=Depends(get_db) if get_db else None):
             .mappings()
             .first()
         )
-        return {
-            "kpi": {
-                "roi_avg": float(row.get("roi_avg") or 0.0),
-                "products": int(row.get("products") or 0),
-                "vendors": int(row.get("vendors") or 0),
-            }
-        }
-    return {"kpi": {"roi_avg": 0.0, "products": 0, "vendors": 0}}
+        metrics = StatsKPI(
+            roi_avg=float(row.get("roi_avg") or 0.0),
+            products=int(row.get("products") or 0),
+            vendors=int(row.get("vendors") or 0),
+        )
+        return StatsKPIResponse(kpi=metrics)
+    return StatsKPIResponse(kpi=StatsKPI(roi_avg=0.0, products=0, vendors=0))
 
 
 @router.get(
     "/roi_by_vendor",
+    response_model=RoiByVendorResponse,
     dependencies=[Depends(require_viewer), Depends(limit_viewer)],
 )
-def roi_by_vendor(db=Depends(get_db) if get_db else None):
+def roi_by_vendor(db=Depends(get_db) if get_db else None) -> RoiByVendorResponse:
     if os.getenv("STATS_USE_SQL") == "1" and db is not None:
         try:
             view = _quoted_roi_view()
@@ -108,22 +119,21 @@ def roi_by_vendor(db=Depends(get_db) if get_db else None):
             .mappings()
             .all()
         )
-        return {
-            "items": [
-                {
-                    "vendor": r["vendor"],
-                    "roi_avg": float(r.get("roi_avg") or 0.0),
-                    "items": int(r.get("items") or 0),
-                }
-                for r in rows
-            ],
-            "total_vendors": len(rows),
-        }
-    return {"items": [], "total_vendors": 0}
+        items = [
+            RoiByVendorItem(
+                vendor=r.get("vendor"),
+                roi_avg=float(r.get("roi_avg") or 0.0),
+                items=int(r.get("items") or 0),
+            )
+            for r in rows
+        ]
+        return RoiByVendorResponse(items=items, total_vendors=len(items))
+    return RoiByVendorResponse(items=[], total_vendors=0)
 
 
 @router.get(
     "/returns",
+    response_model=ReturnsStatsResponse,
     dependencies=[Depends(require_viewer), Depends(limit_viewer)],
 )
 def returns_stats(
@@ -132,9 +142,9 @@ def returns_stats(
     asin: str | None = None,
     vendor: str | None = None,
     db=Depends(get_db) if get_db else None,
-):
+) -> ReturnsStatsResponse:
     if os.getenv("STATS_USE_SQL") != "1" or db is None:
-        return {"items": [], "total_returns": 0}
+        return ReturnsStatsResponse(items=[], total_returns=0)
 
     clauses: list[str] = []
     params: dict[str, str] = {}
@@ -162,24 +172,23 @@ def returns_stats(
     sql = " ".join(query_parts)
 
     rows = db.execute(text(sql), params).mappings().all()
-    return {
-        "items": [
-            {
-                "asin": row["asin"],
-                "qty": int(row.get("qty") or 0),
-                "refund_amount": float(row.get("refund_amount") or 0.0),
-            }
-            for row in rows
-        ],
-        "total_returns": len(rows),
-    }
+    items = [
+        ReturnsStatsItem(
+            asin=row["asin"],
+            qty=int(row.get("qty") or 0),
+            refund_amount=float(row.get("refund_amount") or 0.0),
+        )
+        for row in rows
+    ]
+    return ReturnsStatsResponse(items=items, total_returns=len(items))
 
 
 @router.get(
     "/roi_trend",
+    response_model=RoiTrendResponse,
     dependencies=[Depends(require_viewer), Depends(limit_viewer)],
 )
-def roi_trend(db=Depends(get_db) if get_db else None):
+def roi_trend(db=Depends(get_db) if get_db else None) -> RoiTrendResponse:
     if os.getenv("STATS_USE_SQL") == "1" and db is not None:
         try:
             view = _quoted_roi_view()
@@ -199,17 +208,16 @@ def roi_trend(db=Depends(get_db) if get_db else None):
                     .all()
                 )
                 if rows:
-                    return {
-                        "points": [
-                            {
-                                "month": str(r["month"]),
-                                "roi_avg": float(r.get("roi_avg") or 0.0),
-                                "items": int(r.get("items") or 0),
-                            }
-                            for r in rows
-                        ]
-                    }
+                    points = [
+                        RoiTrendPoint(
+                            month=str(r["month"]),
+                            roi_avg=float(r.get("roi_avg") or 0.0),
+                            items=int(r.get("items") or 0),
+                        )
+                        for r in rows
+                    ]
+                    return RoiTrendResponse(points=points)
             except Exception:
                 continue
-        return {"points": []}
-    return {"points": []}
+        return RoiTrendResponse(points=[])
+    return RoiTrendResponse(points=[])

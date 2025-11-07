@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
+from typing import Any
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import String, bindparam, create_engine, text
@@ -11,13 +14,39 @@ from awa_common.dsn import build_dsn
 from .. import roi_repository
 from ..db import get_session
 from ..roi_views import InvalidROIViewError, get_roi_view_name, quote_identifier
+from ..schemas import RoiApprovalResponse, RoiRow
 from ..security import limit_ops, limit_viewer, require_ops, require_viewer
 
 router = APIRouter()
 templates = Jinja2Templates(directory="templates")
 
 
-@router.get("/roi")
+def _to_float(value: Any) -> float | None:
+    if value is None:
+        return None
+    return float(value)
+
+
+def _to_int(value: Any) -> int | None:
+    if value is None:
+        return None
+    return int(value)
+
+
+def _serialize_roi_row(row: Mapping[str, Any]) -> RoiRow:
+    return RoiRow(
+        asin=str(row.get("asin") or ""),
+        title=row.get("title"),
+        category=row.get("category"),
+        vendor_id=_to_int(row.get("vendor_id")),
+        cost=_to_float(row.get("cost")),
+        freight=_to_float(row.get("freight")),
+        fees=_to_float(row.get("fees")),
+        roi_pct=_to_float(row.get("roi_pct")),
+    )
+
+
+@router.get("/roi", response_model=list[RoiRow])
 async def roi(
     roi_min: float = 0,
     vendor: int | None = None,
@@ -25,12 +54,12 @@ async def roi(
     session: AsyncSession = Depends(get_session),
     _: object = Depends(require_viewer),
     __: None = Depends(limit_viewer),
-):
+) -> list[RoiRow]:
     try:
         rows = await roi_repository.fetch_roi_rows(session, roi_min, vendor, category)
     except InvalidROIViewError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    return [dict(row) for row in rows]
+    return [_serialize_roi_row(dict(row)) for row in rows]
 
 
 def build_pending_sql(include_vendor: bool, include_category: bool):
@@ -116,19 +145,19 @@ async def _extract_asins(request: Request) -> list[str]:
     return [str(value) for value in values]
 
 
-@router.post("/roi-review/approve")
+@router.post("/roi-review/approve", response_model=RoiApprovalResponse)
 async def approve(
     request: Request,
     _: object = Depends(require_ops),
     __: None = Depends(limit_ops),
-) -> dict[str, int]:
+) -> RoiApprovalResponse:
     asins = await _extract_asins(request)
     if not asins:
-        return {"updated": 0}
+        return RoiApprovalResponse(updated=0)
     url = build_dsn(sync=True)
     engine = create_engine(url)
     with engine.begin() as conn:
         rows = conn.execute(APPROVE_SQL, {"asins": asins}).scalars().all()
         count = len(rows)
     engine.dispose()
-    return {"updated": count}
+    return RoiApprovalResponse(updated=count)

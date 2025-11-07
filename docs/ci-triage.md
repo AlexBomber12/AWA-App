@@ -199,6 +199,20 @@ Security review of PR #1 surfaced that every ROI endpoint builds SQL by interpol
 - **CI** workflow (unit job)
 
 ## Summary
+`ci-logs/latest` (or any `ci-logs/*` directory) is missing from the repository snapshot, so no recent workflow artifacts were available to inspect. Proceeded with the requested API schema typing updates without a new CI failure to triage.
+
+## Fix
+- None. We still need the compressed logs uploaded in `ci-logs/` to collect failure excerpts next time.
+
+## Logs
+- Not available locally (the `ci-logs` directory is absent)
+
+---
+
+## Failing workflows
+- **CI** workflow (unit job)
+
+## Summary
 `pytest -q -m "not integration"` failed with `ModuleNotFoundError: No module named 'services.repricer'` during repricer import tests.
 
 ## Fix
