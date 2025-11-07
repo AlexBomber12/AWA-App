@@ -115,7 +115,7 @@ def _apply_database_env(monkeypatch: pytest.MonkeyPatch, sync_url: str, db_name:
     monkeypatch.setenv("PG_DATABASE", db_name)
     monkeypatch.setenv("PG_SYNC_DSN", sync_url)
     monkeypatch.setenv("PG_ASYNC_DSN", sync_url.replace("+psycopg", ""))
-    settings.DATABASE_URL = sync_url  # type: ignore[attr-defined]
+    monkeypatch.setattr(settings, "DATABASE_URL", sync_url, raising=False)
 
 
 def _configured_alembic_config(database_url: str) -> Config:
