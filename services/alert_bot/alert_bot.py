@@ -4,7 +4,16 @@ import os
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-from .rules import bot, check_a1, check_a2, check_a3, check_a4, check_a5
+from .rules import (
+    bot,
+    check_a1,
+    check_a2,
+    check_a3,
+    check_a4,
+    check_a5,
+    close_db_pool,
+    init_db_pool,
+)
 
 logging.basicConfig(level=logging.INFO)
 
@@ -17,6 +26,8 @@ def start() -> int:
     if not bot:
         logging.info("ALERTS DISABLED")
         return 0
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(init_db_pool())
     scheduler.add_job(check_a1, "interval", minutes=CHECK_INTERVAL_MIN)
     scheduler.add_job(check_a2, "interval", minutes=CHECK_INTERVAL_MIN)
     scheduler.add_job(check_a3, "interval", minutes=CHECK_INTERVAL_MIN)
@@ -28,4 +39,9 @@ def start() -> int:
 
 if __name__ == "__main__":
     if start():
-        asyncio.get_event_loop().run_forever()
+        loop = asyncio.get_event_loop()
+        try:
+            loop.run_forever()
+        finally:
+            scheduler.shutdown(wait=False)
+            loop.run_until_complete(close_db_pool())

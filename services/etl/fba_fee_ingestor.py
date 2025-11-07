@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
 import os
-import urllib.request
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Iterable
@@ -11,6 +11,7 @@ from typing import Iterable
 from awa_common.dsn import build_dsn
 
 from pg_utils import connect
+from services.etl import http_client
 
 DEFAULT_ASINS = ("DUMMY1", "DUMMY2")
 DEFAULT_FIXTURE_PATH = Path("tests/fixtures/helium_fees_sample.json")
@@ -54,18 +55,19 @@ def resolve_live(cli_live: bool | None) -> bool:
     return os.getenv("ENABLE_LIVE") == "1"
 
 
-def fetch_live_fees(asins: Iterable[str], api_key: str) -> list[tuple[str, float]]:
-    results: list[tuple[str, float]] = []
+async def _fetch_live_fees(asins: Iterable[str], api_key: str) -> list[tuple[str, float]]:
+    headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
+    rows: list[tuple[str, float]] = []
     for asin in asins:
         url = f"https://api.helium10.com/v1/profits/fees?asin={asin}"
-        request = urllib.request.Request(
-            url,
-            headers={"Authorization": f"Bearer {api_key}"},
-        )
-        with urllib.request.urlopen(request) as response:
-            data = json.load(response)
-        results.append((asin, data["totalFbaFee"]))
-    return results
+        response = await http_client.request("GET", url, headers=headers)
+        payload = response.json()
+        rows.append((asin, float(payload.get("totalFbaFee", 0.0))))
+    return rows
+
+
+def fetch_live_fees(asins: Iterable[str], api_key: str) -> list[tuple[str, float]]:
+    return asyncio.run(_fetch_live_fees(asins, api_key))
 
 
 def load_offline_fees(path: Path) -> list[tuple[str, float]]:

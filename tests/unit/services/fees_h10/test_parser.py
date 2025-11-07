@@ -23,29 +23,20 @@ async def test_fetch_fees_normalises_payload(monkeypatch: pytest.MonkeyPatch) ->
         def json(self):
             return self._data
 
-    class DummyClient:
-        def __init__(self, *args, **kwargs):
-            calls["timeout"] = kwargs.get("timeout")
+    async def fake_request(method: str, url: str, headers=None, **_kwargs):
+        calls["method"] = method
+        calls["url"] = url
+        calls["headers"] = headers
+        return DummyResponse(
+            {
+                "fulfillmentFee": "1.50",
+                "referralFee": 0,
+                "storageFee": "-0.25",
+                "currency": "GBP",
+            }
+        )
 
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, *_exc):
-            return False
-
-        async def get(self, url: str, headers=None):
-            calls["url"] = url
-            calls["headers"] = headers
-            return DummyResponse(
-                {
-                    "fulfillmentFee": "1.50",
-                    "referralFee": 0,
-                    "storageFee": "-0.25",
-                    "currency": "GBP",
-                }
-            )
-
-    monkeypatch.setattr(client.httpx, "AsyncClient", DummyClient)
+    monkeypatch.setattr(client.http_client, "request", fake_request)
     monkeypatch.setattr(client, "H10_KEY", "secret", raising=False)
 
     row = await client.fetch_fees("ASIN123")
@@ -69,21 +60,12 @@ async def test_fetch_fees_handles_missing_key(monkeypatch: pytest.MonkeyPatch) -
         def json(self):
             return {"fulfillmentFee": 2}
 
-    class DummyClient:
-        def __init__(self, *args, **kwargs):
-            self.timeout = kwargs.get("timeout")
+    async def fake_request(method: str, url: str, headers=None, **_kwargs):
+        assert method == "GET"
+        assert headers == {}
+        return DummyResponse()
 
-        async def __aenter__(self):
-            return self
-
-        async def __aexit__(self, *_exc):
-            return False
-
-        async def get(self, url: str, headers=None):
-            assert headers == {}
-            return DummyResponse()
-
-    monkeypatch.setattr(client.httpx, "AsyncClient", DummyClient)
+    monkeypatch.setattr(client.http_client, "request", fake_request)
     monkeypatch.setattr(client, "H10_KEY", "", raising=False)
 
     row = await client.fetch_fees("B00TEST")
