@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import String, bindparam, create_engine, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,6 +10,7 @@ from awa_common.dsn import build_dsn
 
 from .. import roi_repository
 from ..db import get_session
+from ..roi_views import InvalidROIViewError, get_roi_view_name, quote_identifier
 from ..security import limit_ops, limit_viewer, require_ops, require_viewer
 
 router = APIRouter()
@@ -25,18 +26,22 @@ async def roi(
     _: object = Depends(require_viewer),
     __: None = Depends(limit_viewer),
 ):
-    rows = await roi_repository.fetch_roi_rows(session, roi_min, vendor, category)
+    try:
+        rows = await roi_repository.fetch_roi_rows(session, roi_min, vendor, category)
+    except InvalidROIViewError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     return [dict(row) for row in rows]
 
 
 def build_pending_sql(include_vendor: bool, include_category: bool):
+    view_identifier = quote_identifier(get_roi_view_name())
     base = """
         SELECT p.asin, p.title, p.category,
                vp.vendor_id, vp.cost,
                (p.weight_kg * fr.eur_per_kg) AS freight,
                (f.fulfil_fee + f.referral_fee + f.storage_fee) AS fees,
                vf.roi_pct
-        FROM v_roi_full vf
+        FROM {view} vf
         JOIN products p   ON p.asin = vf.asin
         JOIN vendor_prices vp ON vp.sku = p.asin
         JOIN freight_rates fr ON fr.lane = 'EU→IT' AND fr.mode = 'sea'
@@ -44,6 +49,7 @@ def build_pending_sql(include_vendor: bool, include_category: bool):
         WHERE vf.roi_pct >= :roi_min
           AND COALESCE(p.status, 'pending') = 'pending'
     """
+    base = base.format(view=view_identifier)
     params = [bindparam("roi_min", type_=Numeric)]
     if include_vendor:
         base += " AND vp.vendor_id = :vendor"
@@ -66,7 +72,10 @@ def roi_review(
 ):
     url = build_dsn(sync=True)
     engine = create_engine(url)
-    stmt = build_pending_sql(vendor is not None, category is not None)
+    try:
+        stmt = build_pending_sql(vendor is not None, category is not None)
+    except InvalidROIViewError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     params = {"roi_min": roi_min}
     if vendor is not None:
         params["vendor"] = vendor
