@@ -25,6 +25,22 @@ from services.etl.dialects import (
 )
 from services.worker.copy_loader import copy_df_via_temp
 
+
+class ImportFileError(RuntimeError):
+    """Raised when the ETL pipeline fails after persisting load_log metadata."""
+
+    status_code = 500
+
+    def to_meta(self) -> dict[str, str]:
+        return {"status": "error", "error": str(self)}
+
+
+class ImportValidationError(ImportFileError):
+    """Raised for user-facing issues (e.g. empty or malformed uploads)."""
+
+    status_code = 400
+
+
 USE_COPY = os.getenv("USE_COPY", "true").lower() in ("1", "true", "yes")
 BUCKET = "awa-bucket"
 
@@ -42,7 +58,7 @@ def _read_csv_flex(path: Path) -> pd.DataFrame:
             return pd.read_csv(path, sep=sep)
         except Exception:
             continue
-    raise RuntimeError(f"Failed to read CSV: {path}")
+    raise ImportValidationError(f"Failed to read CSV: {path}")
 
 
 def _sha256_file(path: str | Path) -> str:
@@ -98,7 +114,7 @@ def import_file(  # noqa: C901
     TESTING = os.getenv("TESTING") == "1"
     file_path = Path(path)
     if file_path.exists() and file_path.stat().st_size == 0:
-        raise ValueError("empty file")
+        raise ImportValidationError("empty file")
     file_hash = _sha256_file(file_path)
 
     if file_path.suffix in {".xlsx", ".xls"}:
@@ -106,14 +122,17 @@ def import_file(  # noqa: C901
     else:
         df = _read_csv_flex(file_path)
     if df is None or (hasattr(df, "empty") and df.empty):
-        raise ValueError("empty file")
+        raise ImportValidationError("empty file")
     if celery_update:
         celery_update({"stage": "read", "rows": len(df)})
 
     if TESTING and _dialect_override == "test_generic":
         from services.etl.dialects import test_generic as td
 
-        df = td.normalize_df(df)
+        try:
+            df = td.normalize_df(df)
+        except ValueError as err:
+            raise ImportValidationError(str(err)) from err
         engine = create_engine(build_dsn(sync=True))
         with engine.begin() as db_conn:
             for row in df.to_dict(orient="records"):
@@ -134,46 +153,52 @@ def import_file(  # noqa: C901
 
     cols = normalise_headers(df.columns)
     dialect = report_type
-    if dialect is None:
-        if amazon_returns.detect(cols):
-            dialect = "returns_report"
-            df = amazon_returns.normalise(df)
-        elif amazon_reimbursements.detect(cols):
-            dialect = "reimbursements_report"
-            df = amazon_reimbursements.normalise(df)
-        elif amazon_fee_preview.detect(cols):
-            dialect = "fee_preview_report"
-            df = amazon_fee_preview.normalise(df)
-        elif amazon_inventory_ledger.detect(cols):
-            dialect = "inventory_ledger_report"
-            df = amazon_inventory_ledger.normalise(df)
-        elif amazon_ads_sp_cost.detect(cols):
-            dialect = "ads_sp_cost_daily_report"
-            df = amazon_ads_sp_cost.normalise(df)
-        elif amazon_settlements.detect(cols):
-            dialect = "settlements_txn_report"
-            df = amazon_settlements.normalise(df)
+    try:
+        if dialect is None:
+            if amazon_returns.detect(cols):
+                dialect = "returns_report"
+                df = amazon_returns.normalise(df)
+            elif amazon_reimbursements.detect(cols):
+                dialect = "reimbursements_report"
+                df = amazon_reimbursements.normalise(df)
+            elif amazon_fee_preview.detect(cols):
+                dialect = "fee_preview_report"
+                df = amazon_fee_preview.normalise(df)
+            elif amazon_inventory_ledger.detect(cols):
+                dialect = "inventory_ledger_report"
+                df = amazon_inventory_ledger.normalise(df)
+            elif amazon_ads_sp_cost.detect(cols):
+                dialect = "ads_sp_cost_daily_report"
+                df = amazon_ads_sp_cost.normalise(df)
+            elif amazon_settlements.detect(cols):
+                dialect = "settlements_txn_report"
+                df = amazon_settlements.normalise(df)
+            else:
+                raise ImportValidationError("Unknown report: cannot detect dialect")
         else:
-            raise RuntimeError("Unknown report: cannot detect dialect")
-    else:
-        if dialect == "returns_report":
-            df = amazon_returns.normalise(df)
-        elif dialect == "reimbursements_report":
-            df = amazon_reimbursements.normalise(df)
-        elif dialect == "fee_preview_report":
-            df = amazon_fee_preview.normalise(df)
-        elif dialect == "inventory_ledger_report":
-            df = amazon_inventory_ledger.normalise(df)
-        elif dialect == "ads_sp_cost_daily_report":
-            df = amazon_ads_sp_cost.normalise(df)
-        elif dialect == "settlements_txn_report":
-            df = amazon_settlements.normalise(df)
-        else:
-            raise RuntimeError("Unknown report: cannot detect dialect")
+            if dialect == "returns_report":
+                df = amazon_returns.normalise(df)
+            elif dialect == "reimbursements_report":
+                df = amazon_reimbursements.normalise(df)
+            elif dialect == "fee_preview_report":
+                df = amazon_fee_preview.normalise(df)
+            elif dialect == "inventory_ledger_report":
+                df = amazon_inventory_ledger.normalise(df)
+            elif dialect == "ads_sp_cost_daily_report":
+                df = amazon_ads_sp_cost.normalise(df)
+            elif dialect == "settlements_txn_report":
+                df = amazon_settlements.normalise(df)
+            else:
+                raise ImportValidationError("Unknown report: cannot detect dialect")
+    except ValueError as err:
+        raise ImportValidationError(str(err)) from err
     if celery_update:
         celery_update({"stage": "detect", "dialect": dialect})
 
-    df = schemas.validate(df, dialect)
+    try:
+        df = schemas.validate(df, dialect)
+    except ValueError as err:
+        raise ImportValidationError(str(err)) from err
     if celery_update:
         celery_update({"stage": "validate", "rows": len(df)})
 
@@ -282,6 +307,9 @@ def import_file(  # noqa: C901
             "target_table": target_table,
             "warnings": warnings,
         }
+    except ImportFileError:
+        conn.rollback()
+        raise
     except Exception as exc:  # pragma: no cover - defensive
         conn.rollback()
         with conn.cursor() as cur:
@@ -293,7 +321,7 @@ def import_file(  # noqa: C901
                 (str(file_path), target_table, dialect, file_hash, str(exc)[:4000]),
             )
         conn.commit()
-        raise
+        raise ImportFileError(f"Failed to import {file_path}") from exc
     finally:
         conn.close()
         engine.dispose()

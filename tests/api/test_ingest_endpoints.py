@@ -69,19 +69,9 @@ def test_ingest_failure(monkeypatch, tmp_path) -> None:
 
     monkeypatch.setattr("etl.load_csv.import_file", bad_import_file)
     with _get_client(monkeypatch) as client:
-        from services.worker.celery_app import celery_app
-
-        celery_app.conf.task_eager_propagates = False
-
         f = tmp_path / "bad.csv"
         f.write_text("a,b\n1,2\n")
 
         resp = client.post("/ingest", json={"uri": f"file://{f}"})
-        assert resp.status_code == 200
-        task_id = resp.json()["task_id"]
-
-        res = client.get(f"/jobs/{task_id}")
-        assert res.status_code == 200
-        body = res.json()
-        assert body["state"] == "FAILURE"
-        assert body["meta"]["status"] == "error"
+        assert resp.status_code == 500
+        assert resp.json()["detail"] == "boom"

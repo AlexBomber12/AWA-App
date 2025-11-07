@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Any
 
 from celery import states
-from celery.exceptions import Ignore
 from celery.utils.log import get_task_logger
 
 from .celery_app import celery_app
@@ -72,7 +71,7 @@ def task_import_file(self: Any, uri: str, report_type: str | None = None, force:
         logger.exception("task_import_file failed for %s", uri)
         meta = {"status": "error", "error": str(exc)}
         self.update_state(state=states.FAILURE, meta=meta)
-        raise Ignore() from exc
+        raise
     finally:
         if tmp_dir and tmp_dir.exists():
             shutil.rmtree(tmp_dir, ignore_errors=True)
