@@ -1,9 +1,6 @@
 from __future__ import annotations
 
-import importlib
-import os
-from types import ModuleType
-from typing import TYPE_CHECKING, Annotated, cast
+from typing import TYPE_CHECKING, Annotated
 
 if TYPE_CHECKING:
     from pydantic import BaseModel as BaseStrictModel
@@ -15,6 +12,8 @@ from pydantic import BeforeValidator, Field
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from services.api.roi_views import InvalidROIViewError, get_roi_view_name, quote_identifier
+
 # Reuse existing dependencies if present:
 try:
     from services.api.dependencies import get_db  # sync
@@ -25,13 +24,6 @@ except Exception:  # pragma: no cover - fallback if dependencies missing
 
 
 from services.api.security import limit_viewer, require_viewer
-
-# Fallback to repository helper if available
-repo: ModuleType | None
-try:
-    repo = importlib.import_module("services.api.roi_repository")
-except Exception:
-    repo = None
 
 
 def _strip_asin(value: str) -> str:
@@ -63,9 +55,11 @@ router = APIRouter(prefix="/score", tags=["score"])
 
 
 def _roi_view_name() -> str:
-    if repo and hasattr(repo, "_roi_view_name"):
-        return cast(str, repo._roi_view_name())
-    return os.getenv("ROI_VIEW_NAME", "v_roi_full")
+    return get_roi_view_name()
+
+
+def _quoted_roi_view() -> str:
+    return quote_identifier(_roi_view_name())
 
 
 @router.post(
@@ -80,14 +74,16 @@ def score(body: ScoreRequest, db: Session | None = Depends(get_db)) -> ScoreResp
             detail="asins must be a non-empty list",
         )
 
-    view = _roi_view_name()
+    try:
+        view_identifier = _quoted_roi_view()
+    except InvalidROIViewError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    stmt = text(f"SELECT asin, vendor, category, roi FROM {view_identifier} WHERE asin = :asin")
     found = {}
     if db is not None:
         for asin in body.asins:
-            row = db.execute(
-                text(f"SELECT asin, vendor, category, roi FROM {view} WHERE asin = :asin"),
-                {"asin": asin},
-            ).fetchone()
+            row = db.execute(stmt, {"asin": asin}).fetchone()
             if row:
                 found[row.asin] = {
                     "asin": row.asin,

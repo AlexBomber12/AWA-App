@@ -75,9 +75,16 @@ async def test_get_sku_chart_datetime_serialization():
     assert payload["chartData"] == [{"date": dt.isoformat(), "price": 17.5}]
 
 
-def test_roi_view_name_fallback(monkeypatch):
-    monkeypatch.delattr(sku_module.roi_repository, "_roi_view_name", raising=False)
-    assert sku_module._roi_view_name() == "v_roi_full"
+@pytest.mark.asyncio
+async def test_get_sku_invalid_view_returns_400(monkeypatch):
+    def _raise_invalid(_: str = ""):
+        raise sku_module.InvalidROIViewError("bad view")
+
+    monkeypatch.setattr(sku_module, "_sku_card_sql", _raise_invalid)
+    session = _StubSession(_StubResult(mappings=[]))
+    with pytest.raises(HTTPException) as excinfo:
+        await sku_module.get_sku("ANY", session=session)
+    assert excinfo.value.status_code == 400
 
 
 @pytest.mark.asyncio

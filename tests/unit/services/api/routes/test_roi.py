@@ -1,6 +1,7 @@
 import types
 
 import pytest
+from fastapi import HTTPException
 from starlette.requests import Request
 
 from services.api.routes import roi as roi_module
@@ -12,6 +13,17 @@ async def test_roi_returns_dict_rows(fake_db_session):
     session = fake_db_session(_StubResult(mappings=[{"asin": "A1", "roi_pct": 12.3}]))
     result = await roi_module.roi(session=session, roi_min=10)
     assert result == [{"asin": "A1", "roi_pct": 12.3}]
+
+
+@pytest.mark.asyncio
+async def test_roi_invalid_view_returns_http_400(monkeypatch):
+    async def _raise(*_args, **_kwargs):
+        raise roi_module.InvalidROIViewError("bad view")
+
+    monkeypatch.setattr(roi_module.roi_repository, "fetch_roi_rows", _raise)
+    with pytest.raises(HTTPException) as excinfo:
+        await roi_module.roi(session=None)
+    assert excinfo.value.status_code == 400
 
 
 def test_build_pending_sql_adds_filters():
