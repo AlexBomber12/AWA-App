@@ -50,7 +50,7 @@ def test_empty_file_raises_value_error(tmp_path):
     os.environ["TESTING"] = "1"
     empty = tmp_path / "empty.csv"
     empty.write_text("", encoding="utf-8")
-    with pytest.raises(ValueError) as ei:
+    with pytest.raises(lc.ImportValidationError) as ei:
         lc.import_file(str(empty), dialect="test_generic")
     assert "empty file" in str(ei.value)
 
@@ -58,6 +58,6 @@ def test_empty_file_raises_value_error(tmp_path):
 def test_missing_required_columns_gives_informative_error(csv_file_factory):
     os.environ["TESTING"] = "1"
     p = csv_file_factory(headers=["ASIN", "qty"], rows=[{"ASIN": "A1", "qty": 1}], name="bad.csv")
-    with pytest.raises(ValueError) as ei:
+    with pytest.raises(lc.ImportValidationError) as ei:
         lc.import_file(str(p), dialect="test_generic")
     assert "missing required columns" in str(ei.value)

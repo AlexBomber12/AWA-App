@@ -102,8 +102,6 @@ def test_download_minio_to_tmp_uses_env(monkeypatch, tmp_path):
 
 
 def test_task_import_file_cleans_up_on_failure(monkeypatch, tmp_path):
-    from celery.exceptions import Ignore
-
     tmp_dir = tmp_path / "ingest_tmp"
     tmp_dir.mkdir()
     local_path = tmp_dir / "data.csv"
@@ -131,7 +129,7 @@ def test_task_import_file_cleans_up_on_failure(monkeypatch, tmp_path):
 
     monkeypatch.setattr(tasks_module.task_import_file, "update_state", record_update, raising=False)
 
-    with pytest.raises(Ignore):
+    with pytest.raises(RuntimeError, match="ingest failed"):
         tasks_module.task_import_file.run(uri="minio://bucket/data.csv")
 
     failure_updates = [u for u in updates if u.get("meta", {}).get("status") == "error"]

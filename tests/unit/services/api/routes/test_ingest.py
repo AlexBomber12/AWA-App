@@ -1,9 +1,10 @@
 from io import BytesIO
 
 import pytest
-from fastapi import UploadFile
+from fastapi import HTTPException, UploadFile
 from starlette.requests import Request
 
+from etl.load_csv import ImportFileError
 from services.api.routes import ingest as ingest_module
 
 
@@ -43,6 +44,7 @@ async def test_submit_ingest_from_payload(monkeypatch):
         return DummyAsync()
 
     monkeypatch.setattr(ingest_module.task_import_file, "apply_async", fake_apply_async)
+    monkeypatch.setattr(ingest_module.celery_app.conf, "task_always_eager", False, raising=False)
     request = _make_request({"uri": "s3://bucket/file.csv", "report_type": "roi"})
     response = await ingest_module.submit_ingest(request, file=None)
     assert response["task_id"] == "abc"
@@ -61,6 +63,7 @@ async def test_submit_ingest_from_file(monkeypatch, tmp_path):
         return DummyAsync()
 
     monkeypatch.setattr(ingest_module.task_import_file, "apply_async", fake_apply_async)
+    monkeypatch.setattr(ingest_module.celery_app.conf, "task_always_eager", False, raising=False)
     monkeypatch.setattr(ingest_module.tempfile, "mkdtemp", lambda prefix: str(tmp_path))
 
     upload = UploadFile(filename="data.csv", file=BytesIO(b"a,b\n1,2\n"))
@@ -79,3 +82,29 @@ async def test_get_job_returns_meta_async(monkeypatch):
     result = await ingest_module.get_job("abc")
     assert result["state"] == "FAILURE"
     assert result["meta"]["status"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_submit_ingest_eager_failure_propagates(monkeypatch):
+    class DummyAsync:
+        def __init__(self):
+            self.id = "boom-task"
+            self.info = ImportFileError("invalid")
+
+        def get(self, propagate=False):
+            return None
+
+        def failed(self):
+            return True
+
+    def fake_apply_async(*args, **kwargs):
+        return DummyAsync()
+
+    monkeypatch.setattr(ingest_module.task_import_file, "apply_async", fake_apply_async)
+    monkeypatch.setattr(ingest_module.celery_app.conf, "task_always_eager", True, raising=False)
+
+    request = _make_request({"uri": "s3://bucket/file.csv"})
+    with pytest.raises(HTTPException) as excinfo:
+        await ingest_module.submit_ingest(request, file=None)
+    assert excinfo.value.status_code == 500
+    assert "invalid" in excinfo.value.detail

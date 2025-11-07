@@ -8,11 +8,37 @@ from typing import Any
 from celery import states
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 
+from etl.load_csv import ImportFileError
 from services.api.security import limit_ops, limit_viewer, require_ops, require_viewer
 from services.worker.celery_app import celery_app
 from services.worker.tasks import task_import_file
 
 router = APIRouter(prefix="", tags=["ingest"])
+
+
+def _failure_status_and_detail(info: Any) -> tuple[int, str]:
+    if isinstance(info, ImportFileError):
+        return info.status_code, str(info)
+    if isinstance(info, Exception):
+        status = getattr(info, "status_code", 500)
+        return status, str(info)
+    if isinstance(info, dict):
+        detail = info.get("error") or info.get("detail") or "ETL ingest failed"
+        status = int(info.get("status_code") or 500)
+        return status, detail
+    return 500, "ETL ingest failed"
+
+
+def _meta_from_result(state: str, info: Any) -> dict[str, Any]:
+    if isinstance(info, dict) and (info or state != states.FAILURE):
+        return info
+    if state == states.FAILURE:
+        status, detail = _failure_status_and_detail(info)
+        meta: dict[str, Any] = {"status": "error", "error": detail}
+        if status:
+            meta["status_code"] = status
+        return meta
+    return {}
 
 
 @router.post("/ingest")
@@ -49,6 +75,14 @@ async def submit_ingest(
         kwargs={"report_type": report_type or None, "force": force},
         queue="ingest",
     )
+    if celery_app.conf.task_always_eager:
+        try:
+            async_result.get(propagate=False)
+        except Exception:
+            pass
+        if async_result.failed():
+            status, detail = _failure_status_and_detail(async_result.info)
+            raise HTTPException(status_code=status, detail=detail)
     return {"task_id": async_result.id}
 
 
@@ -67,7 +101,5 @@ async def get_job(
         info = res.info
     except Exception:  # pragma: no cover - defensive
         info = {}
-    meta = info if isinstance(info, dict) else {}
-    if state == states.FAILURE and "status" not in meta:
-        meta = {"status": "error"}
+    meta = _meta_from_result(state, info)
     return {"task_id": task_id, "state": state, "meta": meta}
