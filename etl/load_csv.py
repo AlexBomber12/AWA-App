@@ -4,7 +4,8 @@ import hashlib
 import json
 import os
 import tempfile
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -43,6 +44,17 @@ class ImportValidationError(ImportFileError):
 
 USE_COPY = os.getenv("USE_COPY", "true").lower() in ("1", "true", "yes")
 BUCKET = "awa-bucket"
+STREAMING_CHUNK_ENV = int(os.getenv("INGEST_STREAMING_CHUNK_SIZE", "50000"))
+CSV_EXTENSIONS = {".csv", ".txt", ".tsv"}
+XLSX_EXTENSIONS = {".xlsx", ".xlsm"}
+
+
+@dataclass(slots=True)
+class _StreamingMetadata:
+    dialect: str
+    rows: int
+    keyword_full: bool
+    transaction_full: bool
 
 
 def _read_csv_flex(path: Path) -> pd.DataFrame:
@@ -100,12 +112,231 @@ def _open_uri(uri: str) -> Path:
     raise RuntimeError("S3/MinIO open is not available outside tests")
 
 
+def _normalize_for_dialect(df: pd.DataFrame, dialect: str) -> pd.DataFrame:
+    if dialect == "returns_report":
+        return amazon_returns.normalise(df)
+    if dialect == "reimbursements_report":
+        return amazon_reimbursements.normalise(df)
+    if dialect == "fee_preview_report":
+        return amazon_fee_preview.normalise(df)
+    if dialect == "inventory_ledger_report":
+        return amazon_inventory_ledger.normalise(df)
+    if dialect == "ads_sp_cost_daily_report":
+        return amazon_ads_sp_cost.normalise(df)
+    if dialect == "settlements_txn_report":
+        return amazon_settlements.normalise(df)
+    raise ImportValidationError("Unknown report: cannot detect dialect")
+
+
+def _detect_dialect_from_columns(normalized_columns: list[str]) -> str:
+    if amazon_returns.detect(normalized_columns):
+        return "returns_report"
+    if amazon_reimbursements.detect(normalized_columns):
+        return "reimbursements_report"
+    if amazon_fee_preview.detect(normalized_columns):
+        return "fee_preview_report"
+    if amazon_inventory_ledger.detect(normalized_columns):
+        return "inventory_ledger_report"
+    if amazon_ads_sp_cost.detect(normalized_columns):
+        return "ads_sp_cost_daily_report"
+    if amazon_settlements.detect(normalized_columns):
+        return "settlements_txn_report"
+    raise ImportValidationError("Unknown report: cannot detect dialect")
+
+
+def _resolve_dialect(df: pd.DataFrame, explicit: str | None) -> tuple[str, pd.DataFrame]:
+    if explicit:
+        return explicit, _normalize_for_dialect(df, explicit)
+    cols = normalise_headers(df.columns)
+    detected = _detect_dialect_from_columns(cols)
+    return detected, _normalize_for_dialect(df, detected)
+
+
+def _conflict_columns_for(
+    dialect: str,
+    *,
+    df: pd.DataFrame | None = None,
+    metadata: _StreamingMetadata | None = None,
+) -> tuple[str, ...] | None:
+    if dialect == "reimbursements_report":
+        return ("reimb_id",)
+    if dialect == "ads_sp_cost_daily_report":
+        keyword_safe = metadata.keyword_full if metadata else bool(df is not None and df["keyword_id"].notna().all())
+        if keyword_safe:
+            return amazon_ads_sp_cost.CONFLICT_COLS
+        return None
+    if dialect == "settlements_txn_report":
+        txn_safe = (
+            metadata.transaction_full if metadata else bool(df is not None and df["transaction_id"].notna().all())
+        )
+        if txn_safe:
+            return amazon_settlements.CONFLICT_COLS
+        return None
+    return None
+
+
+def _gather_streaming_metadata(path: Path, chunk_size: int, dialect_hint: str | None) -> _StreamingMetadata:
+    dialect: str | None = None
+    rows = 0
+    keyword_full = True
+    transaction_full = True
+    for chunk in load_large_csv(path, chunk_size=chunk_size):
+        if chunk is None or chunk.empty:
+            continue
+        if dialect is None:
+            dialect, normalized = _resolve_dialect(chunk, dialect_hint)
+        else:
+            normalized = _normalize_for_dialect(chunk, dialect)
+        if normalized.empty:
+            continue
+        rows += len(normalized)
+        if "keyword_id" in normalized.columns and normalized["keyword_id"].isna().any():
+            keyword_full = False
+        if "transaction_id" in normalized.columns and normalized["transaction_id"].isna().any():
+            transaction_full = False
+    if dialect is None or rows == 0:
+        raise ImportValidationError("empty file")
+    return _StreamingMetadata(
+        dialect=dialect,
+        rows=rows,
+        keyword_full=keyword_full,
+        transaction_full=transaction_full,
+    )
+
+
+def _process_streaming_chunks(
+    path: Path,
+    *,
+    chunk_size: int,
+    dialect: str,
+    engine: Any,
+    conn: Any,
+    target_table: str,
+    columns: list[str] | None,
+    conflict_cols: tuple[str, ...] | None,
+) -> int:
+    total = 0
+    resolved_columns = list(columns) if columns else None
+    for chunk in load_large_csv(path, chunk_size=chunk_size):
+        if chunk is None or chunk.empty:
+            continue
+        normalized = _normalize_for_dialect(chunk, dialect)
+        if normalized.empty:
+            continue
+        try:
+            validated = schemas.validate(normalized, dialect)
+        except ValueError as err:
+            raise ImportValidationError(str(err)) from err
+        if not len(validated):
+            continue
+        if USE_COPY:
+            if resolved_columns is None:
+                resolved_columns = list(validated.columns)
+            copy_df_via_temp(
+                engine,
+                validated,
+                target_table=target_table,
+                target_schema=None,
+                columns=resolved_columns,
+                conflict_cols=conflict_cols,
+                analyze_after=False,
+                connection=conn,
+            )
+        else:
+            validated.to_sql(target_table, engine, if_exists="append", index=False)
+        total += len(validated)
+    if total == 0:
+        raise ImportValidationError("empty file")
+    return total
+
+
+def load_large_csv(path: Path, *, chunk_size: int = STREAMING_CHUNK_ENV) -> Iterator[pd.DataFrame]:
+    if chunk_size <= 0:
+        raise ValueError("chunk_size must be positive")
+    suffix = path.suffix.lower()
+    if suffix in XLSX_EXTENSIONS:
+        yield from _stream_xlsx_chunks(path, chunk_size)
+        return
+    if suffix in CSV_EXTENSIONS:
+        yield from _stream_csv_chunks(path, chunk_size)
+        return
+    raise ImportValidationError(f"Streaming is only supported for CSV or XLSX files: {path}")
+
+
+def _stream_csv_chunks(path: Path, chunk_size: int) -> Iterator[pd.DataFrame]:
+    last_error: Exception | None = None
+    for encoding in ("utf-8", "utf-8-sig", "cp1252"):
+        try:
+            reader = pd.read_csv(path, sep=None, engine="python", encoding=encoding, chunksize=chunk_size)
+        except UnicodeDecodeError as err:
+            last_error = err
+            continue
+        except Exception as err:
+            last_error = err
+            continue
+        yield from _yield_reader(reader)
+        return
+    for sep in (",", ";", "\t", "|"):
+        try:
+            reader = pd.read_csv(path, sep=sep, chunksize=chunk_size)
+        except Exception as err:
+            last_error = err
+            continue
+        yield from _yield_reader(reader)
+        return
+    raise ImportValidationError(f"Failed to read CSV: {path}") from last_error
+
+
+def _stream_xlsx_chunks(path: Path, chunk_size: int) -> Iterator[pd.DataFrame]:
+    try:
+        from openpyxl import load_workbook
+    except ImportError as exc:  # pragma: no cover - dependency guard
+        raise ImportValidationError("openpyxl is required for XLSX streaming") from exc
+    wb = load_workbook(filename=path, read_only=True, data_only=True)
+    try:
+        for sheet in wb.sheetnames:
+            ws = wb[sheet]
+            headers: list[str] | None = None
+            buffer: list[list[Any]] = []
+            for row in ws.iter_rows(values_only=True):
+                if headers is None:
+                    if not row:
+                        continue
+                    header_values = [(cell if cell is not None else "") for cell in row]
+                    if not any(header_values):
+                        continue
+                    headers = [str(cell).strip() for cell in header_values]
+                    continue
+                if row is None or not any(value is not None for value in row):
+                    continue
+                normalized_row = list(row[: len(headers)])
+                if len(normalized_row) < len(headers):
+                    normalized_row.extend([None] * (len(headers) - len(normalized_row)))
+                buffer.append(normalized_row)
+                if len(buffer) >= chunk_size:
+                    yield pd.DataFrame(buffer, columns=headers)
+                    buffer.clear()
+            if headers and buffer:
+                yield pd.DataFrame(buffer, columns=headers)
+    finally:
+        wb.close()
+
+
+def _yield_reader(reader: pd.io.parsers.TextFileReader) -> Iterator[pd.DataFrame]:
+    try:
+        yield from reader
+    finally:
+        reader.close()
+
+
 def import_file(  # noqa: C901
     path: str,
     report_type: str | None = None,
     celery_update: Callable[[dict[str, Any]], None] | None = None,
     *,
     force: bool = False,
+    streaming: bool = False,
+    chunk_size: int | None = None,
     **kwargs: Any,
 ) -> dict[str, Any]:
     _dialect_override = kwargs.pop("dialect", None)
@@ -116,91 +347,72 @@ def import_file(  # noqa: C901
     if file_path.exists() and file_path.stat().st_size == 0:
         raise ImportValidationError("empty file")
     file_hash = _sha256_file(file_path)
+    if _dialect_override == "test_generic":
+        streaming = False
 
-    if file_path.suffix in {".xlsx", ".xls"}:
-        df = pd.read_excel(file_path)
+    explicit_dialect = _dialect_override or report_type
+    chunk_rows = chunk_size or STREAMING_CHUNK_ENV
+
+    df: pd.DataFrame | None = None
+    metadata: _StreamingMetadata | None = None
+    dialect: str | None = None
+
+    if streaming:
+        if file_path.suffix.lower() == ".xls":
+            raise ImportValidationError("Streaming requires XLSX files for Excel sources")
+        metadata = _gather_streaming_metadata(file_path, chunk_rows, explicit_dialect)
+        dialect = metadata.dialect
+        if celery_update:
+            celery_update({"stage": "read", "rows": metadata.rows})
+            celery_update({"stage": "detect", "dialect": dialect})
     else:
-        df = _read_csv_flex(file_path)
-    if df is None or (hasattr(df, "empty") and df.empty):
-        raise ImportValidationError("empty file")
-    if celery_update:
-        celery_update({"stage": "read", "rows": len(df)})
+        if file_path.suffix in {".xlsx", ".xls"}:
+            df = pd.read_excel(file_path)
+        else:
+            df = _read_csv_flex(file_path)
+        if df is None or (hasattr(df, "empty") and df.empty):
+            raise ImportValidationError("empty file")
+        if celery_update:
+            celery_update({"stage": "read", "rows": len(df)})
 
-    if TESTING and _dialect_override == "test_generic":
-        from services.etl.dialects import test_generic as td
+        if TESTING and _dialect_override == "test_generic":
+            from services.etl.dialects import test_generic as td
+
+            try:
+                df = td.normalize_df(df)
+            except ValueError as err:
+                raise ImportValidationError(str(err)) from err
+            engine = create_engine(build_dsn(sync=True))
+            with engine.begin() as db_conn:
+                for row in df.to_dict(orient="records"):
+                    db_conn.execute(
+                        text(
+                            'INSERT INTO test_generic_raw("ASIN", qty, price) VALUES (:ASIN,:qty,:price) '
+                            'ON CONFLICT ("ASIN") DO UPDATE SET qty=EXCLUDED.qty, price=EXCLUDED.price'
+                        ),
+                        row,
+                    )
+            return {
+                "status": "success",
+                "rows": len(df),
+                "dialect": td.NAME,
+                "target_table": td.TABLE,
+                "warnings": [],
+            }
+
+        dialect, df = _resolve_dialect(df, explicit_dialect)
+        if celery_update:
+            celery_update({"stage": "detect", "dialect": dialect})
 
         try:
-            df = td.normalize_df(df)
+            df = schemas.validate(df, dialect)
         except ValueError as err:
             raise ImportValidationError(str(err)) from err
-        engine = create_engine(build_dsn(sync=True))
-        with engine.begin() as db_conn:
-            for row in df.to_dict(orient="records"):
-                db_conn.execute(
-                    text(
-                        'INSERT INTO test_generic_raw("ASIN", qty, price) VALUES (:ASIN,:qty,:price) '
-                        'ON CONFLICT ("ASIN") DO UPDATE SET qty=EXCLUDED.qty, price=EXCLUDED.price'
-                    ),
-                    row,
-                )
-        return {
-            "status": "success",
-            "rows": len(df),
-            "dialect": td.NAME,
-            "target_table": td.TABLE,
-            "warnings": [],
-        }
+        if celery_update:
+            celery_update({"stage": "validate", "rows": len(df)})
 
-    cols = normalise_headers(df.columns)
-    dialect = report_type
-    try:
-        if dialect is None:
-            if amazon_returns.detect(cols):
-                dialect = "returns_report"
-                df = amazon_returns.normalise(df)
-            elif amazon_reimbursements.detect(cols):
-                dialect = "reimbursements_report"
-                df = amazon_reimbursements.normalise(df)
-            elif amazon_fee_preview.detect(cols):
-                dialect = "fee_preview_report"
-                df = amazon_fee_preview.normalise(df)
-            elif amazon_inventory_ledger.detect(cols):
-                dialect = "inventory_ledger_report"
-                df = amazon_inventory_ledger.normalise(df)
-            elif amazon_ads_sp_cost.detect(cols):
-                dialect = "ads_sp_cost_daily_report"
-                df = amazon_ads_sp_cost.normalise(df)
-            elif amazon_settlements.detect(cols):
-                dialect = "settlements_txn_report"
-                df = amazon_settlements.normalise(df)
-            else:
-                raise ImportValidationError("Unknown report: cannot detect dialect")
-        else:
-            if dialect == "returns_report":
-                df = amazon_returns.normalise(df)
-            elif dialect == "reimbursements_report":
-                df = amazon_reimbursements.normalise(df)
-            elif dialect == "fee_preview_report":
-                df = amazon_fee_preview.normalise(df)
-            elif dialect == "inventory_ledger_report":
-                df = amazon_inventory_ledger.normalise(df)
-            elif dialect == "ads_sp_cost_daily_report":
-                df = amazon_ads_sp_cost.normalise(df)
-            elif dialect == "settlements_txn_report":
-                df = amazon_settlements.normalise(df)
-            else:
-                raise ImportValidationError("Unknown report: cannot detect dialect")
-    except ValueError as err:
-        raise ImportValidationError(str(err)) from err
-    if celery_update:
-        celery_update({"stage": "detect", "dialect": dialect})
-
-    try:
-        df = schemas.validate(df, dialect)
-    except ValueError as err:
-        raise ImportValidationError(str(err)) from err
-    if celery_update:
-        celery_update({"stage": "validate", "rows": len(df)})
+    if dialect is None:
+        raise ImportValidationError("Unknown report: cannot detect dialect")
 
     target_table = {
         "returns_report": "returns_raw",
@@ -245,40 +457,47 @@ def import_file(  # noqa: C901
                         "warnings": warnings,
                     }
 
-        columns = {
-            "returns_report": list(df.columns),
-            "reimbursements_report": list(df.columns),
-            "fee_preview_report": amazon_fee_preview.TARGET_COLUMNS,
-            "inventory_ledger_report": amazon_inventory_ledger.TARGET_COLUMNS,
-            "ads_sp_cost_daily_report": amazon_ads_sp_cost.TARGET_COLUMNS,
-            "settlements_txn_report": amazon_settlements.TARGET_COLUMNS,
-        }[dialect]
+        column_map: dict[str, list[str] | None] = {
+            "returns_report": list(df.columns) if df is not None else None,
+            "reimbursements_report": list(df.columns) if df is not None else None,
+            "fee_preview_report": list(amazon_fee_preview.TARGET_COLUMNS),
+            "inventory_ledger_report": list(amazon_inventory_ledger.TARGET_COLUMNS),
+            "ads_sp_cost_daily_report": list(amazon_ads_sp_cost.TARGET_COLUMNS),
+            "settlements_txn_report": list(amazon_settlements.TARGET_COLUMNS),
+        }
+        columns = column_map[dialect]
+        conflict_cols = _conflict_columns_for(dialect, df=df, metadata=metadata)
 
-        conflict_cols: tuple[str, ...] | None
-        if dialect == "reimbursements_report":
-            conflict_cols = ("reimb_id",)
-        elif dialect == "ads_sp_cost_daily_report" and df["keyword_id"].notna().all():
-            conflict_cols = amazon_ads_sp_cost.CONFLICT_COLS
-        elif dialect == "settlements_txn_report" and df["transaction_id"].notna().all():
-            conflict_cols = amazon_settlements.CONFLICT_COLS
-        else:
-            conflict_cols = None
-
-        if USE_COPY:
-            copy_df_via_temp(
-                engine,
-                df,
+        if streaming:
+            rows_loaded = _process_streaming_chunks(
+                file_path,
+                chunk_size=chunk_rows,
+                dialect=dialect,
+                engine=engine,
+                conn=conn,
                 target_table=target_table,
-                target_schema=None,
                 columns=columns,
                 conflict_cols=conflict_cols,
-                analyze_after=False,
-                connection=conn,
             )
         else:
-            df.to_sql(target_table, engine, if_exists="append", index=False)
+            assert df is not None
+            if USE_COPY:
+                assert columns is not None
+                copy_df_via_temp(
+                    engine,
+                    df,
+                    target_table=target_table,
+                    target_schema=None,
+                    columns=list(columns),
+                    conflict_cols=conflict_cols,
+                    analyze_after=False,
+                    connection=conn,
+                )
+            else:
+                df.to_sql(target_table, engine, if_exists="append", index=False)
+            rows_loaded = len(df)
 
-        if len(df) >= analyze_min:
+        if rows_loaded >= analyze_min:
             with conn.cursor() as cur:
                 cur.execute(f"ANALYZE {target_table}")
 
@@ -293,16 +512,18 @@ def import_file(  # noqa: C901
                     target_table,
                     dialect,
                     file_hash,
-                    len(df),
+                    rows_loaded,
                     json.dumps(warnings),
                 ),
             )
         conn.commit()
         if celery_update:
-            celery_update({"stage": "write", "rows": len(df)})
+            if streaming:
+                celery_update({"stage": "validate", "rows": rows_loaded})
+            celery_update({"stage": "write", "rows": rows_loaded})
         return {
             "status": "success",
-            "rows": len(df),
+            "rows": rows_loaded,
             "dialect": dialect,
             "target_table": target_table,
             "warnings": warnings,
