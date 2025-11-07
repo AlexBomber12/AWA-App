@@ -1,11 +1,26 @@
 from __future__ import annotations
 
 import contextlib
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
-from typing import Any, Iterable, Iterator
+from typing import Any
 
 CONTENT_TYPE_LATEST = "text/plain; version=0.0.4; charset=utf-8"
-_REGISTRY: list[_BaseMetric] = []
+
+
+class CollectorRegistry:
+    def __init__(self) -> None:
+        self._metrics: list[_BaseMetric] = []
+
+    def register(self, metric: _BaseMetric) -> None:
+        if metric not in self._metrics:
+            self._metrics.append(metric)
+
+    def collect(self) -> Iterator[_BaseMetric]:
+        yield from list(self._metrics)
+
+
+_DEFAULT_REGISTRY = CollectorRegistry()
 
 
 @dataclass
@@ -37,8 +52,10 @@ class _BaseMetric:
         self.documentation = documentation
         self.labelnames = tuple(labelnames or ())
         self._values: dict[tuple[str, ...], dict[str, Any]] = {}
-        self._kwargs = kwargs
-        _REGISTRY.append(self)
+        self._kwargs = dict(kwargs)
+        registry: CollectorRegistry | None = self._kwargs.pop("registry", None)
+        self._registry = registry or _DEFAULT_REGISTRY
+        self._registry.register(self)
 
     def clear(self) -> None:
         self._values.clear()
@@ -172,9 +189,10 @@ class Summary(_BaseMetric):
         return samples
 
 
-def generate_latest(*_args: Any, **_kwargs: Any) -> bytes:
+def generate_latest(registry: CollectorRegistry | None = None, *_args: Any, **_kwargs: Any) -> bytes:
     lines: list[str] = []
-    for metric in _REGISTRY:
+    reg = registry or _DEFAULT_REGISTRY
+    for metric in reg.collect():
         lines.append(f"# HELP {metric.name} {metric.documentation}")
         lines.append(f"# TYPE {metric.name} {metric.prom_type}")
         for sample in metric._collect_samples():

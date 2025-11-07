@@ -5,10 +5,17 @@ import json
 import logging
 import os
 
-from awa_common.settings import settings
 from celery import Celery
 from celery.schedules import crontab
 
+from awa_common.logging import configure_logging
+from awa_common.metrics import enable_celery_metrics, init as metrics_init, start_worker_metrics_http_if_enabled
+from awa_common.settings import settings
+
+_worker_version = getattr(settings, "APP_VERSION", "0.0.0")
+
+configure_logging(service="worker", env=settings.ENV, version=_worker_version)
+metrics_init(service="worker", env=settings.ENV, version=_worker_version)
 logging.getLogger(__name__).info("settings=%s", json.dumps(settings.redacted()))
 
 
@@ -39,9 +46,7 @@ def _init_sentry() -> None:
     except BadDsnT:
         logging.getLogger(__name__).warning("Ignoring invalid SENTRY_DSN", exc_info=False)
     except Exception:
-        logging.getLogger(__name__).debug(
-            "Sentry init failed – continuing without telemetry", exc_info=True
-        )
+        logging.getLogger(__name__).debug("Sentry init failed – continuing without telemetry", exc_info=True)
 
 
 _init_sentry()
@@ -59,9 +64,7 @@ def make_celery() -> Celery:
         task_default_rate_limit=None,
         task_ignore_result=False,
         task_track_started=True,
-        task_store_eager_result=(
-            os.getenv("CELERY_TASK_STORE_EAGER_RESULT", "false").lower() in ("1", "true", "yes")
-        ),
+        task_store_eager_result=(os.getenv("CELERY_TASK_STORE_EAGER_RESULT", "false").lower() in ("1", "true", "yes")),
         result_expires=int(os.getenv("CELERY_RESULT_EXPIRES", "86400")),
         timezone=os.getenv("TZ", "UTC"),
         enable_utc=True,
@@ -81,10 +84,21 @@ celery_app = make_celery()
 _beat_schedule = dict(getattr(celery_app.conf, "beat_schedule", {}) or {})
 
 if os.getenv("ENABLE_METRICS", "1") != "0":
-    from services.worker.metrics import maybe_start_metrics_server  # noqa: E402
-
-    port = int(os.getenv("METRICS_PORT", "9097"))
-    maybe_start_metrics_server(port)
+    broker_url = getattr(settings, "BROKER_URL", None) or settings.REDIS_URL
+    queue_names_env = getattr(settings, "QUEUE_NAMES", None)
+    queue_names: list[str] | None
+    if isinstance(queue_names_env, str) and queue_names_env:
+        queue_names = [item.strip() for item in queue_names_env.split(",") if item.strip()]
+    else:
+        queue_names = None
+    interval_s = int(os.getenv("BACKLOG_PROBE_SECONDS", "15"))
+    enable_celery_metrics(
+        celery_app,
+        broker_url=broker_url,
+        queue_names=queue_names,
+        backlog_interval_s=interval_s,
+    )
+    start_worker_metrics_http_if_enabled()
 
 if os.getenv("SCHEDULE_NIGHTLY_MAINTENANCE", "true").lower() in ("1", "true", "yes"):
     cron_expr = os.getenv("NIGHTLY_MAINTENANCE_CRON", "30 2 * * *")

@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import io
-from typing import Any, Sequence, cast
+from collections.abc import Sequence
+from typing import Any, cast
 
 import pandas as pd
 from psycopg2 import sql
@@ -19,7 +20,7 @@ def _fq_ident(schema: str | None, table: str) -> sql.SQL:
     return _ensure_ident(table)
 
 
-def copy_df_via_temp(
+def copy_df_via_temp(  # noqa: C901
     engine: Engine,
     df: pd.DataFrame,
     target_table: str,
@@ -53,21 +54,15 @@ def copy_df_via_temp(
     try:
         with conn.cursor() as cur:
             if target_schema:
-                cur.execute(
-                    sql.SQL("SET LOCAL search_path TO {}, public").format(
-                        _ensure_ident(target_schema)
-                    )
-                )
+                cur.execute(sql.SQL("SET LOCAL search_path TO {}, public").format(_ensure_ident(target_schema)))
 
             cur.execute(
-                sql.SQL(
-                    "CREATE TEMP TABLE {} (LIKE {} INCLUDING DEFAULTS INCLUDING GENERATED) ON COMMIT DROP"
-                ).format(stg, tgt)
+                sql.SQL("CREATE TEMP TABLE {} (LIKE {} INCLUDING DEFAULTS INCLUDING GENERATED) ON COMMIT DROP").format(
+                    stg, tgt
+                )
             )
 
-            copy_stmt = sql.SQL(
-                "COPY {} ({}) FROM STDIN WITH (FORMAT csv, HEADER true, NULL '')"
-            ).format(stg, cols_csv)
+            copy_stmt = sql.SQL("COPY {} ({}) FROM STDIN WITH (FORMAT csv, HEADER true, NULL '')").format(stg, cols_csv)
             cur.copy_expert(copy_stmt.as_string(conn), buf)
 
             if conflict_cols:
@@ -76,23 +71,18 @@ def copy_df_via_temp(
                 update_cols = [c for c in columns if c not in set(conflict_cols)]
                 if update_cols:
                     set_clause = sql.SQL(",").join(
-                        [
-                            sql.SQL("{} = EXCLUDED.{}").format(_ensure_ident(c), _ensure_ident(c))
-                            for c in update_cols
-                        ]
+                        [sql.SQL("{} = EXCLUDED.{}").format(_ensure_ident(c), _ensure_ident(c)) for c in update_cols]
                     )
-                    ins = sql.SQL(
-                        "INSERT INTO {} ({}) SELECT {} FROM {} ON CONFLICT ({}) DO UPDATE SET {}"
-                    ).format(tgt, cols_csv, cols_csv, stg, conflict_list, set_clause)
+                    ins = sql.SQL("INSERT INTO {} ({}) SELECT {} FROM {} ON CONFLICT ({}) DO UPDATE SET {}").format(
+                        tgt, cols_csv, cols_csv, stg, conflict_list, set_clause
+                    )
                 else:
-                    ins = sql.SQL(
-                        "INSERT INTO {} ({}) SELECT {} FROM {} ON CONFLICT ({}) DO NOTHING"
-                    ).format(tgt, cols_csv, cols_csv, stg, conflict_list)
+                    ins = sql.SQL("INSERT INTO {} ({}) SELECT {} FROM {} ON CONFLICT ({}) DO NOTHING").format(
+                        tgt, cols_csv, cols_csv, stg, conflict_list
+                    )
                 cur.execute(ins)
             else:
-                ins = sql.SQL("INSERT INTO {} ({}) SELECT {} FROM {}").format(
-                    tgt, cols_csv, cols_csv, stg
-                )
+                ins = sql.SQL("INSERT INTO {} ({}) SELECT {} FROM {}").format(tgt, cols_csv, cols_csv, stg)
                 cur.execute(ins)
 
             if analyze_after:

@@ -21,8 +21,6 @@ def test_import_cli(tmp_path, monkeypatch):
         lambda self, engine=engine: setattr(self, "engine", engine),
     )
     monkeypatch.setattr(Repository, "ensure_vendor", lambda self, name: 1)
-    monkeypatch.setattr(
-        Repository, "upsert_prices", lambda self, vid, rows, dry_run: (len(rows), 0)
-    )
+    monkeypatch.setattr(Repository, "upsert_prices", lambda self, vid, rows, dry_run: (len(rows), 0))
 
     assert importer.main([str(csv), "--vendor", "ACME", "--dry-run"]) == 0

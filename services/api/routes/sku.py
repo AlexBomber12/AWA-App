@@ -1,27 +1,25 @@
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 from datetime import datetime
-from typing import Any, Iterable, Mapping, TypedDict
+from functools import cache
+from typing import Any, TypedDict
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import Integer, bindparam
-from sqlalchemy import text as sa_text
+from sqlalchemy import Integer, bindparam, text as sa_text
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.sql.elements import TextClause
 
 from .. import roi_repository
 from ..db import get_session
-from ..security import require_ops, require_viewer
+from ..roi_views import InvalidROIViewError, get_roi_view_name, quote_identifier
+from ..security import limit_ops, limit_viewer, require_ops, require_viewer
 
 router = APIRouter(tags=["sku"])
 
 
 def _roi_view_name() -> str:
-    getter = getattr(roi_repository, "_roi_view_name", None)
-    if callable(getter):
-        value = getter()
-        if isinstance(value, str):
-            return value
-    return "v_roi_full"
+    return get_roi_view_name()
 
 
 class ChartPoint(TypedDict):
@@ -29,15 +27,19 @@ class ChartPoint(TypedDict):
     price: float
 
 
-SKU_CARD_SQL = sa_text(
-    f"""
-    SELECT p.title, r.roi_pct, r.fees
-      FROM products AS p
-      JOIN {_roi_view_name()} AS r ON r.asin = p.asin
-     WHERE p.asin = :asin
-     LIMIT 1
-    """
-)
+@cache
+def _sku_card_sql(view_name: str) -> TextClause:
+    quoted_view = quote_identifier(view_name)
+    return sa_text(
+        f"""
+        SELECT p.title, r.roi_pct, r.fees
+          FROM products AS p
+          JOIN {quoted_view} AS r ON r.asin = p.asin
+         WHERE p.asin = :asin
+         LIMIT 1
+        """
+    )
+
 
 SKU_CHART_SQL = sa_text(
     """
@@ -76,9 +78,15 @@ async def get_sku(
     asin: str,
     session: AsyncSession = Depends(get_session),
     _: object = Depends(require_viewer),
+    __: None = Depends(limit_viewer),
 ) -> dict[str, Any]:
     """Return title, ROI, fees, and recent price history for a SKU."""
-    result = await session.execute(SKU_CARD_SQL, {"asin": asin})
+    try:
+        stmt = _sku_card_sql(_roi_view_name())
+    except InvalidROIViewError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    result = await session.execute(stmt, {"asin": asin})
     row = result.mappings().first()
     if not row:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
@@ -97,6 +105,7 @@ async def approve_sku(
     asin: str,
     session: AsyncSession = Depends(get_session),
     _: object = Depends(require_ops),
+    __: None = Depends(limit_ops),
 ) -> dict[str, Any]:
     """Mark the SKU as approved if pending, returning the number of changes."""
     changed = await roi_repository.bulk_approve(session, [asin])

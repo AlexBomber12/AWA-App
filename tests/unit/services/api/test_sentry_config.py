@@ -1,22 +1,7 @@
-from types import SimpleNamespace
-
 import services.api.sentry_config as sentry_config
 
 
-def test_scrub_mapping_masks_sensitive_fields():
-    data = {
-        "password": "secret",
-        "token": "abc",
-        "nested": {"api_key": "xyz"},
-        "list": ["keep"],
-    }
-    scrubbed = sentry_config._scrub_mapping(data)
-    assert scrubbed["password"] == "[redacted]"
-    assert scrubbed["token"] == "[redacted]"
-    assert scrubbed["nested"]["api_key"] == "[redacted]"
-
-
-def test_before_send_adds_request_id(monkeypatch):
+def test_before_send_adds_request_id_and_masks():
     event = {
         "request": {
             "headers": {"x-request-id": "abc", "Authorization": "secret"},
@@ -24,12 +9,13 @@ def test_before_send_adds_request_id(monkeypatch):
         },
         "extra": {"token": "abc"},
     }
-    monkeypatch.setattr(sentry_config, "correlation_id", SimpleNamespace(get=lambda: "fallback"))
     result = sentry_config.before_send(event, {})
-    assert result["request"]["headers"]["Authorization"] == "[redacted]"
-    assert result["request"]["data"]["password"] == "[redacted]"
+    assert result is not event
+    assert result["request"]["headers"]["Authorization"] == "***"
+    assert result["request"]["data"]["password"] == "***"
     assert result["tags"]["request_id"] == "abc"
-    assert result["extra"]["token"] == "[redacted]"
+    assert result["extra"]["token"] == "***"
+    assert event["request"]["headers"]["Authorization"] == "secret"
 
 
 def test_init_sentry_if_configured_invokes_sdk(monkeypatch, settings_env):
@@ -45,3 +31,4 @@ def test_init_sentry_if_configured_invokes_sdk(monkeypatch, settings_env):
     sentry_config.init_sentry_if_configured()
     assert captured["dsn"] == "https://dsn.example/1"
     assert captured["before_send"] is sentry_config.before_send
+    assert captured["before_breadcrumb"] is sentry_config.before_breadcrumb

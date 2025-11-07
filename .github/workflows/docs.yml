@@ -2,53 +2,73 @@
 name: docs
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - 'docs/**'
-      - 'README.md'
-  pull_request:
-    paths:
-      - 'docs/**'
-      - 'README.md'
+  workflow_call:
+    inputs:
+      deploy:
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
 
 jobs:
   build:
+    outputs:
+      site_built: ${{ steps.docs_build.outputs.site_built }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
+      - uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-      - name: Install dependencies
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install docs deps (conditional)
         run: |
-          pip install --break-system-packages -r services/etl/requirements.txt
-          pip install --break-system-packages -r services/api/requirements.txt
-          pip install --break-system-packages -r services/worker/repricer/requirements.txt
-          pip install --break-system-packages -r services/fees_h10/requirements.txt
-          pip install --break-system-packages -r services/alert_bot/requirements.txt
-          pip install --break-system-packages -r requirements-dev.txt
-          pip install --break-system-packages pydoc-markdown
-      - name: Build API docs
-        run: pydoc-markdown
-      - name: Configure Pages
-        uses: actions/configure-pages@v5
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v4
+          if [ -f mkdocs.yml ]; then
+            python -m pip install -U pip
+            pip install mkdocs mkdocs-material mkdocs-redirects
+          else
+            echo "No mkdocs.yml; skipping docs deps"
+          fi
+
+      - name: Build docs (strict)
+        id: docs_build
+        run: |
+          if [ -f mkdocs.yml ]; then
+            mkdocs build --strict
+            echo "site_built=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No mkdocs.yml; nothing to build"
+            echo "site_built=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload docs artifact
+        if: ${{ steps.docs_build.outputs.site_built == 'true' }}
+        uses: actions/upload-artifact@v4
         with:
-          path: docs/api
+          name: docs-site
+          path: site
+
+      - name: Configure Pages
+        if: ${{ inputs.deploy && steps.docs_build.outputs.site_built == 'true' }}
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        if: ${{ inputs.deploy && steps.docs_build.outputs.site_built == 'true' }}
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
 
   deploy:
     needs: build
-    if: ${{ github.event_name == 'push' }}
+    if: ${{ inputs.deploy && needs.build.outputs.site_built == 'true' }}
     runs-on: ubuntu-latest
-    permissions:
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Deploy to GitHub Pages
-        id: deployment
         uses: actions/deploy-pages@v4

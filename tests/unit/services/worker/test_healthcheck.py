@@ -25,9 +25,7 @@ def test_retry_failure():
 def test_main_worker_role(monkeypatch):
     monkeypatch.setattr(healthcheck, "_retry", lambda fn, **kwargs: True)
     monkeypatch.setattr(healthcheck, "ping_worker", lambda: None)
-    monkeypatch.setattr(
-        healthcheck.celery_app, "conf", types.SimpleNamespace(beat_schedule={"job": 1})
-    )
+    monkeypatch.setattr(healthcheck.celery_app, "conf", types.SimpleNamespace(beat_schedule={"job": 1}))
     exit_code = healthcheck.main(["worker"])
     assert exit_code == 0
 

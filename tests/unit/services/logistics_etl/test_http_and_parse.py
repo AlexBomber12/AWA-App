@@ -21,9 +21,7 @@ async def test_download_with_retries_success(monkeypatch) -> None:
         return payload, meta
 
     monkeypatch.setattr(client, "_download_http", _fake_http)
-    result = await client._download_with_retries(
-        "https://example.com/rates.csv", timeout_s=5, retries=1
-    )
+    result = await client._download_with_retries("https://example.com/rates.csv", timeout_s=5, retries=1)
     assert result == (payload, meta)
     assert calls["count"] == 1
 
@@ -60,9 +58,7 @@ async def test_download_with_retries_retries_on_500(monkeypatch) -> None:
     monkeypatch.setattr(client, "_download_http", _flaky)
     monkeypatch.setattr(client.asyncio, "sleep", _fake_sleep)
 
-    payload, meta = await client._download_with_retries(
-        "https://example.com/rates.csv", timeout_s=5, retries=5
-    )
+    payload, meta = await client._download_with_retries("https://example.com/rates.csv", timeout_s=5, retries=5)
     assert payload == b"ok"
     assert meta == {}
     assert attempts["count"] == 3
@@ -123,9 +119,7 @@ async def test_download_http_parses_metadata(monkeypatch) -> None:
 
 
 def test_parse_rows_from_csv_fixture() -> None:
-    fixture_path = (
-        Path(__file__).resolve().parents[3] / "fixtures" / "logistics_etl" / "rates_sample.csv"
-    )
+    fixture_path = Path(__file__).resolve().parents[3] / "fixtures" / "logistics_etl" / "rates_sample.csv"
     fixture = fixture_path.read_bytes()
     rows = client._parse_rows(
         "https://example.com/rates.csv",

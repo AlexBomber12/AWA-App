@@ -8,6 +8,7 @@ import boto3
 from fastapi import APIRouter, Depends, UploadFile
 from fastapi.responses import JSONResponse
 
+from services.api.security import limit_ops, require_ops
 from services.etl import load_csv
 
 BUCKET = "awa-bucket"
@@ -29,7 +30,12 @@ def get_minio() -> Any:
 
 
 @router.post("/", status_code=201)
-async def upload(file: UploadFile, minio: Any = Depends(get_minio)) -> JSONResponse:
+async def upload(
+    file: UploadFile,
+    minio: Any = Depends(get_minio),
+    _: object = Depends(require_ops),
+    __: None = Depends(limit_ops),
+) -> JSONResponse:
     today = datetime.date.today().strftime("%Y-%m")
     dst = f"raw/amazon/{today}/{file.filename}"
     minio.put_object(Bucket=BUCKET, Key=dst, Body=file.file)

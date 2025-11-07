@@ -4,13 +4,48 @@
 [![docker](https://img.shields.io/badge/docker-build-blue)](https://hub.docker.com/r/your-org/awa-app)
 [![docs](https://img.shields.io/badge/docs-latest-blue)](https://your-org.github.io/AWA-App/)
 
-## Quick Start
-Repricer API → http://localhost:8100/health
-The API exposes `/health` for readiness checks.
+## Documentation index
+- [docs/README.md](docs/README.md) – curated index
+- [ADR 0001 — Monorepo Single Source of Truth](docs/ADR/0001-monorepo-SoT.md)
+- [Security guide](docs/SECURITY.md)
+- [Observability guide](docs/OBSERVABILITY.md)
+- [ETL playbook](docs/ETL.md)
+- [Frontend guide](docs/FRONTEND.md)
+
+## Getting Started
+1. **Prerequisites:** Docker + Docker Compose plugin, GNU Make, Python 3.12, Node.js 20, and `npm`.
+2. **Python environment:**
+   ```bash
+   python3.12 -m venv .venv
+   source .venv/bin/activate
+   pip install -r requirements-dev.txt -c constraints.txt
+   pre-commit install
+   ```
+3. **Environment files:** copy the tracked templates and edit as needed.
+   ```bash
+   cp .env.example .env.local
+   cp .env.postgres.example .env.postgres  # optional: used by docker-compose.dev.yml and workflows
+   ```
+4. **Start core services** (Postgres, Redis, API, worker):
+   ```bash
+   docker compose up -d --build --wait db redis api worker
+   # or: make up
+   ```
+5. **Apply migrations:** `alembic -c services/api/alembic.ini upgrade head`
+6. **Run quality checks:** `make qa` (wraps lint, mypy, unit tests) or `pytest -q -m "not integration"`
+7. **Smoke test:** `curl -f http://localhost:8000/ready`
+8. **Webapp (optional):**
+   ```bash
+   cd webapp
+   npm install
+   npm run dev
+   ```
+   Ensure `webapp/.env.local` contains `NEXTAUTH_SECRET`, Keycloak client credentials, and
+   `NEXT_PUBLIC_API_URL=http://localhost:8000`.
 
 ## API documentation
 The generated API reference lives at <https://your-org.github.io/AWA-App/>.
-Regenerate it locally with Python 3.11+ and `pydoc-markdown`:
+Regenerate it locally with Python 3.12+ and `pydoc-markdown`:
 
 ```bash
 pip install pydoc-markdown
@@ -30,22 +65,23 @@ Black auto-formats every commit; CI enforces `git diff --exit-code`.
 
 ### Database configuration
 
-The ETL and API services read Postgres credentials from environment variables.
-Copy `.env.example` to `.env.postgres` and spin up the stack:
+Runtime settings are centralised in `packages/awa_common/settings.py`. For a clean local stack:
 
 ```bash
-cp .env.example .env.postgres
-docker compose up -d --wait
-curl -f http://localhost:8000/health
+cp .env.example .env.local
+cp .env.postgres.example .env.postgres  # optional; used by docker-compose.dev.yml
+docker compose up -d --build --wait db redis api worker
+alembic -c services/api/alembic.ini upgrade head
+curl -f http://localhost:8000/ready
 ```
 
-The stack uses Postgres for all services. Copy `.env.example` to `.env.postgres`
-and run docker compose to start the database and API containers.
+`docker-compose.yml` wires the API and worker to Postgres (`db`) and Redis (`redis`) using the values
+from `.env.local`. `.env.postgres` provides overrides for the auxiliary compose files.
 
 ### Default credentials
 
-The docker-compose files provide fallback values for MinIO and IMAP credentials
-so the stack starts without extra configuration. Adjust `.env.postgres` if you
+The compose files provide fallback values for MinIO and IMAP credentials so the stack starts without
+extra configuration. Update `.env.local` (and `.env.postgres` when using the dev override file) if you
 need different accounts.
 
 ### Database config – env matrix
@@ -70,11 +106,14 @@ other by service name (`postgres:5432`, `redis:6379`, `minio:9000`,
 
 ### Running tests
 
-Before running tests, start the stack and wait for services to become healthy:
+Start the stack and wait for services to become healthy before running tests:
 
 ```bash
-docker compose up -d --wait
-pytest -q
+docker compose up -d --build --wait db redis api worker
+make qa              # lint + mypy + unit tests
+# or run subsets:
+pytest -q -m "not integration"
+pytest -q -m integration         # requires Postgres/Redis running
 ```
 
 ### Continuous Integration
@@ -221,5 +260,6 @@ docker compose exec celery_beat python -m services.ingest.healthcheck beat
 
 ## Local QA checklist
 
-* Run `make test-cov` and ensure coverage badge shows **≥55 %**.
-* Start the stack with `make compose-dev` and verify `curl -f localhost:8000/ready` returns `200`.
+* Run `make qa` and review `./.local-artifacts/` for lint, type, and test logs.
+* Start the stack with `make up` (or `docker compose up -d --build --wait db redis api worker`) and
+  verify `curl -f http://localhost:8000/ready`.

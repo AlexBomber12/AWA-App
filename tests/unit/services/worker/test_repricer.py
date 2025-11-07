@@ -16,9 +16,7 @@ def test_compute_price_calculates_margin():
 async def test_price_endpoint_returns_response():
     transport = ASGITransport(app=main.app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
-        resp = await client.post(
-            "/price", json={"asin": "ASIN123456", "our_cost": "10", "fee_estimate": "2"}
-        )
+        resp = await client.post("/price", json={"asin": "ASIN123456", "our_cost": "10", "fee_estimate": "2"})
         body = resp.json()
         assert body["new_price"]
         assert body["asin"] == "ASIN123456"

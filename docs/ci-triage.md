@@ -123,6 +123,22 @@ The `Pre-commit` step exited with status 127 because GitHub Actions could not lo
 - **CI** workflow (unit job)
 
 ## Summary
+Security review of PR #1 surfaced that every ROI endpoint builds SQL by interpolating the `ROI_VIEW_NAME` environment variable directly into the query text. Any unexpected view name (intentional or accidental) bypassed SQLAlchemy's parameter binding, so CI rejected the change before tests ran.
+
+## Fix
+- Add `services/api/roi_views.py` with a whitelist (`v_roi_full`, `roi_view`, `mat_v_roi_full`, `test_roi_view`) plus identifier quoting utilities.
+- Update `services/api/roi_repository.py` and the ROI/score/sku/stats routes to resolve view names through the whitelist, reuse cached `text()` statements, and raise `HTTP 400` when misconfigured.
+- Extend the ROI unit suites to cover invalid view errors and helper behavior.
+
+## Logs
+- `ci-logs` artifacts were not present in this workspace; no run logs were available.
+
+---
+
+## Failing workflows
+- **CI** workflow (unit job)
+
+## Summary
 `tests/test_api_fast.py::test_health_endpoint` timed out because `FastAPILimiter.init` and the DB readiness loop ran during `TestClient(main.app)` setup when tests expected the mocked lifespan.
 
 ## Fix
@@ -655,3 +671,18 @@ The ETL container exited during `docker compose up` because `python -m services.
 
 ## Logs
 - `ci-logs/latest/unit-pytest.log`
+
+---
+
+## Failing workflows
+- **CI** workflow (unit-local job)
+
+## Summary
+The “Compute diff coverage (80% gate)” step invoked `git fetch --no-tags --prune --depth=1 origin "main:main"` while the workflow was already on `main`, so Git refused to update the checked-out branch and aborted with exit code 128.
+
+## Fix
+- Fetch the base branch without forcing it into the checked-out branch (`git fetch --no-tags --prune --depth=1 origin "${BASE}"`) so the remote-tracking ref refreshes cleanly on both PR and push-to-main runs.
+- Ignore the temporary `.codex-tmp/` directory where CI artifacts are downloaded for triage.
+
+## Logs
+- `.codex-tmp/ci-logs/19139382113/unit-local/11_Compute diff coverage (80% gate).txt`

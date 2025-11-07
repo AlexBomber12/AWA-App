@@ -11,7 +11,6 @@ from pathlib import Path
 from typing import cast
 
 from awa_common.dsn import build_dsn
-
 from pg_utils import connect
 
 DEFAULT_FIXTURE_PATH = Path("fixtures/keepa_sample.json")

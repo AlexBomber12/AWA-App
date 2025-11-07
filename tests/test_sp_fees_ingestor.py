@@ -1,8 +1,8 @@
 import os
 
 import pytest
-from awa_common.dsn import build_dsn
 
+from awa_common.dsn import build_dsn
 from services.etl import sp_fees
 
 pytestmark = pytest.mark.integration

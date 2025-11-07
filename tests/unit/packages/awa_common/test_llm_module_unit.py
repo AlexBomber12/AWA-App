@@ -1,7 +1,8 @@
 import types
 
-import awa_common.llm as llm
 import pytest
+
+import awa_common.llm as llm
 
 
 def test_timeout_seconds_handles_invalid(monkeypatch):
@@ -11,9 +12,7 @@ def test_timeout_seconds_handles_invalid(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_generate_stub_provider_returns_prefix():
-    result = await llm._generate_with_provider(
-        "stub", "hello world", temperature=0.1, max_tokens=32, timeout=1.0
-    )
+    result = await llm._generate_with_provider("stub", "hello world", temperature=0.1, max_tokens=32, timeout=1.0)
     assert result.startswith("[stub]")
 
 
@@ -49,9 +48,7 @@ async def test_generate_local_provider_uses_httpx(monkeypatch):
             return DummyResponse()
 
     monkeypatch.setattr(llm, "httpx", types.SimpleNamespace(AsyncClient=DummyClient))
-    result = await llm._generate_with_provider(
-        "local", "prompt text", temperature=0.5, max_tokens=64, timeout=2.0
-    )
+    result = await llm._generate_with_provider("local", "prompt text", temperature=0.5, max_tokens=64, timeout=2.0)
     assert result == "success"
     assert "prompt text" in calls["json"]["prompt"]
 
@@ -87,9 +84,7 @@ async def test_generate_lan_provider_calls_remote(monkeypatch):
             return DummyResponse()
 
     monkeypatch.setattr(llm, "httpx", types.SimpleNamespace(AsyncClient=DummyClient))
-    result = await llm._generate_with_provider(
-        "lan", "lan prompt", temperature=0.7, max_tokens=32, timeout=1.5
-    )
+    result = await llm._generate_with_provider("lan", "lan prompt", temperature=0.7, max_tokens=32, timeout=1.5)
     assert result == "lan response"
     assert "lan prompt" in recorded["json"]["messages"][0]["content"]
 
@@ -105,9 +100,7 @@ async def test_generate_openai_provider_wraps_errors(monkeypatch):
     monkeypatch.setattr(llm.importlib, "import_module", lambda name: DummyModule)
 
     with pytest.raises(RuntimeError) as excinfo:
-        await llm._generate_with_provider(
-            "openai", "prompt", temperature=0.2, max_tokens=16, timeout=1.0
-        )
+        await llm._generate_with_provider("openai", "prompt", temperature=0.2, max_tokens=16, timeout=1.0)
     assert "openai provider call failed" in str(excinfo.value)
 
 

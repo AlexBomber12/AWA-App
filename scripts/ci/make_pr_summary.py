@@ -150,9 +150,7 @@ def job_name_for_service(service: str) -> str:
     return service
 
 
-def resolve_status(
-    root: Path, job_map: dict[str, tuple[str | None, str | None]], service: str
-) -> str:
+def resolve_status(root: Path, job_map: dict[str, tuple[str | None, str | None]], service: str) -> str:
     job_name = job_name_for_service(service)
     job = job_map.get(job_name)
     icon = status_icon(job[1]) if job else None
@@ -175,9 +173,7 @@ def index_artifacts(root: Path) -> dict[str, list[str]]:
     for child in sorted(root.iterdir()):
         if not child.is_dir():
             continue
-        files = sorted(
-            path.relative_to(child).as_posix() for path in child.rglob("*") if path.is_file()
-        )
+        files = sorted(path.relative_to(child).as_posix() for path in child.rglob("*") if path.is_file())
         index[child.name] = files
     return index
 
@@ -245,11 +241,7 @@ def build_table(
         artifact_entries.update(artifacts_for_service(service, artifact_index))
         artifacts_display = ", ".join(sorted(artifact_entries)) if artifact_entries else "N/A"
 
-        lines.append(
-            "| "
-            f"{service} | {status} | {format_percentage(coverage_value)} | "
-            f"{artifacts_display} | {logs} |"
-        )
+        lines.append(f"| {service} | {status} | {format_percentage(coverage_value)} | {artifacts_display} | {logs} |")
 
     return "\n".join(lines)
 

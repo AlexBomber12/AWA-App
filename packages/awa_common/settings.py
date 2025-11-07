@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import json
-import logging
 import os
 import re
 from typing import Literal
@@ -9,7 +7,9 @@ from typing import Literal
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-EnvName = Literal["local", "test", "staging", "prod"]
+# Preserve legacy values while supporting new stage/dev env conventions.
+EnvName = Literal["local", "test", "dev", "stage", "staging", "prod"]
+AppRuntimeEnv = Literal["dev", "stage", "prod"]
 
 
 def _default_env_file() -> str | None:
@@ -24,105 +24,93 @@ def _default_env_file() -> str | None:
     return None
 
 
+_RATE_UNIT_SECONDS: dict[str, int] = {
+    "second": 1,
+    "sec": 1,
+    "s": 1,
+    "minute": 60,
+    "min": 60,
+    "m": 60,
+}
+
+
+def parse_rate_limit(limit: str) -> tuple[int, int]:
+    """Parse a textual rate limit like ``\"30/min\"`` into (times, seconds)."""
+    value = (limit or "").strip()
+    if not value:
+        raise ValueError("Rate limit value must be non-empty.")
+    match = re.fullmatch(r"(?i)\s*(\d+)\s*/\s*([a-z]+)\s*", value)
+    if not match:
+        raise ValueError(f"Invalid rate limit format: {limit!r}")
+    times = int(match.group(1))
+    unit = match.group(2).lower()
+    seconds = _RATE_UNIT_SECONDS.get(unit)
+    if seconds is None:
+        raise ValueError(f"Unsupported rate limit unit: {unit!r}")
+    if times <= 0:
+        raise ValueError("Rate limit count must be positive.")
+    return times, seconds
+
+
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(
-        env_file=_default_env_file(), env_file_encoding="utf-8", extra="ignore"
-    )
+    model_config = SettingsConfigDict(env_file=_default_env_file(), env_file_encoding="utf-8", extra="ignore")
 
     # Core
-    ENV: EnvName = "local"
+    ENV: str = "local"  # local|dev|stage|prod
     APP_NAME: str = "awa-app"
+    APP_ENV: AppRuntimeEnv = "dev"
+    APP_VERSION: str = "0.0.0"
+    SERVICE_NAME: str = "api"
 
     # Database & cache
     DATABASE_URL: str = Field(default="postgresql+psycopg://app:app@db:5432/app")
     REDIS_URL: str = Field(default="redis://redis:6379/0")
+    BROKER_URL: str | None = None
+    QUEUE_NAMES: str | None = None
 
     # Observability / security
     LOG_LEVEL: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
     SENTRY_DSN: str | None = None
 
+    # Security headers / limits
+    SECURITY_HSTS_ENABLED: bool = False
+    SECURITY_REFERRER_POLICY: str = "strict-origin-when-cross-origin"
+    SECURITY_FRAME_OPTIONS: str = "DENY"
+    SECURITY_X_CONTENT_TYPE_OPTIONS: str = "nosniff"
+    RATE_LIMIT_VIEWER: str = "30/minute"
+    RATE_LIMIT_OPS: str = "120/minute"
+    RATE_LIMIT_ADMIN: str = "240/minute"
+    MAX_REQUEST_BYTES: int = 1_048_576  # 1 MB
+
     # Webapp
     NEXT_PUBLIC_API_URL: str = Field(default="http://localhost:8000")
+    CORS_ORIGINS: str | None = None
 
     # Timeouts
     REQUEST_TIMEOUT_S: int = 15
+
+    # ETL reliability defaults
+    ETL_CONNECT_TIMEOUT_S: float = 5.0
+    ETL_READ_TIMEOUT_S: float = 30.0
+    ETL_TOTAL_TIMEOUT_S: float = 60.0
+    ETL_MAX_RETRIES: int = 5
+    ETL_BACKOFF_BASE_S: float = 0.5
+    ETL_BACKOFF_MAX_S: float = 30.0
+    ETL_RETRY_STATUS_CODES: list[int] = Field(default_factory=lambda: [429, 500, 502, 503, 504])
 
     # Optional: LLM placeholders (no usage change in this PR)
     LLM_PROVIDER: Literal["STUB", "OPENAI", "VLLM"] = "STUB"
     OPENAI_API_BASE: str | None = None
     OPENAI_API_KEY: str | None = None
 
-    # Auth configuration
-    AUTH_MODE: Literal["disabled", "oidc", "forward-auth"] = "disabled"
-    OIDC_ISSUER: str | None = None
-    OIDC_AUDIENCE: str | None = None
-    OIDC_CLIENT_ID: str | None = None
+    # Auth configuration (Keycloak OIDC)
+    OIDC_ISSUER: str = Field(default="https://keycloak.local/realms/awa")
+    OIDC_AUDIENCE: str = Field(default="awa-webapp")
     OIDC_JWKS_URL: str | None = None
-    OIDC_ALGS: str = "RS256"
-    FA_USER_HEADER: str = "X-Forwarded-User"
-    FA_EMAIL_HEADER: str = "X-Forwarded-Email"
-    FA_GROUPS_HEADER: str = "X-Forwarded-Groups"
-    ROLE_MAP_JSON: str = '{"admin":["admin"],"ops":["ops"],"viewer":["viewer"]}'
-    AUTH_REQUIRED_ROUTES_REGEX: str = ""
+    OIDC_JWKS_TTL_SECONDS: int = 900
 
-    _role_map_cache: dict[str, set[str]] | None = None
-    _role_map_cache_key: str | None = None
-    _role_regex_cache: re.Pattern[str] | None = None
-    _role_regex_cache_key: str | None = None
-
-    def _load_role_map(self) -> dict[str, set[str]]:
-        raw_json = self.ROLE_MAP_JSON or "{}"
-        if self._role_map_cache is not None and self._role_map_cache_key == raw_json:
-            return self._role_map_cache
-        try:
-            raw = json.loads(raw_json)
-        except json.JSONDecodeError:
-            raw = {}
-        mapping: dict[str, set[str]] = {}
-        for internal_role, external_values in raw.items():
-            if not isinstance(internal_role, str):
-                continue
-            values: set[str] = set()
-            if isinstance(external_values, list | tuple | set):
-                values = {str(value) for value in external_values}
-            elif isinstance(external_values, str):
-                values = {external_values}
-            mapping[internal_role] = values
-        self._role_map_cache = mapping
-        self._role_map_cache_key = raw_json
-        return self._role_map_cache
-
-    def resolve_role_set(self, claims_or_groups: set[str]) -> set[str]:
-        """Map external IdP/forward-auth groups into internal role names."""
-        if not claims_or_groups:
-            claims_or_groups = set()
-        mapping = self._load_role_map()
-        resolved = {role for role, external in mapping.items() if external & claims_or_groups}
-        # Allow explicit passthrough: if internal role directly referenced externally.
-        direct = {role for role in mapping if role in claims_or_groups}
-        resolved.update(direct)
-        return resolved
-
-    def configured_roles(self) -> set[str]:
-        """Return all internal roles declared in ROLE_MAP_JSON."""
-        return set(self._load_role_map().keys())
-
-    def should_protect_path(self, path: str) -> bool:
-        regex = (self.AUTH_REQUIRED_ROUTES_REGEX or "").strip()
-        if not regex:
-            return False
-        if self._role_regex_cache is None or self._role_regex_cache_key != regex:
-            try:
-                compiled = re.compile(regex)
-            except re.error:
-                logging.getLogger(__name__).warning(
-                    "Invalid AUTH_REQUIRED_ROUTES_REGEX=%r — failing closed (protect all)",
-                    regex,
-                )
-                compiled = re.compile(".*")
-            self._role_regex_cache = compiled
-            self._role_regex_cache_key = regex
-        return bool(self._role_regex_cache.search(path))
+    # Audit trail
+    SECURITY_ENABLE_AUDIT: bool = True
 
     def redacted(self) -> dict:
         def _mask(url: str | None) -> str | None:
@@ -135,16 +123,30 @@ class Settings(BaseSettings):
         return {
             "ENV": self.ENV,
             "APP_NAME": self.APP_NAME,
+            "APP_ENV": self.APP_ENV,
+            "APP_VERSION": self.APP_VERSION,
+            "SERVICE_NAME": self.SERVICE_NAME,
             "DATABASE_URL": _mask(self.DATABASE_URL),
             "REDIS_URL": _mask(self.REDIS_URL),
+            "BROKER_URL": _mask(self.BROKER_URL),
             "SENTRY_DSN": "set" if bool(self.SENTRY_DSN) else None,
             "NEXT_PUBLIC_API_URL": self.NEXT_PUBLIC_API_URL,
+            "CORS_ORIGINS": bool(self.CORS_ORIGINS),
             "LOG_LEVEL": self.LOG_LEVEL,
             "REQUEST_TIMEOUT_S": self.REQUEST_TIMEOUT_S,
             "LLM_PROVIDER": self.LLM_PROVIDER,
             "OPENAI_API_BASE": bool(self.OPENAI_API_BASE),
             "OPENAI_API_KEY": bool(self.OPENAI_API_KEY),
-            "AUTH_MODE": self.AUTH_MODE,
+            "OIDC_ISSUER": self.OIDC_ISSUER,
+            "QUEUE_NAMES": self.QUEUE_NAMES,
+            "SECURITY_REFERRER_POLICY": self.SECURITY_REFERRER_POLICY,
+            "SECURITY_FRAME_OPTIONS": self.SECURITY_FRAME_OPTIONS,
+            "SECURITY_X_CONTENT_TYPE_OPTIONS": self.SECURITY_X_CONTENT_TYPE_OPTIONS,
+            "SECURITY_HSTS_ENABLED": self.SECURITY_HSTS_ENABLED,
+            "RATE_LIMIT_VIEWER": self.RATE_LIMIT_VIEWER,
+            "RATE_LIMIT_OPS": self.RATE_LIMIT_OPS,
+            "RATE_LIMIT_ADMIN": self.RATE_LIMIT_ADMIN,
+            "MAX_REQUEST_BYTES": self.MAX_REQUEST_BYTES,
         }
 
 

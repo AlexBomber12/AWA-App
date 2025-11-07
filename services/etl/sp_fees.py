@@ -2,20 +2,26 @@ from __future__ import annotations
 
 import argparse
 import json
-import logging
 import os
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
-import httpx
-from awa_common.dsn import build_dsn
+import structlog
 from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
+from awa_common.dsn import build_dsn
+from awa_common.etl.guard import process_once
+from awa_common.etl.idempotency import build_payload_meta, compute_idempotency_key
+from awa_common.metrics import record_etl_run, record_etl_skip
 from services.fees_h10 import repository as repo
+
+logger = structlog.get_logger(__name__)
 
 DEFAULT_FIXTURE_PATH = Path("tests/fixtures/spapi_fees_sample.json")
 DEFAULT_SKUS = ("DUMMY1", "DUMMY2")
+SOURCE_NAME = "sp_fees_ingestor"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -81,15 +87,13 @@ def build_rows_from_live(
     rows: list[dict[str, Any]] = []
     for asin in skus:
         response = api.get_my_fees_estimate_for_sku(asin)
-        amount = response["payload"]["FeesEstimateResult"]["FeesEstimate"]["TotalFeesEstimate"][
-            "Amount"
-        ]
+        total_fee = response["payload"]["FeesEstimateResult"]["FeesEstimate"]["TotalFeesEstimate"]["Amount"]
         rows.append(
             {
                 "asin": asin,
                 "marketplace": region or "US",
                 "fee_type": "fba_pick_pack",
-                "amount": amount,
+                "amount": total_fee,
                 "currency": "USD",
                 "source": "sp",
                 "effective_date": os.getenv("SP_FEES_DATE"),
@@ -99,7 +103,7 @@ def build_rows_from_live(
 
 
 def build_rows_from_fixture(path: Path) -> list[dict[str, Any]]:
-    with path.open() as fp:
+    with path.open("r", encoding="utf-8") as fp:
         data = json.load(fp)
     rows: list[dict[str, Any]] = []
     for entry in data:
@@ -108,9 +112,7 @@ def build_rows_from_fixture(path: Path) -> list[dict[str, Any]]:
                 "asin": entry["asin"],
                 "marketplace": "US",
                 "fee_type": "fba_pick_pack",
-                "amount": entry["payload"]["FeesEstimateResult"]["FeesEstimate"][
-                    "TotalFeesEstimate"
-                ]["Amount"],
+                "amount": entry["payload"]["FeesEstimateResult"]["FeesEstimate"]["TotalFeesEstimate"]["Amount"],
                 "currency": "USD",
                 "source": "sp",
                 "effective_date": entry.get("date"),
@@ -119,36 +121,84 @@ def build_rows_from_fixture(path: Path) -> list[dict[str, Any]]:
     return rows
 
 
+def build_idempotency(
+    live: bool,
+    *,
+    skus: Sequence[str],
+    fixture_path: Path,
+) -> tuple[str, dict[str, Any]]:
+    if live:
+        payload = json.dumps(
+            {"mode": "live", "skus": sorted(skus), "date": os.getenv("SP_FEES_DATE")},
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        key = compute_idempotency_key(content=payload)
+        meta = build_payload_meta(
+            extra={
+                "mode": "live",
+                "sku_count": len(skus),
+                "region": os.getenv("REGION"),
+            }
+        )
+        return key, meta
+    key = compute_idempotency_key(path=fixture_path)
+    meta = build_payload_meta(path=fixture_path, extra={"mode": "offline"})
+    return key, meta
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(list(argv) if argv is not None else [])
     live = resolve_live(args.live)
-    dsn = build_dsn()
-    rows: list[dict[str, Any]]
+    fixture_path = Path(args.fixture_path)
+    idempotency_key, payload_meta = build_idempotency(
+        live,
+        skus=args.skus,
+        fixture_path=fixture_path,
+    )
+    task_id = os.getenv("TASK_ID")
+
+    engine = create_engine(build_dsn(sync=True), future=True)
+    SessionLocal = sessionmaker(bind=engine, expire_on_commit=False, future=True)
     try:
-        if live:
-            rows = build_rows_from_live(
-                args.skus,
-                refresh_token=os.getenv("SP_REFRESH_TOKEN", ""),
-                client_id=os.getenv("SP_CLIENT_ID", ""),
-                client_secret=os.getenv("SP_CLIENT_SECRET", ""),
-                region=os.getenv("REGION", ""),
-            )
-        else:
-            rows = build_rows_from_fixture(Path(args.fixture_path))
-    except (
-        httpx.TimeoutException,
-        httpx.RequestError,
-        json.JSONDecodeError,
-        ValueError,
-    ) as exc:
-        logging.error("sp fees fetch failed: %s", exc)
-        return 1
-    engine = create_engine(dsn)
-    try:
-        repo.upsert_fees_raw(engine, rows, testing=os.getenv("TESTING") == "1")
+        with process_once(
+            SessionLocal,
+            source=SOURCE_NAME,
+            payload_meta=payload_meta,
+            idempotency_key=idempotency_key,
+            task_id=task_id,
+        ) as handle:
+            if handle is None:
+                record_etl_skip(SOURCE_NAME)
+                logger.info(
+                    "etl.skipped",
+                    source=SOURCE_NAME,
+                    idempotency_key=idempotency_key,
+                )
+                return 0
+
+            try:
+                with record_etl_run(SOURCE_NAME):
+                    if live:
+                        rows = build_rows_from_live(
+                            args.skus,
+                            refresh_token=os.getenv("SP_REFRESH_TOKEN", ""),
+                            client_id=os.getenv("SP_CLIENT_ID", ""),
+                            client_secret=os.getenv("SP_CLIENT_SECRET", ""),
+                            region=os.getenv("REGION", "US"),
+                        )
+                    else:
+                        rows = build_rows_from_fixture(fixture_path)
+                    if not rows:
+                        logger.info("etl.no_data", source=SOURCE_NAME)
+                        return 0
+                    repo.upsert_fees_raw(engine, rows, testing=os.getenv("TESTING") == "1")
+            except Exception:
+                logger.exception("sp_fees.failed", source=SOURCE_NAME)
+                raise
+        return 0
     finally:
         engine.dispose()
-    return 0
 
 
 if __name__ == "__main__":

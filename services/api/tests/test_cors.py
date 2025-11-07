@@ -15,6 +15,7 @@ def _get_app(monkeypatch, **env):
         return None
 
     monkeypatch.setattr(main, "_wait_for_db", _noop)
+    monkeypatch.setattr(main, "_wait_for_redis", _noop)
 
     from services.api import db as api_db
 
@@ -32,6 +33,15 @@ def _get_app(monkeypatch, **env):
         yield FakeSession()
 
     main.app.dependency_overrides[api_db.get_session] = fake_get_session
+
+    async def _fake_init(_redis):
+        return None
+
+    async def _fake_close():
+        return None
+
+    monkeypatch.setattr(main.FastAPILimiter, "init", _fake_init)
+    monkeypatch.setattr(main.FastAPILimiter, "close", _fake_close)
     return main.app
 
 

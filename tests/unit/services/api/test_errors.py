@@ -107,9 +107,7 @@ async def test_db_exception_handler_returns_500(app_with_handlers, dummy_logger)
 
 
 @pytest.mark.asyncio
-async def test_unhandled_exception_handler_captures_sentry(
-    app_with_handlers, dummy_logger, monkeypatch
-):
+async def test_unhandled_exception_handler_captures_sentry(app_with_handlers, dummy_logger, monkeypatch):
     captured = {}
 
     def fake_capture(exc):

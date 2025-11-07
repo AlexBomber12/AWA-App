@@ -1,15 +1,18 @@
 from __future__ import annotations
 
-import importlib
-import os
-from types import ModuleType
-from typing import Annotated, Any, cast
+from typing import TYPE_CHECKING, Annotated
+
+if TYPE_CHECKING:
+    from pydantic import BaseModel as BaseStrictModel
+else:
+    from awa_common.schemas import BaseStrictModel
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import HTTPBasic, HTTPBasicCredentials
-from pydantic import BaseModel, BeforeValidator, Field
+from pydantic import BeforeValidator, Field
 from sqlalchemy import text
 from sqlalchemy.orm import Session
+
+from services.api.roi_views import InvalidROIViewError, get_roi_view_name, quote_identifier
 
 # Reuse existing dependencies if present:
 try:
@@ -20,39 +23,23 @@ except Exception:  # pragma: no cover - fallback if dependencies missing
         return None
 
 
-try:
-    from services.api.security import (
-        require_basic_auth,  # dependency that raises on bad creds
-        require_viewer,
-    )
-except Exception:
-    _security = HTTPBasic()
-
-    def require_basic_auth(
-        credentials: HTTPBasicCredentials = Depends(_security),
-    ) -> None:  # no-op if project already handles auth globally
-        return None
-
-    async def require_viewer(*_args: Any, **_kwargs: Any) -> Any:
-        return None
+from services.api.security import limit_viewer, require_viewer
 
 
-# Fallback to repository helper if available
-repo: ModuleType | None
-try:
-    repo = importlib.import_module("services.api.roi_repository")
-except Exception:
-    repo = None
+def _strip_asin(value: str) -> str:
+    if not isinstance(value, str):
+        raise ValueError("ASIN must be provided as a string.")
+    return value.strip()
 
 
-Asin = Annotated[str, BeforeValidator(lambda v: v.strip()), Field(min_length=1)]
+Asin = Annotated[str, BeforeValidator(_strip_asin), Field(min_length=1)]
 
 
-class ScoreRequest(BaseModel):
+class ScoreRequest(BaseStrictModel):
     asins: list[Asin] = Field(..., description="List of ASINs")
 
 
-class ScoreItem(BaseModel):
+class ScoreItem(BaseStrictModel):
     asin: str
     roi: float | None = None
     vendor: str | None = None
@@ -60,7 +47,7 @@ class ScoreItem(BaseModel):
     error: str | None = None
 
 
-class ScoreResponse(BaseModel):
+class ScoreResponse(BaseStrictModel):
     items: list[ScoreItem]
 
 
@@ -68,15 +55,17 @@ router = APIRouter(prefix="/score", tags=["score"])
 
 
 def _roi_view_name() -> str:
-    if repo and hasattr(repo, "_roi_view_name"):
-        return cast(str, repo._roi_view_name())
-    return os.getenv("ROI_VIEW_NAME", "v_roi_full")
+    return get_roi_view_name()
+
+
+def _quoted_roi_view() -> str:
+    return quote_identifier(_roi_view_name())
 
 
 @router.post(
     "",
     response_model=ScoreResponse,
-    dependencies=[Depends(require_basic_auth), Depends(require_viewer)],
+    dependencies=[Depends(require_viewer), Depends(limit_viewer)],
 )
 def score(body: ScoreRequest, db: Session | None = Depends(get_db)) -> ScoreResponse:
     if not body.asins:
@@ -85,14 +74,16 @@ def score(body: ScoreRequest, db: Session | None = Depends(get_db)) -> ScoreResp
             detail="asins must be a non-empty list",
         )
 
-    view = _roi_view_name()
+    try:
+        view_identifier = _quoted_roi_view()
+    except InvalidROIViewError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    stmt = text(f"SELECT asin, vendor, category, roi FROM {view_identifier} WHERE asin = :asin")
     found = {}
     if db is not None:
         for asin in body.asins:
-            row = db.execute(
-                text(f"SELECT asin, vendor, category, roi FROM {view} WHERE asin = :asin"),
-                {"asin": asin},
-            ).fetchone()
+            row = db.execute(stmt, {"asin": asin}).fetchone()
             if row:
                 found[row.asin] = {
                     "asin": row.asin,

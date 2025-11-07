@@ -36,9 +36,7 @@ async def _openai_llm(prompt: str, temp: float, max_toks: int) -> str:
     return cast(str, rsp.choices[0].message.content).strip()
 
 
-async def _remote_generate(
-    base: str, key: str | None, prompt: str, max_tokens: int, model: str
-) -> str:
+async def _remote_generate(base: str, key: str | None, prompt: str, max_tokens: int, model: str) -> str:
     headers = {"Authorization": f"Bearer {key}"} if key else {}
     payload = {
         "model": model,

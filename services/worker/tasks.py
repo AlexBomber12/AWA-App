@@ -43,9 +43,7 @@ def _resolve_uri_to_path(uri: str) -> Path:
 
 
 @celery_app.task(name="ingest.import_file", bind=True)  # type: ignore[misc]
-def task_import_file(
-    self: Any, uri: str, report_type: str | None = None, force: bool = False
-) -> dict[str, Any]:
+def task_import_file(self: Any, uri: str, report_type: str | None = None, force: bool = False) -> dict[str, Any]:
     """Import a file into Postgres using existing ETL pipeline."""
 
     self.update_state(state=states.STARTED, meta={"stage": "resolve_uri"})
@@ -74,7 +72,7 @@ def task_import_file(
         logger.exception("task_import_file failed for %s", uri)
         meta = {"status": "error", "error": str(exc)}
         self.update_state(state=states.FAILURE, meta=meta)
-        raise Ignore()
+        raise Ignore() from exc
     finally:
         if tmp_dir and tmp_dir.exists():
             shutil.rmtree(tmp_dir, ignore_errors=True)
@@ -89,9 +87,7 @@ def task_rebuild_views(self: Any) -> dict[str, Any]:
 if os.getenv("TESTING") == "1":
 
     @celery_app.task(name="ingest.enqueue_import", bind=True)  # type: ignore[misc]
-    def enqueue_import(
-        self: Any, *, uri: str, dialect: str
-    ) -> dict[str, Any]:  # pragma: no cover - helper for tests
+    def enqueue_import(self: Any, *, uri: str, dialect: str) -> dict[str, Any]:  # pragma: no cover - helper for tests
         from etl.load_csv import import_file as run_ingest
 
         return run_ingest(uri, dialect=dialect)

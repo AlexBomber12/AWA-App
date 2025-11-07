@@ -7,6 +7,7 @@ from urllib.parse import urlparse, urlunparse
 from urllib.request import Request, urlopen
 
 import psycopg
+
 from awa_common.dsn import build_dsn
 
 

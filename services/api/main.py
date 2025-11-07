@@ -1,7 +1,7 @@
 import asyncio
-import json
 import logging
 import os
+from collections.abc import Iterable
 from contextlib import asynccontextmanager
 
 import httpx
@@ -10,21 +10,21 @@ import sqlalchemy
 import structlog
 from alembic.config import Config
 from alembic.script import ScriptDirectory
-from asgi_correlation_id import CorrelationIdMiddleware
-from awa_common.settings import settings
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi_limiter import FastAPILimiter
-from fastapi_limiter.depends import RateLimiter
 from sqlalchemy import text as sa_text
 from sqlalchemy.ext.asyncio import AsyncSession
-from starlette.requests import Request
-from starlette.responses import Response
 
-from services.api.audit import AuditMiddleware
+from awa_common.logging import RequestIdMiddleware, configure_logging
+from awa_common.metrics import MetricsMiddleware, init as metrics_init, register_metrics_endpoint
+from awa_common.security.headers import install_security_headers
+from awa_common.security.ratelimit import install_role_based_rate_limit
+from awa_common.security.request_limits import install_body_size_limit
+from awa_common.settings import settings
 from services.api.errors import install_exception_handlers
-from services.api.logging_config import configure_logging
-from services.api.metrics import install_metrics
+from services.api.middlewares.audit import AuditMiddleware
+from services.api.security import install_security
 from services.api.sentry_config import init_sentry_if_configured
 
 from .db import async_session, get_session
@@ -36,53 +36,75 @@ from .routes.sku import router as sku_router
 from .routes.stats import router as stats_router
 from .routes.upload import router as upload_router
 
-configure_logging()
-init_sentry_if_configured()
-logging.getLogger(__name__).info("settings=%s", json.dumps(settings.redacted()))
+
+async def ready_db(session: AsyncSession = Depends(get_session)) -> dict[str, str]:
+    """Return 200 only when migrations are at head."""
+    alembic_config = os.getenv("ALEMBIC_CONFIG", "services/api/alembic.ini")
+    cfg = Config(alembic_config)
+    head = ScriptDirectory.from_config(cfg).get_current_head()
+    result = await session.execute(sa_text("SELECT version_num FROM alembic_version"))
+    current = result.scalar()
+    if current == head:
+        return {"status": "ready"}
+    raise HTTPException(status_code=503, detail="migrations pending")
 
 
-def _is_truthy(v: str | None) -> bool:
-    return (v or "").strip().lower() in {"1", "true", "yes", "y"}
+def ready() -> dict[str, str]:
+    return {"status": "ok", "env": settings.ENV}
 
 
-async def client_ip_identifier(request: Request) -> str:
-    if _is_truthy(os.getenv("TRUST_X_FORWARDED", "1")):
-        xff = request.headers.get("x-forwarded-for")
-        if xff:
-            # first IP in the chain
-            ip = xff.split(",")[0].strip()
-            if ip:
-                return ip
-        xri = request.headers.get("x-real-ip")
-        if xri:
-            return xri.strip()
-    client = request.client
-    if not client or not getattr(client, "host", None):
-        return "unknown"
-    return client.host
-
-
-def _parse_rate_limit(s: str) -> tuple[int, int]:
-    # formats: "100/minute", "60/second", "1000/hour"
-    try:
-        n, unit = s.split("/", 1)
-        times = int(n.strip())
-        unit = unit.strip().lower()
-    except Exception:
-        return 100, 60
-    if unit.startswith("min"):
-        seconds = 60
-    elif unit.startswith("sec"):
-        seconds = 1
-    elif unit.startswith("hour"):
-        seconds = 3600
+def _normalize_cors_origins(value: str | Iterable[str] | None) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        items = value.split(",")
     else:
-        seconds = 60
-    return max(times, 1), seconds
+        items = list(value)
+    origins = []
+    for item in items:
+        candidate = item.strip()
+        if candidate:
+            origins.append(candidate)
+    return origins
+
+
+def resolve_cors_origins(
+    app_env: str | None = None, configured_origins: str | Iterable[str] | None = None
+) -> list[str]:
+    env = (app_env or getattr(settings, "APP_ENV", "dev")).strip().lower()
+    raw_origins = configured_origins
+    if raw_origins is None:
+        raw_origins = getattr(settings, "CORS_ORIGINS", None)
+
+    origins = _normalize_cors_origins(raw_origins)
+
+    if not origins:
+        if env == "dev":
+            return ["http://localhost:3000"]
+        if env in {"stage", "staging", "prod", "production"}:
+            raise RuntimeError("CORS_ORIGINS must be set when APP_ENV is 'stage' or 'prod'.")
+        return []
+
+    if env in {"stage", "staging", "prod", "production"} and any(origin == "*" for origin in origins):
+        raise RuntimeError("Wildcard origins are not permitted in stage or prod environments.")
+
+    return origins
+
+
+def install_cors(app: FastAPI) -> None:
+    origins = resolve_cors_origins()
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=origins,
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=["*"],
+        max_age=600,
+    )
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(_app: FastAPI):
     await _wait_for_db()
     await _check_llm()
     redis_url = settings.REDIS_URL
@@ -103,72 +125,47 @@ async def lifespan(app: FastAPI):
                 pass
 
 
-app = FastAPI(lifespan=lifespan)
+def create_app() -> FastAPI:
+    cfg = settings
+    app_version = getattr(cfg, "APP_VERSION", "0.0.0")
+    configure_logging(service="api", env=cfg.ENV, version=app_version)
+    metrics_init(service="api", env=cfg.ENV, version=app_version)
+    init_sentry_if_configured()
+    logging.getLogger(__name__).info("settings=%s", cfg.redacted())
 
-app.add_middleware(CorrelationIdMiddleware, header_name="X-Request-ID")
-app.add_middleware(AuditMiddleware, session_factory=async_session)
-install_exception_handlers(app)
-install_metrics(app)
+    app = FastAPI(lifespan=lifespan)
 
-origins = [o.strip() for o in os.getenv("CORS_ORIGINS", "").split(",") if o.strip()]
-origin_regex = os.getenv("CORS_ALLOW_ORIGIN_REGEX", "").strip()
-allow_credentials = os.getenv("CORS_ALLOW_CREDENTIALS", "false").lower() in {
-    "1",
-    "true",
-    "yes",
-}
+    install_security_headers(app, cfg)
+    install_body_size_limit(app, cfg)
+    app.add_middleware(RequestIdMiddleware)
+    app.add_middleware(MetricsMiddleware)
+    install_security(app)
+    app.add_middleware(AuditMiddleware, session_factory=async_session)
+    install_exception_handlers(app)
+    register_metrics_endpoint(app)
+    install_cors(app)
+    install_role_based_rate_limit(app, cfg)
 
-if origins or origin_regex:
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=origins if origins else [],
-        allow_origin_regex=origin_regex if origin_regex else None,
-        allow_credentials=allow_credentials,
-        allow_methods=["*"],
-        allow_headers=["*"],
-        expose_headers=["*"],
+    app.include_router(upload_router, prefix="/upload")
+    app.include_router(ingest_router)
+    app.include_router(roi_router)
+    app.include_router(stats_router)
+    app.include_router(score_router)
+    app.include_router(sku_router)
+    app.include_router(health_router.router)
+    app.add_api_route(
+        "/ready_db",
+        ready_db,
+        methods=["GET"],
+        status_code=status.HTTP_200_OK,
+        include_in_schema=False,
     )
+    app.add_api_route("/ready", ready, methods=["GET"])
+
+    return app
 
 
-_default = os.getenv("RATE_LIMIT_DEFAULT", "100/minute")
-_times, _seconds = _parse_rate_limit(_default)
-
-
-async def _rate_limit_dependency(request: Request, response: Response) -> None:
-    if FastAPILimiter.redis:
-        limiter = RateLimiter(times=_times, seconds=_seconds, identifier=client_ip_identifier)
-        await limiter(request, response)
-
-
-_rate_limiter_dep = Depends(_rate_limit_dependency)
-app.router.dependencies.append(_rate_limiter_dep)
-
-
-@app.get("/ready_db", status_code=status.HTTP_200_OK, include_in_schema=False)
-async def ready_db(session: AsyncSession = Depends(get_session)) -> dict[str, str]:
-    """Return 200 only when migrations are at head."""
-    alembic_config = os.getenv("ALEMBIC_CONFIG", "services/api/alembic.ini")
-    cfg = Config(alembic_config)
-    head = ScriptDirectory.from_config(cfg).get_current_head()
-    result = await session.execute(sa_text("SELECT version_num FROM alembic_version"))
-    current = result.scalar()
-    if current == head:
-        return {"status": "ready"}
-    raise HTTPException(status_code=503, detail="migrations pending")
-
-
-@app.get("/ready")
-def ready() -> dict[str, str]:
-    return {"status": "ok", "env": settings.ENV}
-
-
-app.include_router(upload_router, prefix="/upload")
-app.include_router(ingest_router)
-app.include_router(roi_router)
-app.include_router(stats_router)
-app.include_router(score_router)
-app.include_router(sku_router)
-app.include_router(health_router.router)
+app = create_app()
 
 
 async def _wait_for_db(max_attempts: int | None = None, delay_s: float | None = None) -> None:
@@ -181,9 +178,7 @@ async def _wait_for_db(max_attempts: int | None = None, delay_s: float | None = 
             )
         )
     if delay_s is None:
-        delay_s = float(
-            os.getenv("WAIT_FOR_DB_DELAY_S", "0.05" if env in {"local", "test"} else "0.2")
-        )
+        delay_s = float(os.getenv("WAIT_FOR_DB_DELAY_S", "0.05" if env in {"local", "test"} else "0.2"))
     db_url = (
         (os.getenv("DATABASE_URL") or "").strip()
         or str(getattr(settings, "DATABASE_URL", "")).strip()
@@ -244,4 +239,4 @@ async def _check_llm() -> None:
             pass
 
 
-__all__ = ["app", "ready"]
+__all__ = ["app", "create_app", "ready", "ready_db"]

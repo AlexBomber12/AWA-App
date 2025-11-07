@@ -2,6 +2,7 @@ import os
 
 import pytest
 from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 
 pytestmark = pytest.mark.integration
 
@@ -75,13 +76,10 @@ def _auth_env():
     os.environ["FEES_RAW_TABLE"] = "test_fees_raw"
 
 
-def test_h10_partial_success_and_idempotent_update(
-    pg_engine, ensure_test_fees_raw_table, monkeypatch
-):
+def test_h10_partial_success_and_idempotent_update(pg_engine, ensure_test_fees_raw_table, monkeypatch):
     _auth_env()
     try:
-        from services.fees_h10 import repository as repo
-        from services.fees_h10 import worker
+        from services.fees_h10 import repository as repo, worker
     except Exception:
         pytest.skip("Helium10 modules not present")
 
@@ -104,16 +102,12 @@ def test_h10_partial_success_and_idempotent_update(
     assert summary2["inserted"] == 1 and summary2["updated"] == 1 and summary2["skipped"] == 1
     with pg_engine.connect() as c:
         amt = c.execute(
-            text(
-                "SELECT amount FROM test_fees_raw WHERE asin='A1' AND marketplace='US' AND fee_type='referral'"
-            )
+            text("SELECT amount FROM test_fees_raw WHERE asin='A1' AND marketplace='US' AND fee_type='referral'")
         ).scalar_one()
     assert float(amt) == 9.99
 
 
-def test_h10_network_error_is_handled_without_partial_writes(
-    pg_engine, ensure_test_fees_raw_table, monkeypatch
-):
+def test_h10_network_error_is_handled_without_partial_writes(pg_engine, ensure_test_fees_raw_table, monkeypatch):
     _auth_env()
     try:
         from services.fees_h10 import worker
@@ -150,5 +144,5 @@ def test_h10_invalid_payload_gracefully_errors(pg_engine, ensure_test_fees_raw_t
         pytest.skip("Helium10 modules not present")
 
     bad_rows = [{"asin": "A1"}]
-    with pytest.raises(Exception):
+    with pytest.raises(SQLAlchemyError):
         repo.upsert_fees_raw(pg_engine, bad_rows, testing=True)

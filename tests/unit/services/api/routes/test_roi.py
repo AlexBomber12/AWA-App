@@ -2,7 +2,6 @@ import types
 
 import pytest
 from fastapi import HTTPException
-from fastapi.security import HTTPBasicCredentials
 from starlette.requests import Request
 
 from services.api.routes import roi as roi_module
@@ -16,19 +15,15 @@ async def test_roi_returns_dict_rows(fake_db_session):
     assert result == [{"asin": "A1", "roi_pct": 12.3}]
 
 
-def test_check_basic_auth_success(monkeypatch):
-    monkeypatch.setenv("BASIC_USER", "user")
-    monkeypatch.setenv("BASIC_PASS", "pass")
-    creds = HTTPBasicCredentials(username="user", password="pass")
-    assert roi_module._check_basic_auth(creds) == "user"
+@pytest.mark.asyncio
+async def test_roi_invalid_view_returns_http_400(monkeypatch):
+    async def _raise(*_args, **_kwargs):
+        raise roi_module.InvalidROIViewError("bad view")
 
-
-def test_check_basic_auth_failure(monkeypatch):
-    monkeypatch.setenv("BASIC_USER", "user")
-    monkeypatch.setenv("BASIC_PASS", "pass")
-    creds = HTTPBasicCredentials(username="bad", password="pass")
-    with pytest.raises(HTTPException):
-        roi_module._check_basic_auth(creds)
+    monkeypatch.setattr(roi_module.roi_repository, "fetch_roi_rows", _raise)
+    with pytest.raises(HTTPException) as excinfo:
+        await roi_module.roi(session=None)
+    assert excinfo.value.status_code == 400
 
 
 def test_build_pending_sql_adds_filters():
@@ -89,7 +84,7 @@ def test_roi_review_renders(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_approve_updates_when_asins(monkeypatch):
+async def test_approve_updates_when_asins(monkeypatch):  # noqa: C901
     recorded = {}
 
     class DummyConn:

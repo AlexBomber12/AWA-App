@@ -49,9 +49,7 @@ def upgrade() -> None:
     op.execute("CREATE INDEX IF NOT EXISTS ix_products_asin ON products(asin)")
     op.execute("CREATE INDEX IF NOT EXISTS ix_fees_raw_asin ON fees_raw(asin)")
     op.execute("CREATE INDEX IF NOT EXISTS ix_keepa_offers_asin ON keepa_offers(asin)")
-    op.execute(
-        "CREATE INDEX IF NOT EXISTS ix_vendor_prices_sku_updated_at ON vendor_prices (sku, updated_at DESC)"
-    )
+    op.execute("CREATE INDEX IF NOT EXISTS ix_vendor_prices_sku_updated_at ON vendor_prices (sku, updated_at DESC)")
 
 
 def downgrade() -> None:

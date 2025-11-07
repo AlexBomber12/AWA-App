@@ -9,8 +9,8 @@
 The root `tests/conftest.py` provides lightweight building blocks for pure unit tests:
 - `faker_seed()` seeds `random`, `numpy.random`, and `faker` (when installed) with a deterministic default. Call it with a different seed if a test needs new data.
 - `env_overrides(**env)` is a context manager that temporarily sets/clears environment variables while automatically restoring the previous state.
-- `dummy_user_ctx(roles=[...])` returns a ready-to-use `Principal` for API tests. Combine it with `fastapi_dep_overrides` to stub authentication.
-- `fastapi_dep_overrides(app, get_principal=...)` patches `app.dependency_overrides` inside a `with` block and restores the original wiring afterwards.
+- `dummy_user_ctx(roles=[...])` returns a ready-to-use `UserCtx` for API tests. Combine it with `fastapi_dep_overrides` to stub authentication.
+- `fastapi_dep_overrides(app, current_user=...)` patches `app.dependency_overrides` inside a `with` block and restores the original wiring afterwards.
 - `http_mock()` queues canned HTTP responses using `httpx.MockTransport`. Register expectations with `mock.add("GET", "https://...", status_code=200, json={...})` and use `with mock.use(): ...` around code that instantiates `httpx` clients.
 - `smtp_mock()` captures calls to `smtplib.SMTP`/`SMTP_SSL` and yields an in-memory list of sent messages so tests can assert email payloads without opening sockets.
 - `now_utc(target="module.time_fn", value="2024-01-01T00:00:00Z")` patches a time provider to return a fixed UTC timestamp—no `freezegun` required.
@@ -40,7 +40,8 @@ All helpers rely solely on the standard library and `httpx`, so no additional te
   - `pytest -q tests/unit/services/fees_h10`
   - `pytest -q tests/unit/services/price_importer`
 - Core coverage additions:
-  - `pytest -q tests/unit/services/api/test_health_rbac_errors.py` exercises readiness probes, RBAC overrides, ROI/stats endpoints (including 422 errors), and API error handling without a real database.
+  - `pytest -q tests/unit/services/api/test_security_oidc.py` exercises JWKS discovery/caching and token validation paths.
+  - `pytest -q tests/unit/services/api/test_rate_limit_roles.py` ensures per-route rate limit dependencies stay wired.
   - `pytest -q tests/unit/services/db/test_views_utils.py` validates the Alembic view helpers, quoting behaviour, and that `replace_view` issues drop/create statements atomically.
   - `pytest -q tests/unit/services/etl/test_idempotency_retry.py` covers CSV ingestion idempotency (including `force=True` overrides) and the ETL healthcheck retry helper.
   - `pytest -q tests/unit/services/logistics_etl/test_http_and_parse.py` mocks the logistics HTTP downloader, retry/backoff branches, CSV parsing, and `fetch_rates` post-processing.

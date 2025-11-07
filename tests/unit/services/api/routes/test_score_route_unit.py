@@ -39,3 +39,14 @@ def test_score_returns_found_rows():
     assert items["A1"].vendor == "V"
     assert items["B2"].error == "not_found"
     assert db.calls[0][1]["asin"] == "A1"
+
+
+def test_score_invalid_view_returns_http_400(monkeypatch):
+    def _raise():
+        raise score_module.InvalidROIViewError("nope")
+
+    monkeypatch.setattr(score_module, "_quoted_roi_view", _raise)
+    body = score_module.ScoreRequest(asins=["A1"])
+    with pytest.raises(HTTPException) as excinfo:
+        score_module.score(body, db=None)
+    assert excinfo.value.status_code == 400

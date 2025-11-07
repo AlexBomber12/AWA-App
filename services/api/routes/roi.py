@@ -1,72 +1,47 @@
 from __future__ import annotations
 
-import os
-import secrets
-
-from awa_common.dsn import build_dsn
-from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import String, bindparam, create_engine, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.types import Numeric
-from starlette import status
+
+from awa_common.dsn import build_dsn
 
 from .. import roi_repository
 from ..db import get_session
-
-try:
-    from ..security import require_basic_auth, require_ops, require_viewer
-except Exception:  # pragma: no cover - fallback if security missing
-
-    def require_basic_auth() -> None:
-        return None
-
-    def require_viewer() -> None:
-        return None
-
-    def require_ops() -> None:
-        return None
-
+from ..roi_views import InvalidROIViewError, get_roi_view_name, quote_identifier
+from ..security import limit_ops, limit_viewer, require_ops, require_viewer
 
 router = APIRouter()
-security = HTTPBasic()
 templates = Jinja2Templates(directory="templates")
 
 
-@router.get("/roi", dependencies=[Depends(require_basic_auth), Depends(require_viewer)])
+@router.get("/roi")
 async def roi(
     roi_min: float = 0,
     vendor: int | None = None,
     category: str | None = None,
     session: AsyncSession = Depends(get_session),
+    _: object = Depends(require_viewer),
+    __: None = Depends(limit_viewer),
 ):
-    rows = await roi_repository.fetch_roi_rows(session, roi_min, vendor, category)
+    try:
+        rows = await roi_repository.fetch_roi_rows(session, roi_min, vendor, category)
+    except InvalidROIViewError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     return [dict(row) for row in rows]
 
 
-def _check_basic_auth(credentials: HTTPBasicCredentials = Depends(security)) -> str:
-    user = os.getenv("BASIC_USER", "admin")
-    pwd = os.getenv("BASIC_PASS", "pass")
-    ok = secrets.compare_digest(credentials.username, user) and secrets.compare_digest(
-        credentials.password, pwd
-    )
-    if not ok:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            headers={"WWW-Authenticate": "Basic"},
-        )
-    return credentials.username
-
-
 def build_pending_sql(include_vendor: bool, include_category: bool):
+    view_identifier = quote_identifier(get_roi_view_name())
     base = """
         SELECT p.asin, p.title, p.category,
                vp.vendor_id, vp.cost,
                (p.weight_kg * fr.eur_per_kg) AS freight,
                (f.fulfil_fee + f.referral_fee + f.storage_fee) AS fees,
                vf.roi_pct
-        FROM v_roi_full vf
+        FROM {view} vf
         JOIN products p   ON p.asin = vf.asin
         JOIN vendor_prices vp ON vp.sku = p.asin
         JOIN freight_rates fr ON fr.lane = 'EU→IT' AND fr.mode = 'sea'
@@ -74,6 +49,7 @@ def build_pending_sql(include_vendor: bool, include_category: bool):
         WHERE vf.roi_pct >= :roi_min
           AND COALESCE(p.status, 'pending') = 'pending'
     """
+    base = base.format(view=view_identifier)
     params = [bindparam("roi_min", type_=Numeric)]
     if include_vendor:
         base += " AND vp.vendor_id = :vendor"
@@ -91,12 +67,15 @@ def roi_review(
     roi_min: int = 0,
     vendor: int | None = None,
     category: str | None = None,
-    _: str = Depends(_check_basic_auth),
-    __: object = Depends(require_ops),
+    _: object = Depends(require_ops),
+    __: None = Depends(limit_ops),
 ):
     url = build_dsn(sync=True)
     engine = create_engine(url)
-    stmt = build_pending_sql(vendor is not None, category is not None)
+    try:
+        stmt = build_pending_sql(vendor is not None, category is not None)
+    except InvalidROIViewError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     params = {"roi_min": roi_min}
     if vendor is not None:
         params["vendor"] = vendor
@@ -140,8 +119,8 @@ async def _extract_asins(request: Request) -> list[str]:
 @router.post("/roi-review/approve")
 async def approve(
     request: Request,
-    _: str = Depends(_check_basic_auth),
-    __: object = Depends(require_ops),
+    _: object = Depends(require_ops),
+    __: None = Depends(limit_ops),
 ) -> dict[str, int]:
     asins = await _extract_asins(request)
     if not asins:

@@ -22,9 +22,7 @@ async def test_timeout_on_lan_falls_back_to_stub(monkeypatch):
 
     async def fake_post(*a, **kw):
         raise (
-            llm.httpx.TimeoutException("timeout")
-            if hasattr(llm.httpx, "TimeoutException")
-            else TimeoutError("timeout")
+            llm.httpx.TimeoutException("timeout") if hasattr(llm.httpx, "TimeoutException") else TimeoutError("timeout")
         )
 
     class FakeClient:

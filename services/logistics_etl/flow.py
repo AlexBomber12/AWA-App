@@ -13,7 +13,7 @@ from . import client, metrics, repository
 logger = logging.getLogger(__name__)
 
 
-async def full(dry_run: bool = False) -> list[dict[str, Any]]:
+async def full(dry_run: bool = False) -> list[dict[str, Any]]:  # noqa: C901
     sources_config = os.getenv("LOGISTICS_SOURCES", "").strip()
     snapshots = await client.fetch_sources()
 
@@ -85,18 +85,14 @@ async def full(dry_run: bool = False) -> list[dict[str, Any]]:
                                     "updated_at",
                                 ],
                             )
-                        rows_upserted = (summary or {}).get("inserted", 0) + (summary or {}).get(
-                            "updated", 0
-                        )
+                        rows_upserted = (summary or {}).get("inserted", 0) + (summary or {}).get("updated", 0)
                         if sha256 is not None or seqno is not None:
                             await repository.mark_load(src, sha256, seqno, len(rows))
             except Exception as exc:
                 status = "failure"
                 skipped = False
                 rows_upserted = 0
-                metrics.etl_failures_total.labels(
-                    source=uri or "unknown", reason=exc.__class__.__name__
-                ).inc()
+                metrics.etl_failures_total.labels(source=uri or "unknown", reason=exc.__class__.__name__).inc()
                 logger.exception("Logistics ETL failed for %s", uri)
 
             duration = time.monotonic() - start
@@ -108,9 +104,7 @@ async def full(dry_run: bool = False) -> list[dict[str, Any]]:
                 {
                     "source": uri,
                     "rows_in": len(rows),
-                    "rows_upserted": (
-                        0 if skipped or dry_run or status != "success" else rows_upserted
-                    ),
+                    "rows_upserted": (0 if skipped or dry_run or status != "success" else rows_upserted),
                     "skipped": skipped,
                     "sha256": sha256,
                     "seqno": seqno,

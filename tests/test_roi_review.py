@@ -1,6 +1,7 @@
 import pytest
-from awa_common.dsn import build_dsn
 from sqlalchemy import create_engine, text
+
+from awa_common.dsn import build_dsn
 
 pytestmark = pytest.mark.integration
 
@@ -46,25 +47,14 @@ def _setup_db():
                 """
             )
         )
-        conn.execute(
-            text("INSERT INTO vendors(id, name) VALUES (1,'ACME GmbH') ON CONFLICT DO NOTHING")
+        conn.execute(text("INSERT INTO vendors(id, name) VALUES (1,'ACME GmbH') ON CONFLICT DO NOTHING"))
+        insert_keepa = (
+            "INSERT INTO keepa_offers(asin, buybox_price) VALUES (:asin,:price) "
+            "ON CONFLICT (asin) DO UPDATE SET buybox_price=EXCLUDED.buybox_price"
         )
-        insert_keepa = "INSERT INTO keepa_offers(asin, buybox_price) VALUES (:asin,:price) ON CONFLICT (asin) DO UPDATE SET buybox_price=EXCLUDED.buybox_price"
-        insert_fee = "INSERT INTO fees_raw(asin, fulfil_fee, referral_fee, storage_fee, currency) VALUES (:asin,1,1,1,'EUR') ON CONFLICT (asin) DO UPDATE SET updated_at=CURRENT_TIMESTAMP"
-        conn.execute(
-            text(
-                "INSERT INTO vendors(id, name) VALUES (1,'ACME GmbH') ON CONFLICT (id) DO UPDATE SET name=EXCLUDED.name"
-            )
-        )
-        conn.execute(
-            text(
-                "INSERT INTO products(asin, title, category, weight_kg) VALUES ('A1','t1','cat',1) ON CONFLICT (asin) DO UPDATE SET title=EXCLUDED.title"
-            )
-        )
-        conn.execute(
-            text(
-                "INSERT INTO products(asin, title, category, weight_kg) VALUES ('A2','t2','cat',1) ON CONFLICT (asin) DO UPDATE SET title=EXCLUDED.title"
-            )
+        insert_fee = (
+            "INSERT INTO fees_raw(asin, fulfil_fee, referral_fee, storage_fee, currency) "
+            "VALUES (:asin,1,1,1,'EUR') ON CONFLICT (asin) DO UPDATE SET updated_at=CURRENT_TIMESTAMP"
         )
         conn.execute(
             text(
@@ -73,12 +63,31 @@ def _setup_db():
         )
         conn.execute(
             text(
-                "INSERT INTO vendor_prices(vendor_id, sku, cost) VALUES (1,'A1',10) ON CONFLICT (vendor_id, sku) DO UPDATE SET cost=EXCLUDED.cost"
+                "INSERT INTO products(asin, title, category, weight_kg) VALUES ('A1','t1','cat',1) "
+                "ON CONFLICT (asin) DO UPDATE SET title=EXCLUDED.title"
             )
         )
         conn.execute(
             text(
-                "INSERT INTO vendor_prices(vendor_id, sku, cost) VALUES (1,'A2',25) ON CONFLICT (vendor_id, sku) DO UPDATE SET cost=EXCLUDED.cost"
+                "INSERT INTO products(asin, title, category, weight_kg) VALUES ('A2','t2','cat',1) "
+                "ON CONFLICT (asin) DO UPDATE SET title=EXCLUDED.title"
+            )
+        )
+        conn.execute(
+            text(
+                "INSERT INTO vendors(id, name) VALUES (1,'ACME GmbH') ON CONFLICT (id) DO UPDATE SET name=EXCLUDED.name"
+            )
+        )
+        conn.execute(
+            text(
+                "INSERT INTO vendor_prices(vendor_id, sku, cost) VALUES (1,'A1',10) "
+                "ON CONFLICT (vendor_id, sku) DO UPDATE SET cost=EXCLUDED.cost"
+            )
+        )
+        conn.execute(
+            text(
+                "INSERT INTO vendor_prices(vendor_id, sku, cost) VALUES (1,'A2',25) "
+                "ON CONFLICT (vendor_id, sku) DO UPDATE SET cost=EXCLUDED.cost"
             )
         )
         conn.execute(
@@ -109,9 +118,7 @@ def _setup_db():
         conn.execute(text(insert_fee), {"asin": "A1"})
         conn.execute(text(insert_fee), {"asin": "A2"})
         conn.execute(
-            text(
-                "INSERT INTO freight_rates(lane, mode, eur_per_kg) VALUES ('EU→IT','sea',1) ON CONFLICT DO NOTHING"
-            )
+            text("INSERT INTO freight_rates(lane, mode, eur_per_kg) VALUES ('EU→IT','sea',1) ON CONFLICT DO NOTHING")
         )
     return engine
 
@@ -143,8 +150,6 @@ def test_bulk_approve(api_client, monkeypatch):
     assert r.status_code == 200
     assert r.json()["updated"] >= 1
     with engine.connect() as conn:
-        rows = conn.execute(
-            text("SELECT status FROM products WHERE asin IN ('A1','B1') ORDER BY asin")
-        )
+        rows = conn.execute(text("SELECT status FROM products WHERE asin IN ('A1','B1') ORDER BY asin"))
         statuses = [row[0] for row in rows.fetchall()]
     assert statuses == ["approved", "approved"]

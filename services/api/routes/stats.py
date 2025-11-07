@@ -2,28 +2,22 @@ from __future__ import annotations
 
 import os
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import text
 
 try:
     from services.api.dependencies import get_db
 except Exception:
     get_db = None
-try:
-    from services.api.security import require_basic_auth, require_viewer
-except Exception:
 
-    def require_basic_auth():
-        return None
-
-    def require_viewer():
-        return None
-
+from services.api.security import limit_viewer, require_viewer
 
 try:
     from services.api import roi_repository as repo
 except Exception:
     repo = None
+
+from services.api.roi_views import InvalidROIViewError, get_roi_view_name, quote_identifier
 
 router = APIRouter(prefix="/stats", tags=["stats"])
 
@@ -56,20 +50,30 @@ def _returns_vendor_available(db) -> bool:
 def _roi_view_name():
     if repo and hasattr(repo, "_roi_view_name"):
         return repo._roi_view_name()
-    return os.getenv("ROI_VIEW_NAME", "v_roi_full")
+    return get_roi_view_name()
+
+
+def _quoted_roi_view():
+    return quote_identifier(_roi_view_name())
 
 
 @router.get(
     "/kpi",
-    dependencies=[Depends(require_basic_auth), Depends(require_viewer)],
+    dependencies=[Depends(require_viewer), Depends(limit_viewer)],
 )
 def kpi(db=Depends(get_db) if get_db else None):
     if os.getenv("STATS_USE_SQL") == "1" and db is not None:
-        view = _roi_view_name()
+        try:
+            view = _quoted_roi_view()
+        except InvalidROIViewError as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
         row = (
             db.execute(
                 text(
-                    f"SELECT AVG(roi) AS roi_avg, COUNT(DISTINCT asin) AS products, COUNT(DISTINCT vendor) AS vendors FROM {view}"
+                    "SELECT AVG(roi) AS roi_avg, "
+                    "COUNT(DISTINCT asin) AS products, "
+                    "COUNT(DISTINCT vendor) AS vendors "
+                    f"FROM {view}"
                 )
             )
             .mappings()
@@ -87,11 +91,14 @@ def kpi(db=Depends(get_db) if get_db else None):
 
 @router.get(
     "/roi_by_vendor",
-    dependencies=[Depends(require_basic_auth), Depends(require_viewer)],
+    dependencies=[Depends(require_viewer), Depends(limit_viewer)],
 )
 def roi_by_vendor(db=Depends(get_db) if get_db else None):
     if os.getenv("STATS_USE_SQL") == "1" and db is not None:
-        view = _roi_view_name()
+        try:
+            view = _quoted_roi_view()
+        except InvalidROIViewError as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
         rows = (
             db.execute(
                 text(
@@ -117,7 +124,7 @@ def roi_by_vendor(db=Depends(get_db) if get_db else None):
 
 @router.get(
     "/returns",
-    dependencies=[Depends(require_basic_auth), Depends(require_viewer)],
+    dependencies=[Depends(require_viewer), Depends(limit_viewer)],
 )
 def returns_stats(
     date_from: str | None = None,
@@ -170,17 +177,22 @@ def returns_stats(
 
 @router.get(
     "/roi_trend",
-    dependencies=[Depends(require_basic_auth), Depends(require_viewer)],
+    dependencies=[Depends(require_viewer), Depends(limit_viewer)],
 )
 def roi_trend(db=Depends(get_db) if get_db else None):
     if os.getenv("STATS_USE_SQL") == "1" and db is not None:
-        view = _roi_view_name()
+        try:
+            view = _quoted_roi_view()
+        except InvalidROIViewError as exc:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
         for date_col in ("dt", "date", "snapshot_date", "created_at"):
             try:
                 rows = (
                     db.execute(
                         text(
-                            f"SELECT date_trunc('month', {date_col})::date AS month, AVG(roi) AS roi_avg, COUNT(*) AS items FROM {view} GROUP BY 1 ORDER BY 1"
+                            f"SELECT date_trunc('month', {date_col})::date AS month, "
+                            "AVG(roi) AS roi_avg, COUNT(*) AS items "
+                            f"FROM {view} GROUP BY 1 ORDER BY 1"
                         )
                     )
                     .mappings()

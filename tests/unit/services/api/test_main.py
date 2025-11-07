@@ -3,83 +3,10 @@ import types
 
 import pytest
 import sqlalchemy
-from starlette.requests import Request
-from starlette.responses import Response
 
 import services.api.main as main
 from tests.fakes import FakeRedis
 from tests.unit.conftest import _StubResult
-
-
-def _make_request(headers=None, client_host=None):
-    scope = {
-        "type": "http",
-        "method": "GET",
-        "path": "/",
-        "headers": headers or [],
-        "client": (client_host, 1234) if client_host else None,
-    }
-    return Request(scope, receive=lambda: None)
-
-
-def test_parse_rate_limit_parses_units():
-    assert main._parse_rate_limit("100/minute") == (100, 60)
-    assert main._parse_rate_limit("10/second") == (10, 1)
-    assert main._parse_rate_limit("200/hour") == (200, 3600)
-
-
-def test_parse_rate_limit_invalid_defaults():
-    assert main._parse_rate_limit("bad format") == (100, 60)
-
-
-@pytest.mark.asyncio
-async def test_client_ip_identifier_prefers_forwarded():
-    request = _make_request(
-        headers=[(b"x-forwarded-for", b"1.2.3.4,5.6.7.8"), (b"x-real-ip", b"9.9.9.9")]
-    )
-    assert await main.client_ip_identifier(request) == "1.2.3.4"
-
-
-@pytest.mark.asyncio
-async def test_client_ip_identifier_fallback_client_host():
-    request = _make_request(client_host="10.0.0.1")
-    assert await main.client_ip_identifier(request) == "10.0.0.1"
-
-
-@pytest.mark.asyncio
-async def test_rate_limit_dependency_skips_without_redis():
-    request = _make_request()
-    response = Response()
-    original = main.FastAPILimiter.redis
-    try:
-        main.FastAPILimiter.redis = None
-        await main._rate_limit_dependency(request, response)
-        assert not hasattr(request.state, "rate_limited")
-    finally:
-        main.FastAPILimiter.redis = original
-
-
-@pytest.mark.asyncio
-async def test_rate_limit_dependency_invokes_limiter(monkeypatch):
-    calls = {}
-
-    class DummyLimiter:
-        def __init__(self, *args, **kwargs):
-            calls["init"] = (args, kwargs)
-
-        async def __call__(self, request, response):
-            request.state.called = True
-
-    original = main.FastAPILimiter.redis
-    main.FastAPILimiter.redis = FakeRedis()
-    monkeypatch.setattr(main, "RateLimiter", DummyLimiter)
-    request = _make_request()
-    response = Response()
-    try:
-        await main._rate_limit_dependency(request, response)
-        assert request.state.called is True
-    finally:
-        main.FastAPILimiter.redis = original
 
 
 @pytest.mark.asyncio

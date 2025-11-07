@@ -18,10 +18,7 @@ ROOT = pathlib.Path(__file__).parents[2] / "services"
         name
         for _, name, _ in pkgutil.walk_packages([str(ROOT)])
         if not name.endswith(("settings", "migrations", "alembic"))
-        and (
-            (ROOT / name.replace(".", "/")).with_suffix(".py").exists()
-            or (ROOT / name.replace(".", "/")).is_dir()
-        )
+        and ((ROOT / name.replace(".", "/")).with_suffix(".py").exists() or (ROOT / name.replace(".", "/")).is_dir())
     ],
 )
 def test_imports(mod):  # noqa: D103

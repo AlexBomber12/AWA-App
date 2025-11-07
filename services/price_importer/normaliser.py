@@ -1,7 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from difflib import get_close_matches
-from typing import Mapping
 
 import pandas as pd
 

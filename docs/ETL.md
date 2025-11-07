@@ -1,0 +1,113 @@
+# ETL Playbook
+
+AWA’s ETL agents share a reliability layer for idempotency, retries, and observability. Use the
+components in `packages/awa_common` to deliver repeatable pipelines that survive restarts and replay.
+
+## Idempotency via `load_log`
+
+- The schema defined in `services/api/migrations/versions/0032_etl_reliability.py` creates
+  `load_log` with a unique constraint on `(source, idempotency_key)`. Columns:
+  - `source` (≤128 chars) – logical agent name (`keepa_ingestor`, `fba_fee_ingestor`, …).
+  - `idempotency_key` (64-char BLAKE2 digest) computed in `packages/awa_common/etl/idempotency.py`.
+  - `status` in `{pending, success, skipped, failed}`; constants live in
+    `packages/awa_common/db/load_log.py`.
+  - `payload_meta` JSONB storing fingerprints, sizes, hashes, and optional extras.
+  - `processed_by`, `task_id`, `duration_ms`, `error_message`, `created_at`, `updated_at`.
+- `compute_idempotency_key` and `build_payload_meta` prefer stable remote metadata (`etag`,
+  `last_modified`, `content_length`, `content_md5`), fall back to local file stats, then the raw
+  payload (`blake2b` hash). Persisting these values guarantees we can prove what was loaded.
+- Duplicate work is detected at insert time; the guard can either skip (`status='skipped'`) or update
+  metadata for auditing.
+
+## HTTP Policy
+
+- Always call `packages/awa_common/etl/http.request` or `.download`. Defaults from
+  `packages/awa_common/settings.Settings`:
+  - Connect timeout 5 s, read timeout 30 s, total budget 60 s.
+  - Up to 5 attempts with exponential backoff (0.5 s base, 30 s cap) shared between retries.
+  - Retries on httpx transport errors and status codes `{429,500,502,503,504}`. `Retry-After` headers
+    are honoured for `429` or any response providing the header.
+- Each retry logs `etl_http_retry` with `attempt`, `sleep`, `source`, `task_id`, and increments
+  `etl_retry_total{source,code}` so operations can see churn.
+
+## Task Lifecycle
+
+- Wrap mutable sections with `packages/awa_common/etl/guard.process_once`:
+  ```python
+  from awa_common.etl.guard import process_once
+  from awa_common.etl.idempotency import compute_idempotency_key, build_payload_meta
+  from awa_common.metrics import record_etl_run, record_etl_skip
+
+  payload_meta = build_payload_meta(path=source_path, remote_meta=remote_headers)
+  key = compute_idempotency_key(path=source_path, remote_meta=remote_headers)
+
+  with process_once(
+      SessionLocal,
+      source="keepa_ingestor",
+      payload_meta=payload_meta,
+      idempotency_key=key,
+  ) as handle:
+      if handle is None:
+          record_etl_skip("keepa_ingestor")
+          return
+      with record_etl_run("keepa_ingestor"):
+          # use handle.session for transactional work
+          ingest_rows(handle.session, payload_meta)
+  ```
+- On entry the guard inserts a `pending` row, commits, and returns a `ProcessHandle`. Exiting with no
+  exception marks the row `success` and records `duration_ms`; raising an exception rolls back and
+  marks `failed` with the truncated message (max 1024 chars).
+- Celery schedules live in `services/worker/celery_app.py`. Environment switches such as
+  `SCHEDULE_MV_REFRESH`, `MV_REFRESH_CRON`, and `SCHEDULE_LOGISTICS_ETL` control when pipelines run.
+  Use those toggles rather than bespoke crontabs.
+
+## Backfill & Replay
+
+- Re-run a job by supplying the same source and idempotency key. The guard returns `None`, letting you
+  skip work safely. Pass `on_duplicate="update_meta"` when you want to refresh metadata while keeping
+  the result marked as `skipped`.
+- To replay a period:
+  1. Compute idempotency keys for the target artefacts (e.g. one per day) with
+     `compute_idempotency_key`.
+  2. Delete or set `status='failed'` for the relevant rows if you intend to recompute; otherwise rely on
+     the guard to skip duplicates.
+  3. Trigger the Celery task (`services.worker.tasks`) or CLI entry point with `force=True` if the agent
+     supports it (see `services/api/routes/ingest.submit_ingest`).
+- Because writes happen in a single transaction inside `process_once`, reruns are atomic—either the
+  run completes and marks `success` or nothing is committed.
+
+## Adding a Connector (Checklist)
+
+1. Decide on a stable `source` name and include it in alerts/metrics.
+2. Fetch data with `awa_common.etl.http.request` or `.download`; avoid raw `httpx` calls.
+3. Build deterministic idempotency keys and metadata with `compute_idempotency_key` /
+   `build_payload_meta`.
+4. Wrap database writes in `process_once` and emit `record_etl_run` / `record_etl_skip` /
+   `record_etl_retry` as appropriate.
+5. Extend tests (see `tests/unit/packages/awa_common/etl/test_guard_logic.py`,
+   `tests/integration/etl/test_load_log_migration.py`) to cover idempotency and schema expectations.
+6. Document the connector schedule and operational notes in this file or a dedicated runbook.
+
+## Operational Guide
+
+- Inspect recent runs:
+  ```sql
+  SELECT source, status, processed_by, duration_ms, error_message, updated_at
+  FROM load_log
+  ORDER BY updated_at DESC
+  LIMIT 20;
+  ```
+- Dashboard metrics: `etl_runs_total{status="failed"}` for failures, `etl_duration_seconds` for long
+  runs, `etl_retry_total` for flaky upstreams. Correlate with structured logs (`etl_http_retry`,
+  `source="..."`).
+- When alerts fire:
+  1. Confirm the failing source in Prometheus or Grafana.
+  2. Query `load_log` for stuck `pending` entries and inspect `error_message`.
+  3. Check the agent logs (Celery worker or dedicated container) for stack traces.
+  4. If a migration is involved, refer to `docs/runbooks/restore.md`; for secrets (API keys, etc.)
+     follow `docs/runbooks/secrets.md`.
+- Capture a diagnostic bundle with `scripts/ci/make_debug_bundle.sh` when escalations are needed; the
+  archive includes docker logs and environment context for post-mortems.
+
+Using the shared guard, HTTP client, and metrics ensures ETL behaviour is predictable and observable in
+all environments.

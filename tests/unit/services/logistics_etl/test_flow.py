@@ -141,9 +141,7 @@ async def test_full_records_failure(monkeypatch):
     assert entry["rows_upserted"] == 0
     assert entry["skipped"] is False
 
-    failure_key = tuple(
-        sorted([("source", "http://example.com/bad.csv"), ("reason", "RuntimeError")])
-    )
+    failure_key = tuple(sorted([("source", "http://example.com/bad.csv"), ("reason", "RuntimeError")]))
     status_key = tuple(sorted([("source", "http://example.com/bad.csv"), ("status", "failure")]))
     assert failures_metric._counters[failure_key] == 1
     assert runs_metric._counters[status_key] == 1
