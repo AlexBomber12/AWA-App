@@ -67,12 +67,12 @@ has been removed to enforce that single source of truth.
 
 ## Links
 
-- [Repository README](../../README.md)
-- [Documentation index](../README.md)
+- [Repository README](https://github.com/your-org/AWA-App/blob/main/README.md)
+- [Documentation index](../index.md)
 - [Security guide](../SECURITY.md)
 - [Observability guide](../OBSERVABILITY.md)
 - [ETL playbook](../ETL.md)
 - [Frontend guide](../FRONTEND.md)
-- [CI scripts](../../scripts/ci)
-- [Alembic configuration](../../services/api/alembic.ini)
-- [Alembic migrations](../../services/api/migrations)
+- CI scripts: `scripts/ci`
+- Alembic configuration: `services/api/alembic.ini`
+- Alembic migrations: `services/api/migrations`
