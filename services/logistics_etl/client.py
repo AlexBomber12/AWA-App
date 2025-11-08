@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import csv
 import io
 import logging
@@ -10,16 +9,26 @@ from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 import anyio
-import httpx
-from httpx import HTTPStatusError
+from tenacity import AsyncRetrying, RetryCallState, stop_after_attempt, wait_exponential
+
+try:  # pragma: no cover - depends on tenacity version
+    from tenacity import wait_random_jitter
+except ImportError:  # pragma: no cover
+    from tenacity import wait_random  # type: ignore
+
+    def wait_random_jitter(jitter: float):
+        return wait_random(0, jitter)
+
 
 from awa_common.settings import Settings
+from services.etl import http_client
 
 URL = Settings().FREIGHT_API_URL
 
 __all__ = [
     "URL",
     "UnsupportedExcelError",
+    "UnsupportedFileFormatError",
     "fetch_rates",
     "fetch_sources",
 ]
@@ -29,6 +38,10 @@ logger = logging.getLogger(__name__)
 
 class UnsupportedExcelError(RuntimeError):
     """Raised when an Excel payload cannot be parsed due to missing optional deps."""
+
+
+class UnsupportedFileFormatError(RuntimeError):
+    """Raised when the payload cannot be mapped to CSV/XLS/XLSX/ZIP formats."""
 
 
 @dataclass
@@ -65,6 +78,9 @@ async def fetch_sources() -> list[dict[str, Any]]:
         except UnsupportedExcelError as exc:
             logger.warning("Excel support unavailable for %s: %s", uri, exc)
             snapshots.append(SourcePayload(uri, b"", {}, [], exc))
+        except UnsupportedFileFormatError as exc:
+            logger.warning("Unsupported logistics payload for %s: %s", uri, exc)
+            raise
         except Exception as exc:  # pragma: no cover - logged for observability
             logger.exception("Failed to fetch logistics source %s", uri)
             snapshots.append(SourcePayload(uri, b"", {}, [], exc))
@@ -111,49 +127,60 @@ async def fetch_rates() -> list[dict[str, object]]:
     return rows
 
 
-async def _download_with_retries(  # noqa: C901
-    url_or_uri: str, *, timeout_s: int, retries: int
-) -> tuple[bytes, dict[str, Any]]:
+def _log_retry_details(retry_state: RetryCallState, *, source: str) -> None:
+    sleep = retry_state.next_action.sleep if retry_state.next_action else 0.0
+    error_type: str | None = None
+    if retry_state.outcome is not None and retry_state.outcome.failed:
+        error_type = retry_state.outcome.exception().__class__.__name__
+    logger.warning(
+        "Retrying download for %s (attempt=%s, next_sleep_s=%.2f, error=%s)",
+        source,
+        retry_state.attempt_number,
+        round(float(sleep), 3),
+        error_type,
+    )
+
+
+async def _download_with_retries(url_or_uri: str, *, timeout_s: int, retries: int) -> tuple[bytes, dict[str, Any]]:
+    cfg = Settings()
+    attempts = max(1, int(cfg.ETL_RETRY_ATTEMPTS), int(retries))
+    wait_policy = wait_exponential(
+        multiplier=cfg.ETL_RETRY_BASE_S,
+        min=cfg.ETL_RETRY_MIN_S,
+        max=cfg.ETL_RETRY_MAX_S,
+    ) + wait_random_jitter(cfg.ETL_RETRY_JITTER_S)
+
+    retrying = AsyncRetrying(
+        stop=stop_after_attempt(attempts),
+        wait=wait_policy,
+        reraise=True,
+        before_sleep=lambda state: _log_retry_details(state, source=url_or_uri),
+    )
+    async for attempt in retrying:
+        with attempt:
+            return await _download_once(url_or_uri, timeout_s=timeout_s)
+
+
+async def _download_once(url_or_uri: str, *, timeout_s: int) -> tuple[bytes, dict[str, Any]]:
     parsed = urlparse(url_or_uri)
     scheme = (parsed.scheme or "").lower()
-    attempt = 0
-    backoff = 0.5
-    last_error: Exception | None = None
-
-    while attempt <= retries:
-        try:
-            if scheme in ("http", "https"):
-                return await _download_http(url_or_uri, timeout_s)
-            if scheme == "s3":
-                return await _download_s3(parsed, timeout_s)
-            if scheme == "ftp":
-                return await _download_ftp(parsed, timeout_s)
-            raise ValueError(f"Unsupported logistics source scheme: {scheme or 'unknown'}")
-        except HTTPStatusError as exc:
-            status = exc.response.status_code
-            if 500 <= status < 600 and attempt < retries:
-                last_error = exc
-            else:
-                raise
-        except Exception as exc:
-            last_error = exc
-        if attempt >= retries:
-            if last_error:
-                raise last_error
-            raise RuntimeError("Download failed without captured exception")
-        await asyncio.sleep(min(8.0, backoff))
-        backoff *= 2
-        attempt += 1
-
-    if last_error:  # pragma: no cover - defensive, loop should have returned/raised
-        raise last_error
-    raise RuntimeError("Download failed without captured exception")
+    if scheme in ("http", "https"):
+        return await _download_http(url_or_uri, timeout_s=timeout_s)
+    if scheme == "s3":
+        return await _download_s3(parsed, timeout_s)
+    if scheme == "ftp":
+        return await _download_ftp(parsed, timeout_s)
+    raise ValueError(f"Unsupported logistics source scheme: {scheme or 'unknown'}")
 
 
-async def _download_http(url: str, timeout_s: int) -> tuple[bytes, dict[str, Any]]:
-    async with httpx.AsyncClient(timeout=timeout_s, follow_redirects=True) as client:
-        response = await client.get(url)
+async def _download_http(url: str, timeout_s: int | None = None) -> tuple[bytes, dict[str, Any]]:
+    client = await http_client.get_client()
+    async with client.stream("GET", url, follow_redirects=True) as response:
         response.raise_for_status()
+        if hasattr(response, "aread"):
+            body = await response.aread()
+        else:  # pragma: no cover - compatibility with test doubles
+            body = getattr(response, "content", b"")
         etag = response.headers.get("etag")
         meta = {
             "content_type": response.headers.get("content-type"),
@@ -163,7 +190,7 @@ async def _download_http(url: str, timeout_s: int) -> tuple[bytes, dict[str, Any
         seqno = response.headers.get("x-amz-version-id") or meta.get("etag")
         if seqno:
             meta["seqno"] = seqno.strip('"')
-        return response.content, meta
+        return body, meta
 
 
 async def _download_s3(parsed, timeout_s: int) -> tuple[bytes, dict[str, Any]]:
@@ -251,7 +278,8 @@ def _parse_rows(source: str, raw: bytes, meta: dict[str, Any]) -> list[dict[str,
         return _parse_csv_rows(source, raw)
     if fmt == "excel":
         return _parse_excel_rows(source, raw)
-    raise ValueError(f"Unsupported data format for {source}")
+    diag = _format_diagnostics(source, meta, raw)
+    raise UnsupportedFileFormatError(f"Unsupported data format for {diag}")
 
 
 def _detect_format(raw_bytes: bytes, name_or_ct: str | None) -> str:
@@ -267,6 +295,12 @@ def _detect_format(raw_bytes: bytes, name_or_ct: str | None) -> str:
         return "csv"
     except Exception:
         return "excel"
+
+
+def _format_diagnostics(source: str, meta: dict[str, Any], raw: bytes) -> str:
+    ct = meta.get("content_type") or "unknown"
+    magic = " ".join(f"{b:02x}" for b in raw[:16])
+    return f"{source} (content_type={ct}, magic={magic})"
 
 
 def _parse_csv_rows(source: str, raw: bytes) -> list[dict[str, Any]]:

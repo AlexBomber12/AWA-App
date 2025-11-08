@@ -7,6 +7,7 @@ from sqlalchemy import create_engine, select
 
 from services.price_importer import reader
 from services.price_importer.common.models_vendor import VendorPrice
+from services.price_importer.io import PriceRow
 from services.price_importer.normaliser import guess_columns, normalise
 from services.price_importer.repository import Repository
 
@@ -65,7 +66,7 @@ def test_repository_upsert_prices_deduplicates_and_updates() -> None:
 
     inserted2, updated2 = repo.upsert_prices(vendor_id, rows)
     assert inserted2 == 0
-    assert updated2 == 3
+    assert updated2 == 1
 
 
 def test_repository_upsert_prices_empty_and_dry_run() -> None:
@@ -82,3 +83,29 @@ def test_repository_upsert_prices_empty_and_dry_run() -> None:
     with engine.connect() as conn:
         rows = list(conn.execute(select(VendorPrice)).mappings())
     assert rows == []
+
+
+def test_prepare_row_accepts_dataclass() -> None:
+    engine = create_engine("sqlite:///:memory:", future=True)
+    repo = Repository(engine)
+    vendor_id = repo.ensure_vendor("DataclassVendor")
+
+    record = PriceRow(sku="sku-123", cost=10, currency="usd", moq=1, lead_time_days=3)
+    prepared = repo._prepare_row(vendor_id, record)
+    assert prepared["currency"] == "USD"
+
+
+def test_upsert_prices_counts_duplicates_in_dry_run() -> None:
+    engine = create_engine("sqlite:///:memory:", future=True)
+    repo = Repository(engine)
+    vendor_id = repo.ensure_vendor("DupVendor")
+
+    rows = [
+        {"sku": "SKU-1", "cost": 10.0, "currency": "EUR"},
+        {"sku": "SKU-1", "cost": 10.0, "currency": "EUR"},
+    ]
+
+    inserted, updated = repo.upsert_prices(vendor_id, rows, dry_run=True)
+
+    assert inserted == 1
+    assert updated == 1

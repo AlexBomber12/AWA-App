@@ -25,17 +25,17 @@ logger = structlog.get_logger(__name__)
 
 
 # Keep a handful of idle sockets alive so repeated cron invocations avoid TLS warmups.
-HTTP_POOL_KEEPALIVE_CONNECTIONS = max(0, int(SETTINGS.ETL_HTTP_KEEPALIVE_CONNECTIONS))
+HTTP_POOL_KEEPALIVE_CONNECTIONS = max(0, int(SETTINGS.ETL_HTTP_KEEPALIVE))
 # Cap concurrent upstream calls (default 20) to avoid exhausting Keepa/Helium quotas.
 HTTP_POOL_MAX_CONNECTIONS = max(HTTP_POOL_KEEPALIVE_CONNECTIONS, int(SETTINGS.ETL_HTTP_MAX_CONNECTIONS))
 # Limit how long tasks wait for a pooled connection; defaults to the connect timeout (10s).
-HTTP_POOL_TIMEOUT_S = float(SETTINGS.ETL_HTTP_POOL_QUEUE_TIMEOUT_S or SETTINGS.ETL_CONNECT_TIMEOUT_S)
+HTTP_POOL_TIMEOUT_S = float(SETTINGS.ETL_POOL_TIMEOUT_S or SETTINGS.ETL_CONNECT_TIMEOUT_S)
 # Use the same retry budget as the sync ETL client (defaults to 3 attempts).
-HTTP_MAX_RETRIES = max(1, int(SETTINGS.ETL_MAX_RETRIES))
+HTTP_MAX_RETRIES = max(1, int(SETTINGS.ETL_RETRY_ATTEMPTS))
 # Abort retry loops after the global ETL timeout (defaults to 60s).
 HTTP_TOTAL_TIMEOUT_S = float(SETTINGS.ETL_TOTAL_TIMEOUT_S)
-HTTP_BACKOFF_BASE_S = float(SETTINGS.ETL_BACKOFF_BASE_S)
-HTTP_BACKOFF_MAX_S = float(SETTINGS.ETL_BACKOFF_MAX_S)
+HTTP_BACKOFF_BASE_S = float(SETTINGS.ETL_RETRY_BASE_S)
+HTTP_BACKOFF_MAX_S = float(SETTINGS.ETL_RETRY_MAX_S)
 
 _HTTP_CLIENT: httpx.AsyncClient | None = None
 _HTTP_CLIENT_LOCK = asyncio.Lock()
@@ -150,7 +150,7 @@ class _RetryWait(wait_random_exponential):
         return super().__call__(retry_state)
 
 
-async def _get_client() -> httpx.AsyncClient:
+async def _ensure_client() -> httpx.AsyncClient:
     global _HTTP_CLIENT
     if _HTTP_CLIENT is not None:
         return _HTTP_CLIENT
@@ -162,7 +162,21 @@ async def _get_client() -> httpx.AsyncClient:
     return _HTTP_CLIENT
 
 
-async def close_http_client() -> None:
+async def init_http(force: bool = False) -> httpx.AsyncClient:
+    if force:
+        await close_http()
+    return await _ensure_client()
+
+
+async def get_client() -> httpx.AsyncClient:
+    return await _get_client()
+
+
+async def _get_client() -> httpx.AsyncClient:  # pragma: no cover - compatibility for older imports
+    return await _ensure_client()
+
+
+async def close_http() -> None:
     global _HTTP_CLIENT
     client = _HTTP_CLIENT
     if client is None:
@@ -211,7 +225,7 @@ async def request(
     task_id: str | None = None,
     request_id: str | None = None,
 ) -> httpx.Response:
-    client = await _get_client()
+    client = await get_client()
 
     async def _send() -> httpx.Response:
         response = await client.request(
@@ -245,7 +259,7 @@ async def request(
     )
 
 
-async def request_json(
+async def fetch_json(
     method: str,
     url: str,
     *,
@@ -258,19 +272,56 @@ async def request_json(
     task_id: str | None = None,
     request_id: str | None = None,
 ) -> Any:
-    response = await request(
-        method,
-        url,
-        params=params,
-        headers=headers,
-        json=json,
-        data=data,
-        files=files,
+    loop = asyncio.get_running_loop()
+    start = loop.time()
+    try:
+        response = await request(
+            method,
+            url,
+            params=params,
+            headers=headers,
+            json=json,
+            data=data,
+            files=files,
+            source=source,
+            task_id=task_id,
+            request_id=request_id,
+        )
+    except Exception as exc:
+        duration_ms = int((loop.time() - start) * 1000)
+        status_code = exc.response.status_code if isinstance(exc, httpx.HTTPStatusError) and exc.response else None
+        logger.warning(
+            "etl_http.request_failed",
+            component="etl_http_client",
+            method=method,
+            url=url,
+            status_code=status_code,
+            duration_ms=duration_ms,
+            source=source,
+            task_id=task_id,
+            request_id=request_id,
+        )
+        raise
+
+    duration_ms = int((loop.time() - start) * 1000)
+    try:
+        payload = response.json()
+    finally:
+        response.close()
+    logger.info(
+        "etl_http.request_completed",
+        component="etl_http_client",
+        method=method,
+        url=url,
+        status_code=response.status_code,
+        duration_ms=duration_ms,
         source=source,
         task_id=task_id,
         request_id=request_id,
     )
-    try:
-        return response.json()
-    finally:
-        response.close()
+    return payload
+
+
+# Backwards compatibility for older imports
+request_json = fetch_json
+close_http_client = close_http
