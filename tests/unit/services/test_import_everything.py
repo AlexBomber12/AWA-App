@@ -1,4 +1,4 @@
-"""Import all service modules for coverage."""
+"""Import all service modules to surface lazy ImportErrors early."""
 
 import importlib
 import pathlib
@@ -6,9 +6,10 @@ import pkgutil
 
 import pytest
 
-ROOT = pathlib.Path(__file__).parents[2] / "services"
+ROOT = pathlib.Path(__file__).resolve().parents[3] / "services"
 
 
+@pytest.mark.unit
 @pytest.mark.parametrize(
     "mod",
     [
@@ -18,5 +19,5 @@ ROOT = pathlib.Path(__file__).parents[2] / "services"
         and ((ROOT / name.replace(".", "/")).with_suffix(".py").exists() or (ROOT / name.replace(".", "/")).is_dir())
     ],
 )
-def test_import(mod):  # noqa: D103
+def test_imports_stay_healthy(mod: str) -> None:
     importlib.import_module(f"services.{mod}")
