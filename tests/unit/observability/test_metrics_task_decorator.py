@@ -38,3 +38,16 @@ def test_instrument_task_error(monkeypatch):
     assert any(sample.labels["status"] == "error" for sample in runs)
     errors = metrics.TASK_ERRORS_TOTAL.collect()[0].samples
     assert any(sample.labels["error_type"] == "RuntimeError" for sample in errors)
+
+
+def test_instrument_task_skip_metrics(monkeypatch):
+    metrics.init(service="worker", env="test", version="1")
+    _reset_metrics()
+
+    @instrument_task("demo_task", emit_metrics=False)
+    def _noop():
+        return "ok"
+
+    assert _noop() == "ok"
+    runs = metrics.TASK_RUNS_TOTAL.collect()[0].samples
+    assert runs == []

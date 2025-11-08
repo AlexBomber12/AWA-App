@@ -3,20 +3,32 @@ from __future__ import annotations
 import os
 import shutil
 import tempfile
-from collections.abc import Callable
 from pathlib import Path
-from typing import Any, TypeVar, cast
+from typing import TYPE_CHECKING, Any
 
 import structlog
 from celery import states
 
 from awa_common.metrics import instrument_task as _instrument_task
 
+if TYPE_CHECKING:
+    from collections.abc import Callable
+    from typing import Protocol, TypeVar
+
+    _InstrumentFunc = TypeVar("_InstrumentFunc", bound=Callable[..., Any])
+
+    class _InstrumentTaskCallable(Protocol):
+        def __call__(
+            self, task_name: str, *, emit_metrics: bool = True
+        ) -> Callable[[_InstrumentFunc], _InstrumentFunc]: ...
+
+    instrument_task: _InstrumentTaskCallable = _instrument_task
+else:
+    instrument_task = _instrument_task
+
 from .celery_app import celery_app
 
 logger = structlog.get_logger(__name__)
-_F = TypeVar("_F", bound=Callable[..., Any])
-instrument_task = cast(Callable[[str], Callable[[_F], _F]], _instrument_task)
 
 
 def _download_minio_to_tmp(uri: str) -> Path:
@@ -47,7 +59,7 @@ def _resolve_uri_to_path(uri: str) -> Path:
 
 
 @celery_app.task(name="ingest.import_file", bind=True)  # type: ignore[misc]
-@instrument_task("ingest.import_file")
+@instrument_task("ingest.import_file", emit_metrics=False)
 def task_import_file(self: Any, uri: str, report_type: str | None = None, force: bool = False) -> dict[str, Any]:
     """Import a file into Postgres using existing ETL pipeline."""
 
@@ -84,7 +96,7 @@ def task_import_file(self: Any, uri: str, report_type: str | None = None, force:
 
 
 @celery_app.task(name="ingest.rebuild_views", bind=True)  # type: ignore[misc]
-@instrument_task("ingest.rebuild_views")
+@instrument_task("ingest.rebuild_views", emit_metrics=False)
 def task_rebuild_views(self: Any) -> dict[str, Any]:
     logger.info("rebuild_views.noop")
     return {"status": "success", "message": "noop"}

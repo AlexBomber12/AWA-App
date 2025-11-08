@@ -4,7 +4,7 @@ import asyncio
 import time
 from collections.abc import Awaitable, Callable, Coroutine
 from decimal import ROUND_HALF_UP, Decimal
-from typing import Any, TypeVar, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import httpx
 import structlog
@@ -56,9 +56,21 @@ else:
     async_to_sync = cast(_AsyncToSyncType, _async_to_sync_value)
 
 
+if TYPE_CHECKING:
+    from typing import Protocol, TypeVar
+
+    _InstrumentFunc = TypeVar("_InstrumentFunc", bound=Callable[..., Any])
+
+    class _InstrumentTaskCallable(Protocol):
+        def __call__(
+            self, task_name: str, *, emit_metrics: bool = True
+        ) -> Callable[[_InstrumentFunc], _InstrumentFunc]: ...
+
+    instrument_task: _InstrumentTaskCallable = _instrument_task
+else:
+    instrument_task = _instrument_task
+
 logger = structlog.get_logger(__name__).bind(component="fees_h10")
-_F = TypeVar("_F", bound=Callable[..., Any])
-instrument_task = cast(Callable[[str], Callable[[_F], _F]], _instrument_task)
 
 app = Celery("fees_h10", broker=SETTINGS.BROKER_URL or "memory://")
 app.conf.beat_schedule = {"refresh-daily": {"task": "fees.refresh", "schedule": 86400.0}}
@@ -206,7 +218,7 @@ async def _run_refresh(asins: list[str]) -> None:
 
 
 @shared_task(name="fees.refresh")  # type: ignore[misc]
-@instrument_task("fees_h10_update")
+@instrument_task("fees_h10_update", emit_metrics=False)
 def refresh_fees() -> None:
     asins = list_active_asins()
     async_to_sync(_run_refresh)(asins)

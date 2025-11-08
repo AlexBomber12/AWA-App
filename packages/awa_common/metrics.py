@@ -390,12 +390,20 @@ def _record_task_run(task_name: str, status: str, duration: float) -> None:
     TASK_DURATION_SECONDS.labels(**_with_base_labels(task=task_name)).observe(duration)
 
 
-def instrument_task(task_name: str) -> Callable[[F], F]:
+def instrument_task(task_name: str, *, emit_metrics: bool = True) -> Callable[[F], F]:
     """
     Decorator for Celery/cron/interval tasks to emit run/error/duration metrics.
     """
 
     def _decorator(func: F) -> F:
+        if not emit_metrics:
+
+            @functools.wraps(func)
+            def _passthrough(*args: Any, **kwargs: Any) -> Any:
+                return func(*args, **kwargs)
+
+            return cast(F, _passthrough)
+
         if asyncio.iscoroutinefunction(func):
 
             @functools.wraps(func)

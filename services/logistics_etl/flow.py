@@ -4,8 +4,7 @@ import argparse
 import asyncio
 import hashlib
 import time
-from collections.abc import Callable
-from typing import Any, TypeVar, cast
+from typing import TYPE_CHECKING, Any
 
 import structlog
 
@@ -15,8 +14,21 @@ from awa_common.settings import Settings
 from . import client, repository
 
 logger = structlog.get_logger(__name__).bind(component="logistics_etl")
-_F = TypeVar("_F", bound=Callable[..., Any])
-instrument_task = cast(Callable[[str], Callable[[_F], _F]], _instrument_task)
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+    from typing import Protocol, TypeVar
+
+    _InstrumentFunc = TypeVar("_InstrumentFunc", bound=Callable[..., Any])
+
+    class _InstrumentTaskCallable(Protocol):
+        def __call__(
+            self, task_name: str, *, emit_metrics: bool = True
+        ) -> Callable[[_InstrumentFunc], _InstrumentFunc]: ...
+
+    instrument_task: _InstrumentTaskCallable = _instrument_task
+else:
+    instrument_task = _instrument_task
 
 
 @instrument_task("logistics_etl")
