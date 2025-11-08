@@ -1,44 +1,20 @@
 from __future__ import annotations
 
-from collections import defaultdict
-from typing import Any
-
 import pytest
 
-from services.logistics_etl import client, flow, metrics, repository
-
-
-class _DummyMetricChild:
-    def __init__(self, parent: _DummyMetric, key: tuple[tuple[str, Any], ...]) -> None:
-        self._parent = parent
-        self._key = key
-
-    def inc(self, amount: float = 1.0) -> None:
-        self._parent._counters[self._key] += amount
-
-    def observe(self, value: float) -> None:
-        self._parent._observations[self._key].append(value)
-
-
-class _DummyMetric:
-    def __init__(self) -> None:
-        self._counters: dict[tuple[tuple[str, Any], ...], float] = defaultdict(float)
-        self._observations: dict[tuple[tuple[str, Any], ...], list[float]] = defaultdict(list)
-
-    def labels(self, **labels: Any) -> _DummyMetricChild:
-        key = tuple(sorted(labels.items()))
-        return _DummyMetricChild(self, key)
+from services.logistics_etl import client, flow, repository
 
 
 @pytest.mark.asyncio
 async def test_full_idempotent_skips_second_run(monkeypatch):
-    runs_metric = _DummyMetric()
-    failures_metric = _DummyMetric()
-    latency_metric = _DummyMetric()
-
-    monkeypatch.setattr(metrics, "etl_runs_total", runs_metric)
-    monkeypatch.setattr(metrics, "etl_failures_total", failures_metric)
-    monkeypatch.setattr(metrics, "etl_latency_seconds", latency_metric)
+    batch_calls: list[tuple[str, int, int]] = []
+    monkeypatch.setattr(
+        flow,
+        "record_etl_batch",
+        lambda job, processed, errors, duration_s: batch_calls.append((job, processed, errors)),
+    )
+    retry_calls: list[tuple[str, str]] = []
+    monkeypatch.setattr(flow, "record_etl_retry", lambda job, reason: retry_calls.append((job, reason)))
 
     snapshot = {
         "source": "http://example.com/rates.csv",
@@ -99,23 +75,21 @@ async def test_full_idempotent_skips_second_run(monkeypatch):
     assert second[0]["rows_upserted"] == 0
     assert upserts["count"] == 1
 
-    success_key = tuple(sorted([("source", snapshot["source"]), ("status", "success")]))
-    skipped_key = tuple(sorted([("source", snapshot["source"]), ("status", "skipped")]))
-    assert runs_metric._counters[success_key] >= 1
-    assert runs_metric._counters[skipped_key] >= 1
-    assert not failures_metric._counters  # no failures reported
-    assert latency_metric._observations  # latency recorded
+    assert len(batch_calls) == 2
+    assert batch_calls[0][1] == 1  # processed row count
+    assert batch_calls[1][1] == 0  # skipped second run
+    assert not retry_calls
 
 
 @pytest.mark.asyncio
 async def test_full_records_failure(monkeypatch):
-    runs_metric = _DummyMetric()
-    failures_metric = _DummyMetric()
-    latency_metric = _DummyMetric()
-
-    monkeypatch.setattr(metrics, "etl_runs_total", runs_metric)
-    monkeypatch.setattr(metrics, "etl_failures_total", failures_metric)
-    monkeypatch.setattr(metrics, "etl_latency_seconds", latency_metric)
+    retry_calls: list[tuple[str, str]] = []
+    monkeypatch.setattr(flow, "record_etl_retry", lambda job, reason: retry_calls.append((job, reason)))
+    monkeypatch.setattr(
+        flow,
+        "record_etl_batch",
+        lambda job, processed, errors, duration_s: None,
+    )
 
     async def fake_fetch_sources():
         return [
@@ -141,8 +115,4 @@ async def test_full_records_failure(monkeypatch):
     assert entry["rows_upserted"] == 0
     assert entry["skipped"] is False
 
-    failure_key = tuple(sorted([("source", "http://example.com/bad.csv"), ("reason", "RuntimeError")]))
-    status_key = tuple(sorted([("source", "http://example.com/bad.csv"), ("status", "failure")]))
-    assert failures_metric._counters[failure_key] == 1
-    assert runs_metric._counters[status_key] == 1
-    assert latency_metric._observations
+    assert retry_calls == [("logistics_etl", "RuntimeError")]

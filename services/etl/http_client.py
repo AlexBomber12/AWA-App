@@ -18,7 +18,7 @@ from tenacity import (
     wait_random_exponential,
 )
 
-from awa_common.metrics import record_etl_retry
+from awa_common.metrics import record_etl_retry, record_http_client_request
 from awa_common.settings import settings as SETTINGS
 
 logger = structlog.get_logger(__name__)
@@ -288,7 +288,7 @@ async def fetch_json(
             request_id=request_id,
         )
     except Exception as exc:
-        duration_ms = int((loop.time() - start) * 1000)
+        duration_s = loop.time() - start
         status_code = exc.response.status_code if isinstance(exc, httpx.HTTPStatusError) and exc.response else None
         logger.warning(
             "etl_http.request_failed",
@@ -296,25 +296,27 @@ async def fetch_json(
             method=method,
             url=url,
             status_code=status_code,
-            duration_ms=duration_ms,
+            duration_ms=int(duration_s * 1000),
             source=source,
             task_id=task_id,
             request_id=request_id,
         )
+        record_http_client_request(source or "unknown", method, status_code, duration_s)
         raise
 
-    duration_ms = int((loop.time() - start) * 1000)
+    duration_s = loop.time() - start
     try:
         payload = response.json()
     finally:
         response.close()
+    record_http_client_request(source or "unknown", method, response.status_code, duration_s)
     logger.info(
         "etl_http.request_completed",
         component="etl_http_client",
         method=method,
         url=url,
         status_code=response.status_code,
-        duration_ms=duration_ms,
+        duration_ms=int(duration_s * 1000),
         source=source,
         task_id=task_id,
         request_id=request_id,

@@ -6,31 +6,32 @@ debug incidents.
 
 ## Logging
 
-- `packages/awa_common/logging.configure_logging` configures structlog to emit JSON with consistent
-  fields. Static context (`service`, `env`, `version`) is injected once; request-scoped context adds
-  `request_id`, `trace_id`, and `user_sub`.
-- The FastAPI stack installs both `awa_common.logging.RequestIdMiddleware` and
-  `services/api.security.RequestContextMiddleware`. Incoming requests without `X-Request-ID` receive a
-  generated UUID, which is echoed on the response headers and made available to downstream services.
-- Celery workers call `awa_common.logging.bind_celery_task()` from `services/worker/celery_app.py` so
-  task logs include `task_id`.
-- Example payload (captured in `tests/unit/packages/awa_common/test_logging_json.py`):
+- `packages/awa_common/logging.configure_logging(service, level=None)` applies the structlog JSON
+  pipeline and reads `service`, `env`, and `version` directly from `awa_common.settings`. Every log
+  record includes the keys `ts`, `level`, `service`, `env`, `version`, `request_id`, `trace_id`,
+  `task`, `component`, and `msg`, so downstream processors never have to guess.
+- Request-scoped helpers `set_request_context` / `clear_request_context` store correlation IDs via
+  contextvars. The FastAPI stack still mounts `RequestIdMiddleware`, which pulls `X-Request-ID`
+  (or generates one), binds it to structlog, and echoes the ID plus `X-Trace-ID` on responses.
+- Background workers call `bind_celery_task()` during the `task_prerun` signal so task IDs populate
+  the `task` field and, when no HTTP request exists, become the default `request_id`.
+- Example payload (`tests/unit/observability/test_structlog_context.py`):
   ```json
   {
-    "timestamp": "2025-11-06T00:00:00.000000Z",
+    "ts": "2025-11-06T00:00:00.000000Z",
     "level": "info",
-    "event": "sample_event",
     "service": "api",
     "env": "local",
     "version": "0.0.0",
     "request_id": "req-1",
     "trace_id": "trace-xyz",
-    "user_sub": "u-123",
-    "status": "ok"
+    "task": null,
+    "component": "price_importer",
+    "msg": "price_import.batch_completed"
   }
   ```
-- Logs always include enough context to correlate API calls, Celery retries, and ETL runs—use
-  `request_id` to pivot between systems.
+- Use `set_request_context` whenever an async boundary would otherwise drop correlation IDs (custom
+  clients, background threads, etc.).
 
 ## Metrics
 
@@ -43,32 +44,54 @@ debug incidents.
 
 ### Workers & Celery
 
-- `task_runs_total{task_name,outcome,service,env,version}`
-- `task_duration_seconds{task_name,service,env,version}`
-- `task_failures_total{task_name,exc_type,service,env,version}`
-- `queue_backlog{queue,service,env,version}` gauges (requires Redis broker and `QUEUE_NAMES`).
-- The worker process enables these by calling `enable_celery_metrics` inside
-  `services/worker/celery_app.py`. Set `WORKER_METRICS_HTTP=1` to expose a scrape port.
+- `task_runs_total{task,status,service,env,version}` counts successes vs. errors.
+- `task_duration_seconds_bucket{task,service,env,version}` histograms runtimes.
+- `task_errors_total{task,error_type,service,env,version}` captures exception class.
+- `queue_backlog{queue,service,env,version}` gauges Redis queue depth when the worker enables
+  `enable_celery_metrics`.
+- Decorate Celery functions (or cron jobs) with `@metrics.instrument_task("task_name")` to emit
+  the counters automatically. Signals registered in `services/worker/celery_app.py` provide a
+  drop-in for legacy tasks that have not yet been decorated.
 
 ### ETL
 
-- `etl_runs_total{source,status,service,env,version}`
-- `etl_failures_total{source,reason,service,env,version}`
-- `etl_duration_seconds{source,service,env,version}` histogram
-- `etl_retry_total{source,code,service,env,version}` counter
-- Domain-specific ETL modules may also export summaries such as
-  `services/logistics_etl/metrics.py::etl_latency_seconds` (Summary over `source`).
-- Wrap new pipelines with `awa_common.metrics.record_etl_run/record_etl_skip` and the HTTP client in
-  `packages/awa_common/etl/http.py` to populate these metrics automatically.
+- `etl_runs_total{job,service,env,version}` increments every time a pipeline processes an input.
+- `etl_processed_records_total{job,service,env,version}` tracks batch throughput.
+- `etl_duration_seconds{job,service,env,version}` records both job-level and per-snapshot durations,
+  depending on whether you call `record_etl_run` or `record_etl_batch`.
+- `etl_retry_total{job,reason,service,env,version}` captures retries, parse failures, and skips
+  with a bounded `reason` label (e.g., `429`, `timeout`, `exception`, `skipped`).
+- Convenience helpers:
+  - `with record_etl_run("job"):` wraps an entire pipeline invocation.
+  - `record_etl_batch(job="logistics", processed=rows, errors=failures, duration_s=seconds)` records
+    per-file progress.
+  - `record_etl_retry(job, reason)` is used by the HTTP clients and ETL modules to tag retries.
+- HTTP clients (`packages/awa_common/etl/http.py` and `services/etl/http_client.py`) now report
+  their own metrics:
+  - `http_client_requests_total{target,method,status_class,service,env,version}`
+  - `http_client_request_duration_seconds_bucket{target,method,service,env,version}`
 
-## Metrics Endpoints
+### Metrics Endpoints
 
 - The API exposes `/metrics` via `packages/awa_common/metrics.register_metrics_endpoint`. Uvicorn
   workers share a Prometheus registry (`PROMETHEUS_MULTIPROC_DIR` is respected when using Gunicorn).
 - Celery workers start a sidecar HTTP exporter when `WORKER_METRICS_HTTP=1`; the port defaults to
   `WORKER_METRICS_PORT=9108` and is mapped in `docker-compose.yml`.
+- Any non-HTTP process (ETL scripts, cron workers, CLI tools) can set
+  `METRICS_TEXTFILE_DIR=/var/lib/node_exporter/textfile` and optionally
+  `METRICS_FLUSH_INTERVAL_S` to enable the node-exporter textfile collector. Call
+  `metrics.flush_textfile("service")` before exit to guarantee a fresh snapshot.
 - When running locally, `docker compose up -d --build --wait db redis api worker` makes the API
   endpoint available on `http://localhost:8000/metrics` and worker metrics on `http://localhost:9108`.
+
+## Sentry
+
+- `packages/awa_common/sentry.init_sentry(service)` centralises DSN handling, scrubbers, and default
+  integrations (Celery, FastAPI, SQLAlchemy, stdlib logging). The initializer never raises: empty or
+  invalid DSNs are logged and the application continues.
+- `before_send` / `before_breadcrumb` are shared so both API and workers scrub secrets the same way.
+- API, worker, fees worker, and price-importer all call `init_sentry(...)` on startup; the helpers
+  guard against double-initialisation.
 
 ## SLO & SLI Targets
 

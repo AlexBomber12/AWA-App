@@ -4,14 +4,31 @@ import os
 import shutil
 import tempfile
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
+import structlog
 from celery import states
-from celery.utils.log import get_task_logger
+
+from awa_common.metrics import instrument_task as _instrument_task
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+    from typing import Protocol, TypeVar
+
+    _InstrumentFunc = TypeVar("_InstrumentFunc", bound=Callable[..., Any])
+
+    class _InstrumentTaskCallable(Protocol):
+        def __call__(
+            self, task_name: str, *, emit_metrics: bool = True
+        ) -> Callable[[_InstrumentFunc], _InstrumentFunc]: ...
+
+    instrument_task: _InstrumentTaskCallable = _instrument_task
+else:
+    instrument_task = _instrument_task
 
 from .celery_app import celery_app
 
-logger = get_task_logger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 def _download_minio_to_tmp(uri: str) -> Path:
@@ -42,6 +59,7 @@ def _resolve_uri_to_path(uri: str) -> Path:
 
 
 @celery_app.task(name="ingest.import_file", bind=True)  # type: ignore[misc]
+@instrument_task("ingest.import_file", emit_metrics=False)
 def task_import_file(self: Any, uri: str, report_type: str | None = None, force: bool = False) -> dict[str, Any]:
     """Import a file into Postgres using existing ETL pipeline."""
 
@@ -78,8 +96,9 @@ def task_import_file(self: Any, uri: str, report_type: str | None = None, force:
 
 
 @celery_app.task(name="ingest.rebuild_views", bind=True)  # type: ignore[misc]
+@instrument_task("ingest.rebuild_views", emit_metrics=False)
 def task_rebuild_views(self: Any) -> dict[str, Any]:
-    logger.info("Rebuild views placeholder executed")
+    logger.info("rebuild_views.noop")
     return {"status": "success", "message": "noop"}
 
 

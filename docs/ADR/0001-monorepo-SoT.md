@@ -25,12 +25,13 @@ staging, CI, production) to consume that same source of truth.
   `APP_ENV`, `DATABASE_URL`, `CORS_ORIGINS`, `OIDC_ISSUER`, rate-limit knobs, and ETL timeouts.
 - Structured logging is provided by `packages/awa_common/logging.py` using structlog JSON renderers.
   Middleware (`awa_common.logging.RequestIdMiddleware` and `services/api.security.RequestContextMiddleware`)
-  binds `timestamp`, `level`, `service`, `env`, `version`, `request_id`, `trace_id`, and `user_sub` so the
-  API, workers, and ETL jobs emit identical payloads.
+  binds `ts`, `level`, `service`, `env`, `version`, `request_id`, `trace_id`, `task`, and `user_sub`
+  so the API, workers, and ETL jobs emit identical payloads.
 - Metrics are defined in `packages/awa_common/metrics.py`, which registers shared Prometheus series such as
-  `http_requests_total`, `http_request_duration_seconds`, `task_runs_total`, `task_failures_total`,
-  `etl_runs_total`, `etl_duration_seconds`, `etl_failures_total`, `etl_retry_total`, and `queue_backlog`
-  with the common `(service, env, version)` label set. The API exposes `/metrics` via the same module.
+  `http_requests_total`, `http_request_duration_seconds`, `task_runs_total`, `task_errors_total`,
+  `etl_runs_total`, `etl_processed_records_total`, `etl_duration_seconds`, `etl_retry_total`, and
+  `queue_backlog` with the common `(service, env, version)` label set. The API exposes `/metrics` via the
+  same module.
 - Security is enforced through Keycloak OIDC validation in
   `packages/awa_common/security/oidc.py` and FastAPI guards in `services/api/security.py`. Tokens must
   include `sub`, `email`, and role claims (`roles` array preferred, `realm_access.roles` fallback). RBAC

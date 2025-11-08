@@ -1,5 +1,4 @@
 import asyncio
-import logging
 import os
 from collections.abc import Iterable
 from contextlib import asynccontextmanager
@@ -128,10 +127,10 @@ async def lifespan(_app: FastAPI):
 def create_app() -> FastAPI:
     cfg = settings
     app_version = getattr(cfg, "APP_VERSION", "0.0.0")
-    configure_logging(service="api", env=cfg.ENV, version=app_version)
+    configure_logging(service="api", level=cfg.LOG_LEVEL)
     metrics_init(service="api", env=cfg.ENV, version=app_version)
     init_sentry_if_configured()
-    logging.getLogger(__name__).info("settings=%s", cfg.redacted())
+    structlog.get_logger(__name__).info("api.settings", settings=cfg.redacted())
 
     app = FastAPI(lifespan=lifespan)
 

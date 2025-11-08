@@ -2,13 +2,13 @@ from __future__ import annotations
 
 import csv
 import io
-import logging
 from dataclasses import asdict, dataclass
 from datetime import date, datetime
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 import anyio
+import structlog
 from tenacity import AsyncRetrying, RetryCallState, stop_after_attempt, wait_exponential
 
 try:  # pragma: no cover - depends on tenacity version
@@ -33,7 +33,7 @@ __all__ = [
     "fetch_sources",
 ]
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__).bind(component="logistics_etl.client")
 
 
 class UnsupportedExcelError(RuntimeError):
