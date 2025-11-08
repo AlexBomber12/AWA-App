@@ -10,6 +10,8 @@ export COVERAGE_FILE="${COVERAGE_FILE:-.coverage}"
 
 PYTEST_CMD=(
   python -m pytest -q
+  -m
+  "not integration and not live"
   --cov=packages
   --cov=services
   --cov-config=.github/coverage.ini
