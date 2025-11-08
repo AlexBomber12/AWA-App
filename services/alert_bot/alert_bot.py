@@ -1,36 +1,25 @@
-import asyncio
-import os
+from __future__ import annotations
 
 import structlog
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from asgiref.sync import async_to_sync
 
 from awa_common.logging import configure_logging
 
-from .rules import bot, check_a1, check_a2, check_a3, check_a4, check_a5, init_db_pool
+from .worker import evaluate_alert_rules, revalidate_telegram
 
 configure_logging(service="alert_bot")
-logger = structlog.get_logger(__name__).bind(component="alert_bot")
-
-scheduler = AsyncIOScheduler(timezone="UTC")
-
-CHECK_INTERVAL_MIN = int(os.getenv("CHECK_INTERVAL_MIN", "60"))
+_logger = structlog.get_logger(__name__).bind(component="alert_bot")
+_evaluate_sync = async_to_sync(evaluate_alert_rules)
 
 
-def start() -> int:
-    if not bot:
-        logger.info("alerts.disabled")
-        return 0
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(init_db_pool())
-    scheduler.add_job(check_a1, "interval", minutes=CHECK_INTERVAL_MIN)
-    scheduler.add_job(check_a2, "interval", minutes=CHECK_INTERVAL_MIN)
-    scheduler.add_job(check_a3, "interval", minutes=CHECK_INTERVAL_MIN)
-    scheduler.add_job(check_a4, "cron", hour=3)
-    scheduler.add_job(check_a5, "cron", hour=4)
-    scheduler.start()
-    return 1
+def main() -> int:
+    """Run a single alert evaluation cycle for manual invocations."""
+
+    revalidate_telegram(force_log=True)
+    result = _evaluate_sync()
+    _logger.info("alerts.run.completed", result=result)
+    return 0
 
 
-if __name__ == "__main__":
-    if start():
-        asyncio.get_event_loop().run_forever()
+if __name__ == "__main__":  # pragma: no cover - manual utility
+    raise SystemExit(main())

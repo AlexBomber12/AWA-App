@@ -140,8 +140,23 @@ class Settings(BaseSettings):
     SECURITY_ENABLE_AUDIT: bool = True
 
     # Alert bot configuration
-    TELEGRAM_TOKEN: str | None = None
-    TELEGRAM_CHAT_ID: str | None = None
+    TELEGRAM_TOKEN: str = ""
+    TELEGRAM_DEFAULT_CHAT_ID: int | str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("TELEGRAM_DEFAULT_CHAT_ID", "TELEGRAM_CHAT_ID"),
+    )
+    ALERTS_ENABLED: bool = Field(
+        default=True,
+        validation_alias=AliasChoices("ALERTS_ENABLED", "ENABLE_ALERTS"),
+    )
+    ALERT_RULES_SOURCE: Literal["yaml", "db"] = "yaml"
+    ALERT_RULES_FILE: str = "config/alert_rules.yaml"
+    ALERTS_EVALUATION_INTERVAL_CRON: str = Field(
+        default="*/5 * * * *",
+        validation_alias=AliasChoices("ALERTS_EVALUATION_INTERVAL_CRON", "ALERTS_CRON"),
+    )
+    TELEGRAM_CONNECT_TIMEOUT_S: float = 3.0
+    TELEGRAM_TOTAL_TIMEOUT_S: float = 10.0
     ROI_THRESHOLD: int = 5
     ROI_DURATION_DAYS: int = 30
     COST_DELTA_PCT: int = 10
@@ -229,6 +244,10 @@ class Settings(BaseSettings):
             "METRICS_TEXTFILE_DIR": bool(self.METRICS_TEXTFILE_DIR),
             "METRICS_FLUSH_INTERVAL_S": self.METRICS_FLUSH_INTERVAL_S,
         }
+
+    @property
+    def TELEGRAM_CHAT_ID(self) -> int | str | None:  # pragma: no cover - compatibility shim
+        return self.TELEGRAM_DEFAULT_CHAT_ID
 
     @property
     def VERSION(self) -> str:

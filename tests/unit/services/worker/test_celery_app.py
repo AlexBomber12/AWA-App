@@ -129,7 +129,7 @@ def test_mv_refresh_and_nightly_merge_and_handle_import_error(monkeypatch, reloa
 
     module = reload_celery_module(celery_module)
     schedule = module.celery_app.conf.beat_schedule
-    assert set(schedule.keys()) == {"nightly-maintenance", "refresh-roi-fees-mvs"}
+    assert {"nightly-maintenance", "refresh-roi-fees-mvs"}.issubset(set(schedule.keys()))
 
     nightly = schedule["nightly-maintenance"]["schedule"]
     assert nightly._orig_minute == "30"

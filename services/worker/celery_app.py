@@ -123,6 +123,32 @@ if os.getenv("SCHEDULE_LOGISTICS_ETL", "false").lower() in ("1", "true", "yes"):
         ),
     }
 
+alerts_cron = settings.ALERTS_EVALUATION_INTERVAL_CRON or "*/5 * * * *"
+legacy_minutes = os.getenv("CHECK_INTERVAL_MIN")
+if legacy_minutes:
+    try:
+        minutes = max(1, int(legacy_minutes))
+        alerts_cron = f"*/{minutes} * * * *"
+    except ValueError:
+        pass
+alerts_cron_parts = alerts_cron.split()
+if len(alerts_cron_parts) != 5:
+    alerts_cron_parts = "*/5 * * * *".split()
+_beat_schedule["alerts-evaluate-rules"] = {
+    "task": "alerts.evaluate_rules",
+    "schedule": crontab(
+        minute=alerts_cron_parts[0],
+        hour=alerts_cron_parts[1],
+        day_of_month=alerts_cron_parts[2],
+        month_of_year=alerts_cron_parts[3],
+        day_of_week=alerts_cron_parts[4],
+    ),
+}
+_beat_schedule["alerts-telegram-health"] = {
+    "task": "alerts.rules_health",
+    "schedule": crontab(minute="0", hour="*", day_of_month="*", month_of_year="*", day_of_week="*"),
+}
+
 if _beat_schedule:
     celery_app.conf.beat_schedule = _beat_schedule
 

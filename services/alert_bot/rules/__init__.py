@@ -1,29 +1,13 @@
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING, Any, cast
+from typing import Any, cast
 
 import asyncpg
 
 from awa_common.dsn import build_dsn
 from awa_common.settings import settings as SETTINGS
 from awa_common.utils.env import env_str
-
-if TYPE_CHECKING:  # pragma: no cover - import for type hints only
-    from telegram import Bot as Bot
-else:  # runtime import with fallback
-    try:
-        from telegram import Bot as RuntimeBot
-    except ModuleNotFoundError:  # pragma: no cover - CI fallback
-
-        class RuntimeBot:
-            def __init__(self, _: str) -> None:  # noqa: D401 - simple stub
-                """Stub telegram.Bot when library is absent."""
-
-            async def send_message(self, *_args: Any, **_kwargs: Any) -> None:
-                return None
-
-    Bot = RuntimeBot
 
 
 # Database connection settings -------------------------------------------------
@@ -39,15 +23,6 @@ def _first_non_empty(*values: str | None) -> str | None:
 
 
 DSN = _first_non_empty(env_str("PG_ASYNC_DSN"), SETTINGS.PG_ASYNC_DSN) or build_dsn(sync=False)
-TOKEN = _first_non_empty(SETTINGS.TELEGRAM_TOKEN, env_str("TELEGRAM_TOKEN"))
-CHAT_ID = _first_non_empty(SETTINGS.TELEGRAM_CHAT_ID, env_str("TELEGRAM_CHAT_ID"))
-
-ROI_THRESHOLD = SETTINGS.ROI_THRESHOLD
-ROI_DURATION_DAYS = SETTINGS.ROI_DURATION_DAYS
-COST_DELTA_PCT = SETTINGS.COST_DELTA_PCT
-PRICE_DROP_PCT = SETTINGS.PRICE_DROP_PCT
-RETURNS_PCT = SETTINGS.RETURNS_PCT
-STALE_DAYS = SETTINGS.STALE_DAYS
 
 
 ALERT_DB_POOL_MIN_SIZE = SETTINGS.ALERT_DB_POOL_MIN_SIZE
@@ -64,36 +39,6 @@ ALERT_DB_POOL_RETRY_DELAY = SETTINGS.ALERT_DB_POOL_RETRY_DELAY
 
 DB_POOL: asyncpg.Pool | None = None
 _POOL_LOCK = asyncio.Lock()
-
-# Telegram bot initialisation
-#
-# In some environments the python‑telegram‑bot library will attempt to auto‑configure
-# HTTP/SOCKS proxy support based on environment variables (e.g. `HTTPS_PROXY`).
-# When the optional socks extras are missing (`socksio` package), this can raise
-# ImportError/RuntimeError at import or instantiation time.  A hard failure here
-# prevents the remainder of this module – and all tests that import it – from
-# executing.  To allow tests to run without requiring proxy extras, we guard
-# the bot creation in a try/except.  If initialisation fails for any reason
-# (missing extras or misconfigured environment), we fall back to a minimal stub
-# implementation.  The tests mock out `bot.send_message` anyway, so skipping
-# initialisation has no adverse effect.
-try:
-    bot = Bot(TOKEN) if TOKEN and CHAT_ID else None
-except Exception:
-    # Fallback to stub Bot when telegram library cannot be initialised.
-    class _BotStub:
-        def __init__(self, *_args: Any, **_kwargs: Any) -> None:
-            """Stub telegram.Bot when initialisation fails."""
-            pass
-
-        async def send_message(self, *_args: Any, **_kwargs: Any) -> None:
-            return None
-
-    Bot = _BotStub  # type: ignore[assignment,misc]
-    bot = Bot(TOKEN) if TOKEN and CHAT_ID else None
-
-
-MSG_ROI_DROP = "⚠️ Маржа по товару упала ниже 5 %. Проверьте цену и закупочную стоимость."
 
 
 async def init_db_pool() -> asyncpg.Pool:
@@ -146,25 +91,16 @@ async def fetch_rows(query: str, *args: Any) -> list[asyncpg.Record]:
     return []
 
 
-async def send(title: str, body: str) -> None:
-    if not bot or CHAT_ID is None:
-        return
-    await bot.send_message(chat_id=CHAT_ID, text=f"{title}\n{body}")
-
-
-async def check_a1() -> None:
-    rows = await fetch_rows(
+async def query_roi_breaches(min_roi_pct: float, min_duration_days: int) -> list[asyncpg.Record]:
+    return await fetch_rows(
         "SELECT asin, roi_pct FROM roi_view WHERE roi_pct < $1 AND updated_at < now() - interval '$2 days'",
-        ROI_THRESHOLD,
-        ROI_DURATION_DAYS,
+        min_roi_pct,
+        min_duration_days,
     )
-    if rows:
-        lst = "\n".join(f"{r['asin']} {r['roi_pct']}%" for r in rows)
-        await send(MSG_ROI_DROP, lst)
 
 
-async def check_a2() -> None:
-    rows = await fetch_rows(
+async def query_price_increase(delta_pct: float) -> list[asyncpg.Record]:
+    return await fetch_rows(
         """
         WITH t AS (
             SELECT vendor_id, sku, cost,
@@ -177,57 +113,30 @@ async def check_a2() -> None:
         WHERE prev_cost IS NOT NULL AND delta > $1
         ORDER BY updated_at DESC
         """,
-        COST_DELTA_PCT,
+        delta_pct,
     )
-    if rows:
-        lst = "\n".join(f"{r['sku']} {r['delta']}%" for r in rows)
-        await send(
-            f"💸 Закупочная цена выросла > {COST_DELTA_PCT}%",
-            f"{lst}\n👉 Свяжитесь с поставщиком или ищите альтернативу.",
-        )
 
 
-async def check_a3() -> None:
-    rows = await fetch_rows(
+async def query_buybox_drop(drop_pct: float) -> list[asyncpg.Record]:
+    return await fetch_rows(
         """
         SELECT asin, 100 * (price_48h - price_now) / price_48h AS drop_pct
         FROM buybox_prices
         WHERE drop_pct > $1
         """,
-        PRICE_DROP_PCT,
+        drop_pct,
     )
-    if rows:
-        lst = "\n".join(f"{r['asin']} {r['drop_pct']}%" for r in rows)
-        await send(
-            f"🏷️ Цена Buy Box упала > {PRICE_DROP_PCT}% за 48 ч",
-            f"{lst}\n👉 Решите: снизить цену или распродать остатки.",
-        )
 
 
-async def check_a4() -> None:
-    rows = await fetch_rows(
+async def query_high_returns(returns_pct: float) -> list[asyncpg.Record]:
+    return await fetch_rows(
         "SELECT asin, returns_ratio FROM returns_view WHERE returns_ratio > $1",
-        RETURNS_PCT,
+        returns_pct,
     )
-    if rows:
-        lst = "\n".join(f"{r['asin']} {r['returns_ratio']}%" for r in rows)
-        await send(
-            f"🔄 Доля возвратов > {RETURNS_PCT}% за 30 дней",
-            f"{lst}\n👉 Проверьте качество товара и описание листинга.",
-        )
 
 
-async def check_a5() -> None:
-    rows = await fetch_rows(
+async def query_stale_price_lists(stale_days: int) -> list[asyncpg.Record]:
+    return await fetch_rows(
         "SELECT vendor_id FROM vendor_prices GROUP BY vendor_id HAVING MAX(updated_at) < now() - interval '$1 days'",
-        STALE_DAYS,
+        stale_days,
     )
-    if rows:
-        lst = "\n".join(f"vendor {r['vendor_id']}" for r in rows)
-        await send(
-            f"📜 Прайс-лист устарел > {STALE_DAYS} дней",
-            f"{lst}\n👉 Запросите свежий прайс у поставщика.",
-        )
-
-
-send_rules = [check_a1, check_a2, check_a3, check_a4, check_a5]

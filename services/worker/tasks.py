@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import asyncio
 import os
 import shutil
 import tempfile
+from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -10,6 +12,21 @@ import structlog
 from celery import states
 
 from awa_common.metrics import instrument_task as _instrument_task
+from services.alert_bot import worker as alerts_worker
+from services.worker.celery_app import celery_app
+
+try:  # pragma: no cover - fallback when asgiref is missing
+    from asgiref.sync import async_to_sync as _async_to_sync
+except ModuleNotFoundError:  # pragma: no cover - allows tests without asgiref
+
+    def _async_to_sync(func: Callable[..., Any]) -> Callable[..., Any]:
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
+            return asyncio.run(func(*args, **kwargs))
+
+        return wrapper
+
+
+async_to_sync: Callable[..., Any] = _async_to_sync
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -26,9 +43,8 @@ if TYPE_CHECKING:
 else:
     instrument_task = _instrument_task
 
-from .celery_app import celery_app
-
 logger = structlog.get_logger(__name__)
+_evaluate_alerts_sync: Callable[[], dict[str, int]] = async_to_sync(alerts_worker.evaluate_alert_rules)
 
 
 def _download_minio_to_tmp(uri: str) -> Path:
@@ -109,3 +125,19 @@ if os.getenv("TESTING") == "1":
         from etl.load_csv import import_file as run_ingest
 
         return run_ingest(uri, dialect=dialect)
+
+
+@celery_app.task(name="alerts.evaluate_rules")  # type: ignore[misc]
+@instrument_task("alerts.evaluate_rules")
+def evaluate_alert_rules() -> dict[str, int]:
+    """Periodic task that evaluates configured alert rules."""
+
+    return _evaluate_alerts_sync()
+
+
+@celery_app.task(name="alerts.rules_health")  # type: ignore[misc]
+@instrument_task("alerts.rules_health")
+def alert_rules_health() -> dict[str, Any]:
+    """Periodic task that refreshes Telegram availability state."""
+
+    return alerts_worker.alert_rules_health()
