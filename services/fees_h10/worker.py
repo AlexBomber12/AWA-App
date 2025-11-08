@@ -30,11 +30,14 @@ def _fallback_async_to_sync(func: Callable[..., Awaitable[Any]]) -> Callable[...
     return _wrapper
 
 
-try:
-    from asgiref.sync import async_to_sync as _runtime_async_to_sync
-except ModuleNotFoundError:  # pragma: no cover - fallback when asgiref missing
-    _runtime_async_to_sync = None
+_runtime_async_to_sync: _AsyncToSyncCallable | None = None
 
+try:
+    from asgiref.sync import async_to_sync as _imported_async_to_sync
+except ModuleNotFoundError:  # pragma: no cover - fallback when asgiref missing
+    _imported_async_to_sync = None
+else:
+    _runtime_async_to_sync = _imported_async_to_sync
 
 if _runtime_async_to_sync is None:
     async_to_sync: _AsyncToSyncCallable = _fallback_async_to_sync
