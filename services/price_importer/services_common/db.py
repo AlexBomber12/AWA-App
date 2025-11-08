@@ -1,22 +1,27 @@
 import asyncio
-import os
+from collections.abc import Callable
+from typing import cast
 from urllib.parse import urlparse, urlunparse
 
 from asyncpg import Pool, create_pool
 from sqlalchemy import text
 from sqlalchemy.engine import Connection, Engine
 
-from .dsn import build_dsn
+from awa_common.dsn import build_dsn as _raw_build_dsn
+from awa_common.utils.env import env_bool
+
+BuildDsnFn = Callable[..., str]
+_build_dsn: BuildDsnFn = cast(BuildDsnFn, _raw_build_dsn)
 
 
 def build_sqlalchemy_url() -> str:
     """Return Postgres URL for SQLAlchemy engines."""
-    return build_dsn(sync=True)
+    return _build_dsn(sync=True)
 
 
 def build_asyncpg_dsn() -> str:
     """Return DSN suitable for asyncpg (without driver suffix)."""
-    url = urlparse(build_dsn(sync=True))
+    url = urlparse(_build_dsn(sync=True))
     return urlunparse(
         (
             "postgresql",
@@ -50,7 +55,7 @@ def refresh_mvs(conn: Engine | Connection) -> None:
             refresh_mvs(connection)
         return
 
-    live = os.getenv("ENABLE_LIVE", "1") != "0"
+    live = env_bool("ENABLE_LIVE", default=True)
     idx_exists = bool(
         conn.execute(text("SELECT 1 FROM pg_indexes WHERE indexname = 'ix_v_refund_totals_pk'")).scalar()
     ) and bool(conn.execute(text("SELECT 1 FROM pg_indexes WHERE indexname = 'ix_v_reimb_totals_pk'")).scalar())

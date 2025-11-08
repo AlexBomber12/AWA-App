@@ -14,16 +14,6 @@ def _reset_http_client(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(http_client, "_HTTP_CLIENT", None, raising=False)
 
 
-def test_env_helpers_fall_back_to_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
-    from services.etl import http_client
-
-    monkeypatch.setenv("TMP_INT_VALUE", "not-an-int")
-    monkeypatch.setenv("TMP_FLOAT_VALUE", "also-bad")
-
-    assert http_client._env_int("TMP_INT_VALUE", 7) == 7
-    assert http_client._env_float("TMP_FLOAT_VALUE", 1.25) == 1.25
-
-
 def test_parse_retry_after_handles_numeric_and_dates(monkeypatch: pytest.MonkeyPatch) -> None:
     from services.etl import http_client
 

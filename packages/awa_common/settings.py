@@ -4,7 +4,7 @@ import os
 import re
 from typing import Literal
 
-from pydantic import Field
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Preserve legacy values while supporting new stage/dev env conventions.
@@ -57,6 +57,7 @@ class Settings(BaseSettings):
 
     # Core
     ENV: str = "local"  # local|dev|stage|prod
+    TESTING: bool = False
     APP_NAME: str = "awa-app"
     APP_ENV: AppRuntimeEnv = "dev"
     APP_VERSION: str = "0.0.0"
@@ -64,8 +65,12 @@ class Settings(BaseSettings):
 
     # Database & cache
     DATABASE_URL: str = Field(default="postgresql+psycopg://app:app@db:5432/app")
+    PG_ASYNC_DSN: str | None = None
     REDIS_URL: str = Field(default="redis://redis:6379/0")
-    BROKER_URL: str | None = None
+    BROKER_URL: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("BROKER_URL", "CELERY_BROKER_URL"),
+    )
     QUEUE_NAMES: str | None = None
 
     # Observability / security
@@ -97,6 +102,9 @@ class Settings(BaseSettings):
     ETL_BACKOFF_BASE_S: float = 0.5
     ETL_BACKOFF_MAX_S: float = 30.0
     ETL_RETRY_STATUS_CODES: list[int] = Field(default_factory=lambda: [429, 500, 502, 503, 504])
+    ETL_HTTP_KEEPALIVE_CONNECTIONS: int = 5
+    ETL_HTTP_MAX_CONNECTIONS: int = 20
+    ETL_HTTP_POOL_QUEUE_TIMEOUT_S: float | None = None
 
     # Optional: LLM placeholders (no usage change in this PR)
     LLM_PROVIDER: Literal["STUB", "OPENAI", "VLLM"] = "STUB"
@@ -111,6 +119,32 @@ class Settings(BaseSettings):
 
     # Audit trail
     SECURITY_ENABLE_AUDIT: bool = True
+
+    # Alert bot configuration
+    TELEGRAM_TOKEN: str | None = None
+    TELEGRAM_CHAT_ID: str | None = None
+    ROI_THRESHOLD: int = 5
+    ROI_DURATION_DAYS: int = 30
+    COST_DELTA_PCT: int = 10
+    PRICE_DROP_PCT: int = 15
+    RETURNS_PCT: int = 5
+    STALE_DAYS: int = 30
+    ALERT_DB_POOL_MIN_SIZE: int = 1
+    ALERT_DB_POOL_MAX_SIZE: int = 5
+    ALERT_DB_POOL_TIMEOUT: float = 10.0
+    ALERT_DB_POOL_ACQUIRE_TIMEOUT: float = 3.0
+    ALERT_DB_POOL_ACQUIRE_RETRIES: int = 3
+    ALERT_DB_POOL_RETRY_DELAY: float = 0.25
+
+    # Logistics ETL configuration
+    LOGISTICS_TIMEOUT_S: float = 15.0
+    LOGISTICS_RETRIES: int = 3
+    LOGISTICS_SOURCES: str | None = None
+    FREIGHT_API_URL: str = "https://example.com/freight.csv"
+
+    # Fees ingestion / external APIs
+    HELIUM10_KEY: str | None = None
+    FEES_RAW_TABLE: str = "fees_raw"
 
     def redacted(self) -> dict:
         def _mask(url: str | None) -> str | None:
@@ -127,6 +161,7 @@ class Settings(BaseSettings):
             "APP_VERSION": self.APP_VERSION,
             "SERVICE_NAME": self.SERVICE_NAME,
             "DATABASE_URL": _mask(self.DATABASE_URL),
+            "PG_ASYNC_DSN": _mask(self.PG_ASYNC_DSN),
             "REDIS_URL": _mask(self.REDIS_URL),
             "BROKER_URL": _mask(self.BROKER_URL),
             "SENTRY_DSN": "set" if bool(self.SENTRY_DSN) else None,
@@ -137,6 +172,7 @@ class Settings(BaseSettings):
             "LLM_PROVIDER": self.LLM_PROVIDER,
             "OPENAI_API_BASE": bool(self.OPENAI_API_BASE),
             "OPENAI_API_KEY": bool(self.OPENAI_API_KEY),
+            "TELEGRAM_TOKEN": bool(self.TELEGRAM_TOKEN),
             "OIDC_ISSUER": self.OIDC_ISSUER,
             "QUEUE_NAMES": self.QUEUE_NAMES,
             "SECURITY_REFERRER_POLICY": self.SECURITY_REFERRER_POLICY,
@@ -147,7 +183,8 @@ class Settings(BaseSettings):
             "RATE_LIMIT_OPS": self.RATE_LIMIT_OPS,
             "RATE_LIMIT_ADMIN": self.RATE_LIMIT_ADMIN,
             "MAX_REQUEST_BYTES": self.MAX_REQUEST_BYTES,
+            "HELIUM10_KEY": bool(self.HELIUM10_KEY),
         }
 
 
-settings = Settings()
+settings: Settings = Settings()

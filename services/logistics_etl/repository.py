@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from collections.abc import Iterable, Mapping, Sequence
 from datetime import date, datetime
 from typing import Any
@@ -9,7 +8,8 @@ from sqlalchemy import text
 from sqlalchemy.engine import Engine
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
-from .dsn import build_dsn
+from awa_common.dsn import build_dsn
+from awa_common.settings import Settings
 
 _engine: AsyncEngine | None = None
 
@@ -146,7 +146,7 @@ async def mark_load(source: str, sha256: str | None, seqno: str | None, rows: in
         await conn.execute(query, {"source": source, "sha256": sha256, "seqno": seqno, "rows": rows})
 
 
-if os.getenv("TESTING") == "1":
+if Settings().TESTING:
 
     def _upsert_many_with_keys(
         engine: Engine,

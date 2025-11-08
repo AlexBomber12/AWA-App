@@ -4,9 +4,10 @@ import argparse
 import asyncio
 import hashlib
 import logging
-import os
 import time
 from typing import Any
+
+from awa_common.settings import Settings
 
 from . import client, metrics, repository
 
@@ -14,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 async def full(dry_run: bool = False) -> list[dict[str, Any]]:  # noqa: C901
-    sources_config = os.getenv("LOGISTICS_SOURCES", "").strip()
+    sources_config = (Settings().LOGISTICS_SOURCES or "").strip()
     snapshots = await client.fetch_sources()
 
     if snapshots:
