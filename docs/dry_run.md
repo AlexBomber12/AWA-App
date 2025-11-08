@@ -18,7 +18,8 @@
 
 ## Logging and metrics
 - Each component logs the command invocation, resolved configuration, and the number of rows/records it would change. Use structured logging (`extra={"dry_run": True}`) where available so Loki/Splunk dashboards can filter by the flag.
-- Prometheus counters keep incrementing: e.g., `metrics.etl_runs_total` and `etl_latency_seconds` are emitted even when no rows are persisted. This lets us compare dry-run vs. live latency.
+- Prometheus counters keep incrementing: e.g., `etl_runs_total` and `etl_duration_seconds` emit even
+  when no rows are persisted. This lets us compare dry-run vs. live latency.
 - The repricer microservice includes `"changed": bool` per ASIN to prove that decisions still execute during rehearsal.
 - Backup/restore jobs upload the same artifacts as a live run (`pgbackrest.log`, `system.txt`, `compose-logs.txt`) so reviewers can trace every command without rerunning it.
 

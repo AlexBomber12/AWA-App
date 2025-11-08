@@ -4,7 +4,7 @@ import asyncio
 import time
 from collections.abc import Awaitable, Callable, Coroutine
 from decimal import ROUND_HALF_UP, Decimal
-from typing import Any, cast
+from typing import Any, TypeVar, cast
 
 import httpx
 import structlog
@@ -12,12 +12,24 @@ from celery import Celery, shared_task
 from sqlalchemy import create_engine, text
 
 from awa_common.dsn import build_dsn
+from awa_common.logging import configure_logging
+from awa_common.metrics import (
+    init as metrics_init,
+    instrument_task as _instrument_task,
+    record_etl_batch,
+    record_etl_retry,
+)
+from awa_common.sentry import init_sentry
 from awa_common.settings import settings as SETTINGS
 from awa_common.utils.env import env_str
 from services.etl import http_client
 
 from . import db_async
 from .client import fetch_fees
+
+configure_logging(service="fees_h10", level=SETTINGS.LOG_LEVEL)
+metrics_init(service="fees_h10", env=SETTINGS.APP_ENV, version=SETTINGS.APP_VERSION)
+init_sentry("fees_h10")
 
 _AsyncToSyncType = Callable[[Callable[..., Awaitable[Any]]], Callable[..., Any]]
 
@@ -44,17 +56,9 @@ else:
     async_to_sync = cast(_AsyncToSyncType, _async_to_sync_value)
 
 
-logger = structlog.get_logger(__name__)
-
-try:  # pragma: no cover - optional when API package absent
-    from services.api.sentry_config import init_sentry_if_configured as _init_sentry
-except ModuleNotFoundError:  # pragma: no cover - optional dependency
-
-    def _init_sentry() -> None:
-        return None
-
-
-_init_sentry()
+logger = structlog.get_logger(__name__).bind(component="fees_h10")
+_F = TypeVar("_F", bound=Callable[..., Any])
+instrument_task = cast(Callable[[str], Callable[[_F], _F]], _instrument_task)
 
 app = Celery("fees_h10", broker=SETTINGS.BROKER_URL or "memory://")
 app.conf.beat_schedule = {"refresh-daily": {"task": "fees.refresh", "schedule": 86400.0}}
@@ -99,6 +103,19 @@ def _normalise_row(raw: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _retry_reason(exc: BaseException) -> str:
+    if isinstance(exc, httpx.TimeoutException):
+        return "timeout"
+    if isinstance(exc, httpx.HTTPStatusError) and exc.response is not None:
+        status = exc.response.status_code
+        if status == 429:
+            return "rate_limit"
+        if 500 <= status < 600:
+            return "5xx"
+        return str(status)
+    return exc.__class__.__name__
+
+
 async def _fetch_single(asin: str, semaphore: asyncio.Semaphore) -> dict[str, Any] | None:
     async with semaphore:
         try:
@@ -111,6 +128,7 @@ async def _fetch_single(asin: str, semaphore: asyncio.Semaphore) -> dict[str, An
                 error=str(exc),
                 error_type=exc.__class__.__name__,
             )
+            record_etl_retry("fees_h10", _retry_reason(exc))
             return None
         except Exception as exc:  # pragma: no cover - defensive logging
             logger.warning(
@@ -120,6 +138,7 @@ async def _fetch_single(asin: str, semaphore: asyncio.Semaphore) -> dict[str, An
                 error=str(exc),
                 error_type=exc.__class__.__name__,
             )
+            record_etl_retry("fees_h10", _retry_reason(exc))
             return None
         row = _normalise_row(payload)
         if not row["asin"]:
@@ -149,10 +168,12 @@ async def _bulk(asins: list[str]) -> None:
         )
 
     if not rows:
+        record_etl_batch("fees_h10", processed=0, errors=failures, duration_s=time.perf_counter() - start)
         return
 
     if not _database_configured():
         logger.warning("fees_h10.database_unconfigured", component="fees_h10", pending_rows=len(rows))
+        record_etl_batch("fees_h10", processed=0, errors=failures, duration_s=time.perf_counter() - start)
         return
 
     summary = await db_async.upsert_fee_rows(rows)
@@ -167,6 +188,12 @@ async def _bulk(asins: list[str]) -> None:
         failures=failures,
         duration_ms=duration_ms,
     )
+    record_etl_batch(
+        "fees_h10",
+        processed=len(rows),
+        errors=failures,
+        duration_s=duration_ms / 1000,
+    )
 
 
 async def _run_refresh(asins: list[str]) -> None:
@@ -179,6 +206,7 @@ async def _run_refresh(asins: list[str]) -> None:
 
 
 @shared_task(name="fees.refresh")  # type: ignore[misc]
+@instrument_task("fees_h10_update")
 def refresh_fees() -> None:
     asins = list_active_asins()
     async_to_sync(_run_refresh)(asins)

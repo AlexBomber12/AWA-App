@@ -18,9 +18,9 @@ def _reset_metrics_globals():
     metrics.HTTP_REQUEST_DURATION_SECONDS.clear()
     metrics.TASK_RUNS_TOTAL.clear()
     metrics.TASK_DURATION_SECONDS.clear()
-    metrics.TASK_FAILURES_TOTAL.clear()
+    metrics.TASK_ERRORS_TOTAL.clear()
     metrics.ETL_RUNS_TOTAL.clear()
-    metrics.ETL_FAILURES_TOTAL.clear()
+    metrics.ETL_PROCESSED_RECORDS_TOTAL.clear()
     metrics.ETL_RETRY_TOTAL.clear()
     metrics.ETL_DURATION_SECONDS.clear()
     metrics.QUEUE_BACKLOG.clear()
@@ -208,10 +208,10 @@ def test_task_signal_flow(monkeypatch):
     metrics.on_task_failure(sender=Sender(), task_id="task-1", exception=RuntimeError("oops"))
 
     runs = metrics.TASK_RUNS_TOTAL.collect()[0].samples
-    labels = {(sample.labels["task_name"], sample.labels["outcome"]) for sample in runs}
+    labels = {(sample.labels["task"], sample.labels["status"]) for sample in runs}
     assert ("pipeline.task", "success") in labels
-    failures = metrics.TASK_FAILURES_TOTAL.collect()[0].samples
-    assert any(sample.labels["exc_type"] == "RuntimeError" for sample in failures)
+    failures = metrics.TASK_ERRORS_TOTAL.collect()[0].samples
+    assert any(sample.labels["error_type"] == "RuntimeError" for sample in failures)
     durations = metrics.TASK_DURATION_SECONDS.collect()[0].samples
     assert any(sample.name.endswith("_sum") for sample in durations)
 
@@ -382,12 +382,10 @@ def test_record_etl_run_tracks_success_and_failure(monkeypatch):
             raise RuntimeError("boom")
 
     runs = metrics.ETL_RUNS_TOTAL.collect()[0].samples
-    success = next(sample for sample in runs if sample.labels["status"] == "success")
-    failure = next(sample for sample in runs if sample.labels["status"] == "failed")
-    assert success.value == 1.0
-    assert failure.value == 1.0
-    failures = metrics.ETL_FAILURES_TOTAL.collect()[0].samples
-    assert any(sample.labels["reason"] == "RuntimeError" for sample in failures)
+    total = next(sample for sample in runs if sample.labels["job"] == "pipeline")
+    assert total.value == 2.0
+    retries = metrics.ETL_RETRY_TOTAL.collect()[0].samples
+    assert any(sample.labels["reason"] == "exception" for sample in retries)
 
 
 def test_record_etl_skip_and_retry_counts() -> None:
@@ -396,7 +394,8 @@ def test_record_etl_skip_and_retry_counts() -> None:
     metrics.record_etl_skip("demo")
     metrics.record_etl_retry("demo", "429")
     runs = metrics.ETL_RUNS_TOTAL.collect()[0].samples
-    skip = next(sample for sample in runs if sample.labels["status"] == "skipped")
+    skip = next(sample for sample in runs if sample.labels["job"] == "demo")
     assert skip.value == 1.0
     retries = metrics.ETL_RETRY_TOTAL.collect()[0].samples
-    assert any(sample.labels["code"] == "429" for sample in retries)
+    reasons = {sample.labels["reason"] for sample in retries}
+    assert {"skipped", "429"}.issubset(reasons)

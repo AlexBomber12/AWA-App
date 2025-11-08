@@ -28,7 +28,8 @@ components in `packages/awa_common` to deliver repeatable pipelines that survive
   - Retries on httpx transport errors and status codes `{429,500,502,503,504}`. `Retry-After` headers
     are honoured for `429` or any response providing the header.
 - Each retry logs `etl_http_retry` with `attempt`, `sleep`, `source`, `task_id`, and increments
-  `etl_retry_total{source,code}` so operations can see churn.
+  `etl_retry_total{job,reason}` (reason in `{429, timeout, 5xx, exception}`) so operations can see
+  churn without exploding cardinality.
 
 ## Task Lifecycle
 
@@ -82,8 +83,9 @@ components in `packages/awa_common` to deliver repeatable pipelines that survive
 2. Fetch data with `awa_common.etl.http.request` or `.download`; avoid raw `httpx` calls.
 3. Build deterministic idempotency keys and metadata with `compute_idempotency_key` /
    `build_payload_meta`.
-4. Wrap database writes in `process_once` and emit `record_etl_run` / `record_etl_skip` /
-   `record_etl_retry` as appropriate.
+4. Wrap database writes in `process_once` and emit `record_etl_run`, `record_etl_batch`, and
+   `record_etl_retry` as appropriate (the helpers feed `etl_runs_total`, `etl_processed_records_total`,
+   and `etl_retry_total` respectively).
 5. Extend tests (see `tests/unit/packages/awa_common/etl/test_guard_logic.py`,
    `tests/integration/etl/test_load_log_migration.py`) to cover idempotency and schema expectations.
 6. Document the connector schedule and operational notes in this file or a dedicated runbook.
@@ -97,9 +99,9 @@ components in `packages/awa_common` to deliver repeatable pipelines that survive
   ORDER BY updated_at DESC
   LIMIT 20;
   ```
-- Dashboard metrics: `etl_runs_total{status="failed"}` for failures, `etl_duration_seconds` for long
-  runs, `etl_retry_total` for flaky upstreams. Correlate with structured logs (`etl_http_retry`,
-  `source="..."`).
+- Dashboard metrics: `task_runs_total{status="error"}` for failures, `etl_duration_seconds` for long
+  runs, `etl_processed_records_total` for throughput, and `etl_retry_total{reason=...}` for flaky
+  upstreams. Correlate with structured logs (`etl_http_retry`, `source="..."`).
 - When alerts fire:
   1. Confirm the failing source in Prometheus or Grafana.
   2. Query `load_log` for stuck `pending` entries and inspect `error_message`.

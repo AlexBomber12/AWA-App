@@ -20,7 +20,7 @@ def test_celery_signal_handlers_record_metrics(monkeypatch: pytest.MonkeyPatch) 
     metrics.init(service="worker", env="test", version="1.0.0")
     metrics.TASK_RUNS_TOTAL.clear()
     metrics.TASK_DURATION_SECONDS.clear()
-    metrics.TASK_FAILURES_TOTAL.clear()
+    metrics.TASK_ERRORS_TOTAL.clear()
     metrics._TASK_START.clear()  # type: ignore[attr-defined]
 
     sequence = _monotonic([1.0, 2.0, 3.0, 4.5])
@@ -40,22 +40,22 @@ def test_celery_signal_handlers_record_metrics(monkeypatch: pytest.MonkeyPatch) 
     )
     metrics.on_task_postrun(sender=_FakeTask, task_id="fail-1", state="FAILURE")
 
-    labels_base = {"task_name": "demo.task", "service": "worker", "env": "test", "version": "1.0.0"}
+    labels_base = {"task": "demo.task", "service": "worker", "env": "test", "version": "1.0.0"}
 
     runs_family = metrics.TASK_RUNS_TOTAL.collect()[0]
     success_value = _sample_value(
         runs_family,
-        {**labels_base, "outcome": "success"},
+        {**labels_base, "status": "success"},
     )
     failure_value = _sample_value(
         runs_family,
-        {**labels_base, "outcome": "failure"},
+        {**labels_base, "status": "failure"},
     )
     assert success_value == 1.0
     assert failure_value == 1.0
 
-    failure_sample = metrics.TASK_FAILURES_TOTAL.collect()[0]
-    assert _sample_value(failure_sample, {**labels_base, "exc_type": "RuntimeError"}) == 1.0
+    failure_sample = metrics.TASK_ERRORS_TOTAL.collect()[0]
+    assert _sample_value(failure_sample, {**labels_base, "error_type": "RuntimeError"}) == 1.0
 
     duration_family = metrics.TASK_DURATION_SECONDS.collect()[0]
     count = _sample_value(duration_family, {**labels_base, "le": "+Inf"})

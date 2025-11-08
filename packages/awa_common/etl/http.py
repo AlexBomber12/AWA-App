@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import time
 from collections.abc import Callable
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
@@ -223,23 +224,39 @@ def request(
     request_id: str | None = None,
 ) -> httpx.Response:
     """Perform an HTTP request with retries and structured logging."""
+    target = source or "unknown"
+    method_name = method.upper()
 
     def _do_request() -> httpx.Response:
         with _prepare_client(timeout) as client:
-            response = client.request(
-                method,
-                url,
-                params=params,
-                headers=headers,
-                json=json,
-                data=data,
-                files=files,
-            )
-            if response.status_code in SETTINGS.ETL_RETRY_STATUS_CODES:
-                retry_after = _parse_retry_after(response.headers.get("Retry-After"))
-                response.close()
-                raise RetryableHTTPStatusError(response, retry_after=retry_after)
-            response.raise_for_status()
+            response: httpx.Response | None = None
+            start = time.perf_counter()
+            try:
+                response = client.request(
+                    method,
+                    url,
+                    params=params,
+                    headers=headers,
+                    json=json,
+                    data=data,
+                    files=files,
+                )
+                if response.status_code in SETTINGS.ETL_RETRY_STATUS_CODES:
+                    retry_after = _parse_retry_after(response.headers.get("Retry-After"))
+                    response.close()
+                    raise RetryableHTTPStatusError(response, retry_after=retry_after)
+                response.raise_for_status()
+            except Exception as exc:
+                duration = time.perf_counter() - start
+                status = None
+                if isinstance(exc, httpx.HTTPStatusError) and exc.response is not None:
+                    status = exc.response.status_code
+                elif isinstance(exc, RetryableHTTPStatusError) and exc.response is not None:
+                    status = exc.response.status_code
+                metrics.record_http_client_request(target, method_name, status, duration)
+                raise
+            duration = time.perf_counter() - start
+            metrics.record_http_client_request(target, method_name, response.status_code, duration)
             return response
 
     return _run_with_retries(

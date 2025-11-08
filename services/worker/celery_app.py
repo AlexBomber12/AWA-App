@@ -1,55 +1,30 @@
 from __future__ import annotations
 
 import importlib
-import json
-import logging
 import os
 
+import structlog
 from celery import Celery
 from celery.schedules import crontab
 
 from awa_common.logging import configure_logging
 from awa_common.metrics import enable_celery_metrics, init as metrics_init, start_worker_metrics_http_if_enabled
+from awa_common.sentry import init_sentry
 from awa_common.settings import settings
 
 _worker_version = getattr(settings, "APP_VERSION", "0.0.0")
 
-configure_logging(service="worker", env=settings.ENV, version=_worker_version)
+configure_logging(service="worker", level=settings.LOG_LEVEL)
 metrics_init(service="worker", env=settings.ENV, version=_worker_version)
-logging.getLogger(__name__).info("settings=%s", json.dumps(settings.redacted()))
 
 
 def _init_sentry() -> None:
-    dsn = (settings.SENTRY_DSN or "").strip()
-    if not dsn:
-        return
-    try:
-        import sentry_sdk
-        from sentry_sdk.integrations.celery import CeleryIntegration
-    except Exception:  # pragma: no cover - optional telemetry
-        return
-    BadDsnT: type[BaseException]
-    try:
-        from sentry_sdk.utils import BadDsn as _BadDsn
-    except Exception:  # pragma: no cover
-        BadDsnT = Exception
-    else:
-        BadDsnT = _BadDsn
-    try:
-        sentry_sdk.init(
-            dsn=dsn,
-            environment=settings.ENV,
-            release=os.getenv("SENTRY_RELEASE") or os.getenv("COMMIT_SHA"),
-            send_default_pii=False,
-            integrations=[CeleryIntegration()],
-        )
-    except BadDsnT:
-        logging.getLogger(__name__).warning("Ignoring invalid SENTRY_DSN", exc_info=False)
-    except Exception:
-        logging.getLogger(__name__).debug("Sentry init failed – continuing without telemetry", exc_info=True)
+    """Backward-compatible Sentry initializer hooking into shared helper."""
+    init_sentry("worker")
 
 
 _init_sentry()
+structlog.get_logger(__name__).info("worker.settings", settings=settings.redacted())
 
 
 def make_celery() -> Celery:

@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import asyncio
+import functools
 import logging
 import os
 import threading
 import time
 from collections.abc import Callable, Iterable
 from contextlib import contextmanager
-from typing import Any
+from pathlib import Path
+from typing import Any, TypeVar, cast
 
 from fastapi import FastAPI, HTTPException, Request, Response
 from prometheus_client import (
@@ -21,6 +24,9 @@ from prometheus_client import (
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from awa_common.logging import bind_celery_task
+from awa_common.settings import settings
+
+F = TypeVar("F", bound=Callable[..., Any])
 
 try:  # pragma: no cover - optional runtime dependency
     from prometheus_client.multiprocess import MultiProcessCollector
@@ -41,14 +47,26 @@ def _create_registry() -> CollectorRegistry:
 
 REGISTRY: CollectorRegistry = _create_registry()
 logger = logging.getLogger(__name__)
+_SERVICE_NAME = "api"
+_TEXTFILE_EXPORTER: _TextfileExporter | None = None
+_TEXTFILE_LOCK = threading.Lock()
 
 
 def _default_labels(service: str | None, env: str | None, version: str | None) -> dict[str, str]:
-    resolved_service = (service or os.getenv("SERVICE_NAME") or "").strip()
+    resolved_service = (service or getattr(settings, "SERVICE_NAME", "") or os.getenv("SERVICE_NAME") or "").strip()
     if not resolved_service:
         resolved_service = "api"
-    resolved_env = (env or os.getenv("APP_ENV") or os.getenv("ENV") or "").strip() or "local"
-    resolved_version = (version or os.getenv("APP_VERSION") or os.getenv("RELEASE") or "").strip() or "0.0.0"
+    resolved_env = env or getattr(settings, "APP_ENV", None) or os.getenv("APP_ENV") or os.getenv("ENV") or ""
+    resolved_env = (resolved_env or "").strip() or "local"
+    resolved_version = (
+        version
+        or getattr(settings, "VERSION", None)
+        or os.getenv("APP_VERSION")
+        or os.getenv("RELEASE")
+        or os.getenv("GIT_SHA")
+        or ""
+    )
+    resolved_version = (resolved_version or "").strip() or "0.0.0"
     return {
         "service": resolved_service,
         "env": resolved_env,
@@ -63,6 +81,9 @@ def init(*, service: str | None = None, env: str | None = None, version: str | N
     """Set common label defaults for metrics."""
     global _BASE_LABEL_VALUES
     _BASE_LABEL_VALUES = _default_labels(service, env, version)
+    global _SERVICE_NAME
+    _SERVICE_NAME = _BASE_LABEL_VALUES["service"]
+    _maybe_start_textfile_exporter()
 
 
 def _with_base_labels(**labels: str) -> dict[str, str]:
@@ -88,45 +109,59 @@ HTTP_REQUEST_DURATION_SECONDS = Histogram(
 TASK_RUNS_TOTAL = Counter(
     "task_runs_total",
     "Celery task executions by outcome",
-    ("task_name", "outcome", *BASE_LABELS),
+    ("task", "status", *BASE_LABELS),
     registry=REGISTRY,
 )
 TASK_DURATION_SECONDS = Histogram(
     "task_duration_seconds",
     "Celery task execution duration",
-    ("task_name", *BASE_LABELS),
+    ("task", *BASE_LABELS),
     buckets=HTTP_BUCKETS,
     registry=REGISTRY,
 )
-TASK_FAILURES_TOTAL = Counter(
-    "task_failures_total",
+TASK_ERRORS_TOTAL = Counter(
+    "task_errors_total",
     "Celery task failures by exception",
-    ("task_name", "exc_type", *BASE_LABELS),
+    ("task", "error_type", *BASE_LABELS),
     registry=REGISTRY,
 )
 
 ETL_RUNS_TOTAL = Counter(
     "etl_runs_total",
     "ETL pipeline executions by status",
-    ("source", "status", *BASE_LABELS),
+    ("job", *BASE_LABELS),
     registry=REGISTRY,
 )
-ETL_FAILURES_TOTAL = Counter(
-    "etl_failures_total",
-    "ETL pipeline failures by reason",
-    ("source", "reason", *BASE_LABELS),
+ETL_PROCESSED_RECORDS_TOTAL = Counter(
+    "etl_processed_records_total",
+    "Records processed per ETL batch",
+    ("job", *BASE_LABELS),
     registry=REGISTRY,
 )
 ETL_RETRY_TOTAL = Counter(
     "etl_retry_total",
     "Retry attempts during ETL HTTP calls",
-    ("source", "code", *BASE_LABELS),
+    ("job", "reason", *BASE_LABELS),
     registry=REGISTRY,
 )
 ETL_DURATION_SECONDS = Histogram(
     "etl_duration_seconds",
     "ETL pipeline duration in seconds",
-    ("source", *BASE_LABELS),
+    ("job", *BASE_LABELS),
+    buckets=HTTP_BUCKETS,
+    registry=REGISTRY,
+)
+
+HTTP_CLIENT_REQUESTS_TOTAL = Counter(
+    "http_client_requests_total",
+    "Outbound HTTP requests",
+    ("target", "method", "status_class", *BASE_LABELS),
+    registry=REGISTRY,
+)
+HTTP_CLIENT_REQUEST_DURATION_SECONDS = Histogram(
+    "http_client_request_duration_seconds",
+    "Outbound HTTP request latency in seconds",
+    ("target", "method", *BASE_LABELS),
     buckets=HTTP_BUCKETS,
     registry=REGISTRY,
 )
@@ -245,7 +280,7 @@ def enable_celery_metrics(
 def on_task_prerun(sender: Any, task_id: str, **_kwargs: Any) -> None:
     """Celery signal handler for task_prerun."""
     task_name = _task_label(sender)
-    TASK_RUNS_TOTAL.labels(**_with_base_labels(task_name=task_name, outcome="start")).inc()
+    TASK_RUNS_TOTAL.labels(**_with_base_labels(task=task_name, status="start")).inc()
     bind_celery_task()
     if not task_id:
         return
@@ -258,7 +293,7 @@ def on_task_postrun(sender: Any, task_id: str, **kwargs: Any) -> None:
     task_name = _task_label(sender)
     state = kwargs.get("state") or "unknown"
     outcome = str(state).lower()
-    TASK_RUNS_TOTAL.labels(**_with_base_labels(task_name=task_name, outcome=outcome)).inc()
+    TASK_RUNS_TOTAL.labels(**_with_base_labels(task=task_name, status=outcome)).inc()
     start_time = None
     if task_id:
         with _TASK_LOCK:
@@ -266,7 +301,7 @@ def on_task_postrun(sender: Any, task_id: str, **kwargs: Any) -> None:
     if start_time is not None:
         _, started_at = start_time
         duration = time.perf_counter() - started_at
-        TASK_DURATION_SECONDS.labels(**_with_base_labels(task_name=task_name)).observe(duration)
+        TASK_DURATION_SECONDS.labels(**_with_base_labels(task=task_name)).observe(duration)
 
 
 def on_task_failure(sender: Any, task_id: str, exception: BaseException | None = None, **_kwargs: Any) -> None:
@@ -275,7 +310,7 @@ def on_task_failure(sender: Any, task_id: str, exception: BaseException | None =
     exc_name = "unknown"
     if exception is not None:
         exc_name = exception.__class__.__name__
-    TASK_FAILURES_TOTAL.labels(**_with_base_labels(task_name=task_name, exc_type=exc_name)).inc()
+    TASK_ERRORS_TOTAL.labels(**_with_base_labels(task=task_name, error_type=exc_name)).inc()
     if task_id:
         logger.debug("celery_task_failure", task_id=task_id)
 
@@ -325,36 +360,6 @@ def _maybe_start_backlog_probe(  # noqa: C901
             thread.start()
 
 
-@contextmanager
-def record_etl_run(source: str):
-    """Record metrics for ETL pipelines."""
-    start_time = time.perf_counter()
-    base_labels = _with_base_labels(source=source)
-    try:
-        yield
-    except Exception as exc:
-        duration = time.perf_counter() - start_time
-        failure_labels = {**base_labels, "reason": exc.__class__.__name__}
-        ETL_FAILURES_TOTAL.labels(**failure_labels).inc()
-        ETL_RUNS_TOTAL.labels(**{**base_labels, "status": "failed"}).inc()
-        ETL_DURATION_SECONDS.labels(**base_labels).observe(duration)
-        raise
-    else:
-        duration = time.perf_counter() - start_time
-        ETL_RUNS_TOTAL.labels(**{**base_labels, "status": "success"}).inc()
-        ETL_DURATION_SECONDS.labels(**base_labels).observe(duration)
-
-
-def record_etl_skip(source: str) -> None:
-    """Increment skip counter for ETL runs that were deduplicated."""
-    ETL_RUNS_TOTAL.labels(**{**_with_base_labels(source=source), "status": "skipped"}).inc()
-
-
-def record_etl_retry(source: str, code: int | str) -> None:
-    """Increment retry counter for ETL HTTP attempts."""
-    ETL_RETRY_TOTAL.labels(**{**_with_base_labels(source=source), "code": str(code)}).inc()
-
-
 def start_worker_metrics_http_if_enabled(port_env: str = "WORKER_METRICS_PORT") -> None:
     """Start HTTP exporter for worker metrics if enabled via env."""
     if os.getenv("WORKER_METRICS_HTTP", "0") not in {"1", "true", "TRUE"}:
@@ -367,27 +372,205 @@ def start_worker_metrics_http_if_enabled(port_env: str = "WORKER_METRICS_PORT") 
     start_http_server(port, registry=REGISTRY)
 
 
+def _record_task_error(task_name: str, exc: BaseException) -> None:
+    labels = _with_base_labels(task=task_name, error_type=exc.__class__.__name__)
+    TASK_ERRORS_TOTAL.labels(**labels).inc()
+
+
+def _record_task_run(task_name: str, status: str, duration: float) -> None:
+    duration = max(duration, 0.0)
+    TASK_RUNS_TOTAL.labels(**_with_base_labels(task=task_name, status=status)).inc()
+    TASK_DURATION_SECONDS.labels(**_with_base_labels(task=task_name)).observe(duration)
+
+
+def instrument_task(task_name: str) -> Callable[[F], F]:
+    """
+    Decorator for Celery/cron/interval tasks to emit run/error/duration metrics.
+    """
+
+    def _decorator(func: F) -> F:
+        if asyncio.iscoroutinefunction(func):
+
+            @functools.wraps(func)
+            async def _async_wrapper(*args: Any, **kwargs: Any) -> Any:
+                start = time.perf_counter()
+                bind_celery_task(task_name=task_name)
+                status = "success"
+                try:
+                    return await func(*args, **kwargs)  # type: ignore[misc]
+                except Exception as exc:
+                    status = "error"
+                    _record_task_error(task_name, exc)
+                    raise
+                finally:
+                    _record_task_run(task_name, status, time.perf_counter() - start)
+
+            return cast(F, _async_wrapper)
+
+        @functools.wraps(func)
+        def _sync_wrapper(*args: Any, **kwargs: Any) -> Any:
+            start = time.perf_counter()
+            bind_celery_task(task_name=task_name)
+            status = "success"
+            try:
+                return func(*args, **kwargs)
+            except Exception as exc:
+                status = "error"
+                _record_task_error(task_name, exc)
+                raise
+            finally:
+                _record_task_run(task_name, status, time.perf_counter() - start)
+
+        return cast(F, _sync_wrapper)
+
+    return _decorator
+
+
+@contextmanager
+def record_etl_run(job: str):
+    """Context manager capturing ETL run durations."""
+    start = time.perf_counter()
+    try:
+        yield
+    except Exception:
+        _record_etl_duration(job, time.perf_counter() - start)
+        record_etl_retry(job, reason="exception")
+        raise
+    else:
+        _record_etl_duration(job, time.perf_counter() - start)
+
+
+def _record_etl_duration(job: str, duration: float) -> None:
+    labels = _with_base_labels(job=job or "unknown")
+    ETL_RUNS_TOTAL.labels(**labels).inc()
+    ETL_DURATION_SECONDS.labels(**labels).observe(max(duration, 0.0))
+
+
+def record_etl_batch(job: str, *, processed: int, errors: int, duration_s: float) -> None:
+    """Update per-batch ETL metrics."""
+    labels = _with_base_labels(job=job or "unknown")
+    if processed:
+        ETL_PROCESSED_RECORDS_TOTAL.labels(**labels).inc(max(processed, 0))
+    ETL_DURATION_SECONDS.labels(**labels).observe(max(duration_s, 0.0))
+    if errors:
+        ETL_RETRY_TOTAL.labels(**_with_base_labels(job=job or "unknown", reason="error")).inc(max(errors, 0))
+
+
+def record_etl_skip(job: str) -> None:
+    """Increment skip counter for ETL runs that were deduplicated."""
+    _record_etl_duration(job, 0.0)
+    ETL_RETRY_TOTAL.labels(**_with_base_labels(job=job or "unknown", reason="skipped")).inc()
+
+
+def record_etl_retry(job: str, reason: str) -> None:
+    """Increment retry counter for ETL HTTP attempts."""
+    labels = _with_base_labels(job=job or "unknown", reason=(reason or "unknown"))
+    ETL_RETRY_TOTAL.labels(**labels).inc()
+
+
+def record_http_client_request(target: str, method: str, status_code: int | None, duration_s: float) -> None:
+    """Record outbound HTTP client metrics."""
+    target = (target or "unknown").lower()
+    method = (method or "GET").upper()
+    status_class = _status_class(status_code)
+    duration = max(duration_s, 0.0)
+    HTTP_CLIENT_REQUESTS_TOTAL.labels(
+        **_with_base_labels(target=target, method=method, status_class=status_class)
+    ).inc()
+    HTTP_CLIENT_REQUEST_DURATION_SECONDS.labels(**_with_base_labels(target=target, method=method)).observe(duration)
+
+
+def _status_class(status_code: int | None) -> str:
+    if status_code is None:
+        return "error"
+    hundreds = int(status_code) // 100
+    return f"{hundreds}xx"
+
+
+def flush_textfile(service: str | None = None) -> Path | None:
+    """Flush the shared registry to the configured textfile directory."""
+    exporter = _TEXTFILE_EXPORTER
+    if exporter is None:
+        return None
+    if service and service != exporter.service:
+        exporter.service = service
+    return exporter.flush()
+
+
+class _TextfileExporter:
+    def __init__(self, directory: Path, service: str, interval_s: float) -> None:
+        self.directory = directory
+        self.service = service
+        self.interval_s = max(interval_s, 0.0)
+        self._thread: threading.Thread | None = None
+        self._stop = threading.Event()
+
+    def start(self) -> None:
+        if self.interval_s <= 0:
+            return
+        if self._thread is not None:
+            return
+        thread = threading.Thread(target=self._loop, name=f"metrics-textfile-{self.service}", daemon=True)
+        self._thread = thread
+        thread.start()
+
+    def _loop(self) -> None:
+        while not self._stop.wait(self.interval_s):
+            try:
+                self.flush()
+            except Exception:
+                logger.debug("metrics.textfile_flush_failed", exc_info=True)
+
+    def flush(self) -> Path:
+        self.directory.mkdir(parents=True, exist_ok=True)
+        path = self.directory / f"awa_{self.service}.prom"
+        tmp_path = path.with_suffix(".tmp")
+        payload = generate_latest(REGISTRY)
+        with tmp_path.open("wb") as fh:
+            fh.write(payload)
+        os.replace(tmp_path, path)
+        return path
+
+
+def _maybe_start_textfile_exporter() -> None:
+    directory = (getattr(settings, "METRICS_TEXTFILE_DIR", "") or "").strip()
+    if not directory:
+        return
+    interval = float(getattr(settings, "METRICS_FLUSH_INTERVAL_S", 15.0) or 0.0)
+    path = Path(directory)
+    with _TEXTFILE_LOCK:
+        exporter = _TextfileExporter(path, _SERVICE_NAME, interval)
+        exporter.start()
+        globals()["_TEXTFILE_EXPORTER"] = exporter
+
+
 __all__ = [
     "CONTENT_TYPE_LATEST",
     "HTTP_REQUESTS_TOTAL",
     "HTTP_REQUEST_DURATION_SECONDS",
     "TASK_RUNS_TOTAL",
     "TASK_DURATION_SECONDS",
-    "TASK_FAILURES_TOTAL",
+    "TASK_ERRORS_TOTAL",
     "ETL_RUNS_TOTAL",
-    "ETL_FAILURES_TOTAL",
+    "ETL_PROCESSED_RECORDS_TOTAL",
     "ETL_RETRY_TOTAL",
     "ETL_DURATION_SECONDS",
+    "HTTP_CLIENT_REQUESTS_TOTAL",
+    "HTTP_CLIENT_REQUEST_DURATION_SECONDS",
     "QUEUE_BACKLOG",
     "MetricsMiddleware",
     "REGISTRY",
     "enable_celery_metrics",
+    "flush_textfile",
+    "instrument_task",
     "init",
     "on_task_failure",
     "on_task_postrun",
     "on_task_prerun",
+    "record_etl_batch",
     "record_etl_run",
     "record_etl_skip",
+    "record_http_client_request",
     "record_etl_retry",
     "register_metrics_endpoint",
     "start_worker_metrics_http_if_enabled",

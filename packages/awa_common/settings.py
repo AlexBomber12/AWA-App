@@ -62,6 +62,8 @@ class Settings(BaseSettings):
     APP_ENV: AppRuntimeEnv = "dev"
     APP_VERSION: str = "0.0.0"
     SERVICE_NAME: str = "api"
+    METRICS_TEXTFILE_DIR: str = ""
+    METRICS_FLUSH_INTERVAL_S: float = 15.0
 
     # Database & cache
     DATABASE_URL: str = Field(default="postgresql+psycopg://app:app@db:5432/app")
@@ -198,6 +200,7 @@ class Settings(BaseSettings):
             "APP_NAME": self.APP_NAME,
             "APP_ENV": self.APP_ENV,
             "APP_VERSION": self.APP_VERSION,
+            "VERSION": self.VERSION,
             "SERVICE_NAME": self.SERVICE_NAME,
             "DATABASE_URL": _mask(self.DATABASE_URL),
             "PG_ASYNC_DSN": _mask(self.PG_ASYNC_DSN),
@@ -223,7 +226,22 @@ class Settings(BaseSettings):
             "RATE_LIMIT_ADMIN": self.RATE_LIMIT_ADMIN,
             "MAX_REQUEST_BYTES": self.MAX_REQUEST_BYTES,
             "HELIUM10_KEY": bool(self.HELIUM10_KEY),
+            "METRICS_TEXTFILE_DIR": bool(self.METRICS_TEXTFILE_DIR),
+            "METRICS_FLUSH_INTERVAL_S": self.METRICS_FLUSH_INTERVAL_S,
         }
+
+    @property
+    def VERSION(self) -> str:
+        for candidate in (
+            getattr(self, "APP_VERSION", None),
+            os.getenv("VERSION"),
+            os.getenv("GIT_SHA"),
+            os.getenv("COMMIT_SHA"),
+        ):
+            value = (candidate or "").strip() if isinstance(candidate, str) else candidate
+            if value:
+                return str(value)
+        return "0.0.0"
 
 
 settings: Settings = Settings()
