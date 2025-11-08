@@ -19,19 +19,27 @@ from services.etl import http_client
 from . import db_async
 from .client import fetch_fees
 
+_AsyncToSyncCallable = Callable[[Callable[..., Awaitable[Any]]], Callable[..., Any]]
+
+
+def _fallback_async_to_sync(func: Callable[..., Awaitable[Any]]) -> Callable[..., Any]:
+    def _wrapper(*args: Any, **kwargs: Any) -> Any:
+        coroutine = cast(Coroutine[Any, Any, Any], func(*args, **kwargs))
+        return asyncio.run(coroutine)
+
+    return _wrapper
+
+
 try:
-    from asgiref.sync import async_to_sync as _async_to_sync
+    from asgiref.sync import async_to_sync as _runtime_async_to_sync
 except ModuleNotFoundError:  # pragma: no cover - fallback when asgiref missing
-
-    def _async_to_sync(func: Callable[..., Awaitable[Any]]) -> Callable[..., Any]:
-        def _wrapper(*args: Any, **kwargs: Any) -> Any:
-            coroutine = cast(Coroutine[Any, Any, Any], func(*args, **kwargs))
-            return asyncio.run(coroutine)
-
-        return _wrapper
+    _runtime_async_to_sync = None
 
 
-async_to_sync = _async_to_sync
+if _runtime_async_to_sync is None:
+    async_to_sync: _AsyncToSyncCallable = _fallback_async_to_sync
+else:
+    async_to_sync = _runtime_async_to_sync
 
 
 logger = structlog.get_logger(__name__)
