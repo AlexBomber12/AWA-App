@@ -4,7 +4,7 @@ import asyncio
 import time
 from collections.abc import Awaitable, Callable, Coroutine
 from decimal import ROUND_HALF_UP, Decimal
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import httpx
 import structlog
@@ -19,7 +19,10 @@ from services.etl import http_client
 from . import db_async
 from .client import fetch_fees
 
-_AsyncToSyncCallable = Callable[[Callable[..., Awaitable[Any]]], Callable[..., Any]]
+if TYPE_CHECKING:  # pragma: no cover - typing helper
+    from asgiref.sync import async_to_sync as _AsyncToSyncType
+else:
+    _AsyncToSyncType = Callable[[Callable[..., Awaitable[Any]]], Callable[..., Any]]
 
 
 def _fallback_async_to_sync(func: Callable[..., Awaitable[Any]]) -> Callable[..., Any]:
@@ -30,19 +33,18 @@ def _fallback_async_to_sync(func: Callable[..., Awaitable[Any]]) -> Callable[...
     return _wrapper
 
 
-_runtime_async_to_sync: _AsyncToSyncCallable | None = None
-
+_async_to_sync_value: Any | None = None
 try:
     from asgiref.sync import async_to_sync as _imported_async_to_sync
 except ModuleNotFoundError:  # pragma: no cover - fallback when asgiref missing
-    _imported_async_to_sync = None
+    pass
 else:
-    _runtime_async_to_sync = _imported_async_to_sync
+    _async_to_sync_value = _imported_async_to_sync
 
-if _runtime_async_to_sync is None:
-    async_to_sync: _AsyncToSyncCallable = _fallback_async_to_sync
+if _async_to_sync_value is None:
+    async_to_sync: _AsyncToSyncType = _fallback_async_to_sync
 else:
-    async_to_sync = _runtime_async_to_sync
+    async_to_sync = cast(_AsyncToSyncType, _async_to_sync_value)
 
 
 logger = structlog.get_logger(__name__)
