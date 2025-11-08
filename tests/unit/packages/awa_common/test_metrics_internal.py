@@ -39,7 +39,7 @@ def test_create_registry_uses_multiprocess(monkeypatch):
             calls.append(registry)
 
     monkeypatch.setenv("PROMETHEUS_MULTIPROC_DIR", "/tmp/prom")
-    monkeypatch.setattr(metrics, "MultiProcessCollector", FakeCollector)
+    monkeypatch.setattr(metrics, "_load_multiprocess_collector", lambda: FakeCollector)
     registry = metrics._create_registry()
     assert calls == [registry]
 

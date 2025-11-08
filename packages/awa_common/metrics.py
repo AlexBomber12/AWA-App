@@ -6,7 +6,7 @@ import logging
 import os
 import threading
 import time
-from collections.abc import Callable, Iterable
+from collections.abc import Awaitable, Callable, Iterable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, TypeVar, cast
@@ -28,11 +28,6 @@ from awa_common.settings import settings
 
 F = TypeVar("F", bound=Callable[..., Any])
 
-try:  # pragma: no cover - optional runtime dependency
-    from prometheus_client.multiprocess import MultiProcessCollector
-except Exception:  # pragma: no cover - multiprocess optional in tests
-    MultiProcessCollector = None  # type: ignore
-
 BASE_LABELS = ("service", "env", "version")
 HTTP_BUCKETS = (0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10)
 
@@ -40,9 +35,20 @@ HTTP_BUCKETS = (0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10)
 def _create_registry() -> CollectorRegistry:
     registry = CollectorRegistry()
     multiproc_dir = os.getenv("PROMETHEUS_MULTIPROC_DIR")
-    if multiproc_dir and MultiProcessCollector is not None:
-        MultiProcessCollector(registry)
+    if multiproc_dir:
+        collector = _load_multiprocess_collector()
+        if collector is not None:
+            collector(registry)
     return registry
+
+
+def _load_multiprocess_collector() -> Callable[[CollectorRegistry], None] | None:
+    """Best-effort loader for the Prometheus multiprocess collector."""
+    try:  # pragma: no cover - optional dependency branch
+        from prometheus_client.multiprocess import MultiProcessCollector
+    except Exception:  # pragma: no cover - optional dependency branch
+        return None
+    return cast(Callable[[CollectorRegistry], None], MultiProcessCollector)
 
 
 REGISTRY: CollectorRegistry = _create_registry()
@@ -177,7 +183,7 @@ QUEUE_BACKLOG = Gauge(
 class MetricsMiddleware(BaseHTTPMiddleware):
     """Record Prometheus metrics for FastAPI HTTP requests."""
 
-    async def dispatch(self, request: Request, call_next: Callable[[Request], Any]) -> Response:
+    async def dispatch(self, request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
         start = time.perf_counter()
         method = request.method.upper()
         status_code = 500
@@ -265,7 +271,7 @@ def enable_celery_metrics(
         return
 
     try:
-        from celery import signals  # type: ignore
+        from celery import signals
     except Exception:  # pragma: no cover - Celery not installed in some environments
         return
 
@@ -312,7 +318,7 @@ def on_task_failure(sender: Any, task_id: str, exception: BaseException | None =
         exc_name = exception.__class__.__name__
     TASK_ERRORS_TOTAL.labels(**_with_base_labels(task=task_name, error_type=exc_name)).inc()
     if task_id:
-        logger.debug("celery_task_failure", task_id=task_id)
+        logger.debug("celery_task_failure task_id=%s", task_id)
 
 
 def _maybe_start_backlog_probe(  # noqa: C901
@@ -331,7 +337,7 @@ def _maybe_start_backlog_probe(  # noqa: C901
         return
 
     try:
-        import redis  # type: ignore
+        import redis
     except Exception:  # pragma: no cover - redis dependency optional
         return
 
@@ -350,7 +356,8 @@ def _maybe_start_backlog_probe(  # noqa: C901
                     backlog = client.llen(queue)
                 except Exception:
                     continue
-                QUEUE_BACKLOG.labels(**_with_base_labels(queue=queue)).set(float(backlog))
+                backlog_value = cast(float | int, backlog)
+                QUEUE_BACKLOG.labels(**_with_base_labels(queue=queue)).set(float(backlog_value))
             time.sleep(max(interval, 1))
 
     with _BACKLOG_LOCK:
@@ -397,7 +404,8 @@ def instrument_task(task_name: str) -> Callable[[F], F]:
                 bind_celery_task(task_name=task_name)
                 status = "success"
                 try:
-                    return await func(*args, **kwargs)  # type: ignore[misc]
+                    coroutine = cast(Callable[..., Awaitable[Any]], func)
+                    return await coroutine(*args, **kwargs)
                 except Exception as exc:
                     status = "error"
                     _record_task_error(task_name, exc)
@@ -427,7 +435,7 @@ def instrument_task(task_name: str) -> Callable[[F], F]:
 
 
 @contextmanager
-def record_etl_run(job: str):
+def record_etl_run(job: str) -> Iterator[None]:
     """Context manager capturing ETL run durations."""
     start = time.perf_counter()
     try:
