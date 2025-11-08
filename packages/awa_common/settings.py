@@ -98,13 +98,30 @@ class Settings(BaseSettings):
     ETL_CONNECT_TIMEOUT_S: float = 5.0
     ETL_READ_TIMEOUT_S: float = 30.0
     ETL_TOTAL_TIMEOUT_S: float = 60.0
-    ETL_MAX_RETRIES: int = 5
-    ETL_BACKOFF_BASE_S: float = 0.5
-    ETL_BACKOFF_MAX_S: float = 30.0
-    ETL_RETRY_STATUS_CODES: list[int] = Field(default_factory=lambda: [429, 500, 502, 503, 504])
-    ETL_HTTP_KEEPALIVE_CONNECTIONS: int = 5
+    ETL_POOL_TIMEOUT_S: float = Field(
+        default=5.0,
+        validation_alias=AliasChoices("ETL_POOL_TIMEOUT_S", "ETL_HTTP_POOL_QUEUE_TIMEOUT_S"),
+    )
+    ETL_HTTP_KEEPALIVE: int = Field(
+        default=5,
+        validation_alias=AliasChoices("ETL_HTTP_KEEPALIVE", "ETL_HTTP_KEEPALIVE_CONNECTIONS"),
+    )
     ETL_HTTP_MAX_CONNECTIONS: int = 20
-    ETL_HTTP_POOL_QUEUE_TIMEOUT_S: float | None = None
+    ETL_RETRY_ATTEMPTS: int = Field(
+        default=5,
+        validation_alias=AliasChoices("ETL_RETRY_ATTEMPTS", "ETL_MAX_RETRIES"),
+    )
+    ETL_RETRY_BASE_S: float = Field(
+        default=0.5,
+        validation_alias=AliasChoices("ETL_RETRY_BASE_S", "ETL_BACKOFF_BASE_S"),
+    )
+    ETL_RETRY_MIN_S: float = 0.5
+    ETL_RETRY_MAX_S: float = Field(
+        default=30.0,
+        validation_alias=AliasChoices("ETL_RETRY_MAX_S", "ETL_BACKOFF_MAX_S"),
+    )
+    ETL_RETRY_JITTER_S: float = 1.0
+    ETL_RETRY_STATUS_CODES: list[int] = Field(default_factory=lambda: [429, 500, 502, 503, 504])
 
     # Optional: LLM placeholders (no usage change in this PR)
     LLM_PROVIDER: Literal["STUB", "OPENAI", "VLLM"] = "STUB"
@@ -145,6 +162,28 @@ class Settings(BaseSettings):
     # Fees ingestion / external APIs
     HELIUM10_KEY: str | None = None
     FEES_RAW_TABLE: str = "fees_raw"
+    H10_MAX_CONCURRENCY: int = 5
+    H10_DB_POOL_MAX_SIZE: int = 10
+
+    @property
+    def ETL_HTTP_KEEPALIVE_CONNECTIONS(self) -> int:  # pragma: no cover - compatibility shim
+        return self.ETL_HTTP_KEEPALIVE
+
+    @property
+    def ETL_HTTP_POOL_QUEUE_TIMEOUT_S(self) -> float:  # pragma: no cover - compatibility shim
+        return self.ETL_POOL_TIMEOUT_S
+
+    @property
+    def ETL_MAX_RETRIES(self) -> int:  # pragma: no cover - compatibility shim
+        return self.ETL_RETRY_ATTEMPTS
+
+    @property
+    def ETL_BACKOFF_BASE_S(self) -> float:  # pragma: no cover - compatibility shim
+        return self.ETL_RETRY_BASE_S
+
+    @property
+    def ETL_BACKOFF_MAX_S(self) -> float:  # pragma: no cover - compatibility shim
+        return self.ETL_RETRY_MAX_S
 
     def redacted(self) -> dict:
         def _mask(url: str | None) -> str | None:

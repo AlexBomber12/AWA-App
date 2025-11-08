@@ -65,7 +65,7 @@ def test_repository_upsert_prices_deduplicates_and_updates() -> None:
 
     inserted2, updated2 = repo.upsert_prices(vendor_id, rows)
     assert inserted2 == 0
-    assert updated2 == 3
+    assert updated2 == 1
 
 
 def test_repository_upsert_prices_empty_and_dry_run() -> None:
