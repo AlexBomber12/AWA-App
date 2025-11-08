@@ -18,3 +18,7 @@ Every job produces a `debug-bundle-<job>.tar.gz` artifact even on success. The b
 - Collected CI log files from the workspace
 
 Download the bundle from the workflow run page, extract it locally, and inspect the captured commands (each file includes the executed command and exit code). This consistent artifact makes reproducing failures offline straightforward, even when a job fails before emitting normal logs.
+
+## Docs deployment
+
+MkDocs builds now run in `.github/workflows/docs.yml` with a strict build, Pages artifact upload, and a gated deploy job that only runs on `main` pushes and manual dispatches. After merging updates to this workflow, open the repository **Settings -> Pages -> Build and deployment** panel and set **Source** to **GitHub Actions** so GitHub Pages is allowed to serve the published artifact (GitHub only requires the toggle once per repository).
