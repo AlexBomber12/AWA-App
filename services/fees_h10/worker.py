@@ -20,15 +20,18 @@ from . import db_async
 from .client import fetch_fees
 
 try:
-    from asgiref.sync import async_to_sync as async_to_sync
+    from asgiref.sync import async_to_sync as _async_to_sync
 except ModuleNotFoundError:  # pragma: no cover - fallback when asgiref missing
 
-    def async_to_sync(func: Callable[..., Awaitable[Any]]) -> Callable[..., Any]:
+    def _async_to_sync(func: Callable[..., Awaitable[Any]]) -> Callable[..., Any]:
         def _wrapper(*args: Any, **kwargs: Any) -> Any:
             coroutine = cast(Coroutine[Any, Any, Any], func(*args, **kwargs))
             return asyncio.run(coroutine)
 
         return _wrapper
+
+
+async_to_sync = _async_to_sync
 
 
 logger = structlog.get_logger(__name__)
