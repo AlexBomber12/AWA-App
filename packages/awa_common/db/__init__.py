@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import os
 from urllib.parse import urlparse, urlunparse
 
 from asyncpg import Pool, create_pool
@@ -9,6 +8,7 @@ from sqlalchemy import text
 from sqlalchemy.engine import Connection, Engine
 
 from ..dsn import build_dsn
+from ..utils.env import env_bool
 
 
 def build_sqlalchemy_url() -> str:
@@ -52,7 +52,7 @@ def refresh_mvs(conn: Engine | Connection) -> None:
             refresh_mvs(connection)
         return
 
-    live = os.getenv("ENABLE_LIVE", "1") != "0"
+    live = env_bool("ENABLE_LIVE", default=True)
     idx_exists = bool(
         conn.execute(text("SELECT 1 FROM pg_indexes WHERE indexname = 'ix_v_refund_totals_pk'")).scalar()
     ) and bool(conn.execute(text("SELECT 1 FROM pg_indexes WHERE indexname = 'ix_v_reimb_totals_pk'")).scalar())

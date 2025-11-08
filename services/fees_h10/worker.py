@@ -1,11 +1,14 @@
 import asyncio
 import json
 import logging
-import os
 
 import httpx
 from celery import Celery, shared_task
 from sqlalchemy import create_engine, text
+
+from awa_common.dsn import build_dsn
+from awa_common.settings import settings as SETTINGS
+from awa_common.utils.env import env_str
 
 try:
     # The worker can run as a standalone image where the full `services`
@@ -27,12 +30,16 @@ from .client import fetch_fees
 _init_sentry()
 
 
+def _database_configured() -> bool:
+    return bool(env_str("DATABASE_URL"))
+
+
 def list_active_asins() -> list[str]:
     """Return known ASINs or an empty list if unavailable."""
-    url = os.getenv("DATABASE_URL")
-    if not url:
+    if not _database_configured():
         return []
-    engine = create_engine(url.replace("+asyncpg", "+psycopg"), future=True)
+    url = build_dsn(sync=True)
+    engine = create_engine(url, future=True)
     try:
         with engine.begin() as conn:
             res = conn.execute(text("SELECT asin FROM products"))
@@ -41,7 +48,7 @@ def list_active_asins() -> list[str]:
         return []
 
 
-app = Celery("fees_h10", broker=os.getenv("CELERY_BROKER_URL", "memory://"))
+app = Celery("fees_h10", broker=SETTINGS.BROKER_URL or "memory://")
 
 app.conf.beat_schedule = {"refresh-daily": {"task": "fees.refresh", "schedule": 86400.0}}
 
@@ -68,12 +75,11 @@ async def _bulk(asins: list[str]) -> None:
                 logging.error("h10 fetch failed for %s: %s", a, exc)
         if not rows:
             return
-        url = os.getenv("DATABASE_URL")
-        if not url:
+        if not _database_configured():
             return
-        engine = create_engine(url.replace("+asyncpg", "+psycopg"), future=True)
-        summary = repo.upsert_fees_raw(engine, rows, testing=os.getenv("TESTING") == "1")
-        if summary and os.getenv("TESTING") == "1":
+        engine = create_engine(build_dsn(sync=True), future=True)
+        summary = repo.upsert_fees_raw(engine, rows, testing=SETTINGS.TESTING)
+        if summary and SETTINGS.TESTING:
             logging.info("h10 upsert summary %s", summary)
         engine.dispose()
     finally:

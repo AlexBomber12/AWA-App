@@ -1,10 +1,10 @@
-import os
 from typing import Any
 
+from awa_common.settings import settings as SETTINGS
 from services.etl import http_client
 
 BASE = "https://api.helium10.com/financials/fba-fees/{}"
-H10_KEY = os.getenv("HELIUM10_KEY", "")
+H10_KEY = SETTINGS.HELIUM10_KEY or ""
 
 
 async def fetch_fees(asin: str) -> dict[str, Any]:

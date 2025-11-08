@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import os
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
@@ -25,32 +24,18 @@ from awa_common.settings import settings as SETTINGS
 logger = structlog.get_logger(__name__)
 
 
-def _env_int(name: str, default: int) -> int:
-    try:
-        return int(os.getenv(name, str(default)))
-    except ValueError:
-        return default
-
-
-def _env_float(name: str, default: float) -> float:
-    try:
-        return float(os.getenv(name, str(default)))
-    except ValueError:
-        return default
-
-
 # Keep a handful of idle sockets alive so repeated cron invocations avoid TLS warmups.
-HTTP_POOL_KEEPALIVE_CONNECTIONS = max(0, _env_int("ETL_HTTP_KEEPALIVE_CONNECTIONS", 5))
+HTTP_POOL_KEEPALIVE_CONNECTIONS = max(0, int(SETTINGS.ETL_HTTP_KEEPALIVE_CONNECTIONS))
 # Cap concurrent upstream calls (default 20) to avoid exhausting Keepa/Helium quotas.
-HTTP_POOL_MAX_CONNECTIONS = max(HTTP_POOL_KEEPALIVE_CONNECTIONS, _env_int("ETL_HTTP_MAX_CONNECTIONS", 20))
+HTTP_POOL_MAX_CONNECTIONS = max(HTTP_POOL_KEEPALIVE_CONNECTIONS, int(SETTINGS.ETL_HTTP_MAX_CONNECTIONS))
 # Limit how long tasks wait for a pooled connection; defaults to the connect timeout (10s).
-HTTP_POOL_TIMEOUT_S = _env_float("ETL_HTTP_POOL_QUEUE_TIMEOUT_S", SETTINGS.ETL_CONNECT_TIMEOUT_S)
+HTTP_POOL_TIMEOUT_S = float(SETTINGS.ETL_HTTP_POOL_QUEUE_TIMEOUT_S or SETTINGS.ETL_CONNECT_TIMEOUT_S)
 # Use the same retry budget as the sync ETL client (defaults to 3 attempts).
-HTTP_MAX_RETRIES = max(1, _env_int("ETL_HTTP_MAX_RETRIES", SETTINGS.ETL_MAX_RETRIES))
+HTTP_MAX_RETRIES = max(1, int(SETTINGS.ETL_MAX_RETRIES))
 # Abort retry loops after the global ETL timeout (defaults to 60s).
-HTTP_TOTAL_TIMEOUT_S = _env_float("ETL_HTTP_TOTAL_TIMEOUT_S", SETTINGS.ETL_TOTAL_TIMEOUT_S)
-HTTP_BACKOFF_BASE_S = _env_float("ETL_HTTP_BACKOFF_BASE_S", SETTINGS.ETL_BACKOFF_BASE_S)
-HTTP_BACKOFF_MAX_S = _env_float("ETL_HTTP_BACKOFF_MAX_S", SETTINGS.ETL_BACKOFF_MAX_S)
+HTTP_TOTAL_TIMEOUT_S = float(SETTINGS.ETL_TOTAL_TIMEOUT_S)
+HTTP_BACKOFF_BASE_S = float(SETTINGS.ETL_BACKOFF_BASE_S)
+HTTP_BACKOFF_MAX_S = float(SETTINGS.ETL_BACKOFF_MAX_S)
 
 _HTTP_CLIENT: httpx.AsyncClient | None = None
 _HTTP_CLIENT_LOCK = asyncio.Lock()

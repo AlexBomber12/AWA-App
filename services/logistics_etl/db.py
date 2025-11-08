@@ -3,7 +3,7 @@ from __future__ import annotations
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
-from .dsn import build_dsn
+from awa_common.dsn import build_dsn
 
 ENGINE: AsyncEngine | None = None
 

@@ -498,24 +498,6 @@ Return Postgres DSN from environment variables.
 
 # price\_importer.services\_common.keepa
 
-<a id="price_importer.services_common.dsn"></a>
-
-# price\_importer.services\_common.dsn
-
-<a id="price_importer.services_common.dsn.build_dsn"></a>
-
-#### build\_dsn
-
-```python
-def build_dsn(sync: bool = True) -> str
-```
-
-Return safe DSN.
-
-Prefers explicit DSNs via ``PG_SYNC_DSN``/``PG_ASYNC_DSN`` or ``DATABASE_URL``.
-Falls back to individual PG_* variables.
-sync=True → SQLAlchemy (+psycopg) else plain asyncpg.
-
 <a id="price_importer.services_common.db"></a>
 
 # price\_importer.services\_common.db
@@ -774,26 +756,6 @@ Daily logistics ETL job.
 <a id="logistics_etl.flow"></a>
 
 # logistics\_etl.flow
-
-<a id="logistics_etl.dsn"></a>
-
-# logistics\_etl.dsn
-
-Local DSN builder to avoid cross-service dependency.
-
-<a id="logistics_etl.dsn.build_dsn"></a>
-
-#### build\_dsn
-
-```python
-def build_dsn(sync: bool = True) -> str
-```
-
-Return a Postgres DSN assembled from environment variables.
-
-Prefers explicit DSNs via ``PG_SYNC_DSN``/``PG_ASYNC_DSN`` or
-``DATABASE_URL``. Falls back to individual PG_* settings and raises an
-error when any required variable is missing.
 
 <a id="logistics_etl.db"></a>
 

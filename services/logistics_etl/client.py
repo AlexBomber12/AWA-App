@@ -4,7 +4,6 @@ import asyncio
 import csv
 import io
 import logging
-import os
 from dataclasses import asdict, dataclass
 from datetime import date, datetime
 from typing import Any
@@ -14,7 +13,9 @@ import anyio
 import httpx
 from httpx import HTTPStatusError
 
-URL = os.getenv("FREIGHT_API_URL", "https://example.com/freight.csv")
+from awa_common.settings import Settings
+
+URL = Settings().FREIGHT_API_URL
 
 __all__ = [
     "URL",
@@ -39,20 +40,6 @@ class SourcePayload:
     error: Exception | None = None
 
 
-def _timeout_setting() -> int:
-    try:
-        return int(os.getenv("LOGISTICS_TIMEOUT_S", "15"))
-    except ValueError:
-        return 15
-
-
-def _retry_setting() -> int:
-    try:
-        return int(os.getenv("LOGISTICS_RETRIES", "3"))
-    except ValueError:
-        return 3
-
-
 async def fetch_sources() -> list[dict[str, Any]]:
     """
     Fetch logistics rate sources configured via LOGISTICS_SOURCES.
@@ -60,13 +47,14 @@ async def fetch_sources() -> list[dict[str, Any]]:
     Returns a list of dictionaries each containing:
         source, raw (bytes), meta (dict), rows (normalized list), error (Exception|None)
     """
-    sources_env = os.getenv("LOGISTICS_SOURCES", "")
+    cfg = Settings()
+    sources_env = cfg.LOGISTICS_SOURCES or ""
     uris = [s.strip() for s in sources_env.split(",") if s.strip()]
     if not uris:
         return []
 
-    timeout_s = _timeout_setting()
-    retries = _retry_setting()
+    timeout_s = int(cfg.LOGISTICS_TIMEOUT_S)
+    retries = int(cfg.LOGISTICS_RETRIES)
     snapshots: list[SourcePayload] = []
 
     for uri in uris:
@@ -89,12 +77,17 @@ async def fetch_rates() -> list[dict[str, object]]:
     Backward-compatible shim used by legacy callers.
     Downloads the single FREIGHT_API_URL CSV and returns parsed rows.
     """
-    url = URL
+    cfg = Settings()
+    url = cfg.FREIGHT_API_URL
     if not url:
         return []
 
     try:
-        raw, _ = await _download_with_retries(url, timeout_s=_timeout_setting(), retries=_retry_setting())
+        raw, _ = await _download_with_retries(
+            url,
+            timeout_s=int(cfg.LOGISTICS_TIMEOUT_S),
+            retries=int(cfg.LOGISTICS_RETRIES),
+        )
     except Exception:
         return []
 

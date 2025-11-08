@@ -1,6 +1,6 @@
 from sqlalchemy import create_engine, text
 
-from .dsn import build_dsn
+from awa_common.dsn import build_dsn
 
 
 def list_active_asins() -> list[str]:

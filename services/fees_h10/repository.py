@@ -1,13 +1,14 @@
-import os
 from collections.abc import Iterable, Mapping
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
+from awa_common.settings import settings as SETTINGS
+
 
 def _fees_table() -> str:
-    return os.getenv("FEES_RAW_TABLE", "fees_raw")
+    return cast(str, getattr(SETTINGS, "FEES_RAW_TABLE", "fees_raw"))
 
 
 def upsert_fees_raw(
