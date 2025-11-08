@@ -5,13 +5,13 @@ The monorepo splits tests into three execution groups so contributors can move q
 ## Test groups
 ### Unit
 - **Scope:** Pure Python logic, FastAPI routes with mocked dependencies, and helpers that do not require Docker services.
-- **Command:** `pytest -q -m "not integration and not live"`
+- **Command:** `./scripts/ci/run_unit.sh` (wraps `pytest -q -m "not integration and not live"` with coverage enabled)
 - **Expectations:** Deterministic, hermetic, no external I/O (network, SMTP, or databases). Use the fixtures from `tests/conftest.py` (`faker_seed`, `env_overrides`, `http_mock`, `smtp_mock`, `now_utc`, etc.) to stub side effects.
 - **CI:** Runs in the `unit` job (`make qa` delegates to the same subset) and collects coverage.
 
 ### Integration
 - **Scope:** Modules that need Postgres, Redis, or docker-compose orchestration (e.g., price importer CLI, Alembic migrations, API-to-DB flows).
-- **Command:** `docker compose up -d --wait db redis api worker` followed by `pytest -q -m integration`
+- **Command:** `docker compose up -d --wait db redis api worker` followed by `pytest -q -m integration tests/integration`
 - **Expectations:** Real services backed by the compose stack, but still idempotent. Tests may seed fixture data through SQLAlchemy or the exposed APIs. Use the `tests/integration/**` layout to group service-specific suites (e.g., `tests/integration/price_importer/`).
 - **CI:** Runs in the `integration` workflow after the stack is built. Coverage is *not* collected here; only the unit job contributes to the coverage gate.
 
@@ -30,12 +30,12 @@ The monorepo splits tests into three execution groups so contributors can move q
    ```
 2. **Unit slice (fast feedback)**
    ```bash
-   pytest -q -m "not integration and not live"
+   ./scripts/ci/run_unit.sh
    ```
 3. **Integration slice**
    ```bash
    docker compose up -d --wait db redis api worker
-   pytest -q -m integration
+   pytest -q -m integration tests/integration
    ```
 4. **Selective targets** — run any path directly (`pytest -q tests/unit/services/price_importer/test_parser.py`) when iterating on a single module.
 
