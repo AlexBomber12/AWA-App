@@ -107,3 +107,14 @@ async def test_fetch_single_limits_concurrency(monkeypatch: pytest.MonkeyPatch) 
     await worker._run_refresh(["A1", "A2", "A3", "A4"])
 
     assert running["max"] <= worker.SETTINGS.H10_MAX_CONCURRENCY
+
+
+def test_fallback_async_to_sync_executes_event_loop() -> None:
+    from services.fees_h10 import worker
+
+    async def sample() -> str:
+        await asyncio.sleep(0)
+        return "ok"
+
+    sync_fn = worker._fallback_async_to_sync(sample)
+    assert sync_fn() == "ok"

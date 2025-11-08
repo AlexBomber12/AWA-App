@@ -169,3 +169,57 @@ async def test_fetch_sources_excel(monkeypatch):
     assert snapshots[0]["rows"][0]["carrier"] == "Maersk"
     assert snapshots[0]["rows"][0]["eur_per_kg"] == pytest.approx(0.85)
     monkeypatch.delenv("LOGISTICS_SOURCES", raising=False)
+
+
+@pytest.mark.asyncio
+async def test_fetch_sources_unsupported_format(monkeypatch):
+    monkeypatch.setenv("LOGISTICS_SOURCES", "http://example.com/file.bin")
+
+    async def fake_download(*_args, **_kwargs):
+        return b"raw", {"content_type": "application/octet-stream"}
+
+    def raise_unsupported(*_args, **_kwargs):
+        raise client.UnsupportedFileFormatError("bad format")
+
+    monkeypatch.setattr(client, "_download_with_retries", fake_download)
+    monkeypatch.setattr(client, "_parse_rows", raise_unsupported)
+
+    with pytest.raises(client.UnsupportedFileFormatError):
+        await client.fetch_sources()
+
+    monkeypatch.delenv("LOGISTICS_SOURCES", raising=False)
+
+
+@pytest.mark.asyncio
+async def test_download_http_falls_back_to_content(monkeypatch):
+    class DummyResponse:
+        def __init__(self) -> None:
+            self.headers = {"content-type": "text/csv"}
+            self.content = b"carrier,origin\n"
+
+        def raise_for_status(self) -> None:
+            return None
+
+    class DummyStream:
+        async def __aenter__(self_inner):
+            return DummyResponse()
+
+        async def __aexit__(self_inner, exc_type, exc, tb):
+            return False
+
+    class DummyClient:
+        def __init__(self) -> None:
+            self.called = False
+
+        def stream(self, *_args, **_kwargs):
+            self.called = True
+            return DummyStream()
+
+    async def fake_get_client():
+        return DummyClient()
+
+    monkeypatch.setattr(client.http_client, "get_client", fake_get_client)
+
+    body, meta = await client._download_http("https://example.com/data.csv")
+    assert body.startswith(b"carrier")
+    assert meta["content_type"] == "text/csv"

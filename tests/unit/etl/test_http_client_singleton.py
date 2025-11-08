@@ -75,3 +75,18 @@ async def test_fetch_json_logs_warning_on_error(monkeypatch: pytest.MonkeyPatch)
 
     assert events
     assert events[0]["event"] == "etl_http.request_failed"
+
+
+@pytest.mark.anyio
+async def test_get_client_delegates_to_private(monkeypatch: pytest.MonkeyPatch) -> None:
+    from services.etl import http_client
+
+    called = {}
+
+    async def fake_get():
+        called["hit"] = True
+        return "client"
+
+    monkeypatch.setattr(http_client, "_get_client", fake_get, raising=False)
+    assert await http_client.get_client() == "client"
+    assert called["hit"] is True
