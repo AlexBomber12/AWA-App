@@ -1,76 +1,52 @@
 ---
-name: docs
+name: Docs
 
 on:
-  workflow_call:
-    inputs:
-      deploy:
-        type: boolean
-        required: false
-        default: false
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  workflow_dispatch:
 
 permissions:
   contents: read
   pages: write
   id-token: write
 
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
 jobs:
   build:
-    outputs:
-      site_built: ${{ steps.docs_build.outputs.site_built }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
-          cache: 'pip'
-
-      - name: Install docs deps (conditional)
+          python-version: "3.12"
+          cache: pip
+      - name: Install MkDocs deps
         run: |
-          if [ -f mkdocs.yml ]; then
-            python -m pip install -U pip
-            pip install mkdocs mkdocs-material mkdocs-redirects
-          else
-            echo "No mkdocs.yml; skipping docs deps"
-          fi
-
-      - name: Build docs (strict)
-        id: docs_build
-        run: |
-          if [ -f mkdocs.yml ]; then
-            mkdocs build --strict
-            echo "site_built=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "No mkdocs.yml; nothing to build"
-            echo "site_built=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Upload docs artifact
-        if: ${{ steps.docs_build.outputs.site_built == 'true' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: docs-site
-          path: site
-
-      - name: Configure Pages
-        if: ${{ inputs.deploy && steps.docs_build.outputs.site_built == 'true' }}
-        uses: actions/configure-pages@v5
-        with:
-          enablement: true
-
-      - name: Upload Pages artifact
-        if: ${{ inputs.deploy && steps.docs_build.outputs.site_built == 'true' }}
+          if [ -f docs/requirements.txt ]; then pip install -r docs/requirements.txt; else pip install mkdocs mkdocs-material; fi
+      - name: Build
+        run: mkdocs build --strict
+      - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: site
 
   deploy:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     needs: build
-    if: ${{ inputs.deploy && needs.build.outputs.site_built == 'true' }}
     runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      pages: write
+      id-token: write
     steps:
-      - name: Deploy to GitHub Pages
+      - uses: actions/configure-pages@v5
+      - id: deployment
         uses: actions/deploy-pages@v4

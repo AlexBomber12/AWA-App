@@ -45,3 +45,5 @@ The AWA App monorepo powers wholesale automation: ETL agents ingest marketplace 
 - [CI Debug](docs/CI_debug.md) — mirror log recipe, artifact locations, and triage checklist.
 
 The docs site is built with MkDocs Material (`mkdocs serve` for local preview, `mkdocs build` in CI). Start at [docs/index.md](docs/index.md) for a curated list of topics, or browse the new sections above directly from GitHub.
+
+After merging docs changes that touch the deployment workflow, go to **Settings -> Pages -> Build and deployment -> Source** and select **GitHub Actions** so the Pages environment follows the new pipeline (GitHub only needs this confirmation once per repo).
