@@ -15,15 +15,18 @@ from awa_common.metrics import instrument_task as _instrument_task
 from services.alert_bot import worker as alerts_worker
 from services.worker.celery_app import celery_app
 
+
+def _fallback_async_to_sync(func: Callable[..., Any]) -> Callable[..., Any]:
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        return asyncio.run(func(*args, **kwargs))
+
+    return wrapper
+
+
 try:  # pragma: no cover - fallback when asgiref is missing
     from asgiref.sync import async_to_sync as _async_to_sync
 except ModuleNotFoundError:  # pragma: no cover - allows tests without asgiref
-
-    def _async_to_sync(func: Callable[..., Any]) -> Callable[..., Any]:
-        def wrapper(*args: Any, **kwargs: Any) -> Any:
-            return asyncio.run(func(*args, **kwargs))
-
-        return wrapper
+    _async_to_sync = _fallback_async_to_sync
 
 
 async_to_sync: Callable[..., Any] = _async_to_sync
