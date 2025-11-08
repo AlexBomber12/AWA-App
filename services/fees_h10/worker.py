@@ -4,7 +4,7 @@ import asyncio
 import time
 from collections.abc import Awaitable, Callable, Coroutine
 from decimal import ROUND_HALF_UP, Decimal
-from typing import TYPE_CHECKING, Any, cast
+from typing import Any, cast
 
 import httpx
 import structlog
@@ -19,10 +19,7 @@ from services.etl import http_client
 from . import db_async
 from .client import fetch_fees
 
-if TYPE_CHECKING:  # pragma: no cover - typing helper
-    from asgiref.sync import async_to_sync as _AsyncToSyncType
-else:
-    _AsyncToSyncType = Callable[[Callable[..., Awaitable[Any]]], Callable[..., Any]]
+_AsyncToSyncType = Callable[[Callable[..., Awaitable[Any]]], Callable[..., Any]]
 
 
 def _fallback_async_to_sync(func: Callable[..., Awaitable[Any]]) -> Callable[..., Any]:
