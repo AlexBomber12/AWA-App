@@ -179,6 +179,32 @@ QUEUE_BACKLOG = Gauge(
     registry=REGISTRY,
 )
 
+ALERTS_NOTIFICATIONS_SENT_TOTAL = Counter(
+    "alerts_notifications_sent_total",
+    "Alert notifications delivered successfully",
+    ("rule", "channel", *BASE_LABELS),
+    registry=REGISTRY,
+)
+ALERTS_NOTIFICATIONS_FAILED_TOTAL = Counter(
+    "alerts_notifications_failed_total",
+    "Alert notification attempts that failed",
+    ("rule", "channel", "error_type", *BASE_LABELS),
+    registry=REGISTRY,
+)
+ALERTS_RULE_EVALUATIONS_TOTAL = Counter(
+    "alerts_rule_evaluations_total",
+    "Alert rule evaluation outcomes",
+    ("rule", "result", *BASE_LABELS),
+    registry=REGISTRY,
+)
+ALERTS_RULE_DURATION_SECONDS = Histogram(
+    "alerts_rule_duration_seconds",
+    "Alert rule evaluation duration in seconds",
+    ("rule", *BASE_LABELS),
+    buckets=HTTP_BUCKETS,
+    registry=REGISTRY,
+)
+
 
 class MetricsMiddleware(BaseHTTPMiddleware):
     """Record Prometheus metrics for FastAPI HTTP requests."""
