@@ -283,10 +283,64 @@ jobs:
             echo "can_comment=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: actions/download-artifact@v4
+      - name: Collect artifact IDs
+        id: artifacts
+        uses: actions/github-script@v7
         with:
+          script: |
+            const { owner, repo } = context.repo;
+            const run_id = context.runId;
+            const artifacts = await github.paginate(
+              github.rest.actions.listWorkflowRunArtifacts,
+              { owner, repo, run_id, per_page: 100 }
+            );
+            const formatIds = (filterFn) =>
+              artifacts.filter(filterFn).map((a) => String(a.id)).join('\n');
+            const findId = (name) =>
+              artifacts.find((a) => a.name === name)?.id?.toString() ?? '';
+            core.setOutput('log_ids', formatIds((a) => a.name.startsWith('logs-')));
+            core.setOutput('coverage_ids', formatIds((a) => /coverage/i.test(a.name)));
+            core.setOutput('gitleaks_ids', formatIds((a) => a.name.startsWith('gitleaks')));
+            core.setOutput('diff_id', findId('diff-coverage'));
+            core.setOutput('integration_id', findId('integration-test-artifacts'));
+
+      - name: Download log artifacts
+        if: steps.artifacts.outputs.log_ids != ''
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ steps.artifacts.outputs.log_ids }}
           path: artifacts
           merge-multiple: true
+
+      - name: Download coverage artifacts
+        if: steps.artifacts.outputs.coverage_ids != ''
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ steps.artifacts.outputs.coverage_ids }}
+          path: artifacts
+          merge-multiple: true
+
+      - name: Download gitleaks artifacts
+        if: steps.artifacts.outputs.gitleaks_ids != ''
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ steps.artifacts.outputs.gitleaks_ids }}
+          path: artifacts
+          merge-multiple: true
+
+      - name: Download diff coverage artifact
+        if: steps.artifacts.outputs.diff_id != ''
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ steps.artifacts.outputs.diff_id }}
+          path: artifacts
+
+      - name: Download integration junit artifacts
+        if: steps.artifacts.outputs.integration_id != ''
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ steps.artifacts.outputs.integration_id }}
+          path: artifacts
 
       - name: Prepare debug-bundle dirs
         if: always()
