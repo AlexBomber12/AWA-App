@@ -101,3 +101,9 @@ async def test_get_sku_chart_handles_invalid_values():
     payload = await sku_module.get_sku("B000ODD", session=session)
 
     assert [point.model_dump() for point in payload.chartData] == [{"date": "", "price": 0.0}]
+
+
+def test_roi_view_name_requires_string(monkeypatch):
+    monkeypatch.setattr(sku_module, "current_roi_view", lambda: object())
+    with pytest.raises(TypeError):
+        sku_module._roi_view_name()

@@ -102,7 +102,7 @@ async def test_approve_raises_when_no_asins():
             return types.SimpleNamespace(getlist=lambda key: [])
 
     with pytest.raises(HTTPException) as excinfo:
-        await roi_module.approve(DummyRequest(), session=object())
+        await roi_module.approve(DummyRequest(), session=object(), _=object(), __=object())
     assert excinfo.value.status_code == 400
 
 

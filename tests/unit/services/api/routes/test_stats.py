@@ -99,6 +99,66 @@ async def test_roi_trend_handles_multiple_columns(monkeypatch):
     assert resp.points[0].month == "2024-01-01"
 
 
+@pytest.mark.asyncio
+async def test_kpi_invalid_view_returns_400(monkeypatch):
+    monkeypatch.setenv("STATS_USE_SQL", "1")
+
+    def _raise_invalid():
+        raise stats_module.InvalidROIViewError("bad view")
+
+    monkeypatch.setattr(stats_module, "current_roi_view", _raise_invalid)
+    with pytest.raises(stats_module.HTTPException) as excinfo:
+        await stats_module.kpi(session=DummyDB({}))
+    assert excinfo.value.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_roi_by_vendor_invalid_view_returns_400(monkeypatch):
+    monkeypatch.setenv("STATS_USE_SQL", "1")
+    monkeypatch.setattr(
+        stats_module,
+        "current_roi_view",
+        lambda: (_ for _ in ()).throw(stats_module.InvalidROIViewError("nope")),
+    )
+    with pytest.raises(stats_module.HTTPException) as excinfo:
+        await stats_module.roi_by_vendor(session=DummyDB({}))
+    assert excinfo.value.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_roi_trend_invalid_view_returns_400(monkeypatch):
+    monkeypatch.setenv("STATS_USE_SQL", "1")
+
+    def _raise_invalid():
+        raise stats_module.InvalidROIViewError("bad view")
+
+    monkeypatch.setattr(stats_module, "current_roi_view", _raise_invalid)
+    with pytest.raises(stats_module.HTTPException) as excinfo:
+        await stats_module.roi_trend(session=DummyDB({}))
+    assert excinfo.value.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_kpi_returns_defaults_without_sql(monkeypatch):
+    monkeypatch.delenv("STATS_USE_SQL", raising=False)
+    result = await stats_module.kpi(session=DummyDB({}))
+    assert result.kpi.products == 0
+
+
+@pytest.mark.asyncio
+async def test_roi_by_vendor_returns_empty_without_sql(monkeypatch):
+    monkeypatch.delenv("STATS_USE_SQL", raising=False)
+    resp = await stats_module.roi_by_vendor(session=DummyDB({}))
+    assert resp.items == []
+
+
+@pytest.mark.asyncio
+async def test_roi_trend_returns_empty_without_sql(monkeypatch):
+    monkeypatch.delenv("STATS_USE_SQL", raising=False)
+    resp = await stats_module.roi_trend(session=DummyDB({}))
+    assert resp.points == []
+
+
 @dataclass
 class _ScalarResult:
     value: int

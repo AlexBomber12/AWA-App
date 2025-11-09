@@ -27,3 +27,19 @@ def test_current_roi_view_cache(monkeypatch):
     assert first == cached  # cache hit
     refreshed = roi_views.current_roi_view(ttl_seconds=0)
     assert refreshed == "mat_v_roi_full"
+
+
+def test_get_quoted_roi_view(monkeypatch):
+    monkeypatch.setenv("ROI_VIEW_NAME", "v_roi_full")
+    roi_views.current_roi_view(ttl_seconds=0)
+    assert roi_views.get_quoted_roi_view() == '"v_roi_full"'
+
+
+def test_quote_identifier_rejects_empty_segments():
+    with pytest.raises(roi_views.InvalidROIViewError):
+        roi_views.quote_identifier("public..view")
+
+
+def test_quote_identifier_rejects_empty_string():
+    with pytest.raises(roi_views.InvalidROIViewError):
+        roi_views.quote_identifier("")
