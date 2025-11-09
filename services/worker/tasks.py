@@ -25,14 +25,16 @@ def _fallback_async_to_sync(func: Callable[..., Any]) -> Callable[..., Any]:
 
 
 try:  # pragma: no cover - fallback when asgiref is missing
-    from asgiref.sync import async_to_sync as _asgiref_async_to_sync
+    from asgiref.sync import async_to_sync as _asu_async_to_sync
+
+    _asgiref_async_to_sync: Callable[..., Any] | None = _asu_async_to_sync
 except ModuleNotFoundError:  # pragma: no cover - allows tests without asgiref
     _asgiref_async_to_sync = None
 
 
 def _resolve_async_to_sync() -> Callable[..., Any]:
     if _asgiref_async_to_sync is not None:
-        return cast(Callable[..., Any], _asgiref_async_to_sync)
+        return _asgiref_async_to_sync
     try:
         module = importlib.import_module("asgiref.sync")
         func = getattr(module, "async_to_sync", None)
