@@ -382,12 +382,18 @@ jobs:
           docker network create awa-e2e || true
           docker run -d --name awa-e2e-postgres --network awa-e2e \
             -e POSTGRES_DB=awa -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres postgres:16
-          for _ in {1..12}; do
+          for attempt in $(seq 1 24); do
             if docker exec awa-e2e-postgres pg_isready -U postgres -d awa; then
               break
             fi
+            echo "Waiting for Postgres... (${attempt}/24)"
             sleep 5
           done
+          if ! docker exec awa-e2e-postgres pg_isready -U postgres -d awa > /dev/null; then
+            echo "Postgres failed to become ready" >&2
+            docker logs awa-e2e-postgres || true
+            exit 1
+          fi
           docker run -d --name awa-e2e-api --network awa-e2e -p 8000:8000 \
             -e DATABASE_URL=postgresql+psycopg://postgres:postgres@awa-e2e-postgres:5432/awa \
             -e PORT=8000 \
