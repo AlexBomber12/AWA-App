@@ -113,3 +113,17 @@ components in `packages/awa_common` to deliver repeatable pipelines that survive
 
 Using the shared guard, HTTP client, and metrics ensures ETL behaviour is predictable and observable in
 all environments.
+
+## ROI / Returns Materialized Views
+
+- The stats APIs (`/stats/*` and `/score`) query the ROI view configured via `ROI_VIEW_NAME`. Point it
+  at `mat_v_roi_full` in production so requests hit the materialized view refreshed by the
+  `db.refresh_roi_mvs` Celery task (defined in `services/worker/maintenance.py`). The task runs after
+  every bulk ROI import and during nightly maintenance, keeping `mat_v_roi_full` and
+  `mat_fees_expanded` current.
+- Returns aggregations default to the live table, but you can switch them to a lightweight view such
+  as `mat_returns_agg` by setting `RETURNS_STATS_VIEW_NAME`. The async routes will prefer that view
+  while preserving parameterised filters.
+- ROI view selection and the “does `returns_raw` have a `vendor` column?” check are cached in
+  `services.api.roi_views` using a TTL cache (default 300 s). Override `ROI_CACHE_TTL_SECONDS` if you
+  need shorter refresh intervals—for example during migrations that swap view names or add columns.

@@ -26,32 +26,25 @@ class _FakeResult:
 class _FakeDB:
     def __init__(self, rows: list[dict[str, Any]]) -> None:
         self._rows = rows
+        self.last_statement = None
         self.last_query = ""
         self.last_params: dict[str, Any] | None = None
 
     async def execute(self, sql, params=None):
+        self.last_statement = sql
         self.last_query = str(sql)
         self.last_params = dict(params or {})
-        if "information_schema" in self.last_query:
-            return _FakeResult([], scalar_value=1)
         return _FakeResult(self._rows)
-
-
-@pytest.fixture(autouse=True)
-def _reset_vendor_cache():
-    stats._RETURNS_VENDOR_COLUMN = None
-    yield
-    stats._RETURNS_VENDOR_COLUMN = None
 
 
 @pytest.mark.asyncio
 async def test_returns_filters_apply(monkeypatch):
     monkeypatch.setenv("STATS_USE_SQL", "1")
 
-    async def _always_true(_session):
+    async def _always_true(_session, **_kwargs):
         return True
 
-    monkeypatch.setattr(stats, "_returns_vendor_available", _always_true)
+    monkeypatch.setattr(stats, "returns_vendor_column_exists", _always_true)
     fake_db = _FakeDB(
         [
             {"asin": "A1", "qty": 2, "refund_amount": 5.5},
