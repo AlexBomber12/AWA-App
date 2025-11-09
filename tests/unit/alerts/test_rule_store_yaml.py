@@ -53,3 +53,26 @@ def test_file_rules_store_validates_entries(tmp_path: Path) -> None:
     store = FileRulesStore(config_path, enable_reload=False)
     with pytest.raises(ValueError):
         store.list_rules()
+
+
+def test_file_rules_store_missing_file(tmp_path: Path) -> None:
+    config_path = tmp_path / "missing.yaml"
+    store = FileRulesStore(config_path, enable_reload=False)
+    with pytest.raises(FileNotFoundError):
+        store.list_rules()
+
+
+def test_file_rules_store_validates_channels_map(tmp_path: Path) -> None:
+    config_path = tmp_path / "bad_channels.yaml"
+    config_path.write_text(
+        textwrap.dedent(
+            """
+            rules:
+              - key: roi
+                channels: 123
+            """
+        )
+    )
+    store = FileRulesStore(config_path, enable_reload=False)
+    with pytest.raises(ValueError):
+        store.list_rules()
