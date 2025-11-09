@@ -10,7 +10,7 @@ import tarfile
 from contextlib import closing
 from pathlib import Path
 
-TRACKED_SERVICES = ["lint", "unit-local", "migrations", "integration", "secret-scan"]
+TRACKED_SERVICES = ["lint", "unit", "integration", "e2e-smoke", "secret-scan"]
 
 STATUS_ICONS: dict[str, str] = {
     "success": "✅",
@@ -26,8 +26,8 @@ STATUS_ICONS: dict[str, str] = {
 
 
 def coverage_service_name(stem: str) -> str:
-    if stem in {"coverage", "coverage-unit-local"}:
-        return "unit-local"
+    if stem in {"coverage", "coverage-unit"}:
+        return "unit"
     if stem.startswith("coverage-"):
         stem = stem[len("coverage-") :]
     if stem == "aggregate":
@@ -180,8 +180,8 @@ def index_artifacts(root: Path) -> dict[str, list[str]]:
 
 def artifacts_for_service(service: str, index: dict[str, list[str]]) -> list[str]:
     keys = {f"logs-{service}", f"debug-bundle-{service}"}
-    if service == "unit-local":
-        keys.update({"unit-local-coverage", "diff-coverage"})
+    if service == "unit":
+        keys.update({"unit-coverage", "diff-coverage"})
     elif service == "secret-scan":
         keys.update({"gitleaks-scan", "secret-scan"})
     entries: set[str] = set()
@@ -198,7 +198,7 @@ def format_percentage(value: float | None) -> str:
 
 
 def read_unit_coverage(coverage: dict[str, float]) -> float | None:
-    return coverage.get("unit-local")
+    return coverage.get("unit")
 
 
 def read_diff_coverage(root: Path) -> tuple[float | None, str | None, bool | None]:
@@ -232,7 +232,7 @@ def build_table(
     lines = [header, separator]
 
     for service in services:
-        coverage_value = coverage.get(service) if service == "unit-local" else None
+        coverage_value = coverage.get(service) if service == "unit" else None
         status = resolve_status(root, job_map, service)
         logs = resolve_log_link(job_map, service)
 

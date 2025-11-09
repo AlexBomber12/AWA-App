@@ -4,10 +4,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf 
 COPY constraints.txt ./constraints.txt
 ENV PIP_CONSTRAINT=/app/constraints.txt
 COPY services/worker/requirements.txt ./services/worker/requirements.txt
+COPY services/etl/requirements.txt ./services/etl/requirements.txt
 RUN pip install --no-cache-dir -U pip && \
-    pip install --no-cache-dir -r services/worker/requirements.txt
+    pip install --no-cache-dir -r services/worker/requirements.txt -r services/etl/requirements.txt
 COPY packages ./packages
 COPY services/worker ./services/worker
+COPY services/etl ./services/etl
 RUN pip install --no-cache-dir -e ./packages/awa_common
 EXPOSE 8001
 CMD sh -lc "celery -A services.worker.celery_app worker -l INFO & \

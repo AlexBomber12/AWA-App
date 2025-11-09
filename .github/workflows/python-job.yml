@@ -1,0 +1,461 @@
+---
+name: python-job
+
+on:
+  workflow_call:
+    inputs:
+      marker:
+        description: Which test marker to run (unit|integration|e2e)
+        required: true
+        type: string
+      python-version:
+        default: '3.12'
+        required: false
+        type: string
+      test-filter:
+        default: ''
+        required: false
+        type: string
+      database-url:
+        default: ''
+        required: false
+        type: string
+      async-database-url:
+        default: ''
+        required: false
+        type: string
+      redis-url:
+        default: ''
+        required: false
+        type: string
+      minio-endpoint:
+        default: ''
+        required: false
+        type: string
+      minio-access-key:
+        default: ''
+        required: false
+        type: string
+      minio-secret-key:
+        default: ''
+        required: false
+        type: string
+      minio-bucket:
+        default: ''
+        required: false
+        type: string
+      minio-region:
+        default: 'us-east-1'
+        required: false
+        type: string
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  BASH_ENV: ${{ github.workspace }}/.github/bash_env
+
+jobs:
+  unit:
+    if: ${{ inputs.marker == 'unit' }}
+    name: unit
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      LLM_PROVIDER: STUB
+      SECURITY_ALWAYS_ADD_VIEWER: "0"
+      AUTH_DEFAULT_ROLES: ""
+    steps:
+      - name: Checkout
+        id: checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ inputs['python-version'] }}
+          cache: pip
+          cache-dependency-path: |
+            constraints.txt
+            **/requirements*.txt
+
+      - name: Upgrade pip tooling
+        run: python -m pip install -U pip wheel
+
+      - name: Install test dependencies
+        run: |
+          python -m pip install --disable-pip-version-check --no-input -q -c constraints.txt -r requirements-dev.txt
+          python -m pip install --disable-pip-version-check --no-input -q -c constraints.txt -e packages/awa_common
+          while IFS= read -r -d '' req; do
+            python -m pip install --disable-pip-version-check --no-input -q -c constraints.txt -r "$req"
+          done < <(find services -maxdepth 2 -name 'requirements*.txt' -print0)
+
+      - name: Harness sanity (no coverage plugins)
+        run: |
+          PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PYTEST_ADDOPTS='' \
+          pytest -q -p no:cov -o addopts='' tests/unit/test_harness_sanity.py
+
+      - name: Reset coverage state
+        run: |
+          python -m coverage erase --rcfile=.github/coverage.ini || true
+          rm -f .coverage .coverage.* || true
+
+      - name: Run unit tests
+        env:
+          PYTEST_ARGS: ${{ inputs['test-filter'] }}
+        run: |
+          mkdir -p artifacts
+          bash scripts/ci/run_unit.sh | tee artifacts/unit.log
+
+      - name: Upload unit logs
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: logs-unit
+          path: artifacts/unit.log
+          if-no-files-found: ignore
+
+      - name: Upload coverage artifacts
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: unit-coverage
+          path: |
+            .coverage
+            coverage.xml
+            coverage.txt
+          if-no-files-found: warn
+
+      - name: Compute diff coverage (80% gate)
+        if: always()
+        run: |
+          if [ ! -f coverage.xml ]; then
+            echo "coverage.xml is missing; emitting stub diff-coverage.txt."
+            echo "NO_COVERAGE_XML" > diff-coverage.txt
+            exit 1
+          fi
+          pip install --disable-pip-version-check --no-input diff-cover
+          BASE="${{ github.base_ref || 'main' }}"
+          git fetch --no-tags --prune --depth=1 origin "${BASE}"
+          git rev-parse "origin/${BASE}" > diff-base.txt
+          diff-cover coverage.xml \
+            --compare-branch "origin/${BASE}" \
+            --fail-under=80 \
+            --diff-range-notation=... | tee diff-coverage.txt
+
+      - name: Upload diff coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: diff-coverage
+          path: |
+            diff-coverage.txt
+            diff-base.txt
+          if-no-files-found: ignore
+
+      - name: Bundle mirror logs (unit)
+        if: failure() && steps.checkout.conclusion == 'success'
+        run: bash scripts/ci/mirrorlogs_bundle.sh
+
+      - name: Label mirror logs bundle
+        if: failure() && steps.checkout.conclusion == 'success'
+        run: |
+          if [ -f artifacts/mirrorlogs.tar.zst ]; then
+            mv artifacts/mirrorlogs.tar.zst "artifacts/mirrorlogs-${{ inputs.marker }}.tar.zst"
+          fi
+          if [ -f artifacts/mirrorlogs.tar.gz ]; then
+            mv artifacts/mirrorlogs.tar.gz "artifacts/mirrorlogs-${{ inputs.marker }}.tar.gz"
+          fi
+
+      - name: Upload mirror logs bundle
+        if: failure() && steps.checkout.conclusion == 'success'
+        uses: actions/upload-artifact@v5
+        with:
+          name: mirrorlogs
+          path: |
+            artifacts/mirrorlogs-${{ inputs.marker }}.tar.zst
+            artifacts/mirrorlogs-${{ inputs.marker }}.tar.gz
+          if-no-files-found: ignore
+          retention-days: 7
+
+  integration:
+    if: ${{ inputs.marker == 'integration' }}
+    name: integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: awa
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d awa"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 12
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      DATABASE_URL: ${{ inputs['database-url'] }}
+      ASYNC_DATABASE_URL: ${{ inputs['async-database-url'] }}
+      REDIS_URL: ${{ inputs['redis-url'] }}
+      RATE_LIMIT_REDIS_URL: ${{ inputs['redis-url'] }}
+      MINIO_ENDPOINT: ${{ inputs['minio-endpoint'] }}
+      MINIO_ACCESS_KEY: ${{ inputs['minio-access-key'] }}
+      MINIO_SECRET_KEY: ${{ inputs['minio-secret-key'] }}
+      MINIO_BUCKET: ${{ inputs['minio-bucket'] }}
+      MINIO_REGION: ${{ inputs['minio-region'] }}
+    steps:
+      - name: Checkout
+        id: checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ inputs['python-version'] }}
+          cache: pip
+          cache-dependency-path: |
+            constraints.txt
+            **/requirements*.txt
+
+      - name: Upgrade pip tooling
+        run: python -m pip install -U pip wheel
+
+      - name: Install integration dependencies
+        run: |
+          python -m pip install -c constraints.txt -r requirements-dev.txt
+          python -m pip install -c constraints.txt -e packages/awa_common
+          while IFS= read -r -d '' req; do
+            python -m pip install -r "$req" -c constraints.txt
+          done < <(find services -maxdepth 2 -name 'requirements*.txt' -print0)
+
+      - name: Start MinIO
+        run: |
+          docker rm -f gha-minio >/dev/null 2>&1 || true
+          docker run -d --name gha-minio \
+            -p 9000:9000 \
+            -e MINIO_ROOT_USER=${{ inputs['minio-access-key'] }} \
+            -e MINIO_ROOT_PASSWORD=${{ inputs['minio-secret-key'] }} \
+            minio/minio:latest server /data
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://localhost:9000/minio/health/live >/dev/null; then
+              exit 0
+            fi
+            echo "Waiting for MinIO... (${attempt}/30)"
+            sleep 2
+          done
+          echo "MinIO failed to become healthy" >&2
+          docker logs gha-minio || true
+          exit 1
+
+      - name: Run Alembic upgrade
+        run: |
+          mkdir -p artifacts
+          alembic -c services/api/alembic.ini upgrade head | tee artifacts/alembic-current.txt
+
+      - name: Integration tests
+        env:
+          PYTEST_ARGS: ${{ inputs['test-filter'] }}
+          COVERAGE_FILE: .coverage.integration
+        run: |
+          mkdir -p artifacts
+          if [ -d tests/integration ] && [ -n "$(ls -A tests/integration)" ]; then
+            PYTEST_CMD=(python -m pytest -q -m integration tests/integration \
+              --cov=packages --cov=services \
+              --cov-config=.github/coverage.ini \
+              --cov-report=term-missing:skip-covered \
+              --cov-report=xml:artifacts/integration-coverage.xml \
+              --junitxml=artifacts/integration-junit.xml)
+            if [ -n "${PYTEST_ARGS}" ]; then
+              PYTEST_CMD+=( -k "${PYTEST_ARGS}" )
+            fi
+            echo "Executing: ${PYTEST_CMD[*]}" | tee artifacts/integration.log
+            "${PYTEST_CMD[@]}" 2>&1 | tee -a artifacts/integration.log
+            coverage xml -o artifacts/integration-coverage.xml --rcfile=.github/coverage.ini || true
+          else
+            echo "No integration tests detected" | tee artifacts/integration.log
+          fi
+
+      - name: Upload integration logs
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: logs-integration
+          path: |
+            artifacts/integration.log
+            artifacts/alembic-current.txt
+          if-no-files-found: ignore
+
+      - name: Upload integration junit/coverage
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: integration-test-artifacts
+          path: |
+            artifacts/integration-junit.xml
+            artifacts/integration-coverage.xml
+          if-no-files-found: ignore
+
+      - name: Stop MinIO
+        if: always()
+        run: docker rm -f gha-minio >/dev/null 2>&1 || true
+
+      - name: Bundle mirror logs (integration)
+        if: failure() && steps.checkout.conclusion == 'success'
+        run: bash scripts/ci/mirrorlogs_bundle.sh
+
+      - name: Label mirror logs bundle
+        if: failure() && steps.checkout.conclusion == 'success'
+        run: |
+          if [ -f artifacts/mirrorlogs.tar.zst ]; then
+            mv artifacts/mirrorlogs.tar.zst "artifacts/mirrorlogs-${{ inputs.marker }}.tar.zst"
+          fi
+          if [ -f artifacts/mirrorlogs.tar.gz ]; then
+            mv artifacts/mirrorlogs.tar.gz "artifacts/mirrorlogs-${{ inputs.marker }}.tar.gz"
+          fi
+
+      - name: Upload mirror logs bundle
+        if: failure() && steps.checkout.conclusion == 'success'
+        uses: actions/upload-artifact@v5
+        with:
+          name: mirrorlogs
+          path: |
+            artifacts/mirrorlogs-${{ inputs.marker }}.tar.zst
+            artifacts/mirrorlogs-${{ inputs.marker }}.tar.gz
+          if-no-files-found: ignore
+          retention-days: 7
+
+  e2e:
+    if: ${{ inputs.marker == 'e2e' }}
+    name: e2e-smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        id: checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Prepare artifacts folder
+        run: mkdir -p artifacts/e2e
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Compute image tag
+        id: meta
+        run: echo "tag=awa-api-e2e:${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
+
+      - name: Build API image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: ${{ steps.meta.outputs.tag }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Launch smoke stack
+        run: |
+          docker rm -f awa-e2e-api >/dev/null 2>&1 || true
+          docker rm -f awa-e2e-postgres >/dev/null 2>&1 || true
+          docker network rm awa-e2e >/dev/null 2>&1 || true
+          docker network create awa-e2e || true
+          docker run -d --name awa-e2e-postgres --network awa-e2e \
+            -e POSTGRES_DB=awa -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres postgres:16
+          for attempt in $(seq 1 24); do
+            if docker exec awa-e2e-postgres pg_isready -U postgres -d awa; then
+              break
+            fi
+            echo "Waiting for Postgres... (${attempt}/24)"
+            sleep 5
+          done
+          if ! docker exec awa-e2e-postgres pg_isready -U postgres -d awa > /dev/null; then
+            echo "Postgres failed to become ready" >&2
+            docker logs awa-e2e-postgres || true
+            exit 1
+          fi
+          docker run -d --name awa-e2e-api --network awa-e2e -p 8000:8000 \
+            -e DATABASE_URL=postgresql+psycopg://postgres:postgres@awa-e2e-postgres:5432/awa \
+            -e PORT=8000 \
+            -e POSTGRES_HOST=awa-e2e-postgres \
+            -e POSTGRES_PORT=5432 \
+            -e POSTGRES_USER=postgres \
+            -e POSTGRES_PASSWORD=postgres \
+            -e POSTGRES_DB=awa \
+            ${{ steps.meta.outputs.tag }}
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://localhost:8000/ready; then
+              exit 0
+            fi
+            echo "API not ready yet (attempt ${attempt}/30); retrying..."
+            sleep 5
+          done
+          echo "API failed readiness probe" >&2
+          exit 1
+
+      - name: Capture docker logs
+        if: always()
+        run: |
+          mkdir -p artifacts/e2e
+          docker logs awa-e2e-api > artifacts/e2e/api.log 2>&1 || true
+          docker logs awa-e2e-postgres > artifacts/e2e/postgres.log 2>&1 || true
+
+      - name: Bundle mirror logs (e2e)
+        if: failure() && steps.checkout.conclusion == 'success'
+        run: bash scripts/ci/mirrorlogs_bundle.sh
+
+      - name: Label mirror logs bundle
+        if: failure() && steps.checkout.conclusion == 'success'
+        run: |
+          if [ -f artifacts/mirrorlogs.tar.zst ]; then
+            mv artifacts/mirrorlogs.tar.zst "artifacts/mirrorlogs-${{ inputs.marker }}.tar.zst"
+          fi
+          if [ -f artifacts/mirrorlogs.tar.gz ]; then
+            mv artifacts/mirrorlogs.tar.gz "artifacts/mirrorlogs-${{ inputs.marker }}.tar.gz"
+          fi
+
+      - name: Upload mirror logs bundle
+        if: failure() && steps.checkout.conclusion == 'success'
+        uses: actions/upload-artifact@v5
+        with:
+          name: mirrorlogs
+          path: |
+            artifacts/mirrorlogs-${{ inputs.marker }}.tar.zst
+            artifacts/mirrorlogs-${{ inputs.marker }}.tar.gz
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Cleanup stack
+        if: always()
+        run: |
+          docker rm -f awa-e2e-api >/dev/null 2>&1 || true
+          docker rm -f awa-e2e-postgres >/dev/null 2>&1 || true
+          docker network rm awa-e2e >/dev/null 2>&1 || true
+
+      - name: Upload e2e logs
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: logs-e2e
+          path: artifacts/e2e
+          if-no-files-found: ignore

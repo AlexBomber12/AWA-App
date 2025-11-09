@@ -3,6 +3,8 @@
 The monorepo splits tests into three execution groups so contributors can move quickly without skipping safety checks. All suites use `pytest` with strict markers, and CI mirrors the commands documented below.
 
 ## Test groups
+CI has three logical test groups plus an e2e smoke check that rides on top of integration readiness.
+
 ### Unit
 - **Scope:** Pure Python logic, FastAPI routes with mocked dependencies, and helpers that do not require Docker services.
 - **Command:** `./scripts/ci/run_unit.sh` (wraps `pytest -q -m "not integration and not live"` with coverage enabled)
@@ -11,14 +13,20 @@ The monorepo splits tests into three execution groups so contributors can move q
 
 ### Integration
 - **Scope:** Modules that need Postgres, Redis, or docker-compose orchestration (e.g., price importer CLI, Alembic migrations, API-to-DB flows).
-- **Command:** `docker compose up -d --wait db redis api worker` followed by `pytest -q -m integration tests/integration`
+- **Command (one-liner):** `docker compose -f docker-compose.ci.yml up -d --wait db redis && pytest -q -m integration tests/integration`
 - **Expectations:** Real services backed by the compose stack, but still idempotent. Tests may seed fixture data through SQLAlchemy or the exposed APIs. Use the `tests/integration/**` layout to group service-specific suites (e.g., `tests/integration/price_importer/`).
-- **CI:** Runs in the `integration` workflow after the stack is built. Coverage is *not* collected here; only the unit job contributes to the coverage gate.
+- **CI:** `decide_integration_needed` runs `scripts/ci/should_run_integration.sh` to diff the current branch against `main`. Any DB/ETL-sensitive changes (migrations, API routes/schemas/security, `packages/awa_common/{metrics,logging,security,dsn,settings}`, `*.sql`, `docker-compose*.yml`, `alembic.ini`, etc.) trigger the full `pytest -q -m integration tests/integration` suite—no more `-k api_audit_rate_limit` filter. You can force the run via the `run-integration` PR label or the `force_full_integration` workflow_dispatch input.
+- **Coverage:** We still gate coverage on the unit job, but integration uploads junit + coverage XML so you can diff regressions when needed.
 
 ### Live
 - **Scope:** Rare tests that hit real third-party APIs or production-like tunnels. They are skipped by default and run only on demand by operators.
 - **Command:** `pytest -q -m live --runlive` once the necessary credentials are exported.
 - **Expectations:** Document the required environment variables inline. Never enable this marker in automated CI.
+
+### E2E smoke
+- **Scope:** Lightweight readiness probe that uses the dockerized API image and curls `/ready` until it succeeds (max ~150 seconds). It validates that dependencies (DB, Alembic, logging) come up cleanly before merging.
+- **Command:** The CI job builds the API image with Buildx, runs Postgres + API in docker, and loops on `curl -fsS http://localhost:8000/ready`.
+- **CI:** Triggered only when integration ran and passed (either automatically via the diff or by a forced run).
 
 ## How to run tests locally
 1. **Bootstrap tooling**
@@ -34,15 +42,25 @@ The monorepo splits tests into three execution groups so contributors can move q
    ```
 3. **Integration slice**
    ```bash
-   docker compose up -d --wait db redis api worker
+   docker compose -f docker-compose.ci.yml up -d --wait db redis
    pytest -q -m integration tests/integration
    ```
 4. **Selective targets** — run any path directly (`pytest -q tests/unit/services/price_importer/test_parser.py`) when iterating on a single module.
 
 ## Coverage policy
 - Coverage thresholds live in `pytest.ini`/`coverage.xml` and are enforced by the unit job only.
-- Integration tests skip coverage to keep the run fast and reduce noise from transient infrastructure.
+- Integration tests still upload coverage XML (for diffing) but do not gate merges.
 - Generate a local report with `pytest -q --cov --cov-report=term-missing` when you need detailed file-by-file deltas.
+
+## CI stages overview
+1. **lint** — Pre-commit, ruff/mypy/actionlint/yamllint; blocks all other jobs.
+2. **unit** — Executes `scripts/ci/run_unit.sh`, uploads coverage, and enforces diff-cover ≥80%.
+3. **decide_integration_needed** — Runs `scripts/ci/should_run_integration.sh` to decide whether DB/ETL changes require the heavy jobs and exposes `run_integration=true|false` to downstream jobs.
+4. **integration** — Spins up Postgres + Redis + MinIO as services, runs `alembic upgrade head`, then `pytest -q -m integration tests/integration` with junit + coverage artifacts. Produces a `mirrorlogs` bundle on failure.
+5. **e2e-smoke** — Builds the API image with Buildx cache, launches a temp stack, and curls `/ready` until success. Logs are uploaded and mirrored if the job fails.
+6. **webapp-build** — Builds the Next.js app with Node 20.
+7. **secret-scan** — Runs gitleaks when the trigger is a PR.
+8. **mirror-logs** — Collects artifacts from every job and posts a PR summary comment, keeping a consistent triage surface even when some jobs were skipped.
 
 ## Layout & naming
 - Unit tests live under `tests/unit/<service>/test_*.py`; service-specific helpers belong next to their subjects.
