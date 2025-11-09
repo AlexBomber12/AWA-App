@@ -6,6 +6,9 @@ from typing import Literal
 
 from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from sqlalchemy.engine import make_url
+
+from .dsn import build_dsn
 
 # Preserve legacy values while supporting new stage/dev env conventions.
 EnvName = Literal["local", "test", "dev", "stage", "staging", "prod"]
@@ -52,6 +55,23 @@ def parse_rate_limit(limit: str) -> tuple[int, int]:
     return times, seconds
 
 
+def _ensure_asyncpg_dsn(url: str) -> str:
+    """Normalize arbitrary Postgres URLs so they use the asyncpg driver."""
+    try:
+        parsed = make_url(url)
+    except Exception:
+        return url
+    driver = parsed.drivername
+    base, sep, suffix = driver.partition("+")
+    if base in {"postgresql", "postgres"}:
+        if sep:
+            driver = f"{base}+asyncpg"
+        else:
+            driver = "postgresql+asyncpg"
+        return str(parsed.set(drivername=driver))
+    return url
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=_default_env_file(), env_file_encoding="utf-8", extra="ignore")
 
@@ -74,6 +94,19 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("BROKER_URL", "CELERY_BROKER_URL"),
     )
     QUEUE_NAMES: str | None = None
+
+    @property
+    def POSTGRES_DSN(self) -> str:
+        """Canonical async-friendly Postgres DSN."""
+        candidates = (
+            os.getenv("POSTGRES_DSN"),
+            self.PG_ASYNC_DSN,
+            self.DATABASE_URL,
+        )
+        for candidate in candidates:
+            if isinstance(candidate, str) and candidate.strip():
+                return _ensure_asyncpg_dsn(candidate.strip())
+        return build_dsn(sync=False)
 
     # Observability / security
     LOG_LEVEL: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"

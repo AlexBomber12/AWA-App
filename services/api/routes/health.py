@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ..db import get_session
+from awa_common.db.async_session import get_async_session
 
 MAX_SKEW = 30  # seconds
 
@@ -15,7 +15,7 @@ router = APIRouter()
 
 
 @router.get("/health", include_in_schema=False)  # type: ignore[misc]
-async def health(session: AsyncSession = Depends(get_session)) -> JSONResponse:
+async def health(session: AsyncSession = Depends(get_async_session)) -> JSONResponse:
     """Return 200 when DB reachable and clocks are in sync."""
     result = await session.execute(text("SELECT (now() AT TIME ZONE 'UTC')"))
     db_now = result.scalar()

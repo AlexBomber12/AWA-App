@@ -1,6 +1,8 @@
 import datetime
 from dataclasses import dataclass
 
+import pytest
+
 from services.api.routes import stats as stats_module
 from services.api.schemas import (
     ReturnsStatsResponse,
@@ -26,7 +28,7 @@ class DummyDB:
         self.results = results
         self.calls = []
 
-    def execute(self, stmt):
+    async def execute(self, stmt):
         key = str(stmt)
         self.calls.append(key)
         return DummyResult(self.results.get(key, []))
@@ -40,46 +42,49 @@ class DummyResult:
         return DummyMappings(self._rows)
 
 
-def test_kpi_sql_branch(monkeypatch):
+@pytest.mark.asyncio
+async def test_kpi_sql_branch(monkeypatch):
     monkeypatch.setenv("STATS_USE_SQL", "1")
-    monkeypatch.setattr(stats_module, "_roi_view_name", lambda: "v_roi_full")
+    monkeypatch.setattr(stats_module, "current_roi_view", lambda: "v_roi_full")
     rows = [{"roi_avg": 1.5, "products": 2, "vendors": 1}]
     db = DummyDB({"SELECT AVG": rows})
 
-    def fake_execute(stmt):
+    async def fake_execute(stmt):
         return DummyResult(rows)
 
     db.execute = fake_execute
-    result = stats_module.kpi(db=db)
+    result = await stats_module.kpi(session=db)
     assert isinstance(result, StatsKPIResponse)
     assert result.kpi.roi_avg == 1.5
 
 
-def test_roi_by_vendor_returns_items(monkeypatch):
+@pytest.mark.asyncio
+async def test_roi_by_vendor_returns_items(monkeypatch):
     monkeypatch.setenv("STATS_USE_SQL", "1")
-    monkeypatch.setattr(stats_module, "_roi_view_name", lambda: "v_roi_full")
+    monkeypatch.setattr(stats_module, "current_roi_view", lambda: "v_roi_full")
     rows = [
         {"vendor": "A", "roi_avg": 2.5, "items": 3},
         {"vendor": "B", "roi_avg": None, "items": None},
     ]
 
     class DummyDB2:
-        def execute(self, stmt):
+        async def execute(self, stmt):
             return DummyResult(rows)
 
-    resp = stats_module.roi_by_vendor(db=DummyDB2())
+    resp = await stats_module.roi_by_vendor(session=DummyDB2())
     assert isinstance(resp, RoiByVendorResponse)
     assert resp.total_vendors == 2
     assert resp.items[0].vendor == "A"
 
 
-def test_roi_trend_handles_multiple_columns(monkeypatch):
+@pytest.mark.asyncio
+async def test_roi_trend_handles_multiple_columns(monkeypatch):
     monkeypatch.setenv("STATS_USE_SQL", "1")
-    monkeypatch.setattr(stats_module, "_roi_view_name", lambda: "v_roi_full")
+    monkeypatch.setattr(stats_module, "current_roi_view", lambda: "v_roi_full")
     calls = {"dt": RuntimeError("no column"), "date": RuntimeError("nope")}
 
     class DummyDB3:
-        def execute(self, stmt):
+        async def execute(self, stmt):
             text = str(stmt)
             if "snapshot_date" in text:
                 rows = [{"month": datetime.date(2024, 1, 1), "roi_avg": 1.2, "items": 5}]
@@ -89,9 +94,69 @@ def test_roi_trend_handles_multiple_columns(monkeypatch):
                     raise exc
             return DummyResult([])
 
-    resp = stats_module.roi_trend(db=DummyDB3())
+    resp = await stats_module.roi_trend(session=DummyDB3())
     assert isinstance(resp, RoiTrendResponse)
     assert resp.points[0].month == "2024-01-01"
+
+
+@pytest.mark.asyncio
+async def test_kpi_invalid_view_returns_400(monkeypatch):
+    monkeypatch.setenv("STATS_USE_SQL", "1")
+
+    def _raise_invalid():
+        raise stats_module.InvalidROIViewError("bad view")
+
+    monkeypatch.setattr(stats_module, "current_roi_view", _raise_invalid)
+    with pytest.raises(stats_module.HTTPException) as excinfo:
+        await stats_module.kpi(session=DummyDB({}))
+    assert excinfo.value.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_roi_by_vendor_invalid_view_returns_400(monkeypatch):
+    monkeypatch.setenv("STATS_USE_SQL", "1")
+    monkeypatch.setattr(
+        stats_module,
+        "current_roi_view",
+        lambda: (_ for _ in ()).throw(stats_module.InvalidROIViewError("nope")),
+    )
+    with pytest.raises(stats_module.HTTPException) as excinfo:
+        await stats_module.roi_by_vendor(session=DummyDB({}))
+    assert excinfo.value.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_roi_trend_invalid_view_returns_400(monkeypatch):
+    monkeypatch.setenv("STATS_USE_SQL", "1")
+
+    def _raise_invalid():
+        raise stats_module.InvalidROIViewError("bad view")
+
+    monkeypatch.setattr(stats_module, "current_roi_view", _raise_invalid)
+    with pytest.raises(stats_module.HTTPException) as excinfo:
+        await stats_module.roi_trend(session=DummyDB({}))
+    assert excinfo.value.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_kpi_returns_defaults_without_sql(monkeypatch):
+    monkeypatch.delenv("STATS_USE_SQL", raising=False)
+    result = await stats_module.kpi(session=DummyDB({}))
+    assert result.kpi.products == 0
+
+
+@pytest.mark.asyncio
+async def test_roi_by_vendor_returns_empty_without_sql(monkeypatch):
+    monkeypatch.delenv("STATS_USE_SQL", raising=False)
+    resp = await stats_module.roi_by_vendor(session=DummyDB({}))
+    assert resp.items == []
+
+
+@pytest.mark.asyncio
+async def test_roi_trend_returns_empty_without_sql(monkeypatch):
+    monkeypatch.delenv("STATS_USE_SQL", raising=False)
+    resp = await stats_module.roi_trend(session=DummyDB({}))
+    assert resp.points == []
 
 
 @dataclass
@@ -125,7 +190,7 @@ class _ReturnsDB:
         self.queries: list[tuple[str, dict[str, object]]] = []
         self.schema_checks = 0
 
-    def execute(self, stmt, params=None):
+    async def execute(self, stmt, params=None):
         sql = str(stmt)
         if "information_schema.columns" in sql:
             self.schema_checks += 1
@@ -134,18 +199,19 @@ class _ReturnsDB:
         return _ReturnResult(self.rows)
 
 
-def test_returns_stats_includes_vendor_when_available(monkeypatch):
+@pytest.mark.asyncio
+async def test_returns_stats_includes_vendor_when_available(monkeypatch):
     monkeypatch.setenv("STATS_USE_SQL", "1")
     monkeypatch.setattr(stats_module, "_RETURNS_VENDOR_COLUMN", None)
     rows = [{"asin": "A1", "qty": 3, "refund_amount": 12.5}]
     db = _ReturnsDB(vendor_available=True, rows=rows)
 
-    resp = stats_module.returns_stats(
+    resp = await stats_module.returns_stats(
         date_from="2024-01-01",
         date_to="2024-02-01",
         asin="A1",
         vendor="Acme",
-        db=db,
+        session=db,
     )
     assert isinstance(resp, ReturnsStatsResponse)
     assert resp.total_returns == 1
@@ -154,17 +220,18 @@ def test_returns_stats_includes_vendor_when_available(monkeypatch):
     assert "vendor = :vendor" in sql
     assert params["vendor"] == "Acme"
     # global cache avoids re-checking schema
-    stats_module.returns_stats(vendor="Acme", db=db)
+    await stats_module.returns_stats(vendor="Acme", session=db)
     assert db.schema_checks == 1
 
 
-def test_returns_stats_ignores_vendor_when_column_missing(monkeypatch):
+@pytest.mark.asyncio
+async def test_returns_stats_ignores_vendor_when_column_missing(monkeypatch):
     monkeypatch.setenv("STATS_USE_SQL", "1")
     monkeypatch.setattr(stats_module, "_RETURNS_VENDOR_COLUMN", None)
     rows = [{"asin": "B2", "qty": None, "refund_amount": None}]
     db = _ReturnsDB(vendor_available=False, rows=rows)
 
-    resp = stats_module.returns_stats(vendor="Acme", db=db)
+    resp = await stats_module.returns_stats(vendor="Acme", session=db)
     assert isinstance(resp, ReturnsStatsResponse)
     assert resp.total_returns == 1
     sql, params = db.queries[0]

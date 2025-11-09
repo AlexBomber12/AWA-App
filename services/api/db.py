@@ -1,27 +1,25 @@
-import os
-from collections.abc import AsyncGenerator
+from __future__ import annotations
 
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy.pool import NullPool
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from awa_common.settings import settings
-
-# Always derive the database URL from shared settings
-DATABASE_URL = settings.DATABASE_URL
-
-pool_kwargs = {}
-if os.getenv("TESTING") == "1":
-    pool_kwargs["poolclass"] = NullPool
-
-engine = create_async_engine(DATABASE_URL, pool_pre_ping=True, future=True, echo=False, **pool_kwargs)
-
-async_session = async_sessionmaker(engine, expire_on_commit=False)
+from awa_common.db.async_session import (
+    dispose_async_engine as dispose_engine,
+    get_async_session as get_session,
+    get_sessionmaker,
+    init_async_engine,
+)
 
 
-async def get_session() -> AsyncGenerator[AsyncSession, None]:
-    async with async_session() as session:
-        yield session
+def async_session() -> AsyncSession:
+    """Backwards-compatible factory that lazily creates AsyncSession objects."""
+    factory: async_sessionmaker[AsyncSession] = get_sessionmaker()
+    return factory()
 
 
-async def dispose_engine() -> None:
-    await engine.dispose()
+__all__ = [
+    "async_session",
+    "dispose_engine",
+    "get_session",
+    "get_sessionmaker",
+    "init_async_engine",
+]

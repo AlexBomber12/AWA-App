@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 import os
+import time
+from typing import Final
 
-DEFAULT_ROI_VIEW = "v_roi_full"
-ALLOWED_ROI_VIEWS: frozenset[str] = frozenset(
+from awa_common.settings import settings
+
+DEFAULT_ROI_VIEW: Final[str] = "v_roi_full"
+ALLOWED_ROI_VIEWS: Final[frozenset[str]] = frozenset(
     {
         "v_roi_full",
         "roi_view",
@@ -11,23 +15,37 @@ ALLOWED_ROI_VIEWS: frozenset[str] = frozenset(
         "test_roi_view",
     }
 )
+_CACHE_TTL_S = 30.0
+_cached_name: str | None = None
+_cached_at: float = 0.0
 
 
 class InvalidROIViewError(ValueError):
     """Raised when roi-related SQL tries to use an unapproved view name."""
 
 
-def _raw_roi_view_name() -> str:
-    return os.getenv("ROI_VIEW_NAME", DEFAULT_ROI_VIEW).strip()
+def _raw_roi_view_name(cfg) -> str:
+    return (os.getenv("ROI_VIEW_NAME") or getattr(cfg, "ROI_VIEW_NAME", DEFAULT_ROI_VIEW) or "").strip()
 
 
-def get_roi_view_name() -> str:
-    """Return a whitelisted ROI view name from the environment."""
-    name = _raw_roi_view_name() or DEFAULT_ROI_VIEW
+def _resolve_roi_view(cfg) -> str:
+    name = _raw_roi_view_name(cfg) or DEFAULT_ROI_VIEW
     if name not in ALLOWED_ROI_VIEWS:
         allowed = ", ".join(sorted(ALLOWED_ROI_VIEWS))
         raise InvalidROIViewError(f"ROI view '{name}' is not allowed. Expected one of: {allowed}.")
     return name
+
+
+def current_roi_view(cfg=settings, *, ttl_seconds: float = _CACHE_TTL_S) -> str:
+    """Return the ROI view name using a short-lived cache to avoid env churn."""
+    global _cached_name, _cached_at
+    now = time.monotonic()
+    if _cached_name and now - _cached_at <= ttl_seconds:
+        return _cached_name
+    resolved = _resolve_roi_view(cfg)
+    _cached_name = resolved
+    _cached_at = now
+    return resolved
 
 
 def quote_identifier(identifier: str) -> str:
@@ -46,14 +64,14 @@ def quote_identifier(identifier: str) -> str:
 
 def get_quoted_roi_view() -> str:
     """Return the configured ROI view, quoted for SQL usage."""
-    return quote_identifier(get_roi_view_name())
+    return quote_identifier(current_roi_view())
 
 
 __all__ = [
     "ALLOWED_ROI_VIEWS",
     "DEFAULT_ROI_VIEW",
     "InvalidROIViewError",
-    "get_roi_view_name",
+    "current_roi_view",
     "get_quoted_roi_view",
     "quote_identifier",
 ]

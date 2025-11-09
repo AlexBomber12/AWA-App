@@ -27,6 +27,7 @@ class RoiApprovalResponse(BaseStrictModel):
     """Result payload for ROI approval actions."""
 
     updated: int = Field(..., description="Number of SKUs updated by the approval request")
+    approved_ids: list[str] = Field(default_factory=list, description="Identifiers that were approved in this request")
 
 
 class StatsKPI(BaseStrictModel):

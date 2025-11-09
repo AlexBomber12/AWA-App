@@ -29,7 +29,7 @@ class _FakeDB:
         self.last_query = ""
         self.last_params: dict[str, Any] | None = None
 
-    def execute(self, sql, params=None):
+    async def execute(self, sql, params=None):
         self.last_query = str(sql)
         self.last_params = dict(params or {})
         if "information_schema" in self.last_query:
@@ -44,21 +44,26 @@ def _reset_vendor_cache():
     stats._RETURNS_VENDOR_COLUMN = None
 
 
-def test_returns_filters_apply(monkeypatch):
+@pytest.mark.asyncio
+async def test_returns_filters_apply(monkeypatch):
     monkeypatch.setenv("STATS_USE_SQL", "1")
-    monkeypatch.setattr(stats, "_returns_vendor_available", lambda db: True)
+
+    async def _always_true(_session):
+        return True
+
+    monkeypatch.setattr(stats, "_returns_vendor_available", _always_true)
     fake_db = _FakeDB(
         [
             {"asin": "A1", "qty": 2, "refund_amount": 5.5},
         ]
     )
 
-    result = stats.returns_stats(
+    result = await stats.returns_stats(
         date_from="2024-01-01",
         date_to="2024-01-31",
         asin="A1",
         vendor="V100",
-        db=fake_db,
+        session=fake_db,
     )
 
     assert "return_date >= :date_from" in fake_db.last_query
@@ -79,7 +84,8 @@ def test_returns_filters_apply(monkeypatch):
     monkeypatch.delenv("STATS_USE_SQL", raising=False)
 
 
-def test_returns_no_filters_preserves_shape(monkeypatch):
+@pytest.mark.asyncio
+async def test_returns_no_filters_preserves_shape(monkeypatch):
     monkeypatch.setenv("STATS_USE_SQL", "1")
     fake_db = _FakeDB(
         [
@@ -87,7 +93,7 @@ def test_returns_no_filters_preserves_shape(monkeypatch):
         ]
     )
 
-    result = stats.returns_stats(db=fake_db)
+    result = await stats.returns_stats(session=fake_db)
     assert "WHERE" not in fake_db.last_query.upper()
     assert isinstance(result, ReturnsStatsResponse)
     assert result.total_returns == 1

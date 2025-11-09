@@ -5,7 +5,6 @@ from contextlib import asynccontextmanager
 
 import httpx
 import redis.asyncio as aioredis
-import sqlalchemy
 import structlog
 from alembic.config import Config
 from alembic.script import ScriptDirectory
@@ -15,6 +14,13 @@ from fastapi_limiter import FastAPILimiter
 from sqlalchemy import text as sa_text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from awa_common.db.async_session import (
+    dispose_async_engine,
+    get_async_engine,
+    get_async_session,
+    get_sessionmaker,
+    init_async_engine,
+)
 from awa_common.logging import RequestIdMiddleware, configure_logging
 from awa_common.metrics import MetricsMiddleware, init as metrics_init, register_metrics_endpoint
 from awa_common.security.headers import install_security_headers
@@ -26,7 +32,6 @@ from services.api.middlewares.audit import AuditMiddleware
 from services.api.security import install_security
 from services.api.sentry_config import init_sentry_if_configured
 
-from .db import async_session, get_session
 from .routes import health as health_router
 from .routes.ingest import router as ingest_router
 from .routes.roi import router as roi_router
@@ -36,7 +41,7 @@ from .routes.stats import router as stats_router
 from .routes.upload import router as upload_router
 
 
-async def ready_db(session: AsyncSession = Depends(get_session)) -> dict[str, str]:
+async def ready_db(session: AsyncSession = Depends(get_async_session)) -> dict[str, str]:
     """Return 200 only when migrations are at head."""
     alembic_config = os.getenv("ALEMBIC_CONFIG", "services/api/alembic.ini")
     cfg = Config(alembic_config)
@@ -104,6 +109,7 @@ def install_cors(app: FastAPI) -> None:
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
+    init_async_engine()
     await _wait_for_db()
     await _check_llm()
     redis_url = settings.REDIS_URL
@@ -122,6 +128,7 @@ async def lifespan(_app: FastAPI):
                 await FastAPILimiter.close()
             except RuntimeError:
                 pass
+        await dispose_async_engine()
 
 
 def create_app() -> FastAPI:
@@ -139,7 +146,7 @@ def create_app() -> FastAPI:
     app.add_middleware(RequestIdMiddleware)
     app.add_middleware(MetricsMiddleware)
     install_security(app)
-    app.add_middleware(AuditMiddleware, session_factory=async_session)
+    app.add_middleware(AuditMiddleware, session_factory=lambda: get_sessionmaker()())
     install_exception_handlers(app)
     register_metrics_endpoint(app)
     install_cors(app)
@@ -178,27 +185,17 @@ async def _wait_for_db(max_attempts: int | None = None, delay_s: float | None = 
         )
     if delay_s is None:
         delay_s = float(os.getenv("WAIT_FOR_DB_DELAY_S", "0.05" if env in {"local", "test"} else "0.2"))
-    db_url = (
-        (os.getenv("DATABASE_URL") or "").strip()
-        or str(getattr(settings, "DATABASE_URL", "")).strip()
-        or "postgresql+psycopg://app:app@db:5432/app"
-    )
+    engine = get_async_engine()
     last_err: Exception | None = None
     for _ in range(max_attempts):
-        engine = sqlalchemy.create_engine(db_url)
         try:
-            with engine.connect() as conn:
-                conn.execute(sa_text("SELECT 1"))
+            async with engine.connect() as conn:
+                await conn.execute(sa_text("SELECT 1"))
             last_err = None
             break
         except Exception as exc:
             last_err = exc
             await asyncio.sleep(delay_s)
-        finally:
-            try:
-                engine.dispose()
-            except Exception:
-                pass
     if last_err and env not in {"local", "test"}:
         raise last_err
 

@@ -33,6 +33,11 @@ debug incidents.
 - Use `set_request_context` whenever an async boundary would otherwise drop correlation IDs (custom
   clients, background threads, etc.).
 
+## Database Access
+
+- `packages/awa_common/db/async_session` owns the global `AsyncEngine` and FastAPI dependency `get_async_session()`. Engines are initialised during app lifespan and disposed on shutdown so middlewares (audit, rate-limit) and routers share a single asyncpg pool.
+- ROI-facing routes resolve view names exclusively through `packages/awa_common/roi_views.current_roi_view()`, which enforces the whitelist and caches the configured name for 30 seconds to avoid per-request environment lookups.
+
 ## Metrics
 
 ### HTTP (API)

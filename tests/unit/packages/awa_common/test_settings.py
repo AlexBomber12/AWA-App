@@ -29,3 +29,25 @@ def test_new_logistics_and_http_fields(monkeypatch) -> None:
     assert settings.ETL_HTTP_MAX_CONNECTIONS == 32
     assert settings.LOGISTICS_TIMEOUT_S == 21
     assert settings.FREIGHT_API_URL == "https://example.com/rates.csv"
+
+
+def test_ensure_asyncpg_dsn_converts_postgres(monkeypatch) -> None:
+    from awa_common.settings import _ensure_asyncpg_dsn
+
+    value = _ensure_asyncpg_dsn("postgresql://user:pass@host/app")
+    assert value.startswith("postgresql+asyncpg://")
+    assert _ensure_asyncpg_dsn("mysql://host/app") == "mysql://host/app"
+
+
+def test_postgres_dsn_uses_env_overrides(monkeypatch) -> None:
+    monkeypatch.setenv("POSTGRES_DSN", "postgresql://env-user@db/app")
+    cfg = Settings()
+    assert cfg.POSTGRES_DSN.startswith("postgresql+asyncpg://env-user")
+
+
+def test_postgres_dsn_falls_back_to_database_url(monkeypatch) -> None:
+    monkeypatch.delenv("POSTGRES_DSN", raising=False)
+    monkeypatch.delenv("PG_ASYNC_DSN", raising=False)
+    monkeypatch.setenv("DATABASE_URL", "postgresql+psycopg://fallback@db/app")
+    cfg = Settings(PG_ASYNC_DSN=None)
+    assert cfg.POSTGRES_DSN.startswith("postgresql+asyncpg://fallback")

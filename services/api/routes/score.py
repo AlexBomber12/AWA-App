@@ -9,20 +9,11 @@ else:
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BeforeValidator, Field
-from sqlalchemy import text
-from sqlalchemy.orm import Session
+from sqlalchemy import bindparam, text
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from services.api.roi_views import InvalidROIViewError, get_roi_view_name, quote_identifier
-
-# Reuse existing dependencies if present:
-try:
-    from services.api.dependencies import get_db  # sync
-except Exception:  # pragma: no cover - fallback if dependencies missing
-
-    def get_db() -> Session | None:
-        return None
-
-
+from awa_common.db.async_session import get_async_session
+from awa_common.roi_views import InvalidROIViewError, current_roi_view, quote_identifier
 from services.api.security import limit_viewer, require_viewer
 
 
@@ -54,20 +45,15 @@ class ScoreResponse(BaseStrictModel):
 router = APIRouter(prefix="/score", tags=["score"])
 
 
-def _roi_view_name() -> str:
-    return get_roi_view_name()
-
-
-def _quoted_roi_view() -> str:
-    return quote_identifier(_roi_view_name())
-
-
 @router.post(
     "",
     response_model=ScoreResponse,
     dependencies=[Depends(require_viewer), Depends(limit_viewer)],
 )
-def score(body: ScoreRequest, db: Session | None = Depends(get_db)) -> ScoreResponse:
+async def score(
+    body: ScoreRequest,
+    session: AsyncSession = Depends(get_async_session),
+) -> ScoreResponse:
     if not body.asins:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -75,26 +61,26 @@ def score(body: ScoreRequest, db: Session | None = Depends(get_db)) -> ScoreResp
         )
 
     try:
-        view_identifier = _quoted_roi_view()
+        view_identifier = quote_identifier(current_roi_view())
     except InvalidROIViewError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
-    stmt = text(f"SELECT asin, vendor, category, roi FROM {view_identifier} WHERE asin = :asin")
-    found = {}
-    if db is not None:
-        for asin in body.asins:
-            row = db.execute(stmt, {"asin": asin}).fetchone()
-            if row:
-                found[row.asin] = {
-                    "asin": row.asin,
-                    "vendor": getattr(row, "vendor", None),
-                    "category": getattr(row, "category", None),
-                    "roi": (float(row.roi) if getattr(row, "roi", None) is not None else None),
-                }
-    items = []
-    for asin in body.asins:
-        if asin in found:
-            items.append(ScoreItem(**found[asin]))
-        else:
-            items.append(ScoreItem(asin=asin, error="not_found"))
+    stmt = text(
+        f"""
+            SELECT asin, vendor, category, roi
+              FROM {view_identifier}
+             WHERE asin IN :asins
+            """
+    ).bindparams(bindparam("asins", expanding=True))
+    result = await session.execute(stmt, {"asins": tuple(body.asins)})
+    found = {
+        row.asin: ScoreItem(
+            asin=row.asin,
+            vendor=getattr(row, "vendor", None),
+            category=getattr(row, "category", None),
+            roi=float(row.roi) if getattr(row, "roi", None) is not None else None,
+        )
+        for row in result
+    }
+    items = [found.get(asin, ScoreItem(asin=asin, error="not_found")) for asin in body.asins]
     return ScoreResponse(items=items)
