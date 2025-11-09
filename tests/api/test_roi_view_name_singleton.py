@@ -26,7 +26,7 @@ def _patch_current_roi_view(
 
 @pytest.mark.asyncio
 async def test_score_route_invokes_singleton(monkeypatch):
-    counter = _patch_current_roi_view(monkeypatch, score_module)
+    counter = _patch_current_roi_view(monkeypatch, score_module, attr="get_roi_view_name")
     session = _StubSession(_StubResult(mappings=[{"asin": "A1", "vendor": "V1", "category": "Cat", "roi": 12.3}]))
     body = score_module.ScoreRequest(asins=["A1"])
     await score_module.score(body, session=session)
@@ -35,7 +35,7 @@ async def test_score_route_invokes_singleton(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_sku_route_invokes_singleton(monkeypatch):
-    counter = _patch_current_roi_view(monkeypatch, sku_module)
+    counter = _patch_current_roi_view(monkeypatch, sku_module, attr="get_roi_view_name")
     card = _StubResult(mappings=[{"title": "Sample", "roi_pct": 10.0, "fees": 2.0}])
     chart = _StubResult(mappings=[])
     session = _StubSession(card, chart)
@@ -45,7 +45,7 @@ async def test_sku_route_invokes_singleton(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_stats_route_invokes_singleton(monkeypatch):
-    counter = _patch_current_roi_view(monkeypatch, stats_module)
+    counter = _patch_current_roi_view(monkeypatch, stats_module, attr="get_roi_view_name")
     monkeypatch.setenv("STATS_USE_SQL", "1")
     session = _StubSession(_StubResult(mappings=[{"roi_avg": 10.0, "products": 1, "vendors": 1}]))
     await stats_module.kpi(session=session)

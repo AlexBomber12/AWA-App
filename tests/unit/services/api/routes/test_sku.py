@@ -13,8 +13,8 @@ async def test_get_sku_200():
     card_result = _StubResult(mappings=[{"title": "Sample SKU", "roi_pct": 12.5, "fees": 3.25}])
     chart_result = _StubResult(
         mappings=[
-            {"date": "2024-01-03T00:00:00Z", "price": 15.0},
             {"date": "2024-01-01T00:00:00Z", "price": 12.5},
+            {"date": "2024-01-03T00:00:00Z", "price": 15.0},
         ]
     )
     session = _StubSession(card_result, chart_result)
@@ -26,7 +26,10 @@ async def test_get_sku_200():
     assert isinstance(payload.roi, float) and payload.roi == pytest.approx(12.5)
     assert isinstance(payload.fees, float) and payload.fees == pytest.approx(3.25)
     assert isinstance(payload.chartData, list)
-    assert payload.chartData[0].date <= payload.chartData[-1].date
+    assert [point.date for point in payload.chartData] == [
+        "2024-01-01T00:00:00Z",
+        "2024-01-03T00:00:00Z",
+    ]
     assert all(point.price is not None for point in payload.chartData)
 
 
@@ -104,6 +107,6 @@ async def test_get_sku_chart_handles_invalid_values():
 
 
 def test_roi_view_name_requires_string(monkeypatch):
-    monkeypatch.setattr(sku_module, "current_roi_view", lambda: object())
+    monkeypatch.setattr(sku_module, "get_roi_view_name", lambda: object())
     with pytest.raises(TypeError):
         sku_module._roi_view_name()

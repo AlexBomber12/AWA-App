@@ -1,13 +1,32 @@
 from __future__ import annotations
 
 import os
+from functools import lru_cache
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import text
+from sqlalchemy import (
+    Column,
+    Date,
+    MetaData,
+    Numeric,
+    String,
+    Table,
+    and_,
+    bindparam,
+    func,
+    literal_column,
+    select,
+)
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from awa_common.db.async_session import get_async_session
-from awa_common.roi_views import InvalidROIViewError, current_roi_view, quote_identifier
+from services.api.roi_repository import get_roi_view_table
+from services.api.roi_views import (
+    InvalidROIViewError,
+    get_roi_view_name,
+    returns_vendor_column_exists,
+)
 from services.api.schemas import (
     ReturnsStatsItem,
     ReturnsStatsResponse,
@@ -22,38 +41,50 @@ from services.api.security import limit_viewer, require_viewer
 
 router = APIRouter(prefix="/stats", tags=["stats"])
 
-_RETURNS_VENDOR_COLUMN: bool | None = None
+RETURNS_VIEW_ENV = "RETURNS_STATS_VIEW_NAME"
+DEFAULT_RETURNS_VIEW = "returns_raw"
+TREND_DATE_CANDIDATES: tuple[str, ...] = ("dt", "date", "snapshot_date", "created_at")
 
 
 def _sql_mode_enabled() -> bool:
     return os.getenv("STATS_USE_SQL") == "1"
 
 
-async def _returns_vendor_available(session: AsyncSession) -> bool:
-    global _RETURNS_VENDOR_COLUMN
-    if _RETURNS_VENDOR_COLUMN is not None:
-        return _RETURNS_VENDOR_COLUMN
+def _split_identifier(identifier: str) -> tuple[str | None, str]:
+    parts = identifier.split(".", 1)
+    if len(parts) == 2:
+        return parts[0], parts[1]
+    return None, parts[0]
+
+
+def _returns_view_name() -> str:
+    raw = (os.getenv(RETURNS_VIEW_ENV) or DEFAULT_RETURNS_VIEW).strip()
+    return raw or DEFAULT_RETURNS_VIEW
+
+
+@lru_cache(maxsize=2)
+def _returns_table_info() -> tuple[Table, str, str]:
+    schema, name = _split_identifier(_returns_view_name())
+    metadata = MetaData()
+    table = Table(
+        name,
+        metadata,
+        Column("asin", String),
+        Column("qty", Numeric),
+        Column("refund_amount", Numeric),
+        Column("return_date", Date),
+        Column("vendor", String),
+        schema=schema,
+    )
+    return table, (schema or "public"), name
+
+
+def _roi_table_or_400() -> Table:
     try:
-        result = await session.execute(
-            text(
-                """
-                SELECT 1
-                  FROM information_schema.columns
-                 WHERE table_schema = 'public'
-                   AND table_name = 'returns_raw'
-                   AND column_name = 'vendor'
-                 LIMIT 1
-                """
-            )
-        )
-        _RETURNS_VENDOR_COLUMN = bool(result.scalar())
-    except Exception:
-        _RETURNS_VENDOR_COLUMN = False
-    return _RETURNS_VENDOR_COLUMN
-
-
-def _quoted_roi_view() -> str:
-    return quote_identifier(current_roi_view())
+        roi_view = get_roi_view_name()
+    except InvalidROIViewError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    return get_roi_view_table(roi_view)
 
 
 @router.get(
@@ -64,18 +95,14 @@ def _quoted_roi_view() -> str:
 async def kpi(session: AsyncSession = Depends(get_async_session)) -> StatsKPIResponse:
     if not _sql_mode_enabled():
         return StatsKPIResponse(kpi=StatsKPI(roi_avg=0.0, products=0, vendors=0))
-    try:
-        view = _quoted_roi_view()
-    except InvalidROIViewError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    result = await session.execute(
-        text(
-            "SELECT AVG(roi) AS roi_avg, "
-            "COUNT(DISTINCT asin) AS products, "
-            "COUNT(DISTINCT vendor) AS vendors "
-            f"FROM {view}"
-        )
+
+    table = _roi_table_or_400()
+    stmt = select(
+        func.avg(table.c.roi).label("roi_avg"),
+        func.count(func.distinct(table.c.asin)).label("products"),
+        func.count(func.distinct(table.c.vendor)).label("vendors"),
     )
+    result = await session.execute(stmt)
     row = (result.mappings().first()) or {}
     metrics = StatsKPI(
         roi_avg=float(row.get("roi_avg") or 0.0),
@@ -93,28 +120,26 @@ async def kpi(session: AsyncSession = Depends(get_async_session)) -> StatsKPIRes
 async def roi_by_vendor(session: AsyncSession = Depends(get_async_session)) -> RoiByVendorResponse:
     if not _sql_mode_enabled():
         return RoiByVendorResponse(items=[], total_vendors=0)
-    try:
-        view = _quoted_roi_view()
-    except InvalidROIViewError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    result = await session.execute(
-        text(
-            f"""
-            SELECT vendor, AVG(roi) AS roi_avg, COUNT(*) AS items
-              FROM {view}
-          GROUP BY vendor
-          ORDER BY vendor
-            """
+
+    table = _roi_table_or_400()
+    stmt = (
+        select(
+            table.c.vendor.label("vendor"),
+            func.avg(table.c.roi).label("roi_avg"),
+            func.count().label("items"),
         )
+        .group_by(table.c.vendor)
+        .order_by(table.c.vendor.asc())
     )
+    result = await session.execute(stmt)
     rows = result.mappings().all()
     items = [
         RoiByVendorItem(
-            vendor=r.get("vendor"),
-            roi_avg=float(r.get("roi_avg") or 0.0),
-            items=int(r.get("items") or 0),
+            vendor=row.get("vendor"),
+            roi_avg=float(row.get("roi_avg") or 0.0),
+            items=int(row.get("items") or 0),
         )
-        for r in rows
+        for row in rows
     ]
     return RoiByVendorResponse(items=items, total_vendors=len(items))
 
@@ -134,32 +159,38 @@ async def returns_stats(
     if not _sql_mode_enabled():
         return ReturnsStatsResponse(items=[], total_returns=0)
 
-    clauses: list[str] = []
-    params: dict[str, str] = {}
+    table, schema, name = _returns_table_info()
+    clauses = []
+    params: dict[str, object] = {}
 
     if date_from:
-        clauses.append("return_date >= :date_from")
+        clauses.append(table.c.return_date >= bindparam("date_from"))
         params["date_from"] = date_from
     if date_to:
-        clauses.append("return_date <= :date_to")
+        clauses.append(table.c.return_date <= bindparam("date_to"))
         params["date_to"] = date_to
     if asin:
-        clauses.append("asin = :asin")
+        clauses.append(table.c.asin == bindparam("asin"))
         params["asin"] = asin
-    if vendor and await _returns_vendor_available(session):
-        clauses.append("vendor = :vendor")
-        params["vendor"] = vendor
+    if vendor:
+        vendor_available = await returns_vendor_column_exists(session, table_name=name, schema=schema)
+        if vendor_available:
+            clauses.append(table.c.vendor == bindparam("vendor"))
+            params["vendor"] = vendor
 
-    query_parts = [
-        "SELECT asin, SUM(qty) AS qty, SUM(refund_amount) AS refund_amount",
-        "FROM returns_raw",
-    ]
+    stmt = (
+        select(
+            table.c.asin.label("asin"),
+            func.sum(table.c.qty).label("qty"),
+            func.sum(table.c.refund_amount).label("refund_amount"),
+        )
+        .group_by(table.c.asin)
+        .order_by(table.c.asin.asc())
+    )
     if clauses:
-        query_parts.append("WHERE " + " AND ".join(clauses))
-    query_parts.append("GROUP BY asin ORDER BY asin")
-    sql = " ".join(query_parts)
+        stmt = stmt.where(and_(*clauses))
 
-    result = await session.execute(text(sql), params)
+    result = await session.execute(stmt, params or None)
     rows = result.mappings().all()
     items = [
         ReturnsStatsItem(
@@ -180,30 +211,33 @@ async def returns_stats(
 async def roi_trend(session: AsyncSession = Depends(get_async_session)) -> RoiTrendResponse:
     if not _sql_mode_enabled():
         return RoiTrendResponse(points=[])
-    try:
-        view = _quoted_roi_view()
-    except InvalidROIViewError as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    for date_col in ("dt", "date", "snapshot_date", "created_at"):
-        try:
-            result = await session.execute(
-                text(
-                    f"SELECT date_trunc('month', {date_col})::date AS month, "
-                    "AVG(roi) AS roi_avg, COUNT(*) AS items "
-                    f"FROM {view} GROUP BY 1 ORDER BY 1"
-                )
+
+    table = _roi_table_or_400()
+    for column_name in TREND_DATE_CANDIDATES:
+        date_expr = literal_column(column_name)
+        month_expr = func.date_trunc("month", date_expr).label("month")
+        stmt = (
+            select(
+                month_expr,
+                func.avg(table.c.roi).label("roi_avg"),
+                func.count().label("items"),
             )
-        except Exception:
+            .group_by(month_expr)
+            .order_by(month_expr.asc())
+        )
+        try:
+            result = await session.execute(stmt)
+        except SQLAlchemyError:
             continue
         rows = result.mappings().all()
         if rows:
             points = [
                 RoiTrendPoint(
-                    month=str(r["month"]),
-                    roi_avg=float(r.get("roi_avg") or 0.0),
-                    items=int(r.get("items") or 0),
+                    month=str(row["month"]),
+                    roi_avg=float(row.get("roi_avg") or 0.0),
+                    items=int(row.get("items") or 0),
                 )
-                for r in rows
+                for row in rows
             ]
             return RoiTrendResponse(points=points)
     return RoiTrendResponse(points=[])

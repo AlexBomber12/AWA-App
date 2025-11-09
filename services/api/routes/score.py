@@ -9,11 +9,11 @@ else:
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BeforeValidator, Field
-from sqlalchemy import bindparam, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from awa_common.db.async_session import get_async_session
-from awa_common.roi_views import InvalidROIViewError, current_roi_view, quote_identifier
+from services.api import roi_repository
+from services.api.roi_views import InvalidROIViewError, get_roi_view_name
 from services.api.security import limit_viewer, require_viewer
 
 
@@ -61,26 +61,28 @@ async def score(
         )
 
     try:
-        view_identifier = quote_identifier(current_roi_view())
+        roi_view = get_roi_view_name()
     except InvalidROIViewError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
-    stmt = text(
-        f"""
-            SELECT asin, vendor, category, roi
-              FROM {view_identifier}
-             WHERE asin IN :asins
-            """
-    ).bindparams(bindparam("asins", expanding=True))
-    result = await session.execute(stmt, {"asins": tuple(body.asins)})
-    found = {
-        row.asin: ScoreItem(
-            asin=row.asin,
-            vendor=getattr(row, "vendor", None),
-            category=getattr(row, "category", None),
-            roi=float(row.roi) if getattr(row, "roi", None) is not None else None,
+    rows_by_asin = await roi_repository.fetch_scores_for_asins(session, body.asins, roi_view)
+    items: list[ScoreItem] = []
+    for asin in body.asins:
+        row = rows_by_asin.get(asin)
+        if not row:
+            items.append(ScoreItem(asin=asin, error="not_found"))
+            continue
+        roi_value = row.get("roi")
+        try:
+            roi = float(roi_value) if roi_value is not None else None
+        except (TypeError, ValueError):
+            roi = None
+        items.append(
+            ScoreItem(
+                asin=asin,
+                vendor=row.get("vendor"),
+                category=row.get("category"),
+                roi=roi,
+            )
         )
-        for row in result
-    }
-    items = [found.get(asin, ScoreItem(asin=asin, error="not_found")) for asin in body.asins]
     return ScoreResponse(items=items)

@@ -11,8 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import TextClause
 
 from awa_common.db.async_session import get_async_session
-from awa_common.roi_views import InvalidROIViewError, current_roi_view, quote_identifier
 from services.api.app.repositories import roi as roi_repository
+from services.api.roi_views import InvalidROIViewError, get_roi_view_name, quote_identifier
 from services.api.schemas import SkuApprovalResponse, SkuChartPoint, SkuResponse
 from services.api.security import limit_ops, limit_viewer, require_ops, require_viewer
 
@@ -20,7 +20,7 @@ router = APIRouter(tags=["sku"])
 
 
 def _roi_view_name() -> str:
-    view = current_roi_view()
+    view = get_roi_view_name()
     if isinstance(view, str):
         return view
     raise TypeError("Configured ROI view name must be a string")
@@ -42,11 +42,16 @@ def _sku_card_sql(view_name: str) -> TextClause:
 
 SKU_CHART_SQL = sa_text(
     """
-        SELECT captured_at AS date, price
-          FROM buybox
-         WHERE asin = :asin
-         ORDER BY captured_at DESC
-         LIMIT :limit
+        WITH latest AS (
+            SELECT captured_at AS date, price
+              FROM buybox
+             WHERE asin = :asin
+             ORDER BY captured_at DESC
+             LIMIT :limit
+        )
+        SELECT date, price
+          FROM latest
+      ORDER BY date ASC
         """
 ).bindparams(bindparam("limit", type_=Integer))
 
@@ -61,7 +66,7 @@ def _to_iso(value: Any) -> str:
 
 def _serialize_chart(rows: Iterable[Mapping[str, Any]]) -> list[SkuChartPoint]:
     items: list[SkuChartPoint] = []
-    for row in reversed(list(rows)):
+    for row in rows:
         date_value = row.get("date")
         price_value = row.get("price")
         try:
