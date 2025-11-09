@@ -127,7 +127,7 @@ Security review of PR #1 surfaced that every ROI endpoint builds SQL by interpol
 
 ## Fix
 - Add `services/api/roi_views.py` with a whitelist (`v_roi_full`, `roi_view`, `mat_v_roi_full`, `test_roi_view`) plus identifier quoting utilities.
-- Update `services/api/roi_repository.py` and the ROI/score/sku/stats routes to resolve view names through the whitelist, reuse cached `text()` statements, and raise `HTTP 400` when misconfigured.
+- Update `services/api/app/repositories/roi.py` and the ROI/score/sku/stats routes to resolve view names through the whitelist, reuse cached `text()` statements, and raise `HTTP 400` when misconfigured.
 - Extend the ROI unit suites to cover invalid view errors and helper behavior.
 
 ## Logs

@@ -10,17 +10,20 @@ from sqlalchemy import Integer, bindparam, text as sa_text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import TextClause
 
-from .. import roi_repository
-from ..db import get_session
-from ..roi_views import InvalidROIViewError, get_roi_view_name, quote_identifier
-from ..schemas import SkuApprovalResponse, SkuChartPoint, SkuResponse
-from ..security import limit_ops, limit_viewer, require_ops, require_viewer
+from awa_common.db.async_session import get_async_session
+from awa_common.roi_views import InvalidROIViewError, current_roi_view, quote_identifier
+from services.api.app.repositories import roi as roi_repository
+from services.api.schemas import SkuApprovalResponse, SkuChartPoint, SkuResponse
+from services.api.security import limit_ops, limit_viewer, require_ops, require_viewer
 
 router = APIRouter(tags=["sku"])
 
 
 def _roi_view_name() -> str:
-    return get_roi_view_name()
+    view = current_roi_view()
+    if isinstance(view, str):
+        return view
+    raise TypeError("Configured ROI view name must be a string")
 
 
 @cache
@@ -72,7 +75,7 @@ def _serialize_chart(rows: Iterable[Mapping[str, Any]]) -> list[SkuChartPoint]:
 @router.get("/sku/{asin}", response_model=SkuResponse)
 async def get_sku(
     asin: str,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_async_session),
     _: object = Depends(require_viewer),
     __: None = Depends(limit_viewer),
 ) -> SkuResponse:
@@ -99,13 +102,13 @@ async def get_sku(
 @router.post("/sku/{asin}/approve", response_model=SkuApprovalResponse)
 async def approve_sku(
     asin: str,
-    session: AsyncSession = Depends(get_session),
+    session: AsyncSession = Depends(get_async_session),
     _: object = Depends(require_ops),
     __: None = Depends(limit_ops),
 ) -> SkuApprovalResponse:
     """Mark the SKU as approved if pending, returning the number of changes."""
-    changed = await roi_repository.bulk_approve(session, [asin])
-    return SkuApprovalResponse(approved=True, changed=int(changed))
+    approved_asins = await roi_repository.bulk_approve(session, [asin])
+    return SkuApprovalResponse(approved=True, changed=len(approved_asins))
 
 
 __all__ = ["router", "get_sku", "approve_sku"]

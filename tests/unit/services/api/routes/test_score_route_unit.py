@@ -6,47 +6,53 @@ from fastapi import HTTPException
 from services.api.routes import score as score_module
 
 
-class DummyRow:
-    def __init__(self, asin, vendor=None, category=None, roi=None):
-        self.asin = asin
-        self.vendor = vendor
-        self.category = category
-        self.roi = roi
+class DummyResult:
+    def __init__(self, rows):
+        self._rows = rows
+
+    def __iter__(self):
+        for row in self._rows:
+            yield types.SimpleNamespace(**row)
 
 
-class DummyDB:
+class DummySession:
     def __init__(self, rows):
         self.rows = rows
         self.calls = []
 
-    def execute(self, stmt, params):
+    async def execute(self, stmt, params):
         self.calls.append((str(stmt), params))
-        asin = params["asin"]
-        return types.SimpleNamespace(fetchone=lambda: self.rows.get(asin))
+        asins = set(params["asins"])
+        matching = [row for row in self.rows if row["asin"] in asins]
+        return DummyResult(matching)
 
 
-def test_score_validates_non_empty_body():
+@pytest.mark.asyncio
+async def test_score_validates_non_empty_body():
     with pytest.raises(HTTPException) as excinfo:
-        score_module.score(score_module.ScoreRequest(asins=[]), db=None)
+        await score_module.score(score_module.ScoreRequest(asins=[]), session=DummySession([]))
     assert excinfo.value.status_code == 422
 
 
-def test_score_returns_found_rows():
-    db = DummyDB({"A1": DummyRow("A1", vendor="V", category="C", roi=1.5)})
+@pytest.mark.asyncio
+async def test_score_returns_found_rows(monkeypatch):
+    session = DummySession([{"asin": "A1", "vendor": "V", "category": "C", "roi": 1.5}])
     body = score_module.ScoreRequest(asins=["A1", "B2"])
-    resp = score_module.score(body, db=db)
+    resp = await score_module.score(body, session=session)
     items = {item.asin: item for item in resp.items}
     assert items["A1"].vendor == "V"
     assert items["B2"].error == "not_found"
-    assert db.calls[0][1]["asin"] == "A1"
+    assert "WHERE asin IN" in session.calls[0][0]
 
 
-def test_score_invalid_view_returns_http_400(monkeypatch):
-    def _raise():
-        raise score_module.InvalidROIViewError("nope")
-
-    monkeypatch.setattr(score_module, "_quoted_roi_view", _raise)
+@pytest.mark.asyncio
+async def test_score_invalid_view_returns_http_400(monkeypatch):
+    monkeypatch.setattr(
+        score_module,
+        "current_roi_view",
+        lambda: (_ for _ in ()).throw(score_module.InvalidROIViewError("nope")),
+    )
     body = score_module.ScoreRequest(asins=["A1"])
     with pytest.raises(HTTPException) as excinfo:
-        score_module.score(body, db=None)
+        await score_module.score(body, session=DummySession([]))
     assert excinfo.value.status_code == 400

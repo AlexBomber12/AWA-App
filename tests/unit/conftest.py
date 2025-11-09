@@ -1,4 +1,5 @@
 import asyncio
+import types
 from collections import deque
 from collections.abc import AsyncIterator, Iterable
 from typing import Any
@@ -36,6 +37,13 @@ class _StubResult:
 
     def first(self) -> dict[str, Any] | None:
         return self._rows[0] if self._rows else None
+
+    def __iter__(self):
+        for row in self._rows:
+            if isinstance(row, dict):
+                yield types.SimpleNamespace(**row)
+            else:
+                yield row
 
 
 class _StubSession:

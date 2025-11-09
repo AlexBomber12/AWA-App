@@ -40,7 +40,7 @@ async def test_get_sku_404():
 
 @pytest.mark.asyncio
 async def test_approve_idempotent(monkeypatch):
-    calls = iter([1, 0])
+    calls = iter([["A1"], []])
 
     async def _fake_bulk(session, asins):
         return next(calls)

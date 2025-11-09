@@ -2,7 +2,6 @@ import asyncio
 import types
 
 import pytest
-import sqlalchemy
 
 import services.api.main as main
 from tests.fakes import FakeRedis
@@ -56,30 +55,26 @@ async def test_wait_for_db_retries_then_succeeds(monkeypatch):
         def __init__(self, succeed_on):
             self.succeed_on = succeed_on
 
-        def __enter__(self):
+        async def __aenter__(self):
             attempts["count"] += 1
             if attempts["count"] < self.succeed_on:
                 raise RuntimeError("db down")
             return self
 
-        def __exit__(self, exc_type, exc, tb):
+        async def __aexit__(self, exc_type, exc, tb):
             return False
 
-        def execute(self, stmt):
+        async def execute(self, stmt):
             return None
 
     class DummyEngine:
         def __init__(self):
             self.conn = DummyConn(2)
-            self.disposed = False
 
         def connect(self):
             return self.conn
 
-        def dispose(self):
-            self.disposed = True
-
-    monkeypatch.setattr(sqlalchemy, "create_engine", lambda url: DummyEngine())
+    monkeypatch.setattr(main, "get_async_engine", lambda: DummyEngine())
 
     async def fake_sleep(_delay):
         return None
