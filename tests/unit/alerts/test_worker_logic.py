@@ -122,3 +122,26 @@ def test_load_rules_handles_value_error(monkeypatch: pytest.MonkeyPatch) -> None
     monkeypatch.setattr(alerts_worker, "RULES_STORE", BrokenStore())
     rules = alerts_worker._load_rules()
     assert isinstance(rules, list) and rules
+
+
+@pytest.mark.asyncio
+async def test_revalidate_telegram(monkeypatch: pytest.MonkeyPatch) -> None:
+    called = {"token": None, "chat": None}
+
+    def fake_validate(token, chat_id):
+        called["token"] = token
+        called["chat"] = chat_id
+        return True, "ok"
+
+    monkeypatch.setattr(alerts_worker, "validate_config", fake_validate)
+    monkeypatch.setattr(alerts_worker.settings, "TELEGRAM_TOKEN", "abc")
+    monkeypatch.setattr(alerts_worker.settings, "TELEGRAM_DEFAULT_CHAT_ID", 123)
+    enabled, reason = alerts_worker.revalidate_telegram(force_log=True)
+    assert enabled is True
+    assert reason == "ok"
+
+
+def test_alert_rules_health(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(alerts_worker, "revalidate_telegram", lambda force_log=False: (True, "ok"))
+    result = alerts_worker.alert_rules_health()
+    assert result["telegram_enabled"] is True

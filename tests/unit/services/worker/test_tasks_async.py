@@ -23,6 +23,15 @@ def test_fallback_async_to_sync_runs_coroutine() -> None:
     assert calls == [42]
 
 
+def test_fallback_async_to_sync_propagates_exception() -> None:
+    async def boom():
+        raise ValueError("fail")
+
+    sync_fn = tasks._fallback_async_to_sync(boom)
+    with pytest.raises(ValueError):
+        sync_fn()
+
+
 def test_resolve_async_to_sync_uses_import(monkeypatch: pytest.MonkeyPatch) -> None:
     def dummy(func):
         return func
@@ -43,6 +52,17 @@ def test_resolve_async_to_sync_fallback_when_import_missing(monkeypatch: pytest.
     monkeypatch.setattr(tasks.importlib, "import_module", boom)
     resolved = tasks._resolve_async_to_sync()
     assert resolved is tasks._fallback_async_to_sync
+
+
+def test_resolve_async_to_sync_caches(monkeypatch: pytest.MonkeyPatch) -> None:
+    def dummy(func):
+        return func
+
+    monkeypatch.setattr(tasks, "_asgiref_async_to_sync", dummy, raising=False)
+    first = tasks._resolve_async_to_sync()
+    second = tasks._resolve_async_to_sync()
+    assert first is dummy
+    assert second is dummy
 
 
 def test_celery_wrapper_evaluate(monkeypatch: pytest.MonkeyPatch) -> None:

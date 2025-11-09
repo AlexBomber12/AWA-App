@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import textwrap
 from pathlib import Path
 
@@ -76,3 +77,31 @@ def test_file_rules_store_validates_channels_map(tmp_path: Path) -> None:
     store = FileRulesStore(config_path, enable_reload=False)
     with pytest.raises(ValueError):
         store.list_rules()
+
+
+def test_file_rules_store_reload(tmp_path: Path) -> None:
+    config_path = tmp_path / "rules.yaml"
+    config_path.write_text(
+        textwrap.dedent(
+            """
+            rules:
+              - key: roi
+                enabled: true
+            """
+        )
+    )
+    store = FileRulesStore(config_path, enable_reload=True)
+    assert store.list_rules()[0].key == "roi"
+    config_path.write_text(
+        textwrap.dedent(
+            """
+            rules:
+              - key: returns_rate_pct
+                enabled: true
+            """
+        )
+    )
+    # force reload by bumping mtime
+    current = config_path.stat().st_mtime + 1
+    os.utime(config_path, (current, current))
+    assert store.list_rules()[0].key == "returns_rate_pct"

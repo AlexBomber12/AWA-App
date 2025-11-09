@@ -46,6 +46,23 @@ def test_validate_config_handles_http_error() -> None:
     assert "HTTP 401" in reason or "error" in reason.lower()
 
 
+def test_validate_config_invalid_json(monkeypatch) -> None:
+    class BadResponse(_StubResponse):
+        def json(self) -> dict:
+            raise ValueError("no json")
+
+    client = _StubClient(BadResponse(status_code=200, payload={}))
+    ok, reason = telegram.validate_config("123456:ABCDEFGHIJKLMNO", "42", client=client)
+    assert ok is False
+    assert "invalid" in reason.lower()
+
+
+def test_validate_config_missing_chat_id(monkeypatch) -> None:
+    ok, reason = telegram.validate_config("123456:ABCDEFGHIJKLMNO", "", client=None)
+    assert ok is False
+    assert "chat_id" in reason
+
+
 def test_validate_config_uses_default_client(monkeypatch) -> None:
     response = _StubResponse(status_code=200, payload={"ok": True, "result": {"first_name": "bot"}})
     created = {"closed": False}
