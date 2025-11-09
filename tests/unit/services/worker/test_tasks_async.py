@@ -65,6 +65,13 @@ def test_resolve_async_to_sync_caches(monkeypatch: pytest.MonkeyPatch) -> None:
     assert second is dummy
 
 
+def test_resolve_async_to_sync_missing_attr(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(tasks, "_asgiref_async_to_sync", None, raising=False)
+    monkeypatch.setattr(tasks.importlib, "import_module", lambda name: object())
+    resolved = tasks._resolve_async_to_sync()
+    assert resolved is tasks._fallback_async_to_sync
+
+
 def test_celery_wrapper_evaluate(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(tasks, "_evaluate_alerts_sync", lambda: {"ok": 1})
     assert tasks.evaluate_alert_rules() == {"ok": 1}

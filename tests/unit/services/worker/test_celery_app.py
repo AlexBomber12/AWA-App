@@ -149,3 +149,11 @@ def test_alerts_schedule_uses_legacy_env(monkeypatch, reload_celery_module):
     cron = entry["schedule"]
     assert cron._orig_minute == "*/10"
     assert "alerts-telegram-health" in schedule
+
+
+def test_alerts_schedule_invalid_cron(monkeypatch, reload_celery_module):
+    monkeypatch.delenv("CHECK_INTERVAL_MIN", raising=False)
+    monkeypatch.setattr(celery_module.settings, "ALERTS_EVALUATION_INTERVAL_CRON", "invalid")
+    module = reload_celery_module(celery_module)
+    cron = module.celery_app.conf.beat_schedule["alerts-evaluate-rules"]["schedule"]
+    assert cron._orig_minute == "*/5"

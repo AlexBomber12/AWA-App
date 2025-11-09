@@ -116,6 +116,18 @@ async def test_send_message_invalid_json(metric_stubs) -> None:
     assert not sent_counter.records
 
 
+def test_normalize_chat_id_str() -> None:
+    value, reason = telegram._normalize_chat_id(" 77 ")
+    assert value == 77
+    assert reason is None
+
+
+def test_normalize_chat_id_non_numeric() -> None:
+    value, reason = telegram._normalize_chat_id("abc")
+    assert value is None
+    assert "integer" in (reason or "")
+
+
 @pytest.mark.asyncio
 async def test_send_photo_and_document_forward_payload(monkeypatch: pytest.MonkeyPatch) -> None:
     captured: list[tuple[str, dict[str, Any]]] = []
@@ -159,3 +171,30 @@ async def test_ensure_async_client_reuses_instance(monkeypatch: pytest.MonkeyPat
 
     assert client1 is client2
     assert created  # ensure factory invoked once
+
+
+@pytest.mark.asyncio
+async def test_send_payload_success(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(telegram.settings, "TELEGRAM_TOKEN", "12345:ABCDE")
+    monkeypatch.setattr(telegram.settings, "TELEGRAM_DEFAULT_CHAT_ID", 555)
+
+    class DummyClient:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, dict[str, Any]]] = []
+
+        async def post(self, url: str, json: dict[str, Any]):
+            self.calls.append((url, json))
+            return DummyResponse(status_code=200, payload={"ok": True})
+
+    client = DummyClient()
+    ok = await telegram._send_payload(
+        method="sendMessage",
+        payload={"text": "hi"},
+        chat_id_override=None,
+        disable_notification=True,
+        client=client,
+        rule="roi",
+    )
+    assert ok is True
+    assert client.calls[0][1]["chat_id"] == 555
+    assert client.calls[0][1]["disable_notification"] is True
