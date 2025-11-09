@@ -93,7 +93,6 @@ async def _extract_asins(request: Request) -> list[str]:
     return [str(value) for value in values]
 
 
-@router.post("/roi-review/approve", response_model=RoiApprovalResponse)
 def _resolve_approver(request: Request) -> str | None:
     user = getattr(request.state, "user", None)
     if user is None:
