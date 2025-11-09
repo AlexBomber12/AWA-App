@@ -29,7 +29,7 @@ except ModuleNotFoundError:  # pragma: no cover - allows tests without asgiref
     _async_to_sync = _fallback_async_to_sync
 
 
-async_to_sync: Callable[..., Any] = cast(Callable[..., Any], _async_to_sync)
+async_to_sync = cast(Callable[..., Any], _async_to_sync)
 
 if TYPE_CHECKING:
     from collections.abc import Callable

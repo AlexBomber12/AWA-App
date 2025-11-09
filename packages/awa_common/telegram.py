@@ -245,6 +245,29 @@ async def _send_payload(
         _record_failure(rule, "http_error")
         return False
 
+    try:
+        payload = response.json()
+    except ValueError:
+        _LOGGER.error(
+            "telegram.invalid_json",
+            method=method,
+            status_code=response.status_code,
+            body=response.text[:512],
+        )
+        _record_failure(rule, "invalid_response")
+        return False
+
+    if not payload.get("ok", False):
+        description = payload.get("description") or payload.get("error_code") or "unknown error"
+        _LOGGER.error(
+            "telegram.api_error",
+            method=method,
+            status_code=response.status_code,
+            description=description,
+        )
+        _record_failure(rule, "api_error")
+        return False
+
     _record_success(rule)
     return True
 

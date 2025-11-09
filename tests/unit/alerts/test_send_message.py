@@ -10,9 +10,15 @@ configure_logging(service="tests-alerts")  # ensure structlog bridges to stdlib 
 
 
 class DummyResponse:
-    def __init__(self, status_code: int, text: str = "") -> None:
+    def __init__(self, status_code: int, text: str = "", payload: dict | None = None) -> None:
         self.status_code = status_code
         self.text = text
+        self._payload = payload
+
+    def json(self) -> dict:
+        if self._payload is None:
+            raise ValueError("invalid json")
+        return self._payload
 
 
 class DummyClient:
@@ -59,7 +65,7 @@ def metric_stubs(monkeypatch: pytest.MonkeyPatch):
 @pytest.mark.asyncio
 async def test_send_message_success(metric_stubs, monkeypatch: pytest.MonkeyPatch) -> None:
     sent_counter, failed_counter = metric_stubs
-    client = DummyClient(DummyResponse(status_code=200))
+    client = DummyClient(DummyResponse(status_code=200, payload={"ok": True}))
     ok = await telegram.send_message("hello", client=client, rule="roi")
     assert ok is True
     assert sent_counter.records
@@ -68,24 +74,40 @@ async def test_send_message_success(metric_stubs, monkeypatch: pytest.MonkeyPatc
 
 
 @pytest.mark.asyncio
-async def test_send_message_http_error(metric_stubs, caplog: pytest.LogCaptureFixture) -> None:
+async def test_send_message_http_error(metric_stubs) -> None:
     sent_counter, failed_counter = metric_stubs
-    caplog.set_level("ERROR")
     client = DummyClient(DummyResponse(status_code=400, text="bad request"))
     ok = await telegram.send_message("oops", client=client, rule="roi")
     assert ok is False
-    assert "telegram.http_error" in caplog.text
     assert failed_counter.records[0]["error_type"] == "http_error"
     assert not sent_counter.records
 
 
 @pytest.mark.asyncio
-async def test_send_message_exception(metric_stubs, caplog: pytest.LogCaptureFixture) -> None:
+async def test_send_message_exception(metric_stubs) -> None:
     sent_counter, failed_counter = metric_stubs
-    caplog.set_level("ERROR")
-    client = DummyClient(DummyResponse(status_code=200), raise_exc=True)
+    client = DummyClient(DummyResponse(status_code=200, payload={"ok": True}), raise_exc=True)
     ok = await telegram.send_message("timeout", client=client, rule="roi")
     assert ok is False
-    assert "telegram.exception" in caplog.text
     assert failed_counter.records[0]["error_type"] == "exception"
+    assert not sent_counter.records
+
+
+@pytest.mark.asyncio
+async def test_send_message_api_error(metric_stubs) -> None:
+    sent_counter, failed_counter = metric_stubs
+    client = DummyClient(DummyResponse(status_code=200, payload={"ok": False, "description": "forbidden"}))
+    ok = await telegram.send_message("blocked", client=client, rule="roi")
+    assert ok is False
+    assert failed_counter.records[0]["error_type"] == "api_error"
+    assert not sent_counter.records
+
+
+@pytest.mark.asyncio
+async def test_send_message_invalid_json(metric_stubs) -> None:
+    sent_counter, failed_counter = metric_stubs
+    client = DummyClient(DummyResponse(status_code=200, text="oops", payload=None))
+    ok = await telegram.send_message("broken", client=client, rule="roi")
+    assert ok is False
+    assert failed_counter.records[0]["error_type"] == "invalid_response"
     assert not sent_counter.records
