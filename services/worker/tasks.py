@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import importlib
 import os
 import shutil
 import tempfile
@@ -24,12 +25,25 @@ def _fallback_async_to_sync(func: Callable[..., Any]) -> Callable[..., Any]:
 
 
 try:  # pragma: no cover - fallback when asgiref is missing
-    from asgiref.sync import async_to_sync as _async_to_sync
+    from asgiref.sync import async_to_sync as _asgiref_async_to_sync
 except ModuleNotFoundError:  # pragma: no cover - allows tests without asgiref
-    _async_to_sync = _fallback_async_to_sync
+    _asgiref_async_to_sync = None
 
 
-async_to_sync = cast(Callable[..., Any], _async_to_sync)
+def _resolve_async_to_sync() -> Callable[..., Any]:
+    if _asgiref_async_to_sync is not None:
+        return cast(Callable[..., Any], _asgiref_async_to_sync)
+    try:
+        module = importlib.import_module("asgiref.sync")
+        func = getattr(module, "async_to_sync", None)
+        if func is None:
+            raise AttributeError("async_to_sync missing")
+        return cast(Callable[..., Any], func)
+    except (ModuleNotFoundError, AttributeError):  # pragma: no cover - executed in fallback tests
+        return _fallback_async_to_sync
+
+
+async_to_sync = _resolve_async_to_sync()
 
 if TYPE_CHECKING:
     from collections.abc import Callable
