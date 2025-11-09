@@ -68,6 +68,7 @@ jobs:
       AUTH_DEFAULT_ROLES: ""
     steps:
       - name: Checkout
+        id: checkout
         uses: actions/checkout@v5
         with:
           fetch-depth: 0
@@ -156,11 +157,11 @@ jobs:
           if-no-files-found: ignore
 
       - name: Bundle mirror logs (unit)
-        if: failure()
+        if: failure() && steps.checkout.conclusion == 'success'
         run: bash scripts/ci/mirrorlogs_bundle.sh
 
       - name: Label mirror logs bundle
-        if: failure()
+        if: failure() && steps.checkout.conclusion == 'success'
         run: |
           if [ -f artifacts/mirrorlogs.tar.zst ]; then
             mv artifacts/mirrorlogs.tar.zst "artifacts/mirrorlogs-${{ inputs.marker }}.tar.zst"
@@ -170,7 +171,7 @@ jobs:
           fi
 
       - name: Upload mirror logs bundle
-        if: failure()
+        if: failure() && steps.checkout.conclusion == 'success'
         uses: actions/upload-artifact@v5
         with:
           name: mirrorlogs
@@ -209,7 +210,7 @@ jobs:
           --health-timeout 5s
           --health-retries 12
       minio:
-        image: minio/minio:latest
+        image: bitnami/minio:latest
         env:
           MINIO_ROOT_USER: minio
           MINIO_ROOT_PASSWORD: miniosecret
@@ -232,6 +233,7 @@ jobs:
       MINIO_REGION: ${{ inputs['minio-region'] }}
     steps:
       - name: Checkout
+        id: checkout
         uses: actions/checkout@v5
         with:
           fetch-depth: 0
@@ -305,11 +307,11 @@ jobs:
           if-no-files-found: ignore
 
       - name: Bundle mirror logs (integration)
-        if: failure()
+        if: failure() && steps.checkout.conclusion == 'success'
         run: bash scripts/ci/mirrorlogs_bundle.sh
 
       - name: Label mirror logs bundle
-        if: failure()
+        if: failure() && steps.checkout.conclusion == 'success'
         run: |
           if [ -f artifacts/mirrorlogs.tar.zst ]; then
             mv artifacts/mirrorlogs.tar.zst "artifacts/mirrorlogs-${{ inputs.marker }}.tar.zst"
@@ -319,7 +321,7 @@ jobs:
           fi
 
       - name: Upload mirror logs bundle
-        if: failure()
+        if: failure() && steps.checkout.conclusion == 'success'
         uses: actions/upload-artifact@v5
         with:
           name: mirrorlogs
@@ -336,6 +338,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout
+        id: checkout
         uses: actions/checkout@v5
         with:
           fetch-depth: 0
@@ -396,11 +399,11 @@ jobs:
           docker logs awa-e2e-postgres > artifacts/e2e/postgres.log 2>&1 || true
 
       - name: Bundle mirror logs (e2e)
-        if: failure()
+        if: failure() && steps.checkout.conclusion == 'success'
         run: bash scripts/ci/mirrorlogs_bundle.sh
 
       - name: Label mirror logs bundle
-        if: failure()
+        if: failure() && steps.checkout.conclusion == 'success'
         run: |
           if [ -f artifacts/mirrorlogs.tar.zst ]; then
             mv artifacts/mirrorlogs.tar.zst "artifacts/mirrorlogs-${{ inputs.marker }}.tar.zst"
@@ -410,7 +413,7 @@ jobs:
           fi
 
       - name: Upload mirror logs bundle
-        if: failure()
+        if: failure() && steps.checkout.conclusion == 'success'
         uses: actions/upload-artifact@v5
         with:
           name: mirrorlogs
