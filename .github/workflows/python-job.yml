@@ -209,18 +209,6 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 12
-      minio:
-        image: bitnami/minio:latest
-        env:
-          MINIO_ROOT_USER: minio
-          MINIO_ROOT_PASSWORD: miniosecret
-        ports:
-          - 9000:9000
-        options: >-
-          --health-cmd "curl -f http://localhost:9000/minio/health/live || exit 1"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 12
     env:
       DATABASE_URL: ${{ inputs['database-url'] }}
       ASYNC_DATABASE_URL: ${{ inputs['async-database-url'] }}
@@ -257,6 +245,25 @@ jobs:
           while IFS= read -r -d '' req; do
             python -m pip install -r "$req" -c constraints.txt
           done < <(find services -maxdepth 2 -name 'requirements*.txt' -print0)
+
+      - name: Start MinIO
+        run: |
+          docker rm -f gha-minio >/dev/null 2>&1 || true
+          docker run -d --name gha-minio \
+            -p 9000:9000 \
+            -e MINIO_ROOT_USER=${{ inputs['minio-access-key'] }} \
+            -e MINIO_ROOT_PASSWORD=${{ inputs['minio-secret-key'] }} \
+            minio/minio:RELEASE.2024-09-07T00-00-00Z server /data
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://localhost:9000/minio/health/live >/dev/null; then
+              exit 0
+            fi
+            echo "Waiting for MinIO... (${attempt}/30)"
+            sleep 2
+          done
+          echo "MinIO failed to become healthy" >&2
+          docker logs gha-minio || true
+          exit 1
 
       - name: Run Alembic upgrade
         run: |
@@ -305,6 +312,10 @@ jobs:
             artifacts/integration-junit.xml
             artifacts/integration-coverage.xml
           if-no-files-found: ignore
+
+      - name: Stop MinIO
+        if: always()
+        run: docker rm -f gha-minio >/dev/null 2>&1 || true
 
       - name: Bundle mirror logs (integration)
         if: failure() && steps.checkout.conclusion == 'success'

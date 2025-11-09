@@ -149,6 +149,15 @@ jobs:
             BASE_REF=$(jq -r '.pull_request.base.sha' "$GITHUB_EVENT_PATH")
             BASE_BRANCH_NAME=$(jq -r '.pull_request.base.ref' "$GITHUB_EVENT_PATH")
             LABEL_OVERRIDE=$(jq -r 'any(.pull_request.labels[]?.name; contains("run-integration")) // false' "$GITHUB_EVENT_PATH" || echo false)
+          elif [[ "${GITHUB_EVENT_NAME}" == "push" ]]; then
+            BASE_REF=$(jq -r '.before // empty' "$GITHUB_EVENT_PATH")
+            if [[ "${BASE_REF}" == "0000000000000000000000000000000000000000" ]]; then
+              BASE_REF=""
+            fi
+            BASE_BRANCH_NAME=$(jq -r '.ref // empty' "$GITHUB_EVENT_PATH" | sed 's#refs/heads/##') || true
+            if [[ -z "${BASE_BRANCH_NAME}" ]]; then
+              BASE_BRANCH_NAME="${DEFAULT_BRANCH}"
+            fi
           else
             BASE_REF="origin/${DEFAULT_BRANCH}"
           fi

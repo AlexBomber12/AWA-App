@@ -13,6 +13,10 @@ LABEL_FORCE="${RUN_INTEGRATION_LABEL:-false}"
 ROOT="$(git rev-parse --show-toplevel)"
 cd "${ROOT}"
 
+is_commit_sha() {
+  [[ "$1" =~ ^[0-9a-f]{7,40}$ ]]
+}
+
 if [[ "${FORCE_FULL}" == "true" ]]; then
   DECISION="true"
 elif [[ "${LABEL_FORCE}" == "true" ]]; then
@@ -24,7 +28,12 @@ else
     git fetch --no-tags --prune --depth=1 origin "${DEFAULT_BRANCH}" >/dev/null 2>&1
     BASE_SHA="origin/${DEFAULT_BRANCH}"
   elif ! git cat-file -t "${BASE_SHA}" >/dev/null 2>&1; then
-    git fetch --no-tags --prune --depth=1 origin "${BASE_BRANCH_NAME}"
+    if is_commit_sha "${BASE_SHA}"; then
+      git fetch --no-tags --prune --depth=1 origin "${BASE_SHA}" >/dev/null 2>&1 || true
+    else
+      git fetch --no-tags --prune --depth=1 origin "${BASE_BRANCH_NAME}" >/dev/null 2>&1
+      BASE_SHA="origin/${BASE_BRANCH_NAME}"
+    fi
   fi
 
   if ! git rev-parse --quiet --verify "${BASE_SHA}^{commit}" >/dev/null; then
