@@ -7,16 +7,8 @@ COPY requirements-dev.txt ./requirements-dev.txt
 RUN pip install --no-cache-dir -r requirements-dev.txt
 
 # Copy API + shared code needed for the smoke test.
-COPY packages ./packages
-COPY services/api ./services/api
-COPY services/etl ./services/etl
-COPY scripts ./scripts
-COPY pyproject.toml ./pyproject.toml
-COPY constraints.txt ./constraints.txt
-
-# Install repo package in editable mode so imports resolve.
+COPY . .
 RUN pip install --no-cache-dir -e ./packages/awa_common
-
 WORKDIR /app/services/api
 ENTRYPOINT ["/app/services/api/docker-entrypoint.sh"]
 HEALTHCHECK --interval=5s --timeout=2s --retries=30 CMD curl -fsS http://localhost:8000/ready || exit 1
