@@ -71,7 +71,7 @@ def run_migrations_online() -> None:
 
 
 if config:
-    config.set_main_option("script_location", "services/api/migrations")
+    config.set_main_option("script_location", "migrations")
     config.set_main_option("sqlalchemy.url", _database_url())
     config.attributes["view_helpers"] = view_helpers
     config.attributes["replace_view"] = view_helpers.replace_view
