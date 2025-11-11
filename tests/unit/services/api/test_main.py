@@ -141,6 +141,34 @@ async def test_check_llm_sets_fallback(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_close_redis_client_prefers_aclose():
+    class Client:
+        def __init__(self):
+            self.closed = False
+
+        async def aclose(self):
+            self.closed = True
+
+    client = Client()
+    await main._close_redis_client(client)
+    assert client.closed is True
+
+
+@pytest.mark.asyncio
+async def test_close_redis_client_falls_back_to_close():
+    class Client:
+        def __init__(self):
+            self.closed = False
+
+        async def close(self):
+            self.closed = True
+
+    client = Client()
+    await main._close_redis_client(client)
+    assert client.closed is True
+
+
+@pytest.mark.asyncio
 async def test_lifespan_initialises_and_closes(monkeypatch):
     flags = {"db": 0, "redis": 0, "closed": False}
 

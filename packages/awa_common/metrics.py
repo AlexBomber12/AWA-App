@@ -239,6 +239,25 @@ AWA_INGEST_DOWNLOAD_FAILURES_TOTAL = Counter(
     ("scheme", "reason", *BASE_LABELS),
     registry=REGISTRY,
 )
+STATS_CACHE_HITS_TOTAL = Counter(
+    "stats_cache_hits_total",
+    "Cache hits for /stats endpoints",
+    ("endpoint", *BASE_LABELS),
+    registry=REGISTRY,
+)
+STATS_CACHE_MISS_TOTAL = Counter(
+    "stats_cache_miss_total",
+    "Cache misses for /stats endpoints",
+    ("endpoint", *BASE_LABELS),
+    registry=REGISTRY,
+)
+STATS_QUERY_DURATION_SECONDS = Histogram(
+    "stats_query_duration_seconds",
+    "Execution time of stats SQL queries",
+    ("endpoint", *BASE_LABELS),
+    buckets=HTTP_BUCKETS,
+    registry=REGISTRY,
+)
 
 HTTP_CLIENT_REQUESTS_TOTAL = Counter(
     "http_client_requests_total",
@@ -713,6 +732,23 @@ def record_price_importer_rows(stage: str, rows: int) -> None:
 
 def record_price_importer_validation(duration_s: float) -> None:
     PRICE_IMPORTER_VALIDATE_SECONDS.labels(**_with_base_labels()).observe(max(duration_s, 0.0))
+
+
+def _stats_labels(endpoint: str) -> dict[str, str]:
+    label = (endpoint or "unknown").lower() or "unknown"
+    return _with_base_labels(endpoint=label)
+
+
+def record_stats_cache_hit(endpoint: str) -> None:
+    STATS_CACHE_HITS_TOTAL.labels(**_stats_labels(endpoint)).inc()
+
+
+def record_stats_cache_miss(endpoint: str) -> None:
+    STATS_CACHE_MISS_TOTAL.labels(**_stats_labels(endpoint)).inc()
+
+
+def record_stats_query_duration(endpoint: str, duration_s: float) -> None:
+    STATS_QUERY_DURATION_SECONDS.labels(**_stats_labels(endpoint)).observe(max(duration_s, 0.0))
 
 
 def record_ingest_download(bytes_count: int, duration_s: float, *, scheme: str | None) -> None:

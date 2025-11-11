@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime as dt
 from typing import Any
 
 import pytest
@@ -64,8 +65,8 @@ async def test_returns_filters_apply(monkeypatch):
     assert "asin = :asin" in fake_db.last_query
     assert "vendor = :vendor" in fake_db.last_query
     assert fake_db.last_params == {
-        "date_from": "2024-01-01",
-        "date_to": "2024-01-31",
+        "date_from": dt.date(2024, 1, 1),
+        "date_to": dt.date(2024, 1, 31),
         "asin": "A1",
         "vendor": "V100",
     }
@@ -93,4 +94,40 @@ async def test_returns_no_filters_preserves_shape(monkeypatch):
     assert result.items[0].asin == "B2"
     assert result.items[0].qty == 1
     assert result.items[0].refund_amount == pytest.approx(1.2)
+    monkeypatch.delenv("STATS_USE_SQL", raising=False)
+
+
+@pytest.mark.asyncio
+async def test_stats_guardrails_clamp(monkeypatch):
+    monkeypatch.setenv("STATS_USE_SQL", "1")
+    monkeypatch.setattr(stats.settings, "STATS_MAX_DAYS", 5, raising=False)
+    monkeypatch.setattr(stats.settings, "REQUIRE_CLAMP", False, raising=False)
+    fake_db = _FakeDB([{"asin": "C1", "qty": 10, "refund_amount": 12.0}])
+
+    result = await stats.returns_stats(
+        date_from="2024-01-01",
+        date_to="2024-02-01",
+        session=fake_db,
+    )
+
+    assert fake_db.last_params is not None
+    assert fake_db.last_params["date_from"] == dt.date(2024, 1, 28)
+    assert fake_db.last_params["date_to"] == dt.date(2024, 2, 1)
+    assert result.total_returns == 1
+    monkeypatch.delenv("STATS_USE_SQL", raising=False)
+
+
+@pytest.mark.asyncio
+async def test_stats_guardrails_require_error(monkeypatch):
+    monkeypatch.setenv("STATS_USE_SQL", "1")
+    monkeypatch.setattr(stats.settings, "STATS_MAX_DAYS", 3, raising=False)
+    monkeypatch.setattr(stats.settings, "REQUIRE_CLAMP", True, raising=False)
+    fake_db = _FakeDB([])
+
+    with pytest.raises(stats.HTTPException):
+        await stats.returns_stats(
+            date_from="2024-01-01",
+            date_to="2024-01-10",
+            session=fake_db,
+        )
     monkeypatch.delenv("STATS_USE_SQL", raising=False)

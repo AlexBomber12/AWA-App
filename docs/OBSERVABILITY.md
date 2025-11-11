@@ -74,7 +74,17 @@ debug incidents.
 - HTTP clients (`packages/awa_common/etl/http.py` and `services/etl/http_client.py`) now report
   their own metrics:
   - `http_client_requests_total{target,method,status_class,service,env,version}`
-  - `http_client_request_duration_seconds_bucket{target,method,service,env,version}`
+- `http_client_request_duration_seconds_bucket{target,method,service,env,version}`
+
+### Stats Aggregates
+
+- `stats_cache_hits_total{endpoint,service,env,version}` and `stats_cache_miss_total{...}` measure
+  Redis effectiveness for `/stats/kpi`, `/stats/returns`, and `/stats/roi_trend`.
+- `stats_query_duration_seconds_bucket{endpoint,service,env,version}` captures the DB runtime for
+  the same aggregate queries so you can correlate cache hit-rates with database load.
+- Cache operations log `stats_cache_hit`, `stats_cache_miss`, and `stats_cache_store_failed`
+  messages that include only the hashed cache key and endpoint. Payloads are intentionally excluded
+  so Sentry breadcrumbs never contain PII.
 
 ### Metrics Endpoints
 

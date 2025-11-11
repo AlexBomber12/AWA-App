@@ -486,14 +486,9 @@ def _api_fast_startup_global(monkeypatch, request):  # noqa: C901
     try:
         import redis.asyncio as aioredis
 
-        class _FakeRedis:
-            async def ping(self):
-                return True
+        cache_fake = FakeRedis()
 
-            async def aclose(self):
-                return None
-
-        monkeypatch.setattr(aioredis, "from_url", lambda *_a, **_k: _FakeRedis(), raising=True)
+        monkeypatch.setattr(aioredis, "from_url", lambda *_a, **_k: cache_fake, raising=True)
     except Exception:
         pass
 

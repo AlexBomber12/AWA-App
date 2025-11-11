@@ -1,4 +1,5 @@
 import datetime
+from types import SimpleNamespace
 
 import pytest
 from sqlalchemy.exc import SQLAlchemyError
@@ -10,6 +11,7 @@ from services.api.schemas import (
     RoiTrendResponse,
     StatsKPIResponse,
 )
+from tests.fakes import FakeRedis
 
 
 class DummyMappings:
@@ -39,6 +41,12 @@ class DummyDB:
     async def execute(self, stmt, params=None):
         self.calls.append((stmt, params))
         return DummyResult(self.rows)
+
+
+def _fake_request(cache_client=None, namespace="stats:"):
+    state = SimpleNamespace(stats_cache=cache_client, stats_cache_namespace=namespace)
+    app = SimpleNamespace(state=state)
+    return SimpleNamespace(app=app)
 
 
 @pytest.mark.asyncio
@@ -198,3 +206,46 @@ async def test_returns_stats_ignores_vendor_when_column_missing(monkeypatch):
     if params is not None:
         assert "vendor" not in params
     assert "vendor" not in str(stmt)
+
+
+def test_stats_namespace_defaults(monkeypatch):
+    monkeypatch.setattr(stats_module.settings, "STATS_CACHE_NAMESPACE", "custom:", raising=False)
+    assert stats_module._stats_cache_client(None) is None
+    assert stats_module._stats_namespace(None) == "custom:"
+
+
+@pytest.mark.asyncio
+async def test_returns_stats_invalid_date(monkeypatch):
+    monkeypatch.setenv("STATS_USE_SQL", "1")
+    with pytest.raises(stats_module.HTTPException):
+        await stats_module.returns_stats(date_from="invalid", session=DummyDB([]))
+
+
+@pytest.mark.asyncio
+async def test_returns_stats_uses_cache(monkeypatch):
+    monkeypatch.setenv("STATS_USE_SQL", "1")
+    monkeypatch.setattr(stats_module.settings, "STATS_ENABLE_CACHE", True, raising=False)
+    monkeypatch.setattr(stats_module.settings, "STATS_CACHE_TTL_S", 5, raising=False)
+    cache_client = FakeRedis()
+    request = _fake_request(cache_client)
+    rows = [{"asin": "C1", "qty": 5, "refund_amount": 7.5}]
+    db = DummyDB(rows)
+
+    resp1 = await stats_module.returns_stats(
+        date_from="2024-01-01",
+        date_to="2024-01-02",
+        session=db,
+        request=request,
+    )
+    resp2 = await stats_module.returns_stats(
+        date_from="2024-01-01",
+        date_to="2024-01-02",
+        session=db,
+        request=request,
+    )
+    assert resp1.total_returns == 1
+    assert resp2.total_returns == 1
+    assert len(db.calls) == 1
+    cache_keys = list(cache_client._kv.keys())
+    assert any(key.startswith("stats:returns") for key in cache_keys)
+    assert any(key.endswith(":meta") for key in cache_keys)

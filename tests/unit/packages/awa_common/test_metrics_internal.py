@@ -169,6 +169,15 @@ def test_register_metrics_endpoint_returns_payload():
     assert response.headers["content-type"] == metrics.CONTENT_TYPE_LATEST
 
 
+def test_stats_cache_counters_increment():
+    metrics.record_stats_cache_hit("kpi")
+    metrics.record_stats_cache_miss("kpi")
+    hit_samples = metrics.STATS_CACHE_HITS_TOTAL.collect()[0].samples
+    miss_samples = metrics.STATS_CACHE_MISS_TOTAL.collect()[0].samples
+    assert any(sample.value == 1 for sample in hit_samples if sample.labels["endpoint"] == "kpi")
+    assert any(sample.value == 1 for sample in miss_samples if sample.labels["endpoint"] == "kpi")
+
+
 def test_task_label_fallbacks():
     class WithName:
         name = "demo.task"

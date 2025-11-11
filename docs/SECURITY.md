@@ -88,6 +88,19 @@ single source of truth reflected in the codebase.
 - Retries log `etl_http_retry` events with `attempt`, `sleep`, and `status_code`, and increment
   `etl_retry_total{source,code}` in Prometheus.
 
+## Stats Cache Safety
+
+- `/stats/kpi`, `/stats/returns`, and `/stats/roi_trend` use a Redis read-through cache when
+  `STATS_ENABLE_CACHE=true`. Keys follow the `STATS_CACHE_NAMESPACE` prefix and include only hashed
+  endpoint/query-parameter tuples so no raw filter values leak.
+- Cached payloads contain aggregated metrics only; PII never enters the cache and TTL is bounded by
+  `STATS_CACHE_TTL_S` (300–600 s by default).
+- Debug logs (`stats_cache_hit`, `stats_cache_miss`, `stats_cache_store_failed`) include the hashed
+  cache key plus endpoint but never the payload, ensuring Sentry breadcrumbs stay scrubbed.
+- After each MV refresh the worker task deletes cached KPI/ROI entries plus any returns windows that
+  overlap the refreshed period (`purge_returns_cache` uses SCAN+DEL), preventing stale aggregates
+  from lingering.
+
 ## Sentry Telemetry
 
 - `services/api/sentry_config.py` initialises Sentry when `SENTRY_DSN` is set. Telemetry is optional;

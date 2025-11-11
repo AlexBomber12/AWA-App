@@ -1,4 +1,5 @@
 import asyncio
+import inspect
 import os
 from collections.abc import Callable, Iterable
 from contextlib import asynccontextmanager
@@ -14,6 +15,7 @@ from fastapi_limiter import FastAPILimiter
 from sqlalchemy import text as sa_text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from awa_common.cache import normalize_namespace
 from awa_common.db.async_session import (
     dispose_async_engine,
     get_async_engine,
@@ -114,28 +116,46 @@ async def lifespan(_app: FastAPI):
     await _wait_for_db()
     await _check_llm()
     redis_url = settings.REDIS_URL
-    r = None
+    limiter_redis: aioredis.Redis | None = None
+    stats_cache: aioredis.Redis | None = None
+    _app.state.stats_cache = None
+    _app.state.stats_cache_namespace = normalize_namespace(getattr(settings, "STATS_CACHE_NAMESPACE", "stats:"))
     lag_stop: Callable[[], None] | None = None
     try:
         if settings.ENABLE_LOOP_LAG_MONITOR:
             lag_stop = start_loop_lag_monitor(asyncio.get_running_loop(), float(settings.LOOP_LAG_INTERVAL_S))
             _app.state.loop_lag_stop = lag_stop
-        r = await _wait_for_redis(redis_url)
-        await FastAPILimiter.init(r)
+        limiter_redis = await _wait_for_redis(redis_url)
+        await FastAPILimiter.init(limiter_redis)
     except Exception as exc:
         structlog.get_logger().warning("redis_unavailable", error=str(exc))
-        r = None
+        limiter_redis = None
+    try:
+        if getattr(settings, "STATS_ENABLE_CACHE", False):
+            stats_cache = aioredis.from_url(redis_url, encoding="utf-8", decode_responses=True)
+            await stats_cache.ping()
+            _app.state.stats_cache = stats_cache
+    except Exception as exc:
+        structlog.get_logger().warning("stats_cache_unavailable", error=str(exc))
+        if stats_cache is not None:
+            await stats_cache.aclose()
+        stats_cache = None
+        _app.state.stats_cache = None
     try:
         yield
     finally:
         if lag_stop is not None:
             lag_stop()
             _app.state.loop_lag_stop = None
-        if r is not None:
+        if stats_cache is not None:
+            await _close_redis_client(stats_cache)
+            _app.state.stats_cache = None
+        if limiter_redis is not None:
             try:
                 await FastAPILimiter.close()
             except RuntimeError:
                 pass
+            await _close_redis_client(limiter_redis)
         await dispose_async_engine()
 
 
@@ -242,6 +262,20 @@ async def _check_llm() -> None:
             settings.LLM_PROVIDER = fallback  # type: ignore[attr-defined]
         except Exception:
             pass
+
+
+async def _close_redis_client(client: aioredis.Redis | None) -> None:
+    if client is None:
+        return
+    close = getattr(client, "aclose", None)
+    if callable(close):
+        await close()
+        return
+    close = getattr(client, "close", None)
+    if callable(close):
+        result = close()
+        if inspect.isawaitable(result):
+            await result
 
 
 __all__ = ["app", "create_app", "ready", "ready_db"]

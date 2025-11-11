@@ -58,6 +58,14 @@ celery_app = make_celery()
 
 _beat_schedule = dict(getattr(celery_app.conf, "beat_schedule", {}) or {})
 
+
+def _env_flag(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.lower() in ("1", "true", "yes")
+
+
 if os.getenv("ENABLE_METRICS", "1") != "0":
     broker_url = getattr(settings, "BROKER_URL", None) or settings.REDIS_URL
     queue_names_env = getattr(settings, "QUEUE_NAMES", None)
@@ -91,11 +99,11 @@ if os.getenv("SCHEDULE_NIGHTLY_MAINTENANCE", "true").lower() in ("1", "true", "y
         ),
     }
 
-if os.getenv("SCHEDULE_MV_REFRESH", "true").lower() in ("1", "true", "yes"):
-    cron_expr = os.getenv("MV_REFRESH_CRON", "*/15 * * * *")
+if _env_flag("SCHEDULE_MV_REFRESH", getattr(settings, "SCHEDULE_MV_REFRESH", True)):
+    cron_expr = os.getenv("MV_REFRESH_CRON", getattr(settings, "MV_REFRESH_CRON", "30 2 * * *"))
     mv_cron = cron_expr.split()
     if len(mv_cron) != 5:
-        mv_cron = "*/15 * * * *".split()
+        mv_cron = getattr(settings, "MV_REFRESH_CRON", "30 2 * * *").split()
     _beat_schedule["refresh-roi-fees-mvs"] = {
         "task": "db.refresh_roi_mvs",
         "schedule": crontab(

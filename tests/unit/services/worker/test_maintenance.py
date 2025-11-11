@@ -103,10 +103,16 @@ def test_task_maintenance_nightly(monkeypatch):
 def test_task_refresh_roi_mvs_executes_both_views(monkeypatch):
     engine = RefreshEngine()
     monkeypatch.setattr(maintenance_module, "create_engine", lambda *_: engine)
+    monkeypatch.setattr(
+        maintenance_module,
+        "_bust_stats_cache",
+        lambda *_: {"status": "success", "deleted": {"kpi": 1, "roi_trend": 0, "returns": 0}},
+    )
     result = maintenance_module.task_refresh_roi_mvs.run()
     assert result == {
         "status": "success",
         "views": ["mat_v_roi_full", "mat_fees_expanded"],
+        "cache_bust": {"status": "success", "deleted": {"kpi": 1, "roi_trend": 0, "returns": 0}},
     }
     assert engine.disposed is True
     assert engine.log[0] == ("execution_options", {"isolation_level": "AUTOCOMMIT"})
