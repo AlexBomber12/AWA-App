@@ -31,6 +31,12 @@ def _test_env_defaults(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("SENTRY_METRICS_ENABLED", "0")
 
 
+@pytest.fixture(autouse=True)
+def _disable_loop_lag_monitor(monkeypatch: pytest.MonkeyPatch):
+    if "ENABLE_LOOP_LAG_MONITOR" not in os.environ:
+        monkeypatch.setenv("ENABLE_LOOP_LAG_MONITOR", "0")
+
+
 AUDIT_SENTINEL_ATTR = "_strict_audit_patched"
 AUDIT_SPY_ATTR = "_strict_audit_spy"
 

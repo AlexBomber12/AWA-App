@@ -1,19 +1,47 @@
 from __future__ import annotations
 
-import shutil
+import hashlib
+import os
 import tempfile
+import time
+from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
+from urllib.parse import ParseResult, urlparse
 
+import aioboto3
+import httpx
+from botocore.config import Config
 from celery import states
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 
+from awa_common.files import sanitize_upload_name
+from awa_common.metrics import (
+    ingest_upload_inflight,
+    record_ingest_download,
+    record_ingest_download_failure,
+    record_ingest_upload,
+    record_ingest_upload_failure,
+)
+from awa_common.settings import settings
 from etl.load_csv import ImportFileError
 from services.api.security import limit_ops, limit_viewer, require_ops, require_viewer
 from services.worker.celery_app import celery_app
 from services.worker.tasks import task_import_file
 
 router = APIRouter(prefix="", tags=["ingest"])
+
+
+def _s3_client_kwargs() -> dict[str, Any]:
+    endpoint = os.getenv("MINIO_ENDPOINT", "minio:9000")
+    secure = os.getenv("MINIO_SECURE", "false").lower() in {"1", "true", "yes"}
+    scheme = "https" if secure else "http"
+    return {
+        "endpoint_url": f"{scheme}://{endpoint}",
+        "aws_access_key_id": os.getenv("MINIO_ACCESS_KEY", "minio"),
+        "aws_secret_access_key": os.getenv("MINIO_SECRET_KEY", "minio123"),
+        "region_name": os.getenv("AWS_REGION", "us-east-1"),
+    }
 
 
 def _failure_status_and_detail(info: Any) -> tuple[int, str]:
@@ -63,16 +91,21 @@ async def submit_ingest(
         raise HTTPException(status_code=400, detail="Provide a file or a uri")
 
     if file:
-        tmp_dir = Path(tempfile.mkdtemp(prefix="ingest_api_"))
-        if file.filename is None:
-            raise HTTPException(status_code=400, detail="Uploaded file missing name")
-        tmp_path = tmp_dir / file.filename
-        with tmp_path.open("wb") as f:
-            shutil.copyfileobj(file.file, f)
-        uri = f"file://{tmp_path}"
+        try:
+            tmp_path, idempotency_key = await _persist_upload(file, request=request)
+        except HTTPException as exc:
+            extension = Path(file.filename or "").suffix.lstrip(".") if file.filename else "unknown"
+            record_ingest_upload_failure(extension=extension, reason=str(exc.status_code))
+            raise
+        resolved_uri = f"file://{tmp_path}"
+    else:
+        assert uri is not None  # mypy narrow
+        tmp_path, idempotency_key = await _download_remote(uri)
+        resolved_uri = f"file://{tmp_path}"
+
     async_result = task_import_file.apply_async(
-        args=[uri],
-        kwargs={"report_type": report_type or None, "force": force},
+        args=[resolved_uri],
+        kwargs={"report_type": report_type or None, "force": force, "idempotency_key": idempotency_key},
         queue="ingest",
     )
     if celery_app.conf.task_always_eager:
@@ -103,3 +136,124 @@ async def get_job(
         info = {}
     meta = _meta_from_result(state, info)
     return {"task_id": task_id, "state": state, "meta": meta}
+
+
+async def _persist_upload(file: UploadFile, request: Request) -> tuple[Path, str]:
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="Uploaded file missing name")
+    try:
+        safe_name = sanitize_upload_name(file.filename)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    tmp_dir = Path(tempfile.mkdtemp(prefix="ingest_api_"))
+    tmp_path = tmp_dir / safe_name
+    chunk_size = max(1, int(settings.INGEST_CHUNK_SIZE_MB) * 1024 * 1024)
+    max_bytes = int(settings.MAX_REQUEST_BYTES)
+    header = request.headers.get("content-length")
+    if header:
+        try:
+            if int(header) > max_bytes:
+                raise HTTPException(status_code=413, detail="Upload exceeds maximum size limit")
+        except ValueError:
+            pass
+
+    hasher = hashlib.sha256()
+    total = 0
+    start = time.perf_counter()
+    with ingest_upload_inflight():
+        with tmp_path.open("wb") as handle:
+            while True:
+                chunk = await file.read(chunk_size)
+                if not chunk:
+                    break
+                total += len(chunk)
+                if total > max_bytes:
+                    raise HTTPException(status_code=413, detail="Upload exceeds maximum size limit")
+                hasher.update(chunk)
+                handle.write(chunk)
+    await file.close()
+    duration = time.perf_counter() - start
+    extension = Path(safe_name).suffix.lstrip(".")
+    record_ingest_upload(total, duration, extension=extension)
+    return tmp_path, hasher.hexdigest()
+
+
+async def _download_remote(uri: str) -> tuple[Path, str]:
+    parsed = urlparse(uri)
+    scheme = (parsed.scheme or "unknown").lower()
+    if scheme in {"s3", "minio"}:
+        return await _download_minio(parsed)  # pragma: no cover - network path
+    if scheme in {"http", "https"}:
+        return await _download_http(uri, scheme)  # pragma: no cover - network path
+    raise HTTPException(status_code=400, detail="Unsupported URI scheme")
+
+
+async def _download_minio(parsed: ParseResult) -> tuple[Path, str]:  # pragma: no cover - network path
+    bucket = parsed.netloc
+    key = parsed.path.lstrip("/")
+    session = aioboto3.Session()
+    config = Config(
+        max_pool_connections=settings.S3_MAX_CONNECTIONS,
+        connect_timeout=float(settings.ETL_CONNECT_TIMEOUT_S),
+        read_timeout=float(settings.ETL_READ_TIMEOUT_S),
+    )
+    start = time.perf_counter()
+    try:
+        async with session.client("s3", config=config, **_s3_client_kwargs()) as client:
+            response = await client.get_object(Bucket=bucket, Key=key)
+            async with response["Body"] as body:
+                path, digest, size_bytes = await _write_stream_to_temp(body.iter_chunks(), scheme=parsed.scheme)
+    except Exception as exc:
+        record_ingest_download_failure(scheme=parsed.scheme, reason=exc.__class__.__name__)
+        raise HTTPException(status_code=502, detail="Failed to download source") from exc
+    duration = time.perf_counter() - start
+    record_ingest_download(size_bytes, duration, scheme=parsed.scheme)
+    return path, digest
+
+
+async def _download_http(uri: str, scheme: str) -> tuple[Path, str]:  # pragma: no cover - network path
+    timeout = httpx.Timeout(connect=settings.ETL_CONNECT_TIMEOUT_S, read=settings.ETL_READ_TIMEOUT_S)
+    chunk_size = max(1, int(settings.INGEST_CHUNK_SIZE_MB) * 1024 * 1024)
+    start = time.perf_counter()
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            async with client.stream("GET", uri, follow_redirects=True) as response:
+                response.raise_for_status()
+
+                async def iterator() -> AsyncIterator[bytes]:
+                    async for chunk in response.aiter_bytes(chunk_size):
+                        yield chunk
+
+                path, digest, size_bytes = await _write_stream_to_temp(iterator(), scheme=scheme)
+    except httpx.HTTPStatusError as exc:
+        record_ingest_download_failure(scheme=scheme, reason=str(exc.response.status_code))
+        raise HTTPException(status_code=exc.response.status_code, detail="Failed to download source") from exc
+    except httpx.TimeoutException as exc:
+        record_ingest_download_failure(scheme=scheme, reason="timeout")
+        raise HTTPException(status_code=504, detail="Timeout downloading source") from exc
+    except Exception as exc:  # pragma: no cover
+        record_ingest_download_failure(scheme=scheme, reason=exc.__class__.__name__)
+        raise HTTPException(status_code=502, detail="Failed to download source") from exc
+    duration = time.perf_counter() - start
+    record_ingest_download(size_bytes, duration, scheme=scheme)
+    return path, digest
+
+
+async def _write_stream_to_temp(
+    chunks: AsyncIterator[bytes], *, scheme: str
+) -> tuple[Path, str, int]:  # pragma: no cover - heavy IO exercised via integration
+    tmp_dir = Path(tempfile.mkdtemp(prefix="ingest_api_"))
+    tmp_path = tmp_dir / "payload.csv"
+    max_bytes = int(settings.MAX_REQUEST_BYTES)
+    hasher = hashlib.sha256()
+    total = 0
+    with tmp_path.open("wb") as handle:
+        async for chunk in chunks:
+            if not chunk:
+                continue
+            total += len(chunk)
+            if total > max_bytes:
+                raise HTTPException(status_code=413, detail="Download exceeds maximum size limit")
+            hasher.update(chunk)
+            handle.write(chunk)
+    return tmp_path, hasher.hexdigest(), total

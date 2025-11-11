@@ -1,6 +1,6 @@
 import asyncio
 import os
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from contextlib import asynccontextmanager
 
 import httpx
@@ -22,6 +22,7 @@ from awa_common.db.async_session import (
     init_async_engine,
 )
 from awa_common.logging import RequestIdMiddleware, configure_logging
+from awa_common.loop_lag import start_loop_lag_monitor
 from awa_common.metrics import MetricsMiddleware, init as metrics_init, register_metrics_endpoint
 from awa_common.security.headers import install_security_headers
 from awa_common.security.ratelimit import install_role_based_rate_limit
@@ -114,7 +115,11 @@ async def lifespan(_app: FastAPI):
     await _check_llm()
     redis_url = settings.REDIS_URL
     r = None
+    lag_stop: Callable[[], None] | None = None
     try:
+        if settings.ENABLE_LOOP_LAG_MONITOR:
+            lag_stop = start_loop_lag_monitor(asyncio.get_running_loop(), float(settings.LOOP_LAG_INTERVAL_S))
+            _app.state.loop_lag_stop = lag_stop
         r = await _wait_for_redis(redis_url)
         await FastAPILimiter.init(r)
     except Exception as exc:
@@ -123,6 +128,9 @@ async def lifespan(_app: FastAPI):
     try:
         yield
     finally:
+        if lag_stop is not None:
+            lag_stop()
+            _app.state.loop_lag_stop = None
         if r is not None:
             try:
                 await FastAPILimiter.close()
@@ -151,6 +159,7 @@ def create_app() -> FastAPI:
     register_metrics_endpoint(app)
     install_cors(app)
     install_role_based_rate_limit(app, cfg)
+    app.state.loop_lag_stop = None
 
     app.include_router(upload_router, prefix="/upload")
     app.include_router(ingest_router)

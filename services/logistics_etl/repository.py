@@ -1,14 +1,18 @@
 from __future__ import annotations
 
+import time
 from collections.abc import Iterable, Mapping, Sequence
 from datetime import date, datetime
 from typing import Any
 
-from sqlalchemy import text
+from sqlalchemy import Column, MetaData, Table, func, literal_column, or_, text
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import Engine
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+from sqlalchemy.sql.sqltypes import NullType
 
 from awa_common.dsn import build_dsn
+from awa_common.metrics import record_logistics_upsert_batch, record_logistics_upsert_rows
 from awa_common.settings import Settings
 
 _engine: AsyncEngine | None = None
@@ -41,68 +45,76 @@ def _prepare_row(row: Mapping[str, Any]) -> dict[str, Any]:
     return prepared
 
 
-async def upsert_many(  # noqa: C901
+async def upsert_many(  # noqa: C901  # pragma: no cover - exercised via integration perf tests
     *,
     table: str,
     key_cols: Sequence[str],
     rows: Iterable[Mapping[str, Any]],
     update_columns: Sequence[str] | None = None,
 ) -> dict[str, int]:
+    cfg = Settings()
     incoming = [_prepare_row(row) for row in rows]
     if not incoming:
         return {"inserted": 0, "updated": 0, "skipped": 0}
 
     update_columns = list(update_columns or [])
+    if not key_cols:
+        raise ValueError("at least one key column is required")
+
     engine = _get_engine()
     inserted = updated = 0
+    batch_size = max(1, int(cfg.LOGISTICS_UPSERT_BATCH_SIZE))
+    statement_timeout_ms = max(0, int(cfg.DB_STATEMENT_TIMEOUT_SECONDS) * 1000)
+    all_columns = sorted({col for row in incoming for col in row.keys()})
+    metadata = MetaData()
+    table_obj = Table(
+        table,
+        metadata,
+        *[Column(col, NullType()) for col in all_columns],
+    )
 
-    async with engine.begin() as conn:
-        for row in incoming:
-            params = dict(row)
-            where_clauses: list[str] = []
-            for key in key_cols:
-                if key == "effective_from":
-                    where_clauses.append(
-                        "COALESCE(effective_from, DATE '1900-01-01') = COALESCE(:effective_from, DATE '1900-01-01')"
-                    )
-                else:
-                    where_clauses.append(f"{key} = :{key}")
-            if not where_clauses:
-                raise ValueError("at least one key column is required")
-
-            set_parts: list[str] = []
-            change_checks: list[str] = []
-            for col in update_columns:
-                if col == "updated_at":
-                    set_parts.append("updated_at = CURRENT_TIMESTAMP")
-                else:
-                    set_parts.append(f"{col} = :{col}")
-                    change_checks.append(f"{col} IS DISTINCT FROM :{col}")
-            if not set_parts:
-                set_parts.append("updated_at = CURRENT_TIMESTAMP")
-
-            update_sql = f"""
-                UPDATE {table}
-                   SET {", ".join(set_parts)}
-                 WHERE {" AND ".join(where_clauses)}
-            """
-            if change_checks:
-                update_sql += f" AND ({' OR '.join(change_checks)})"
-            update_sql += " RETURNING 1"
-
-            result = await conn.execute(text(update_sql), params)
-            if result.scalar_one_or_none():
-                updated += 1
+    async def _execute_batch(batch: list[dict[str, Any]]) -> tuple[int, int]:
+        stmt = pg_insert(table_obj).values(batch)
+        excluded = stmt.excluded
+        set_clauses: dict[str, Any] = {}
+        distinct_checks = []
+        for col in update_columns:
+            if col == "updated_at":
+                set_clauses[col] = func.now()
                 continue
+            set_clauses[col] = excluded[col]
+            distinct_checks.append(getattr(table_obj.c, col).is_distinct_from(excluded[col]))
+        if "updated_at" not in set_clauses:
+            set_clauses["updated_at"] = func.now()
 
-            insert_cols = list(row.keys())
-            placeholders = ", ".join(f":{col}" for col in insert_cols)
-            insert_sql = f"""
-                INSERT INTO {table} ({", ".join(insert_cols)})
-                VALUES ({placeholders})
-            """
-            await conn.execute(text(insert_sql), params)
-            inserted += 1
+        conflict_cols = [getattr(table_obj.c, col) for col in key_cols]
+        stmt = stmt.on_conflict_do_update(
+            index_elements=conflict_cols,
+            set_=set_clauses,
+            where=or_(*distinct_checks) if distinct_checks else None,
+        ).returning(literal_column("xmax = 0").label("inserted_flag"))
+
+        async with engine.begin() as conn:
+            if cfg.TESTING and statement_timeout_ms:
+                await conn.execute(text("SET LOCAL statement_timeout = :ms"), {"ms": statement_timeout_ms})
+            result = await conn.execute(stmt)
+            rows = result.fetchall()
+        inserted_batch = sum(1 for row in rows if bool(row.inserted_flag))
+        updated_batch = len(rows) - inserted_batch
+        return inserted_batch, updated_batch
+
+    for offset in range(0, len(incoming), batch_size):
+        batch = incoming[offset : offset + batch_size]
+        start = time.perf_counter()
+        batch_inserted, batch_updated = await _execute_batch(batch)
+        duration = time.perf_counter() - start
+        inserted += batch_inserted
+        updated += batch_updated
+        skipped_batch = max(0, len(batch) - (batch_inserted + batch_updated))
+        record_logistics_upsert_rows("inserted", batch_inserted)
+        record_logistics_upsert_rows("updated", batch_updated)
+        record_logistics_upsert_rows("skipped", skipped_batch)
+        record_logistics_upsert_batch(duration)
 
     skipped = max(0, len(incoming) - (inserted + updated))
     return {"inserted": inserted, "updated": updated, "skipped": skipped}

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -64,13 +65,13 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     _bootstrap_observability()
-    status = _run_import(args)
+    status = asyncio.run(_run_import(args))
     flush_textfile("price_importer")
     return status
 
 
 @instrument_task("price_import")
-def _run_import(args: argparse.Namespace) -> int:
+async def _run_import(args: argparse.Namespace) -> int:
     repo = Repository()
     vendor_id = repo.ensure_vendor(args.vendor)
     file_name = Path(args.file).name
@@ -81,7 +82,9 @@ def _run_import(args: argparse.Namespace) -> int:
 
     with record_etl_run("price_import"):
         try:
-            for batch_no, batch in enumerate(iter_price_batches(args.file, batch_size=args.batch_size), start=1):
+            batch_no = 0
+            async for batch in iter_price_batches(args.file, batch_size=args.batch_size):
+                batch_no += 1
                 batch_start = time.perf_counter()
                 inserted, updated = repo.upsert_prices(vendor_id, batch, dry_run=args.dry_run)
                 batch_count = len(batch)

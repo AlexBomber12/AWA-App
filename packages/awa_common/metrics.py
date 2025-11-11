@@ -111,6 +111,31 @@ HTTP_REQUEST_DURATION_SECONDS = Histogram(
     buckets=HTTP_BUCKETS,
     registry=REGISTRY,
 )
+AWA_INGEST_UPLOAD_BYTES_TOTAL = Counter(
+    "awa_ingest_upload_bytes_total",
+    "Bytes accepted by /upload and /ingest streaming flows",
+    ("extension", *BASE_LABELS),
+    registry=REGISTRY,
+)
+AWA_INGEST_UPLOAD_SECONDS = Histogram(
+    "awa_ingest_upload_seconds",
+    "Upload handling latency in seconds",
+    ("extension", *BASE_LABELS),
+    buckets=HTTP_BUCKETS,
+    registry=REGISTRY,
+)
+AWA_INGEST_UPLOAD_INFLIGHT = Gauge(
+    "awa_ingest_upload_inflight",
+    "Concurrent uploads being processed",
+    (*BASE_LABELS,),
+    registry=REGISTRY,
+)
+AWA_INGEST_UPLOAD_FAILURES_TOTAL = Counter(
+    "awa_ingest_upload_failures_total",
+    "Upload failures for streaming endpoints",
+    ("extension", "reason", *BASE_LABELS),
+    registry=REGISTRY,
+)
 
 TASK_RUNS_TOTAL = Counter(
     "task_runs_total",
@@ -155,6 +180,63 @@ ETL_DURATION_SECONDS = Histogram(
     "ETL pipeline duration in seconds",
     ("job", *BASE_LABELS),
     buckets=HTTP_BUCKETS,
+    registry=REGISTRY,
+)
+LOGISTICS_ETL_TASKS_INFLIGHT = Gauge(
+    "logistics_etl_tasks_inflight",
+    "Concurrent logistics ETL sources being processed",
+    ("source", *BASE_LABELS),
+    registry=REGISTRY,
+)
+LOGISTICS_ETL_TASK_SECONDS = Histogram(
+    "logistics_etl_task_seconds",
+    "Per-source logistics ETL duration in seconds",
+    ("source", *BASE_LABELS),
+    buckets=HTTP_BUCKETS,
+    registry=REGISTRY,
+)
+LOGISTICS_ETL_ROWS_TOTAL = Counter(
+    "logistics_etl_rows_total",
+    "Rows handled per logistics ETL source",
+    ("source", "result", *BASE_LABELS),
+    registry=REGISTRY,
+)
+LOGISTICS_ETL_ERRORS_TOTAL = Counter(
+    "logistics_etl_errors_total",
+    "Errors raised per logistics ETL source",
+    ("source", "reason", *BASE_LABELS),
+    registry=REGISTRY,
+)
+LOGISTICS_UPSERT_ROWS_TOTAL = Counter(
+    "logistics_upsert_rows_total",
+    "Rows affected by batched logistics upserts",
+    ("operation", *BASE_LABELS),
+    registry=REGISTRY,
+)
+LOGISTICS_UPSERT_BATCH_SECONDS = Histogram(
+    "logistics_upsert_batch_seconds",
+    "Duration of batched logistics upserts in seconds",
+    (*BASE_LABELS,),
+    buckets=HTTP_BUCKETS,
+    registry=REGISTRY,
+)
+AWA_INGEST_DOWNLOAD_BYTES_TOTAL = Counter(
+    "awa_ingest_download_bytes_total",
+    "Bytes downloaded for ingest URIs",
+    ("scheme", *BASE_LABELS),
+    registry=REGISTRY,
+)
+AWA_INGEST_DOWNLOAD_SECONDS = Histogram(
+    "awa_ingest_download_seconds",
+    "Download latency for ingest URIs",
+    ("scheme", *BASE_LABELS),
+    buckets=HTTP_BUCKETS,
+    registry=REGISTRY,
+)
+AWA_INGEST_DOWNLOAD_FAILURES_TOTAL = Counter(
+    "awa_ingest_download_failures_total",
+    "Download failures by URI scheme",
+    ("scheme", "reason", *BASE_LABELS),
     registry=REGISTRY,
 )
 
@@ -202,6 +284,25 @@ ALERTS_RULE_DURATION_SECONDS = Histogram(
     "Alert rule evaluation duration in seconds",
     ("rule", *BASE_LABELS),
     buckets=HTTP_BUCKETS,
+    registry=REGISTRY,
+)
+EVENT_LOOP_LAG_SECONDS = Gauge(
+    "event_loop_lag_seconds",
+    "Observed event loop scheduling lag",
+    (*BASE_LABELS,),
+    registry=REGISTRY,
+)
+PRICE_IMPORTER_VALIDATE_SECONDS = Histogram(
+    "price_importer_validate_seconds",
+    "Time spent validating and normalising price importer chunks",
+    (*BASE_LABELS,),
+    buckets=HTTP_BUCKETS,
+    registry=REGISTRY,
+)
+PRICE_IMPORTER_ROWS_TOTAL = Counter(
+    "price_importer_rows_total",
+    "Rows processed by the price importer",
+    ("stage", *BASE_LABELS),
     registry=REGISTRY,
 )
 
@@ -529,6 +630,122 @@ def _status_class(status_code: int | None) -> str:
     return f"{hundreds}xx"
 
 
+@contextmanager
+def ingest_upload_inflight() -> Iterator[None]:
+    labels = _with_base_labels()
+    AWA_INGEST_UPLOAD_INFLIGHT.labels(**labels).inc()
+    try:
+        yield
+    finally:
+        AWA_INGEST_UPLOAD_INFLIGHT.labels(**labels).dec()
+
+
+def _upload_labels(extension: str | None) -> dict[str, str]:
+    ext = (extension or "unknown").lstrip(".") or "unknown"
+    return _with_base_labels(extension=ext)
+
+
+def record_ingest_upload(bytes_count: int, duration_s: float, *, extension: str | None) -> None:
+    labels = _upload_labels(extension)
+    if bytes_count > 0:
+        AWA_INGEST_UPLOAD_BYTES_TOTAL.labels(**labels).inc(max(bytes_count, 0))
+    AWA_INGEST_UPLOAD_SECONDS.labels(**labels).observe(max(duration_s, 0.0))
+
+
+def record_ingest_upload_failure(*, extension: str | None, reason: str) -> None:
+    labels = _with_base_labels(extension=(extension or "unknown").lstrip(".") or "unknown", reason=reason or "error")
+    AWA_INGEST_UPLOAD_FAILURES_TOTAL.labels(**labels).inc()
+
+
+def logistics_source_label(source: str | None) -> str:
+    label = (source or "unknown").strip() or "unknown"
+    if len(label) > 80:
+        return label[:80]
+    return label
+
+
+def logistics_source_labels(source: str | None) -> dict[str, str]:
+    return _with_base_labels(source=logistics_source_label(source))
+
+
+def record_logistics_rows(source: str | None, *, rows: int, result: str) -> None:
+    if rows <= 0:
+        return
+    labels = _with_base_labels(source=logistics_source_label(source), result=(result or "processed"))
+    LOGISTICS_ETL_ROWS_TOTAL.labels(**labels).inc(max(rows, 0))
+
+
+def record_logistics_error(source: str | None, reason: str) -> None:
+    labels = _with_base_labels(source=logistics_source_label(source), reason=(reason or "unknown"))
+    LOGISTICS_ETL_ERRORS_TOTAL.labels(**labels).inc()
+
+
+def record_logistics_task_duration(source: str | None, duration_s: float) -> None:
+    labels = logistics_source_labels(source)
+    LOGISTICS_ETL_TASK_SECONDS.labels(**labels).observe(max(duration_s, 0.0))
+
+
+def logistics_task_inflight_change(source: str | None, delta: int) -> None:
+    labels = logistics_source_labels(source)
+    if delta >= 0:
+        LOGISTICS_ETL_TASKS_INFLIGHT.labels(**labels).inc(delta)
+    else:
+        LOGISTICS_ETL_TASKS_INFLIGHT.labels(**labels).dec(abs(delta))
+
+
+def record_logistics_upsert_rows(operation: str, rows: int) -> None:
+    if rows <= 0:
+        return
+    labels = _with_base_labels(operation=(operation or "unknown"))
+    LOGISTICS_UPSERT_ROWS_TOTAL.labels(**labels).inc(max(rows, 0))
+
+
+def record_logistics_upsert_batch(duration_s: float) -> None:
+    LOGISTICS_UPSERT_BATCH_SECONDS.labels(**_with_base_labels()).observe(max(duration_s, 0.0))
+
+
+def record_price_importer_rows(stage: str, rows: int) -> None:
+    if rows <= 0:
+        return
+    labels = _with_base_labels(stage=(stage or "unknown"))
+    PRICE_IMPORTER_ROWS_TOTAL.labels(**labels).inc(max(rows, 0))
+
+
+def record_price_importer_validation(duration_s: float) -> None:
+    PRICE_IMPORTER_VALIDATE_SECONDS.labels(**_with_base_labels()).observe(max(duration_s, 0.0))
+
+
+def record_ingest_download(bytes_count: int, duration_s: float, *, scheme: str | None) -> None:
+    label = (scheme or "unknown").lower() or "unknown"
+    labels = _with_base_labels(scheme=label)
+    if bytes_count > 0:
+        AWA_INGEST_DOWNLOAD_BYTES_TOTAL.labels(**labels).inc(max(bytes_count, 0))
+    AWA_INGEST_DOWNLOAD_SECONDS.labels(**labels).observe(max(duration_s, 0.0))
+
+
+def record_ingest_download_failure(*, scheme: str | None, reason: str) -> None:
+    scheme_label = (scheme or "unknown").lower() or "unknown"
+    labels = _with_base_labels(scheme=scheme_label, reason=reason or "error")
+    AWA_INGEST_DOWNLOAD_FAILURES_TOTAL.labels(**labels).inc()
+
+
+async def monitor_event_loop_lag(interval_s: float = 0.5, *, warn_threshold_s: float | None = None) -> None:
+    """Track event loop scheduling delay."""
+    loop = asyncio.get_running_loop()
+    labels = _with_base_labels()
+    try:
+        while True:
+            start = loop.time()
+            await asyncio.sleep(interval_s)
+            lag = max(loop.time() - start - interval_s, 0.0)
+            EVENT_LOOP_LAG_SECONDS.labels(**labels).set(lag)
+            if warn_threshold_s is not None and lag > warn_threshold_s:
+                logger.warning("event_loop.lag lag_ms=%d", int(lag * 1000))
+    except asyncio.CancelledError:  # pragma: no cover - shutdown path
+        EVENT_LOOP_LAG_SECONDS.labels(**labels).set(0.0)
+        raise
+
+
 def flush_textfile(service: str | None = None) -> Path | None:
     """Flush the shared registry to the configured textfile directory."""
     exporter = _TEXTFILE_EXPORTER
@@ -590,6 +807,10 @@ __all__ = [
     "CONTENT_TYPE_LATEST",
     "HTTP_REQUESTS_TOTAL",
     "HTTP_REQUEST_DURATION_SECONDS",
+    "AWA_INGEST_UPLOAD_BYTES_TOTAL",
+    "AWA_INGEST_UPLOAD_SECONDS",
+    "AWA_INGEST_UPLOAD_INFLIGHT",
+    "AWA_INGEST_UPLOAD_FAILURES_TOTAL",
     "TASK_RUNS_TOTAL",
     "TASK_DURATION_SECONDS",
     "TASK_ERRORS_TOTAL",
@@ -597,13 +818,30 @@ __all__ = [
     "ETL_PROCESSED_RECORDS_TOTAL",
     "ETL_RETRY_TOTAL",
     "ETL_DURATION_SECONDS",
+    "LOGISTICS_ETL_TASKS_INFLIGHT",
+    "LOGISTICS_ETL_TASK_SECONDS",
+    "LOGISTICS_ETL_ROWS_TOTAL",
+    "LOGISTICS_ETL_ERRORS_TOTAL",
+    "LOGISTICS_UPSERT_ROWS_TOTAL",
+    "LOGISTICS_UPSERT_BATCH_SECONDS",
+    "AWA_INGEST_DOWNLOAD_BYTES_TOTAL",
+    "AWA_INGEST_DOWNLOAD_SECONDS",
+    "AWA_INGEST_DOWNLOAD_FAILURES_TOTAL",
     "HTTP_CLIENT_REQUESTS_TOTAL",
     "HTTP_CLIENT_REQUEST_DURATION_SECONDS",
     "QUEUE_BACKLOG",
+    "EVENT_LOOP_LAG_SECONDS",
+    "PRICE_IMPORTER_VALIDATE_SECONDS",
+    "PRICE_IMPORTER_ROWS_TOTAL",
     "MetricsMiddleware",
     "REGISTRY",
     "enable_celery_metrics",
     "flush_textfile",
+    "ingest_upload_inflight",
+    "logistics_source_label",
+    "logistics_source_labels",
+    "logistics_task_inflight_change",
+    "monitor_event_loop_lag",
     "instrument_task",
     "init",
     "on_task_failure",
@@ -612,8 +850,19 @@ __all__ = [
     "record_etl_batch",
     "record_etl_run",
     "record_etl_skip",
+    "record_ingest_upload",
+    "record_ingest_upload_failure",
+    "record_ingest_download",
+    "record_ingest_download_failure",
     "record_http_client_request",
+    "record_logistics_rows",
+    "record_logistics_error",
+    "record_logistics_task_duration",
     "record_etl_retry",
+    "record_logistics_upsert_rows",
+    "record_logistics_upsert_batch",
+    "record_price_importer_rows",
+    "record_price_importer_validation",
     "register_metrics_endpoint",
     "start_worker_metrics_http_if_enabled",
 ]

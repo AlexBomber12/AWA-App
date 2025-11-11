@@ -1,4 +1,3 @@
-import sys
 import types
 from pathlib import Path
 
@@ -28,7 +27,7 @@ def test_task_import_file_success(monkeypatch, tmp_path):
 
     monkeypatch.setattr(tasks_module, "_resolve_uri_to_path", lambda uri: local)
 
-    def fake_import(path, report_type=None, celery_update=None, force=False):
+    def fake_import(path, report_type=None, celery_update=None, force=False, idempotency_key=None):
         assert "data.csv" in path
         if celery_update:
             celery_update({"progress": 50})
@@ -68,37 +67,50 @@ def test_download_minio_to_tmp_uses_env(monkeypatch, tmp_path):
 
     captured: dict[str, object] = {}
 
-    class DummyMinio:
-        def __init__(self, endpoint, access_key=None, secret_key=None, secure=None):
-            captured["endpoint"] = endpoint
-            captured["access_key"] = access_key
-            captured["secret_key"] = secret_key
-            captured["secure"] = secure
+    class DummyBody:
+        async def __aenter__(self):
+            return self
 
-        def fget_object(self, bucket: str, key: str, dst: str) -> None:
-            captured["bucket"] = bucket
-            captured["key"] = key
-            Path(dst).write_text("data", encoding="utf-8")
+        async def __aexit__(self, *_args) -> None:
+            return None
 
-    fake_minio = types.ModuleType("minio")
-    fake_minio.Minio = DummyMinio  # type: ignore[attr-defined]
-    monkeypatch.setitem(sys.modules, "minio", fake_minio)
+        async def iter_chunks(self):
+            yield b"data"
+
+    class DummyClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args) -> None:
+            return None
+
+        async def get_object(self, Bucket: str, Key: str):
+            captured["bucket"] = Bucket
+            captured["key"] = Key
+            return {"Body": DummyBody()}
+
+    class DummySession:
+        def client(self, *_args, **kwargs):
+            captured["endpoint_url"] = kwargs.get("endpoint_url")
+            captured["aws_access_key_id"] = kwargs.get("aws_access_key_id")
+            captured["aws_secret_access_key"] = kwargs.get("aws_secret_access_key")
+            return DummyClient()
 
     monkeypatch.setenv("MINIO_ENDPOINT", "custom:9000")
     monkeypatch.setenv("MINIO_ACCESS_KEY", "ak")
     monkeypatch.setenv("MINIO_SECRET_KEY", "sk")
     monkeypatch.setenv("MINIO_SECURE", "true")
     monkeypatch.setattr(tasks_module.tempfile, "mkdtemp", lambda prefix: str(tmp_dir))
+    monkeypatch.setattr(tasks_module.aioboto3, "Session", lambda: DummySession())
 
     result = tasks_module._download_minio_to_tmp("minio://bucket/path/to/data.csv")
 
     assert result == tmp_dir / "data.csv"
     assert captured["bucket"] == "bucket"
     assert captured["key"] == "path/to/data.csv"
-    assert captured["endpoint"] == "custom:9000"
-    assert captured["access_key"] == "ak"
-    assert captured["secret_key"] == "sk"
-    assert captured["secure"] is True
+    assert "https://custom:9000" in captured["endpoint_url"]
+    assert captured["aws_access_key_id"] == "ak"
+    assert captured["aws_secret_access_key"] == "sk"
 
 
 def test_task_import_file_cleans_up_on_failure(monkeypatch, tmp_path):
@@ -146,17 +158,19 @@ def test_task_import_file_forwards_force_flag(monkeypatch, tmp_path):
 
     calls: dict[str, object] = {}
 
-    def fake_import(path, report_type=None, celery_update=None, force=False):
+    def fake_import(path, report_type=None, celery_update=None, force=False, idempotency_key=None):
         calls["path"] = path
         calls["report_type"] = report_type
         calls["force"] = force
+        calls["idempotency_key"] = idempotency_key
         return {}
 
     monkeypatch.setattr("etl.load_csv.import_file", fake_import)
     monkeypatch.setattr(tasks_module.task_import_file, "update_state", lambda *a, **k: None, raising=False)
 
-    tasks_module.task_import_file.run(uri="file://data.csv", report_type="audit", force=True)
+    tasks_module.task_import_file.run(uri="file://data.csv", report_type="audit", force=True, idempotency_key="key123")
 
     assert calls["report_type"] == "audit"
     assert calls["force"] is True
+    assert calls["idempotency_key"] == "key123"
     assert local.name in Path(calls["path"]).name

@@ -337,6 +337,7 @@ def import_file(  # noqa: C901
     force: bool = False,
     streaming: bool = False,
     chunk_size: int | None = None,
+    idempotency_key: str | None = None,
     **kwargs: Any,
 ) -> dict[str, Any]:
     _dialect_override = kwargs.pop("dialect", None)
@@ -346,7 +347,7 @@ def import_file(  # noqa: C901
     file_path = Path(path)
     if file_path.exists() and file_path.stat().st_size == 0:
         raise ImportValidationError("empty file")
-    file_hash = _sha256_file(file_path)
+    file_hash = idempotency_key or _sha256_file(file_path)
     if _dialect_override == "test_generic":
         streaming = False
 

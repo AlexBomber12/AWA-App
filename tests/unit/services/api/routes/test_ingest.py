@@ -32,7 +32,7 @@ def _make_request(payload):
 
 
 @pytest.mark.asyncio
-async def test_submit_ingest_from_payload(monkeypatch):
+async def test_submit_ingest_from_payload(monkeypatch, tmp_path):
     recorded = {}
 
     class DummyAsync:
@@ -44,12 +44,20 @@ async def test_submit_ingest_from_payload(monkeypatch):
         recorded["kwargs"] = kwargs
         return DummyAsync()
 
+    remote_file = tmp_path / "remote.csv"
+    remote_file.write_text("a,b", encoding="utf-8")
+
+    async def fake_remote(uri: str):
+        return remote_file, "hash-1"
+
+    monkeypatch.setattr(ingest_module, "_download_remote", fake_remote)
     monkeypatch.setattr(ingest_module.task_import_file, "apply_async", fake_apply_async)
     monkeypatch.setattr(ingest_module.celery_app.conf, "task_always_eager", False, raising=False)
     request = _make_request({"uri": "s3://bucket/file.csv", "report_type": "roi"})
     response = await ingest_module.submit_ingest(request, file=None)
     assert response["task_id"] == "abc"
     assert recorded["kwargs"]["queue"] == "ingest"
+    assert recorded["kwargs"]["kwargs"]["idempotency_key"] == "hash-1"
 
 
 @pytest.mark.asyncio
@@ -60,7 +68,7 @@ async def test_submit_ingest_from_file(monkeypatch, tmp_path):
         id = "file-task"
 
     def fake_apply_async(*args, **kwargs):
-        recorded["uri"] = kwargs.get("args", [])[0]
+        recorded["kwargs"] = kwargs
         return DummyAsync()
 
     monkeypatch.setattr(ingest_module.task_import_file, "apply_async", fake_apply_async)
@@ -71,7 +79,8 @@ async def test_submit_ingest_from_file(monkeypatch, tmp_path):
     request = _make_request({})
     response = await ingest_module.submit_ingest(request, file=upload)
     assert response["task_id"] == "file-task"
-    assert recorded["uri"].startswith("file://")
+    assert recorded["kwargs"]["args"][0].startswith("file://")
+    assert recorded["kwargs"]["kwargs"]["idempotency_key"]
 
 
 @pytest.mark.asyncio
@@ -86,7 +95,7 @@ async def test_get_job_returns_meta_async(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_submit_ingest_eager_failure_propagates(monkeypatch):
+async def test_submit_ingest_eager_failure_propagates(monkeypatch, tmp_path):
     class DummyAsync:
         def __init__(self):
             self.id = "boom-task"
@@ -103,6 +112,13 @@ async def test_submit_ingest_eager_failure_propagates(monkeypatch):
 
     monkeypatch.setattr(ingest_module.task_import_file, "apply_async", fake_apply_async)
     monkeypatch.setattr(ingest_module.celery_app.conf, "task_always_eager", True, raising=False)
+    remote = tmp_path / "boom.csv"
+    remote.write_text("a", encoding="utf-8")
+
+    async def fake_download(_uri: str):
+        return remote, "hash"
+
+    monkeypatch.setattr(ingest_module, "_download_remote", fake_download)
 
     request = _make_request({"uri": "s3://bucket/file.csv"})
     with pytest.raises(HTTPException) as excinfo:
@@ -112,7 +128,7 @@ async def test_submit_ingest_eager_failure_propagates(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_submit_ingest_eager_get_exception(monkeypatch):
+async def test_submit_ingest_eager_get_exception(monkeypatch, tmp_path):
     class DummyAsync:
         def __init__(self):
             self.id = "ok-task"
@@ -124,6 +140,13 @@ async def test_submit_ingest_eager_get_exception(monkeypatch):
         def failed(self):
             return False
 
+    remote = tmp_path / "ok.csv"
+    remote.write_text("a", encoding="utf-8")
+
+    async def fake_download(_uri: str):
+        return remote, "hash"
+
+    monkeypatch.setattr(ingest_module, "_download_remote", fake_download)
     monkeypatch.setattr(ingest_module.task_import_file, "apply_async", lambda *a, **k: DummyAsync())
     monkeypatch.setattr(ingest_module.celery_app.conf, "task_always_eager", True, raising=False)
 
@@ -153,3 +176,36 @@ def test_meta_from_result_returns_dict_for_success():
 def test_meta_from_result_handles_non_failure_empty():
     meta = ingest_module._meta_from_result(states.SUCCESS, None)
     assert meta == {}
+
+
+def test_s3_client_kwargs_reads_env(monkeypatch):
+    monkeypatch.setenv("MINIO_ENDPOINT", "custom:9000")
+    monkeypatch.setenv("MINIO_ACCESS_KEY", "ak")
+    monkeypatch.setenv("MINIO_SECRET_KEY", "sk")
+    result = ingest_module._s3_client_kwargs()
+    assert result["endpoint_url"] == "http://custom:9000"
+    assert result["aws_access_key_id"] == "ak"
+    assert result["aws_secret_access_key"] == "sk"
+
+
+@pytest.mark.asyncio
+async def test_persist_upload_enforces_header(monkeypatch):
+    upload = UploadFile(filename="data.csv", file=BytesIO(b"a,b\n1,2\n"))
+    request = Request({"type": "http", "headers": [(b"content-length", b"5")]})
+    monkeypatch.setattr(ingest_module.settings, "MAX_REQUEST_BYTES", 1)
+    with pytest.raises(HTTPException):
+        await ingest_module._persist_upload(upload, request)
+
+
+@pytest.mark.asyncio
+async def test_download_remote_rejects_unknown_scheme():
+    with pytest.raises(HTTPException):
+        await ingest_module._download_remote("ftp://example.com/path")
+
+
+@pytest.mark.asyncio
+async def test_persist_upload_rejects_absolute(tmp_path):
+    upload = UploadFile(filename="/tmp/data.csv", file=BytesIO(b"a,b\n1,2\n"))
+    request = Request({"type": "http", "headers": []})
+    with pytest.raises(HTTPException):
+        await ingest_module._persist_upload(upload, request)

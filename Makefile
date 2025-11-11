@@ -56,7 +56,7 @@ type: ensure-bootstrap
 
 unit: ensure-bootstrap
 	mkdir -p $(ART)
-	PYTHONUNBUFFERED=1 $(PYTEST) -vv -s -m "not integration and not slow" \
+	ENABLE_LOOP_LAG_MONITOR=0 PYTHONUNBUFFERED=1 $(PYTEST) -vv -s -m "not integration and not slow" \
 	  -n auto --dist=loadfile --durations=20 \
 	| tee $(ART)/unit.log ; test $${PIPESTATUS[0]} -eq 0
 
@@ -89,9 +89,9 @@ install-dev: bootstrap-dev
 
 qa: ensure-bootstrap
 	mkdir -p $(ART)
-	$(MAKE) lint
-	$(MAKE) type
-	$(MAKE) unit
+	ENABLE_LOOP_LAG_MONITOR=0 $(MAKE) lint
+	ENABLE_LOOP_LAG_MONITOR=0 $(MAKE) type
+	ENABLE_LOOP_LAG_MONITOR=0 $(MAKE) unit
 
 qa-fix: ensure-bootstrap
 	@set -o pipefail; \

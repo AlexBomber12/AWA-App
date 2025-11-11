@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import Generator, Iterable, Sequence
+import asyncio
+from collections.abc import AsyncIterator, Generator, Sequence
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -9,12 +10,16 @@ from typing import Any
 import pandas as pd
 import structlog
 
+from awa_common.settings import Settings
+
 from .normaliser import normalise
-from .reader import detect_format, load_file
+from .reader import detect_format
 
 logger = structlog.get_logger(__name__)
 
-DEFAULT_BATCH_SIZE = 1000
+SETTINGS = Settings()
+DEFAULT_BATCH_SIZE = SETTINGS.PRICE_IMPORTER_CHUNK_ROWS
+VALIDATION_WORKERS = SETTINGS.PRICE_IMPORTER_VALIDATION_WORKERS
 
 
 @dataclass(frozen=True)
@@ -132,27 +137,117 @@ def _iter_csv_chunks(path: str | Path, batch_size: int) -> Generator[pd.DataFram
     raise RuntimeError(f"Failed to stream CSV file: {path}")
 
 
-def _iter_dataframe_batches(df: pd.DataFrame, batch_size: int) -> Generator[pd.DataFrame]:
-    total = len(df.index)
-    if total == 0:
-        return
-    for start in range(0, total, batch_size):
-        yield df.iloc[start : start + batch_size]
+def _iter_xlsx_chunks(path: str | Path, batch_size: int) -> Generator[pd.DataFrame]:
+    try:
+        from openpyxl import load_workbook
+    except ImportError as exc:  # pragma: no cover - optional dependency guard
+        raise RuntimeError("openpyxl is required to stream XLSX files") from exc
+
+    wb = load_workbook(path, read_only=True, data_only=True)
+    try:
+        ws = wb.active
+        headers: list[str] | None = None
+        buffer: list[list[Any]] = []
+        for row in ws.iter_rows(values_only=True):
+            if headers is None:
+                if not row:
+                    continue
+                headers = [str(cell).strip() if cell is not None else "" for cell in row]
+                continue
+            if row is None or not any(value is not None for value in row):
+                continue
+            normalized_row = list(row[: len(headers)])
+            if len(normalized_row) < len(headers):
+                normalized_row.extend([None] * (len(headers) - len(normalized_row)))
+            buffer.append(normalized_row)
+            if len(buffer) >= batch_size:
+                yield pd.DataFrame(buffer, columns=headers)
+                buffer.clear()
+        if headers and buffer:
+            yield pd.DataFrame(buffer, columns=headers)
+    finally:
+        wb.close()
 
 
-def iter_price_batches(path: str | Path, batch_size: int = DEFAULT_BATCH_SIZE) -> Iterable[list[PriceRow]]:
-    """Yield validated, normalised price rows in bounded-size batches."""
+def _frame_iterator(path: str | Path, batch_size: int) -> Generator[pd.DataFrame]:
     fmt = detect_format(path)
     if fmt == "csv":
-        frames = _iter_csv_chunks(path, batch_size)
-    else:
-        frames = _iter_dataframe_batches(load_file(path), batch_size)
+        return _iter_csv_chunks(path, batch_size)
+    if fmt == "excel":
+        return _iter_xlsx_chunks(path, batch_size)
+    raise RuntimeError(f"Unsupported price importer format: {fmt}")
 
-    for frame in frames:
-        if frame is None or frame.empty:
-            continue
-        cleaned = normalise(frame)
-        records = cleaned.to_dict(orient="records")
-        if not records:
-            continue
-        yield validate_price_rows(records)
+
+def _next_frame(iterator: Generator[pd.DataFrame]) -> pd.DataFrame | None:
+    try:
+        return next(iterator)
+    except StopIteration:
+        return None
+
+
+async def _validate_frame(frame: pd.DataFrame, sem: asyncio.Semaphore) -> list[PriceRow]:
+    async with sem:
+        return await asyncio.to_thread(_normalize_and_validate, frame)
+
+
+def _normalize_and_validate(frame: pd.DataFrame) -> list[PriceRow]:
+    cleaned = normalise(frame)
+    records = cleaned.to_dict(orient="records")
+    if not records:
+        return []
+    return validate_price_rows(records)
+
+
+async def iter_price_batches(
+    path: str | Path,
+    batch_size: int | None = None,
+    max_workers: int | None = None,
+) -> AsyncIterator[list[PriceRow]]:
+    """
+    Yield validated, normalised price rows with bounded concurrency.
+
+    The caller must iterate using ``async for`` to benefit from streaming behaviour.
+    """
+
+    target_batch = max(1, int(batch_size or DEFAULT_BATCH_SIZE))
+    worker_limit = max(1, int(max_workers or VALIDATION_WORKERS))
+    iterator = _frame_iterator(path, target_batch)
+    sem = asyncio.Semaphore(worker_limit)
+    pending: dict[int, asyncio.Task[list[PriceRow]]] = {}
+    next_yield = 0
+    idx = 0
+
+    try:
+        while True:
+            frame = await asyncio.to_thread(_next_frame, iterator)
+            if frame is None:
+                break
+            if frame.empty:
+                continue
+            task = asyncio.create_task(_validate_frame(frame, sem))
+            pending[idx] = task
+            idx += 1
+            if len(pending) >= worker_limit:
+                batch = await _await_ordered(pending, next_yield)
+                if batch:
+                    yield batch
+                next_yield += 1
+
+        while pending:
+            batch = await _await_ordered(pending, next_yield)
+            if batch:
+                yield batch
+            next_yield += 1
+    finally:
+        for task in pending.values():
+            task.cancel()
+
+
+async def _await_ordered(pending: dict[int, asyncio.Task[list[PriceRow]]], order: int) -> list[PriceRow]:
+    task = pending.pop(order, None)
+    if task is None:
+        raise RuntimeError("price importer batch ordering mismatch")
+    result = await task
+    if not result:
+        return []
+    return result
