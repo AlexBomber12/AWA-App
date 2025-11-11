@@ -43,3 +43,27 @@ def test_ensure_size_limit_enforces_header():
     upload_module._ensure_size_limit(request, max_bytes=2048)
     with pytest.raises(HTTPException):
         upload_module._ensure_size_limit(request, max_bytes=100)
+
+
+def test_ensure_size_limit_ignores_bad_header():
+    request = Request({"type": "http", "headers": [(b"content-length", b"invalid")]})
+    upload_module._ensure_size_limit(request, max_bytes=1)
+
+
+@pytest.mark.asyncio
+async def test_upload_records_failure(monkeypatch):
+    async def failing(*_a, **_k):
+        raise HTTPException(status_code=413, detail="too big")
+
+    fail_called = {}
+
+    monkeypatch.setattr(upload_module, "_upload_stream_to_s3", failing)
+    monkeypatch.setattr(
+        upload_module, "record_ingest_upload_failure", lambda **_k: fail_called.setdefault("called", True)
+    )
+    request = Request({"type": "http", "headers": []})
+    upload = UploadFile(filename="name.csv", file=BytesIO(b"data"))
+
+    with pytest.raises(HTTPException):
+        await upload_module.upload(request, upload)
+    assert fail_called.get("called") is True

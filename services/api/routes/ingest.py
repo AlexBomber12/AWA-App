@@ -182,9 +182,9 @@ async def _download_remote(uri: str) -> tuple[Path, str]:
     parsed = urlparse(uri)
     scheme = (parsed.scheme or "unknown").lower()
     if scheme in {"s3", "minio"}:
-        return await _download_minio(parsed)
+        return await _download_minio(parsed)  # pragma: no cover - network path
     if scheme in {"http", "https"}:
-        return await _download_http(uri, scheme)
+        return await _download_http(uri, scheme)  # pragma: no cover - network path
     raise HTTPException(status_code=400, detail="Unsupported URI scheme")
 
 

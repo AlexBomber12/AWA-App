@@ -201,3 +201,11 @@ async def test_persist_upload_enforces_header(monkeypatch):
 async def test_download_remote_rejects_unknown_scheme():
     with pytest.raises(HTTPException):
         await ingest_module._download_remote("ftp://example.com/path")
+
+
+@pytest.mark.asyncio
+async def test_persist_upload_rejects_absolute(tmp_path):
+    upload = UploadFile(filename="/tmp/data.csv", file=BytesIO(b"a,b\n1,2\n"))
+    request = Request({"type": "http", "headers": []})
+    with pytest.raises(HTTPException):
+        await ingest_module._persist_upload(upload, request)
