@@ -5,6 +5,7 @@ from datetime import datetime
 import pytest
 from sqlalchemy import text
 
+from services.worker import maintenance as maintenance_module
 from services.worker.maintenance import task_refresh_roi_mvs
 
 pytestmark = [pytest.mark.integration]
@@ -15,7 +16,7 @@ def _select_scalar(conn, query: str, **params):
     return result.scalar()
 
 
-def test_materialized_views_are_materialized_and_indexed(db_engine):
+def test_materialized_views_are_materialized_and_indexed(db_engine, monkeypatch):
     asin = "MVTEST001"
 
     with db_engine.begin() as conn:
@@ -98,9 +99,11 @@ def test_materialized_views_are_materialized_and_indexed(db_engine):
             {"asin": asin},
         )
 
+    monkeypatch.setattr(maintenance_module, "_bust_stats_cache", lambda *_: {"status": "skipped"})
     result = task_refresh_roi_mvs.run()  # type: ignore[attr-defined]
     assert result["status"] == "success"
     assert set(result["views"]) == {"mat_v_roi_full", "mat_fees_expanded"}
+    assert result["cache_bust"]["status"] == "skipped"
 
     with db_engine.connect() as conn:
         assert _select_scalar(conn, "SELECT to_regclass('mat_v_roi_full')") is not None

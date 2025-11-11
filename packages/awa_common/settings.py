@@ -94,6 +94,13 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("BROKER_URL", "CELERY_BROKER_URL"),
     )
     QUEUE_NAMES: str | None = None
+    SCHEDULE_MV_REFRESH: bool = True
+    MV_REFRESH_CRON: str = "30 2 * * *"
+    STATS_ENABLE_CACHE: bool = True
+    STATS_CACHE_TTL_S: int = 600
+    STATS_CACHE_NAMESPACE: str = "stats:"
+    STATS_MAX_DAYS: int = 365
+    REQUIRE_CLAMP: bool = False
 
     @property
     def POSTGRES_DSN(self) -> str:

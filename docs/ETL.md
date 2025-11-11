@@ -124,6 +124,15 @@ all environments.
 - Returns aggregations default to the live table, but you can switch them to a lightweight view such
   as `mat_returns_agg` by setting `RETURNS_STATS_VIEW_NAME`. The async routes will prefer that view
   while preserving parameterised filters.
+- The optional monthly partitioning scaffold for `returns_raw` ships disabled; enable
+  `RETURNS_PARTITION_SCAFFOLD=1` during a maintenance window and follow
+  `docs/runbooks/returns_partitioning.md` for the copy/attach/rename workflow.
 - ROI view selection and the “does `returns_raw` have a `vendor` column?” check are cached in
   `services.api.roi_views` using a TTL cache (default 300 s). Override `ROI_CACHE_TTL_SECONDS` if you
   need shorter refresh intervals—for example during migrations that swap view names or add columns.
+- `/stats/returns` enforces a bounded date range via `STATS_MAX_DAYS` (default 365). When
+  `REQUIRE_CLAMP=false` the API clamps `date_from` to stay within the window; when set to `true` it
+  returns HTTP 422 so callers must adjust the request client-side.
+- Redis read-through caching can be enabled with `STATS_ENABLE_CACHE=true`. Keys live under
+  `STATS_CACHE_NAMESPACE` (default `stats:`), expire after `STATS_CACHE_TTL_S` seconds, and are
+  automatically invalidated after the MV refresh task completes.

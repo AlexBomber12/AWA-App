@@ -93,8 +93,8 @@ def test_mv_refresh_schedule_invalid_cron_falls_back(monkeypatch, reload_celery_
     entry = schedule.get("refresh-roi-fees-mvs")
     assert entry is not None
     cron = entry["schedule"]
-    assert cron._orig_minute == "*/15"
-    assert cron._orig_hour == "*"
+    assert cron._orig_minute == "30"
+    assert cron._orig_hour == "2"
     assert cron._orig_day_of_week == "*"
 
 
