@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from io import BytesIO
 
-from fastapi import UploadFile
+import pytest
+from fastapi import HTTPException, UploadFile
 from starlette.requests import Request
 
 from services.api.routes import upload as upload_module
@@ -35,3 +36,10 @@ async def test_upload_streams_and_dispatches_task(monkeypatch):
     response = await upload_module.upload(request, upload)
     assert response.status_code == 202
     assert recorded["kwargs"]["idempotency_key"] == "abc123"
+
+
+def test_ensure_size_limit_enforces_header():
+    request = Request({"type": "http", "headers": [(b"content-length", b"1024")]})
+    upload_module._ensure_size_limit(request, max_bytes=2048)
+    with pytest.raises(HTTPException):
+        upload_module._ensure_size_limit(request, max_bytes=100)

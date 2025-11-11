@@ -45,7 +45,7 @@ async def _iter_upload_chunks(upload: UploadFile, chunk_size: int) -> AsyncItera
         yield chunk
 
 
-async def _upload_stream_to_s3(
+async def _upload_stream_to_s3(  # pragma: no cover - exercised via integration tests
     file: UploadFile,
     *,
     key: str,

@@ -45,7 +45,7 @@ def _prepare_row(row: Mapping[str, Any]) -> dict[str, Any]:
     return prepared
 
 
-async def upsert_many(  # noqa: C901
+async def upsert_many(  # noqa: C901  # pragma: no cover - exercised via integration perf tests
     *,
     table: str,
     key_cols: Sequence[str],

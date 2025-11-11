@@ -176,3 +176,28 @@ def test_meta_from_result_returns_dict_for_success():
 def test_meta_from_result_handles_non_failure_empty():
     meta = ingest_module._meta_from_result(states.SUCCESS, None)
     assert meta == {}
+
+
+def test_s3_client_kwargs_reads_env(monkeypatch):
+    monkeypatch.setenv("MINIO_ENDPOINT", "custom:9000")
+    monkeypatch.setenv("MINIO_ACCESS_KEY", "ak")
+    monkeypatch.setenv("MINIO_SECRET_KEY", "sk")
+    result = ingest_module._s3_client_kwargs()
+    assert result["endpoint_url"] == "http://custom:9000"
+    assert result["aws_access_key_id"] == "ak"
+    assert result["aws_secret_access_key"] == "sk"
+
+
+@pytest.mark.asyncio
+async def test_persist_upload_enforces_header(monkeypatch):
+    upload = UploadFile(filename="data.csv", file=BytesIO(b"a,b\n1,2\n"))
+    request = Request({"type": "http", "headers": [(b"content-length", b"5")]})
+    monkeypatch.setattr(ingest_module.settings, "MAX_REQUEST_BYTES", 1)
+    with pytest.raises(HTTPException):
+        await ingest_module._persist_upload(upload, request)
+
+
+@pytest.mark.asyncio
+async def test_download_remote_rejects_unknown_scheme():
+    with pytest.raises(HTTPException):
+        await ingest_module._download_remote("ftp://example.com/path")

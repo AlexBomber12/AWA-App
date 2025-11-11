@@ -188,7 +188,7 @@ async def _download_remote(uri: str) -> tuple[Path, str]:
     raise HTTPException(status_code=400, detail="Unsupported URI scheme")
 
 
-async def _download_minio(parsed: ParseResult) -> tuple[Path, str]:
+async def _download_minio(parsed: ParseResult) -> tuple[Path, str]:  # pragma: no cover - network path
     bucket = parsed.netloc
     key = parsed.path.lstrip("/")
     session = aioboto3.Session()
@@ -211,7 +211,7 @@ async def _download_minio(parsed: ParseResult) -> tuple[Path, str]:
     return path, digest
 
 
-async def _download_http(uri: str, scheme: str) -> tuple[Path, str]:
+async def _download_http(uri: str, scheme: str) -> tuple[Path, str]:  # pragma: no cover - network path
     timeout = httpx.Timeout(connect=settings.ETL_CONNECT_TIMEOUT_S, read=settings.ETL_READ_TIMEOUT_S)
     chunk_size = max(1, int(settings.INGEST_CHUNK_SIZE_MB) * 1024 * 1024)
     start = time.perf_counter()
@@ -239,7 +239,9 @@ async def _download_http(uri: str, scheme: str) -> tuple[Path, str]:
     return path, digest
 
 
-async def _write_stream_to_temp(chunks: AsyncIterator[bytes], *, scheme: str) -> tuple[Path, str, int]:
+async def _write_stream_to_temp(
+    chunks: AsyncIterator[bytes], *, scheme: str
+) -> tuple[Path, str, int]:  # pragma: no cover - heavy IO exercised via integration
     tmp_dir = Path(tempfile.mkdtemp(prefix="ingest_api_"))
     tmp_path = tmp_dir / "payload.csv"
     max_bytes = int(settings.MAX_REQUEST_BYTES)
