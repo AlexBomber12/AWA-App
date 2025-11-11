@@ -120,7 +120,15 @@ class Settings(BaseSettings):
     RATE_LIMIT_VIEWER: str = "30/minute"
     RATE_LIMIT_OPS: str = "120/minute"
     RATE_LIMIT_ADMIN: str = "240/minute"
-    MAX_REQUEST_BYTES: int = 1_048_576  # 1 MB
+    MAX_REQUEST_BYTES: int = 268_435_456  # 256 MB ceiling for uploads
+    INGEST_STREAMING_ENABLED: bool = True
+    INGEST_CHUNK_SIZE_MB: int = 8
+    S3_USE_AIOBOTO3: bool = True
+    S3_MULTIPART_THRESHOLD_MB: int = 16
+    S3_MAX_CONNECTIONS: int = 50
+    SPOOL_MAX_BYTES: int = 67_108_864  # 64 MB safety cap for SpooledTemporaryFile
+    ENABLE_LOOP_LAG_MONITOR: bool = False
+    LOOP_LAG_INTERVAL_S: float = 1.0
 
     # Webapp
     NEXT_PUBLIC_API_URL: str = Field(default="http://localhost:8000")
@@ -203,17 +211,31 @@ class Settings(BaseSettings):
     ALERT_DB_POOL_ACQUIRE_RETRIES: int = 3
     ALERT_DB_POOL_RETRY_DELAY: float = 0.25
 
+    # Async DB pools (FastAPI & workers)
+    ASYNC_DB_POOL_SIZE: int = 10
+    ASYNC_DB_MAX_OVERFLOW: int = 10
+    ASYNC_DB_POOL_TIMEOUT: float = 30.0
+    DB_STATEMENT_TIMEOUT_SECONDS: int = 30
+
     # Logistics ETL configuration
     LOGISTICS_TIMEOUT_S: float = 15.0
     LOGISTICS_RETRIES: int = 3
     LOGISTICS_SOURCES: str | None = None
     FREIGHT_API_URL: str = "https://example.com/freight.csv"
+    LOGISTICS_MAX_CONCURRENCY: int = 6
+    LOGISTICS_PER_SOURCE_TIMEOUT_SECONDS: int = 60
+    LOGISTICS_GATHER_TIMEOUT_SECONDS: int = 120
+    LOGISTICS_UPSERT_BATCH_SIZE: int = 20_000
 
     # Fees ingestion / external APIs
     HELIUM10_KEY: str | None = None
     FEES_RAW_TABLE: str = "fees_raw"
     H10_MAX_CONCURRENCY: int = 5
     H10_DB_POOL_MAX_SIZE: int = 10
+
+    # Price importer
+    PRICE_IMPORTER_CHUNK_ROWS: int = 10_000
+    PRICE_IMPORTER_VALIDATION_WORKERS: int = 4
 
     @property
     def ETL_HTTP_KEEPALIVE_CONNECTIONS(self) -> int:  # pragma: no cover - compatibility shim

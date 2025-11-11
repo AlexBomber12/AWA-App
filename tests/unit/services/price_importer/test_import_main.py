@@ -22,8 +22,12 @@ def test_main_processes_batches(monkeypatch, tmp_path):
         [PriceRow(sku="A2", cost=2, currency="USD", moq=1, lead_time_days=5)],
     ]
 
-    monkeypatch.setattr(importer, "_ensure_logging", lambda: None, raising=False)
-    monkeypatch.setattr(importer, "iter_price_batches", lambda *_a, **_k: iter(batches), raising=False)
+    async def _fake_batches(*_a, **_k):
+        for batch in batches:
+            yield batch
+
+    monkeypatch.setattr(importer, "_bootstrap_observability", lambda: None, raising=False)
+    monkeypatch.setattr(importer, "iter_price_batches", _fake_batches, raising=False)
 
     class DummyRepo:
         def ensure_vendor(self, vendor: str) -> int:
@@ -55,10 +59,13 @@ def test_main_logs_validation_errors(monkeypatch, tmp_path):
     tmp_file = tmp_path / "prices.csv"
     tmp_file.write_text("unused", encoding="utf-8")
 
-    monkeypatch.setattr(importer, "_ensure_logging", lambda: None, raising=False)
-    monkeypatch.setattr(
-        importer, "iter_price_batches", lambda *a, **k: (_ for _ in ()).throw(ValueError("invalid")), raising=False
-    )
+    async def _failing_batches(*_a, **_k):
+        raise ValueError("invalid")
+        if False:  # pragma: no cover - ensure async generator semantics
+            yield []
+
+    monkeypatch.setattr(importer, "_bootstrap_observability", lambda: None, raising=False)
+    monkeypatch.setattr(importer, "iter_price_batches", _failing_batches, raising=False)
 
     captured = []
     monkeypatch.setattr(

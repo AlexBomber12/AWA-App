@@ -9,12 +9,27 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
+import aioboto3
 import structlog
+from botocore.config import Config
 from celery import states
 
 from awa_common.metrics import instrument_task as _instrument_task
+from awa_common.settings import settings
 from services.alert_bot import worker as alerts_worker
 from services.worker.celery_app import celery_app
+
+
+def _s3_client_kwargs() -> dict[str, Any]:
+    endpoint = os.getenv("MINIO_ENDPOINT", "minio:9000")
+    secure = os.getenv("MINIO_SECURE", "false").lower() in {"1", "true", "yes"}
+    scheme = "https" if secure else "http"
+    return {
+        "endpoint_url": f"{scheme}://{endpoint}",
+        "aws_access_key_id": os.getenv("MINIO_ACCESS_KEY", "minio"),
+        "aws_secret_access_key": os.getenv("MINIO_SECRET_KEY", "minio123"),
+        "region_name": os.getenv("AWS_REGION", "us-east-1"),
+    }
 
 
 def _fallback_async_to_sync(func: Callable[..., Any]) -> Callable[..., Any]:
@@ -66,23 +81,32 @@ logger = structlog.get_logger(__name__)
 _evaluate_alerts_sync: Callable[[], dict[str, int]] = async_to_sync(alerts_worker.evaluate_alert_rules)
 
 
-def _download_minio_to_tmp(uri: str) -> Path:
+async def _download_minio_async(uri: str) -> Path:
     from urllib.parse import urlparse
-
-    from minio import Minio
 
     parsed = urlparse(uri)
     bucket = parsed.netloc
     key = parsed.path.lstrip("/")
-    endpoint = os.getenv("MINIO_ENDPOINT", "minio:9000")
-    secure = os.getenv("MINIO_SECURE", "false").lower() in ("1", "true", "yes")
-    access_key = os.getenv("MINIO_ACCESS_KEY")
-    secret_key = os.getenv("MINIO_SECRET_KEY")
-    client = Minio(endpoint, access_key=access_key, secret_key=secret_key, secure=secure)
+    session = aioboto3.Session()
+    config = Config(
+        max_pool_connections=settings.S3_MAX_CONNECTIONS,
+        connect_timeout=float(settings.ETL_CONNECT_TIMEOUT_S),
+        read_timeout=float(settings.ETL_READ_TIMEOUT_S),
+    )
     tmpdir = Path(tempfile.mkdtemp(prefix="ingest_"))
     dst = tmpdir / Path(key).name
-    client.fget_object(bucket, key, str(dst))
+    async with session.client("s3", config=config, **_s3_client_kwargs()) as client:
+        response = await client.get_object(Bucket=bucket, Key=key)
+        async with response["Body"] as body:
+            with dst.open("wb") as handle:
+                async for chunk in body.iter_chunks():
+                    if chunk:
+                        handle.write(chunk)
     return dst
+
+
+def _download_minio_to_tmp(uri: str) -> Path:
+    return asyncio.run(_download_minio_async(uri))
 
 
 def _resolve_uri_to_path(uri: str) -> Path:
@@ -95,7 +119,13 @@ def _resolve_uri_to_path(uri: str) -> Path:
 
 @celery_app.task(name="ingest.import_file", bind=True)  # type: ignore[misc]
 @instrument_task("ingest.import_file", emit_metrics=False)
-def task_import_file(self: Any, uri: str, report_type: str | None = None, force: bool = False) -> dict[str, Any]:
+def task_import_file(
+    self: Any,
+    uri: str,
+    report_type: str | None = None,
+    force: bool = False,
+    idempotency_key: str | None = None,
+) -> dict[str, Any]:
     """Import a file into Postgres using existing ETL pipeline."""
 
     self.update_state(state=states.STARTED, meta={"stage": "resolve_uri"})
@@ -113,6 +143,7 @@ def task_import_file(self: Any, uri: str, report_type: str | None = None, force:
             report_type=report_type,
             celery_update=lambda m: self.update_state(state=states.STARTED, meta=m),
             force=force,
+            idempotency_key=idempotency_key,
         )
         summary: dict[str, Any] = {}
         if isinstance(result, dict):
