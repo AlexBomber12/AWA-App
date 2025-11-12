@@ -133,6 +133,15 @@ def _stop_worker_loop_lag_monitor(**_: Any) -> None:
         structlog.get_logger(__name__).warning("loop_lag_monitor.stop_failed", exc_info=True)
 
 
+def _run_alertbot_startup_validation(**_: Any) -> None:
+    try:
+        from services.alert_bot.worker import run_startup_validation
+
+        run_startup_validation()
+    except Exception:
+        structlog.get_logger(__name__).warning("alertbot.startup_validation_failed", exc_info=True)
+
+
 if os.getenv("ENABLE_METRICS", "1") != "0":
     broker_url = getattr(settings, "BROKER_URL", None) or settings.REDIS_URL
     queue_names_env = getattr(settings, "QUEUE_NAMES", None)
@@ -198,7 +207,11 @@ if os.getenv("SCHEDULE_LOGISTICS_ETL", "false").lower() in ("1", "true", "yes"):
         ),
     }
 
-alerts_cron = settings.ALERTS_EVALUATION_INTERVAL_CRON or "*/5 * * * *"
+alert_schedule_override = os.getenv("ALERT_SCHEDULE_CRON")
+if alert_schedule_override:
+    alerts_cron = alert_schedule_override.strip() or settings.ALERTS_EVALUATION_INTERVAL_CRON or "*/5 * * * *"
+else:
+    alerts_cron = settings.ALERTS_EVALUATION_INTERVAL_CRON or "*/5 * * * *"
 legacy_minutes = os.getenv("CHECK_INTERVAL_MIN")
 if legacy_minutes:
     try:
@@ -209,22 +222,31 @@ if legacy_minutes:
 alerts_cron_parts = alerts_cron.split()
 if len(alerts_cron_parts) != 5:
     alerts_cron_parts = "*/5 * * * *".split()
-_beat_schedule["alerts-evaluate-rules"] = {
-    "task": "alerts.evaluate_rules",
-    "schedule": crontab(
-        minute=alerts_cron_parts[0],
-        hour=alerts_cron_parts[1],
-        day_of_month=alerts_cron_parts[2],
-        month_of_year=alerts_cron_parts[3],
-        day_of_week=alerts_cron_parts[4],
-    ),
-}
-_beat_schedule["alerts-telegram-health"] = {
-    "task": "alerts.rules_health",
-    "schedule": crontab(minute="0", hour="*", day_of_month="*", month_of_year="*", day_of_week="*"),
-}
+alertbot_schedule = crontab(
+    minute=alerts_cron_parts[0],
+    hour=alerts_cron_parts[1],
+    day_of_month=alerts_cron_parts[2],
+    month_of_year=alerts_cron_parts[3],
+    day_of_week=alerts_cron_parts[4],
+)
+alertbot_entry = _beat_schedule.setdefault(
+    "alertbot-run",
+    {
+        "task": "alertbot.run",
+        "schedule": alertbot_schedule,
+    },
+)
+_beat_schedule.setdefault("alerts-evaluate-rules", alertbot_entry)
+_beat_schedule.setdefault(
+    "alerts-telegram-health",
+    {
+        "task": "alerts.rules_health",
+        "schedule": crontab(minute="0", hour="*", day_of_month="*", month_of_year="*", day_of_week="*"),
+    },
+)
 
 worker_process_init.connect(_start_worker_loop_lag_monitor, weak=False)
+worker_process_init.connect(_run_alertbot_startup_validation, weak=False)
 worker_process_shutdown.connect(_stop_worker_loop_lag_monitor, weak=False)
 
 if _beat_schedule:

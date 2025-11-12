@@ -203,16 +203,27 @@ class Settings(BaseSettings):
         default=None,
         validation_alias=AliasChoices("TELEGRAM_DEFAULT_CHAT_ID", "TELEGRAM_CHAT_ID"),
     )
+    TELEGRAM_API_BASE: str = "https://api.telegram.org"
     ALERTS_ENABLED: bool = Field(
         default=True,
         validation_alias=AliasChoices("ALERTS_ENABLED", "ENABLE_ALERTS"),
     )
     ALERT_RULES_SOURCE: Literal["yaml", "db"] = "yaml"
     ALERT_RULES_FILE: str = "config/alert_rules.yaml"
+    ALERT_RULES_PATH: str = "services/alert_bot/config.yaml"
+    ALERT_RULES_WATCH: bool = False
+    ALERT_RULES_WATCH_INTERVAL_S: float = 60.0
+    ALERT_RULES_OVERRIDE: str | None = None
     ALERTS_EVALUATION_INTERVAL_CRON: str = Field(
         default="*/5 * * * *",
         validation_alias=AliasChoices("ALERTS_EVALUATION_INTERVAL_CRON", "ALERTS_CRON"),
     )
+    ALERT_SCHEDULE_CRON: str = "*/1 * * * *"
+    ALERT_EVAL_CONCURRENCY: int = 8
+    ALERT_SEND_CONCURRENCY: int = 8
+    ALERT_TELEGRAM_MAX_RPS: float = 25.0
+    ALERT_TELEGRAM_MAX_CHAT_RPS: float = 1.0
+    ALERT_RULE_TIMEOUT_S: float = 15.0
     TELEGRAM_CONNECT_TIMEOUT_S: float = 3.0
     TELEGRAM_TOTAL_TIMEOUT_S: float = 10.0
     ROI_THRESHOLD: int = 5

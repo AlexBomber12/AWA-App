@@ -19,17 +19,13 @@ def _load_module(monkeypatch: pytest.MonkeyPatch):
 def test_alert_bot_main(monkeypatch: pytest.MonkeyPatch) -> None:
     module = _load_module(monkeypatch)
 
-    called = {"revalidated": False, "evaluated": False}
-
-    def fake_revalidate(force_log: bool):
-        called["revalidated"] = force_log
+    called = {"evaluated": False}
 
     def fake_eval():
         called["evaluated"] = True
         return {"status": "ok"}
 
-    monkeypatch.setattr(module, "revalidate_telegram", fake_revalidate)
     monkeypatch.setattr(module, "_evaluate_sync", fake_eval)
 
     assert module.main() == 0
-    assert called == {"revalidated": True, "evaluated": True}
+    assert called == {"evaluated": True}

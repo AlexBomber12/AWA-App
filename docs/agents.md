@@ -46,6 +46,26 @@ Agents are first added to the local docker-compose environment for development. 
 3. Add tests covering the expected behavior and ensure `pre-commit` and `pytest` succeed.
 4. Update CI and docker-compose files so the agent runs in each environment.
 
+## Alert bot
+The alert bot now fans out rule evaluations and Telegram sends in parallel with two layers of throttling (evaluation via `ALERT_EVAL_CONCURRENCY`, delivery via `ALERT_SEND_CONCURRENCY` plus token buckets). A single Celery beat entry (`alertbot.run`) executes on the cadence defined by `ALERT_SCHEDULE_CRON` (defaults to every minute) and the in-process scheduler honours per-rule `schedule` values (cron expressions or `@every 5m` style intervals).
+
+### Rule configuration
+- Source file: `services/alert_bot/config.yaml` (override with `ALERT_RULES_PATH`). The document contains `version`, `defaults` (chat list, parse mode, enabled flag), and a `rules[]` list.
+- Each rule has `id`, `type` (`roi_drop`, `buybox_loss`, `returns_spike`, `price_outdated`, or `custom` plus legacy aliases), `schedule`, `chat_id` (string or list), `params`, and a Jinja-compatible `template`.
+- The parser validates unique IDs, enforces chat targets, and supports runtime toggles through `ALERT_RULES_OVERRIDE=rule1:off,rule2:on`.
+- File reloads happen on SIGHUP or at 60s intervals when `ALERT_RULES_WATCH=1`.
+
+### Metrics & observability
+- Rule execution: `alertbot_rules_evaluated_total{rule,outcome}`, `alertbot_rule_eval_duration_seconds{rule}`.
+- Event and send pipeline: `alertbot_events_emitted_total{rule}`, `alertbot_messages_sent_total{rule,status}`, `alertbot_send_latency_seconds`, `alertbot_batch_duration_seconds`, and `alertbot_inflight_sends`.
+- Telegram errors: `alertbot_telegram_errors_total{error_code}`.
+- Health: `alertbot_startup_validation_ok` gauges whether token/chat validation passed. When the gauge is `0`, sending is skipped but rule evaluations continue.
+
+### Troubleshooting
+- Invalid tokens or chat IDs log `alertbot.validation.failed` entries with the problematic ID; update `TELEGRAM_TOKEN` / `TELEGRAM_DEFAULT_CHAT_ID` and rerun `alertbot.run`.
+- Ensure `ALERT_RULES_PATH` points to a readable file; if the bot falls back to legacy rules it logs `alertbot.no_rules`.
+- For test environments set `TELEGRAM_API_BASE` to a stub endpoint so CI never calls production Telegram servers.
+
 ## Log-driven debugging contract
 Agent fixes follow the mirror-log process outlined below.
 

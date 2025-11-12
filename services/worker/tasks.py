@@ -177,17 +177,29 @@ if os.getenv("TESTING") == "1":
         return run_ingest(uri, dialect=dialect)
 
 
-@celery_app.task(name="alerts.evaluate_rules")  # type: ignore[misc]
-@instrument_task("alerts.evaluate_rules")
-def evaluate_alert_rules() -> dict[str, int]:
-    """Periodic task that evaluates configured alert rules."""
+@celery_app.task(name="alertbot.run")  # type: ignore[misc]
+@instrument_task("alertbot.run")
+def alertbot_run() -> dict[str, Any]:
+    """Periodic task that evaluates alert rules and dispatches notifications."""
+
+    return _evaluate_alerts_sync()
+
+
+def evaluate_alert_rules() -> dict[str, Any]:
+    """Backward-compatible helper for legacy callers."""
 
     return _evaluate_alerts_sync()
 
 
 @celery_app.task(name="alerts.rules_health")  # type: ignore[misc]
 @instrument_task("alerts.rules_health")
+def alert_rules_health_task() -> dict[str, Any]:
+    """Celery task that reports Telegram/config health."""
+
+    return alerts_worker.alert_rules_health()
+
+
 def alert_rules_health() -> dict[str, Any]:
-    """Periodic task that refreshes Telegram availability state."""
+    """Return alert bot health without scheduling a dedicated Celery task."""
 
     return alerts_worker.alert_rules_health()
