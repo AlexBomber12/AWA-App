@@ -91,3 +91,59 @@ def test_parse_rule_overrides_applies(tmp_path: Path) -> None:
     status = {rule.id: rule.enabled for rule in runtime.rules}
     assert status["roi_drop"] is False
     assert status["buybox_loss"] is True
+
+
+def test_runtime_chat_ids(tmp_path: Path) -> None:
+    path = _write_yaml(
+        tmp_path,
+        """
+        version: 2
+        defaults:
+          chat_id: "@ops"
+        rules:
+          - id: roi_drop
+            type: roi_drop
+          - id: buybox_loss
+            type: buybox_loss
+            enabled: false
+        """,
+    )
+    runtime = alert_config.load_config(path)
+    assert runtime.chat_ids() == {"@ops"}
+
+
+def test_config_manager_reload_detects_changes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(alert_config.signal, "signal", lambda *args, **kwargs: None)
+    monkeypatch.setattr(alert_config.AlertConfigManager, "_signal_installed", False, raising=False)
+    path = _write_yaml(
+        tmp_path,
+        """
+        version: 1
+        defaults:
+          chat_id: "@ops"
+        rules:
+          - id: roi_drop
+            type: roi_drop
+        """,
+    )
+    manager = alert_config.AlertConfigManager(path=path, watch=True, watch_interval=0.0)
+    first = manager.load(force=True)
+    assert first is not None
+    path.write_text(
+        textwrap.dedent(
+            """
+            version: 2
+            defaults:
+              chat_id: "@ops"
+            rules:
+              - id: roi_drop
+                type: roi_drop
+                enabled: false
+            """
+        ),
+        encoding="utf-8",
+    )
+    manager.request_reload()
+    updated = manager.maybe_reload()
+    assert updated is not None
+    assert updated.version == "2"

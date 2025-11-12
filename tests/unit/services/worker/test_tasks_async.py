@@ -80,3 +80,8 @@ def test_celery_wrapper_evaluate(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_celery_wrapper_health(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(tasks.alerts_worker, "alert_rules_health", lambda: {"enabled": True})
     assert tasks.alert_rules_health()["enabled"] is True
+
+
+def test_alert_rules_health_task(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(tasks.alerts_worker, "alert_rules_health", lambda: {"ok": True})
+    assert tasks.alert_rules_health_task()["ok"] is True

@@ -157,3 +157,25 @@ def test_alerts_schedule_invalid_cron(monkeypatch, reload_celery_module):
     module = reload_celery_module(celery_module)
     cron = module.celery_app.conf.beat_schedule["alerts-evaluate-rules"]["schedule"]
     assert cron._orig_minute == "*/5"
+
+
+def test_alertbot_schedule_entries(monkeypatch, reload_celery_module):
+    monkeypatch.delenv("CHECK_INTERVAL_MIN", raising=False)
+    module = reload_celery_module(celery_module)
+    schedule = module.celery_app.conf.beat_schedule
+    assert "alertbot-run" in schedule
+    assert "alerts-evaluate-rules" in schedule
+    assert "alerts-telegram-health" in schedule
+
+
+def test_run_alertbot_startup_validation_handles_errors(monkeypatch):
+    calls: list[str] = []
+
+    def fake_run():
+        calls.append("called")
+        raise RuntimeError("boom")
+
+    stub = SimpleNamespace(run_startup_validation=fake_run)
+    monkeypatch.setitem(sys.modules, "services.alert_bot.worker", stub)
+    celery_module._run_alertbot_startup_validation()
+    assert calls == ["called"]

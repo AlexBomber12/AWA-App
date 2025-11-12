@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
-from services.alert_bot import worker
+from services.alert_bot import config as alert_config, worker
 from services.alert_bot.config import AlertRule
 from services.alert_bot.rules import AlertEvent
 
@@ -41,3 +42,22 @@ def test_dedupe_events_keeps_first() -> None:
     ]
     deduped = worker._dedupe_events(events)
     assert [event.text for event in deduped] == ["first", "unique"]
+
+
+def test_collect_chat_ids_prefers_runtime() -> None:
+    rule = alert_config.AlertRule(
+        id="roi",
+        type="roi_drop",
+        enabled=True,
+        schedule=None,
+        chat_ids=["@ops"],
+        parse_mode="HTML",
+        params={},
+        template=None,
+    )
+    defaults = alert_config.AlertRuleDefaults(enabled=True, parse_mode="HTML", chat_ids=["@ops"])
+    runtime = alert_config.AlertRulesRuntime(
+        version="1", defaults=defaults, rules=[rule], source_path=Path("x"), loaded_at=0.0
+    )
+    ids = worker._collect_chat_ids(runtime, [])
+    assert ids == {"@ops"}

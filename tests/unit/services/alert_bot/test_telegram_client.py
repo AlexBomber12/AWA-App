@@ -90,3 +90,67 @@ async def test_rate_limiter_invoked(monkeypatch: pytest.MonkeyPatch) -> None:
     await client.send_message(chat_id=77, text="limited")
     assert global_bucket.calls == 1
     assert chat_bucket.calls == 1
+
+
+@pytest.mark.asyncio
+async def test_token_bucket_zero_rate(monkeypatch: pytest.MonkeyPatch) -> None:
+    bucket = telegram._TokenBucket(0)  # type: ignore[attr-defined]
+    called = {"sleep": False}
+
+    async def fake_sleep(_duration: float) -> None:
+        called["sleep"] = True
+
+    monkeypatch.setattr(telegram.asyncio, "sleep", fake_sleep)
+    await bucket.acquire()
+    assert called["sleep"] is False
+
+
+@pytest.mark.asyncio
+async def test_token_bucket_waits(monkeypatch: pytest.MonkeyPatch) -> None:
+    bucket = telegram._TokenBucket(1)  # type: ignore[attr-defined]
+    bucket.tokens = 0
+    sleeps: list[float] = []
+
+    async def fake_sleep(duration: float) -> None:
+        sleeps.append(duration)
+
+    monkeypatch.setattr(telegram.asyncio, "sleep", fake_sleep)
+    await bucket.acquire()
+    assert sleeps  # ensured wait branch executed
+
+
+def test_retry_after_from_payload() -> None:
+    assert telegram._retry_after_from_payload({"parameters": {"retry_after": 3}}) == 3.0  # type: ignore[attr-defined]
+    assert telegram._retry_after_from_payload({}) is None  # type: ignore[attr-defined]
+
+
+@pytest.mark.asyncio
+async def test_send_message_missing_token() -> None:
+    stub_client = StubAsyncClient([])
+    client = telegram.AsyncTelegramClient(token="", client=stub_client)
+    result = await client.send_message(chat_id=1, text="hi")
+    assert result.ok is False
+    assert result.status == "error"
+
+
+@pytest.mark.asyncio
+async def test_send_message_invalid_chat(monkeypatch: pytest.MonkeyPatch) -> None:
+    stub_client = StubAsyncClient([])
+    client = telegram.AsyncTelegramClient(token="12345:ABCDE", client=stub_client)
+    result = await client.send_message(chat_id="   ", text="hi")
+    assert result.ok is False
+    assert result.status == "error"
+
+
+@pytest.mark.asyncio
+async def test_get_me_and_get_chat(monkeypatch: pytest.MonkeyPatch) -> None:
+    responses = [
+        StubResponse(200, payload={"ok": True, "result": {"username": "bot"}}),
+        StubResponse(200, payload={"ok": True, "result": {"id": 1}}),
+    ]
+    stub_client = StubAsyncClient(responses)
+    client = telegram.AsyncTelegramClient(token="12345:ABCDE", client=stub_client)
+    me = await client.get_me()
+    assert me.ok is True
+    chat = await client.get_chat(123)
+    assert chat.ok is True
