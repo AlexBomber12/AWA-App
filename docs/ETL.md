@@ -31,6 +31,25 @@ components in `packages/awa_common` to deliver repeatable pipelines that survive
   `etl_retry_total{job,reason}` (reason in `{429, timeout, 5xx, exception}`) so operations can see
   churn without exploding cardinality.
 
+## Shared validation & retry helpers
+
+- Ingest endpoints now return a structured `ErrorResponse` (defined in `services/api/schemas.py`) with machine
+  readable codes (`unsupported_file_format`, `bad_request`, `unprocessable_entity`, `validation_error`)
+  and the `X-Request-ID` echoed back to the caller. The FastAPI layer increments
+  `api_ingest_4xx_total{code}`/`api_ingest_5xx_total` and logs the user sub, route, and error code so
+  dashboards can separate unsupported files from schema failures.
+- CSV/XLSX scrubbing logic lives in `packages/awa_common/vendor`. Functions such as
+  `normalize_currency`, `parse_decimal`, and `parse_date` are shared by the price importer and
+  logistics ETL so we only maintain one set of validators. Normalization and schema errors feed the
+  new Prometheus counters `etl_row_normalized_total{job}` and `etl_normalize_errors_total{job,reason}`.
+- Long lived retry policies now funnel through `packages/awa_common/retries`. Supply a `RetryConfig`
+  and use `@retry`/`@aretry` instead of hand rolling Tenacity loops; the helper logs every retry with
+  the current request id and emits `awa_retry_attempts_total{operation}` plus
+  `awa_retry_sleep_seconds{operation}` so queuing delays are visible.
+- Typed ETL rows live in `packages/awa_common/types`. `RateRowModel` and `PriceRowModel` validate
+  Decimal/date fields at runtime while the corresponding `TypedDict` definitions feed mypy so that
+  price importer and logistics ETL hand off consistent structures before writing to Postgres.
+
 ## Task Lifecycle
 
 - Wrap mutable sections with `packages/awa_common/etl/guard.process_once`:

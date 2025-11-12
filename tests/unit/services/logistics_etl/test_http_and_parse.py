@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import builtins
+from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -135,7 +136,7 @@ def test_parse_rows_from_csv_fixture() -> None:
     )
     assert len(rows) == 3
     assert rows[0]["carrier"] == "DHL"
-    assert rows[0]["eur_per_kg"] == pytest.approx(1.25)
+    assert rows[0]["eur_per_kg"] == Decimal("1.25")
 
 
 def test_parse_rows_unsupported_format(monkeypatch) -> None:

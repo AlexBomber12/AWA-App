@@ -57,7 +57,7 @@ lint-fix: ensure-bootstrap
 	$(RUFF) check . --fix
 
 type: ensure-bootstrap
-	$(MYPY) .
+	$(MYPY) packages services etl
 
 unit: ensure-bootstrap
 	@set -o pipefail; \

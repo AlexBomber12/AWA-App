@@ -11,11 +11,13 @@ from urllib.parse import ParseResult, urlparse
 
 import aioboto3
 import httpx
+import structlog
 from botocore.config import Config
 from celery import states
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Request, UploadFile
+from fastapi.responses import JSONResponse
 
-from awa_common.files import sanitize_upload_name
+from awa_common.files import ALLOWED_UPLOAD_EXTENSIONS, sanitize_upload_name
 from awa_common.metrics import (
     ingest_upload_inflight,
     record_ingest_download,
@@ -25,11 +27,35 @@ from awa_common.metrics import (
 )
 from awa_common.settings import settings
 from etl.load_csv import ImportFileError
+from services.api.routes.ingest_errors import IngestRequestError, ingest_error_response, respond_with_ingest_error
+from services.api.schemas import ErrorCode
 from services.api.security import limit_ops, limit_viewer, require_ops, require_viewer
 from services.worker.celery_app import celery_app
 from services.worker.tasks import task_import_file
 
 router = APIRouter(prefix="", tags=["ingest"])
+logger = structlog.get_logger(__name__)
+_SUPPORTED_SUFFIXES = {ext.lower() for ext in ALLOWED_UPLOAD_EXTENSIONS}
+
+
+def _route_path(request: Request) -> str:
+    return str(request.scope.get("path") or request.url.path)
+
+
+def _unsupported_file_error(filename: str | None) -> IngestRequestError:
+    suffix = Path(filename or "").suffix.lower() or "unknown"
+    return IngestRequestError(
+        status_code=400,
+        code="unsupported_file_format",
+        detail=f"Files with extension '{suffix}' are not supported",
+        hint="Upload CSV or XLSX files exported from Amazon reports.",
+    )
+
+
+def _validate_extension(filename: str | None) -> None:
+    lowered = (filename or "").lower()
+    if not any(lowered.endswith(ext) for ext in _SUPPORTED_SUFFIXES):
+        raise _unsupported_file_error(filename)
 
 
 def _s3_client_kwargs() -> dict[str, Any]:
@@ -57,6 +83,21 @@ def _failure_status_and_detail(info: Any) -> tuple[int, str]:
     return 500, "ETL ingest failed"
 
 
+def _error_from_failure(info: Any) -> IngestRequestError:
+    status, detail = _failure_status_and_detail(info)
+    status = status or 500
+    code: ErrorCode
+    if status == 422:
+        code = "unprocessable_entity"
+    elif status == 400:
+        code = "bad_request"
+    elif status == 413:
+        code = "bad_request"
+    else:
+        code = "bad_request"
+    return IngestRequestError(status_code=status, code=code, detail=detail)
+
+
 def _meta_from_result(state: str, info: Any) -> dict[str, Any]:
     if isinstance(info, dict) and (info or state != states.FAILURE):
         return info
@@ -78,45 +119,64 @@ async def submit_ingest(
     force: bool = False,
     _: object = Depends(require_ops),
     __: None = Depends(limit_ops),
-) -> dict[str, Any]:
-    if not file and uri is None:
-        try:
-            payload = await request.json()
-        except Exception:
-            payload = {}
-        uri = payload.get("uri")
-        report_type = report_type or payload.get("report_type")
-        force = force or bool(payload.get("force"))
-    if not file and not uri:
-        raise HTTPException(status_code=400, detail="Provide a file or a uri")
+) -> JSONResponse:
+    route = _route_path(request)
+    try:
+        if not file and uri is None:
+            try:
+                payload = await request.json()
+            except Exception:
+                payload = {}
+            uri = payload.get("uri")
+            report_type = report_type or payload.get("report_type")
+            force = force or bool(payload.get("force"))
+        if not file and not uri:
+            raise IngestRequestError(
+                status_code=400,
+                code="bad_request",
+                detail="Provide a file upload or the uri field.",
+                hint="Send multipart/form-data with a file or JSON containing uri.",
+            )
 
-    if file:
-        try:
-            tmp_path, idempotency_key = await _persist_upload(file, request=request)
-        except HTTPException as exc:
-            extension = Path(file.filename or "").suffix.lstrip(".") if file.filename else "unknown"
-            record_ingest_upload_failure(extension=extension, reason=str(exc.status_code))
-            raise
-        resolved_uri = f"file://{tmp_path}"
-    else:
-        assert uri is not None  # mypy narrow
-        tmp_path, idempotency_key = await _download_remote(uri)
-        resolved_uri = f"file://{tmp_path}"
+        if file:
+            try:
+                _validate_extension(file.filename)
+                tmp_path, idempotency_key = await _persist_upload(file, request=request)
+            except IngestRequestError as exc:
+                extension = Path(file.filename or "").suffix.lstrip(".") if file and file.filename else "unknown"
+                record_ingest_upload_failure(extension=extension, reason=exc.code)
+                raise
+            resolved_uri = f"file://{tmp_path}"
+        else:
+            assert uri is not None  # mypy narrow
+            tmp_path, idempotency_key = await _download_remote(uri)
+            resolved_uri = f"file://{tmp_path}"
 
-    async_result = task_import_file.apply_async(
-        args=[resolved_uri],
-        kwargs={"report_type": report_type or None, "force": force, "idempotency_key": idempotency_key},
-        queue="ingest",
-    )
-    if celery_app.conf.task_always_eager:
-        try:
-            async_result.get(propagate=False)
-        except Exception:
-            pass
-        if async_result.failed():
-            status, detail = _failure_status_and_detail(async_result.info)
-            raise HTTPException(status_code=status, detail=detail)
-    return {"task_id": async_result.id}
+        async_result = task_import_file.apply_async(
+            args=[resolved_uri],
+            kwargs={"report_type": report_type or None, "force": force, "idempotency_key": idempotency_key},
+            queue="ingest",
+        )
+        if celery_app.conf.task_always_eager:
+            try:
+                async_result.get(propagate=False)
+            except Exception:
+                pass
+            if async_result.failed():
+                error = _error_from_failure(async_result.info)
+                return respond_with_ingest_error(request, error, route=route)
+        return JSONResponse({"task_id": async_result.id})
+    except IngestRequestError as exc:
+        return respond_with_ingest_error(request, exc, route=route)
+    except Exception:
+        logger.exception("submit_ingest.failed", route=route)
+        return ingest_error_response(
+            request,
+            status_code=500,
+            code="bad_request",
+            detail="ETL ingest failed unexpectedly",
+            route=route,
+        )
 
 
 @router.get("/jobs/{task_id}")
@@ -140,11 +200,14 @@ async def get_job(
 
 async def _persist_upload(file: UploadFile, request: Request) -> tuple[Path, str]:
     if not file.filename:
-        raise HTTPException(status_code=400, detail="Uploaded file missing name")
+        raise IngestRequestError(status_code=400, code="bad_request", detail="Uploaded file missing name")
     try:
         safe_name = sanitize_upload_name(file.filename)
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        message = str(exc)
+        if "Unsupported file extension" in message:
+            raise _unsupported_file_error(file.filename) from exc
+        raise IngestRequestError(status_code=400, code="bad_request", detail=message) from exc
     tmp_dir = Path(tempfile.mkdtemp(prefix="ingest_api_"))
     tmp_path = tmp_dir / safe_name
     chunk_size = max(1, int(settings.INGEST_CHUNK_SIZE_MB) * 1024 * 1024)
@@ -153,7 +216,12 @@ async def _persist_upload(file: UploadFile, request: Request) -> tuple[Path, str
     if header:
         try:
             if int(header) > max_bytes:
-                raise HTTPException(status_code=413, detail="Upload exceeds maximum size limit")
+                raise IngestRequestError(
+                    status_code=413,
+                    code="bad_request",
+                    detail="Upload exceeds maximum size limit",
+                    hint="Split the file or reduce report size and retry.",
+                )
         except ValueError:
             pass
 
@@ -168,7 +236,12 @@ async def _persist_upload(file: UploadFile, request: Request) -> tuple[Path, str
                     break
                 total += len(chunk)
                 if total > max_bytes:
-                    raise HTTPException(status_code=413, detail="Upload exceeds maximum size limit")
+                    raise IngestRequestError(
+                        status_code=413,
+                        code="bad_request",
+                        detail="Upload exceeds maximum size limit",
+                        hint="Split the file or reduce report size and retry.",
+                    )
                 hasher.update(chunk)
                 handle.write(chunk)
     await file.close()
@@ -185,7 +258,12 @@ async def _download_remote(uri: str) -> tuple[Path, str]:
         return await _download_minio(parsed)  # pragma: no cover - network path
     if scheme in {"http", "https"}:
         return await _download_http(uri, scheme)  # pragma: no cover - network path
-    raise HTTPException(status_code=400, detail="Unsupported URI scheme")
+    raise IngestRequestError(
+        status_code=400,
+        code="bad_request",
+        detail=f"Unsupported URI scheme '{scheme}'",
+        hint="Use http(s), s3, or minio URIs.",
+    )
 
 
 async def _download_minio(parsed: ParseResult) -> tuple[Path, str]:  # pragma: no cover - network path
@@ -205,7 +283,12 @@ async def _download_minio(parsed: ParseResult) -> tuple[Path, str]:  # pragma: n
                 path, digest, size_bytes = await _write_stream_to_temp(body.iter_chunks(), scheme=parsed.scheme)
     except Exception as exc:
         record_ingest_download_failure(scheme=parsed.scheme, reason=exc.__class__.__name__)
-        raise HTTPException(status_code=502, detail="Failed to download source") from exc
+        raise IngestRequestError(
+            status_code=502,
+            code="bad_request",
+            detail="Failed to download source from object storage",
+            hint="Verify MinIO/S3 connectivity and credentials.",
+        ) from exc
     duration = time.perf_counter() - start
     record_ingest_download(size_bytes, duration, scheme=parsed.scheme)
     return path, digest
@@ -226,14 +309,28 @@ async def _download_http(uri: str, scheme: str) -> tuple[Path, str]:  # pragma: 
 
                 path, digest, size_bytes = await _write_stream_to_temp(iterator(), scheme=scheme)
     except httpx.HTTPStatusError as exc:
-        record_ingest_download_failure(scheme=scheme, reason=str(exc.response.status_code))
-        raise HTTPException(status_code=exc.response.status_code, detail="Failed to download source") from exc
+        status = exc.response.status_code if exc.response is not None else 502
+        record_ingest_download_failure(scheme=scheme, reason=str(status))
+        raise IngestRequestError(
+            status_code=status,
+            code="bad_request",
+            detail=f"Failed to download source (HTTP {status})",
+        ) from exc
     except httpx.TimeoutException as exc:
         record_ingest_download_failure(scheme=scheme, reason="timeout")
-        raise HTTPException(status_code=504, detail="Timeout downloading source") from exc
+        raise IngestRequestError(
+            status_code=504,
+            code="bad_request",
+            detail="Timeout downloading source",
+            hint="Retry later or reduce file size.",
+        ) from exc
     except Exception as exc:  # pragma: no cover
         record_ingest_download_failure(scheme=scheme, reason=exc.__class__.__name__)
-        raise HTTPException(status_code=502, detail="Failed to download source") from exc
+        raise IngestRequestError(
+            status_code=502,
+            code="bad_request",
+            detail="Failed to download source",
+        ) from exc
     duration = time.perf_counter() - start
     record_ingest_download(size_bytes, duration, scheme=scheme)
     return path, digest
@@ -253,7 +350,12 @@ async def _write_stream_to_temp(
                 continue
             total += len(chunk)
             if total > max_bytes:
-                raise HTTPException(status_code=413, detail="Download exceeds maximum size limit")
+                raise IngestRequestError(
+                    status_code=413,
+                    code="bad_request",
+                    detail="Download exceeds maximum size limit",
+                    hint="Limit remote files to MAX_REQUEST_BYTES or upload via MinIO.",
+                )
             hasher.update(chunk)
             handle.write(chunk)
     return tmp_path, hasher.hexdigest(), total

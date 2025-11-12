@@ -13,7 +13,7 @@ async def test_iter_price_batches_async(tmp_path):
     async for batch in importer_io.iter_price_batches(csv_path, batch_size=1, max_workers=1):
         batches.append(batch)
     assert len(batches) == 1
-    assert batches[0][0].sku == "sku1"
+    assert batches[0][0]["sku"] == "sku1"
 
 
 def test_frame_iterator_csv(tmp_path):

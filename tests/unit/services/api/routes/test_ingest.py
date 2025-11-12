@@ -1,8 +1,9 @@
+import json
 from io import BytesIO
 
 import pytest
 from celery import states
-from fastapi import HTTPException, UploadFile
+from fastapi import UploadFile
 from starlette.requests import Request
 
 from etl.load_csv import ImportFileError
@@ -31,6 +32,10 @@ def _make_request(payload):
     return req
 
 
+def _json_body(response):
+    return json.loads(response.body.decode())
+
+
 @pytest.mark.asyncio
 async def test_submit_ingest_from_payload(monkeypatch, tmp_path):
     recorded = {}
@@ -55,7 +60,8 @@ async def test_submit_ingest_from_payload(monkeypatch, tmp_path):
     monkeypatch.setattr(ingest_module.celery_app.conf, "task_always_eager", False, raising=False)
     request = _make_request({"uri": "s3://bucket/file.csv", "report_type": "roi"})
     response = await ingest_module.submit_ingest(request, file=None)
-    assert response["task_id"] == "abc"
+    data = _json_body(response)
+    assert data["task_id"] == "abc"
     assert recorded["kwargs"]["queue"] == "ingest"
     assert recorded["kwargs"]["kwargs"]["idempotency_key"] == "hash-1"
 
@@ -78,7 +84,8 @@ async def test_submit_ingest_from_file(monkeypatch, tmp_path):
     upload = UploadFile(filename="data.csv", file=BytesIO(b"a,b\n1,2\n"))
     request = _make_request({})
     response = await ingest_module.submit_ingest(request, file=upload)
-    assert response["task_id"] == "file-task"
+    data = _json_body(response)
+    assert data["task_id"] == "file-task"
     assert recorded["kwargs"]["args"][0].startswith("file://")
     assert recorded["kwargs"]["kwargs"]["idempotency_key"]
 
@@ -121,10 +128,11 @@ async def test_submit_ingest_eager_failure_propagates(monkeypatch, tmp_path):
     monkeypatch.setattr(ingest_module, "_download_remote", fake_download)
 
     request = _make_request({"uri": "s3://bucket/file.csv"})
-    with pytest.raises(HTTPException) as excinfo:
-        await ingest_module.submit_ingest(request, file=None)
-    assert excinfo.value.status_code == 500
-    assert "invalid" in excinfo.value.detail
+    response = await ingest_module.submit_ingest(request, file=None)
+    assert response.status_code == 500
+    payload = json.loads(response.body.decode())
+    assert payload["code"] == "bad_request"
+    assert "invalid" in payload["detail"]
 
 
 @pytest.mark.asyncio
@@ -152,7 +160,8 @@ async def test_submit_ingest_eager_get_exception(monkeypatch, tmp_path):
 
     request = _make_request({"uri": "s3://bucket/file.csv"})
     response = await ingest_module.submit_ingest(request, file=None)
-    assert response["task_id"] == "ok-task"
+    data = _json_body(response)
+    assert data["task_id"] == "ok-task"
 
 
 def test_failure_status_handles_generic_exception():
@@ -193,13 +202,13 @@ async def test_persist_upload_enforces_header(monkeypatch):
     upload = UploadFile(filename="data.csv", file=BytesIO(b"a,b\n1,2\n"))
     request = Request({"type": "http", "headers": [(b"content-length", b"5")]})
     monkeypatch.setattr(ingest_module.settings, "MAX_REQUEST_BYTES", 1)
-    with pytest.raises(HTTPException):
+    with pytest.raises(ingest_module.IngestRequestError):
         await ingest_module._persist_upload(upload, request)
 
 
 @pytest.mark.asyncio
 async def test_download_remote_rejects_unknown_scheme():
-    with pytest.raises(HTTPException):
+    with pytest.raises(ingest_module.IngestRequestError):
         await ingest_module._download_remote("ftp://example.com/path")
 
 
@@ -207,5 +216,5 @@ async def test_download_remote_rejects_unknown_scheme():
 async def test_persist_upload_rejects_absolute(tmp_path):
     upload = UploadFile(filename="/tmp/data.csv", file=BytesIO(b"a,b\n1,2\n"))
     request = Request({"type": "http", "headers": []})
-    with pytest.raises(HTTPException):
+    with pytest.raises(ingest_module.IngestRequestError):
         await ingest_module._persist_upload(upload, request)

@@ -45,14 +45,16 @@ class Repository:
         elif isinstance(row, Mapping):
             data = dict(row)
         else:
-            data = {k: getattr(row, k) for k in ("sku", "cost", "currency", "moq", "lead_time_days")}
+            data = {k: getattr(row, k) for k in ("sku", "unit_price", "currency", "moq", "lead_time_d")}
+        unit_price = data.get("unit_price", data.get("cost"))
         currency = str(data.get("currency", "EUR") or "EUR").strip() or "EUR"
+        lead_time = data.get("lead_time_d", data.get("lead_time_days", 0))
         return {
             "vendor_id": vendor_id,
             "sku": data.get("sku"),
-            "cost": data.get("cost"),
+            "cost": unit_price,
             "moq": data.get("moq", 0),
-            "lead_time_days": data.get("lead_time_days", 0),
+            "lead_time_days": lead_time,
             "currency": currency.upper(),
         }
 

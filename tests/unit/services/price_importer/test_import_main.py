@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib
+from decimal import Decimal
 from types import SimpleNamespace
 
 import pytest
@@ -12,14 +13,12 @@ def _get_importer_module():
 
 def test_main_processes_batches(monkeypatch, tmp_path):
     importer = _get_importer_module()
-    from services.price_importer.io import PriceRow
-
     tmp_file = tmp_path / "prices.csv"
     tmp_file.write_text("unused", encoding="utf-8")
 
     batches = [
-        [PriceRow(sku="A1", cost=1, currency="EUR", moq=0, lead_time_days=0)],
-        [PriceRow(sku="A2", cost=2, currency="USD", moq=1, lead_time_days=5)],
+        [{"sku": "A1", "unit_price": Decimal("1"), "currency": "EUR", "moq": 0, "lead_time_d": 0}],
+        [{"sku": "A2", "unit_price": Decimal("2"), "currency": "USD", "moq": 1, "lead_time_d": 5}],
     ]
 
     async def _fake_batches(*_a, **_k):

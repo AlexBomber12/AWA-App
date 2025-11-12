@@ -1,6 +1,9 @@
 # Changelog
 
 ## Unreleased
+- enforce structured `ErrorResponse` payloads for ingest APIs with per-code metrics/logging
+- add shared vendor/retry/type helpers across price importer and logistics ETL plus new normalization metrics
+- refactor ROI review template/context to rely on a single `rows` key with regression tests
 - unify DSN handling and build custom Postgres image
 - fix(ci): pipeline passes with updated env defaults
 - drop and recreate refund views to prevent InvalidTableDefinition errors

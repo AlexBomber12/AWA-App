@@ -16,15 +16,15 @@ def test_price_importer_upsert_batches(pg_engine) -> None:
     vendor_id = repo.ensure_vendor("BatchVendor")
 
     initial_rows = [
-        {"sku": "SKU-1", "cost": 10.0, "currency": "EUR", "moq": 1, "lead_time_days": 5},
-        {"sku": "SKU-2", "cost": 12.5, "currency": "USD", "moq": 2, "lead_time_days": 7},
+        {"sku": "SKU-1", "unit_price": 10.0, "currency": "EUR", "moq": 1, "lead_time_d": 5},
+        {"sku": "SKU-2", "unit_price": 12.5, "currency": "USD", "moq": 2, "lead_time_d": 7},
     ]
     inserted, updated = repo.upsert_prices(vendor_id, initial_rows)
     assert inserted == 2 and updated == 0
 
     batch_rows = [
-        {"sku": "SKU-1", "cost": 11.0, "currency": "eur", "moq": 3, "lead_time_days": 6},
-        {"sku": "SKU-3", "cost": 9.99, "currency": "GBP", "moq": 1, "lead_time_days": 4},
+        {"sku": "SKU-1", "unit_price": 11.0, "currency": "eur", "moq": 3, "lead_time_d": 6},
+        {"sku": "SKU-3", "unit_price": 9.99, "currency": "GBP", "moq": 1, "lead_time_d": 4},
     ]
     inserted2, updated2 = repo.upsert_prices(vendor_id, batch_rows)
     assert inserted2 == 1 and updated2 == 1

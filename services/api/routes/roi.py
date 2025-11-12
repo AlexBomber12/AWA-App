@@ -72,11 +72,10 @@ async def roi_review(
         rows = await roi_repository.fetch_pending_rows(session, roi_min, vendor, category)
     except InvalidROIViewError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    items = [dict(row) if isinstance(row, Mapping) else dict(row._mapping) for row in rows]
+    resolved_rows = [dict(row) if isinstance(row, Mapping) else dict(row._mapping) for row in rows]
     context = {
         "request": request,
-        "items": items,
-        "rows": items,
+        "rows": resolved_rows,
         "roi_min": roi_min,
         "vendor": vendor,
         "category": category,

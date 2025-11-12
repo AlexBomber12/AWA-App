@@ -4,9 +4,9 @@ import argparse
 import datetime as dt
 import json
 import os
-from collections.abc import Iterable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import structlog
 from sqlalchemy import create_engine, text
@@ -17,6 +17,7 @@ from awa_common.etl.guard import process_once
 from awa_common.etl.http import request as http_request
 from awa_common.etl.idempotency import build_payload_meta, compute_idempotency_key
 from awa_common.metrics import record_etl_run, record_etl_skip
+from awa_common.retries import RetryConfig, retry
 
 logger = structlog.get_logger(__name__)
 
@@ -64,13 +65,12 @@ def resolve_live(cli_live: bool | None) -> bool:
     return os.getenv("ENABLE_LIVE") == "1"
 
 
-def fetch_live_fees(asins: Iterable[str], api_key: str, *, task_id: str | None) -> list[tuple[str, float]]:
-    if not api_key:
-        raise RuntimeError("Missing HELIUM_API_KEY")
-    results: list[tuple[str, float]] = []
-    headers = {"Authorization": f"Bearer {api_key}"}
-    for asin in asins:
-        url = f"{HELIUM_ENDPOINT}?asin={asin}"
+RetryFunc = Callable[[Callable[[], dict[str, Any]]], Callable[[], dict[str, Any]]]
+_HELIUM_RETRY = cast(RetryFunc, retry(RetryConfig(operation="helium_fee", retry_on=(Exception,))))
+
+
+def _request_helium_fee(url: str, headers: dict[str, str], task_id: str | None) -> dict[str, Any]:
+    def _call() -> dict[str, Any]:
         response = http_request(
             "GET",
             url,
@@ -78,7 +78,19 @@ def fetch_live_fees(asins: Iterable[str], api_key: str, *, task_id: str | None) 
             source=SOURCE_NAME,
             task_id=task_id,
         )
-        data = response.json()
+        return cast(dict[str, Any], response.json())
+
+    return _HELIUM_RETRY(_call)()
+
+
+def fetch_live_fees(asins: Iterable[str], api_key: str, *, task_id: str | None) -> list[tuple[str, float]]:
+    if not api_key:
+        raise RuntimeError("Missing HELIUM_API_KEY")
+    results: list[tuple[str, float]] = []
+    headers = {"Authorization": f"Bearer {api_key}"}
+    for asin in asins:
+        url = f"{HELIUM_ENDPOINT}?asin={asin}"
+        data = _request_helium_fee(url, headers, task_id)
         results.append((asin, float(data["totalFbaFee"])))
     return results
 

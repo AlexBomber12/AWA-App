@@ -4,23 +4,18 @@ import csv
 import io
 from dataclasses import asdict, dataclass
 from datetime import date, datetime
+from decimal import Decimal
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 import anyio
 import structlog
-from tenacity import AsyncRetrying, RetryCallState, stop_after_attempt, wait_exponential
 
-try:  # pragma: no cover - depends on tenacity version
-    from tenacity import wait_random_jitter
-except ImportError:  # pragma: no cover
-    from tenacity import wait_random  # type: ignore
-
-    def wait_random_jitter(jitter: float):
-        return wait_random(0, jitter)
-
-
+from awa_common.metrics import record_etl_normalize_error, record_etl_rows_normalized
+from awa_common.retries import RetryConfig, aretry
 from awa_common.settings import Settings
+from awa_common.types import RateRowModel
+from awa_common.vendor import parse_date as vendor_parse_date, parse_decimal
 from services.etl import http_client
 
 URL = Settings().FREIGHT_API_URL
@@ -127,38 +122,28 @@ async def fetch_rates() -> list[dict[str, object]]:
     return rows
 
 
-def _log_retry_details(retry_state: RetryCallState, *, source: str) -> None:
-    sleep = retry_state.next_action.sleep if retry_state.next_action else 0.0
-    error_type: str | None = None
-    if retry_state.outcome is not None and retry_state.outcome.failed:
-        error_type = retry_state.outcome.exception().__class__.__name__
-    logger.warning(
-        "Retrying download for %s (attempt=%s, next_sleep_s=%.2f, error=%s)",
-        source,
-        retry_state.attempt_number,
-        round(float(sleep), 3),
-        error_type,
-    )
-
-
 async def _download_with_retries(url_or_uri: str, *, timeout_s: int, retries: int) -> tuple[bytes, dict[str, Any]]:
     cfg = Settings()
     attempts = max(1, int(cfg.ETL_RETRY_ATTEMPTS), int(retries))
-    wait_policy = wait_exponential(
-        multiplier=cfg.ETL_RETRY_BASE_S,
-        min=cfg.ETL_RETRY_MIN_S,
-        max=cfg.ETL_RETRY_MAX_S,
-    ) + wait_random_jitter(cfg.ETL_RETRY_JITTER_S)
-
-    retrying = AsyncRetrying(
-        stop=stop_after_attempt(attempts),
-        wait=wait_policy,
-        reraise=True,
-        before_sleep=lambda state: _log_retry_details(state, source=url_or_uri),
+    raw_jitter = getattr(cfg, "ETL_RETRY_JITTER_S", 0.0)
+    try:
+        jitter_seconds = float(raw_jitter)
+    except (TypeError, ValueError):
+        jitter_seconds = 0.0
+    retry_cfg = RetryConfig(
+        operation="logistics_download",
+        stop_after=attempts,
+        base_wait_s=float(cfg.ETL_RETRY_BASE_S),
+        max_wait_s=float(cfg.ETL_RETRY_MAX_S),
+        jitter=jitter_seconds > 0,
+        retry_on=(Exception,),
     )
-    async for attempt in retrying:
-        with attempt:
-            return await _download_once(url_or_uri, timeout_s=timeout_s)
+
+    @aretry(retry_cfg)
+    async def _download() -> tuple[bytes, dict[str, Any]]:
+        return await _download_once(url_or_uri, timeout_s=timeout_s)
+
+    return await _download()
 
 
 async def _download_once(url_or_uri: str, *, timeout_s: int) -> tuple[bytes, dict[str, Any]]:
@@ -316,7 +301,9 @@ def _parse_csv_rows(source: str, raw: bytes) -> list[dict[str, Any]]:
         try:
             rows.append(_normalize_row(row, source))
         except ValueError as exc:
+            record_etl_normalize_error("logistics_etl", "row_error")
             logger.warning("Skipping invalid row from %s: %s", source, exc)
+    record_etl_rows_normalized("logistics_etl", len(rows))
     return rows
 
 
@@ -340,7 +327,9 @@ def _parse_excel_rows(source: str, raw: bytes) -> list[dict[str, Any]]:
         try:
             rows.append(_normalize_row(data, source))
         except ValueError as exc:
+            record_etl_normalize_error("logistics_etl", "row_error")
             logger.warning("Skipping invalid Excel row from %s: %s", source, exc)
+    record_etl_rows_normalized("logistics_etl", len(rows))
     return rows
 
 
@@ -364,23 +353,23 @@ def _normalize_row(row: dict[str, Any], source: str) -> dict[str, Any]:  # noqa:
             return None
         return raw_value or None
 
-    def _as_float(*keys: str) -> float:
+    def _as_decimal(*keys: str) -> Decimal:
         for key in keys:
             value = normalized.get(key)
             if value is None or value == "":
                 continue
             try:
-                return float(value)
+                return parse_decimal(value)
             except (TypeError, ValueError) as exc:
-                raise ValueError(f"Invalid float for {key}: {value}") from exc
-        raise ValueError(f"Missing float field {keys} in source {source}")
+                raise ValueError(f"Invalid decimal for {key}: {value}") from exc
+        raise ValueError(f"Missing decimal field {keys} in source {source}")
 
-    def _as_date(*keys: str) -> str | None:
+    def _as_date(*keys: str) -> date | None:
         raw_value = _optional_str(*keys)
         if raw_value is None:
             return None
         try:
-            return _normalize_date(raw_value)
+            return vendor_parse_date(raw_value)
         except ValueError as exc:
             raise ValueError(f"Invalid date value {raw_value} for keys {keys}") from exc
 
@@ -388,38 +377,17 @@ def _normalize_row(row: dict[str, Any], source: str) -> dict[str, Any]:  # noqa:
     origin = _as_str("origin", "origin_code", "from")
     dest = _as_str("dest", "destination", "destination_code", "to")
     service = _as_str("service", "service_level", "mode")
-    eur_per_kg = _as_float("eur_per_kg", "rate", "price_per_kg")
-    effective_from = _as_date("effective_from", "valid_from", "start_date")
-    effective_to = _as_date("effective_to", "valid_to", "end_date")
+    eur_per_kg = _as_decimal("eur_per_kg", "rate", "price_per_kg")
+    valid_from = _as_date("effective_from", "valid_from", "start_date")
+    valid_to = _as_date("effective_to", "valid_to", "end_date")
 
-    return {
-        "carrier": carrier,
-        "origin": origin,
-        "dest": dest,
-        "service": service,
-        "eur_per_kg": eur_per_kg,
-        "effective_from": effective_from,
-        "effective_to": effective_to,
-        "source": source,
-    }
-
-
-def _normalize_date(value: str | date | datetime) -> str:
-    if isinstance(value, datetime):
-        return value.date().isoformat()
-    if isinstance(value, date):
-        return value.isoformat()
-    text = str(value).strip()
-    if not text:
-        raise ValueError("Empty date value")
-
-    for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y"):
-        try:
-            return datetime.strptime(text, fmt).date().isoformat()
-        except ValueError:
-            continue
-    try:
-        # fromisoformat supports YYYY-MM-DD and other ISO variants
-        return datetime.fromisoformat(text).date().isoformat()
-    except ValueError as exc:
-        raise ValueError(f"Unrecognized date format: {text}") from exc
+    return RateRowModel(
+        carrier=carrier,
+        origin=origin,
+        dest=dest,
+        service=service,
+        eur_per_kg=eur_per_kg,
+        valid_from=valid_from,
+        valid_to=valid_to,
+        source=source,
+    ).model_dump()

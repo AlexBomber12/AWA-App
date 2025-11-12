@@ -39,7 +39,7 @@ class ImportFileError(RuntimeError):
 class ImportValidationError(ImportFileError):
     """Raised for user-facing issues (e.g. empty or malformed uploads)."""
 
-    status_code = 400
+    status_code = 422
 
 
 USE_COPY = os.getenv("USE_COPY", "true").lower() in ("1", "true", "yes")
