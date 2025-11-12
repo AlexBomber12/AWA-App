@@ -26,8 +26,8 @@ from awa_common.db.async_session import (
 from awa_common.logging import RequestIdMiddleware, configure_logging
 from awa_common.loop_lag import start_loop_lag_monitor
 from awa_common.metrics import MetricsMiddleware, init as metrics_init, register_metrics_endpoint
+from awa_common.security import oidc as oidc_provider
 from awa_common.security.headers import install_security_headers
-from awa_common.security.ratelimit import install_role_based_rate_limit
 from awa_common.security.request_limits import install_body_size_limit
 from awa_common.settings import settings
 from services.api.errors import install_exception_handlers
@@ -121,6 +121,7 @@ async def lifespan(_app: FastAPI):
     _app.state.stats_cache = None
     _app.state.stats_cache_namespace = normalize_namespace(getattr(settings, "STATS_CACHE_NAMESPACE", "stats:"))
     lag_stop: Callable[[], None] | None = None
+    jwks_started = False
     try:
         if settings.ENABLE_LOOP_LAG_MONITOR:
             lag_stop = start_loop_lag_monitor(asyncio.get_running_loop(), float(settings.LOOP_LAG_INTERVAL_S))
@@ -141,12 +142,16 @@ async def lifespan(_app: FastAPI):
             await stats_cache.aclose()
         stats_cache = None
         _app.state.stats_cache = None
+    await oidc_provider.init_async_jwks_provider(settings)
+    jwks_started = True
     try:
         yield
     finally:
         if lag_stop is not None:
             lag_stop()
             _app.state.loop_lag_stop = None
+        if jwks_started:
+            await oidc_provider.shutdown_async_jwks_provider()
         if stats_cache is not None:
             await _close_redis_client(stats_cache)
             _app.state.stats_cache = None
@@ -178,7 +183,6 @@ def create_app() -> FastAPI:
     install_exception_handlers(app)
     register_metrics_endpoint(app)
     install_cors(app)
-    install_role_based_rate_limit(app, cfg)
     app.state.loop_lag_stop = None
 
     app.include_router(upload_router, prefix="/upload")

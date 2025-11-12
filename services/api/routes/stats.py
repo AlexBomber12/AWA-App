@@ -39,6 +39,7 @@ from awa_common.metrics import (
     record_stats_query_duration,
 )
 from awa_common.settings import settings
+from services.api.rate_limit import roi_by_vendor_rate_limiter
 from services.api.roi_repository import get_roi_view_table
 from services.api.roi_views import (
     InvalidROIViewError,
@@ -265,7 +266,7 @@ async def kpi(
 @router.get(
     "/roi_by_vendor",
     response_model=RoiByVendorResponse,
-    dependencies=[Depends(require_viewer), Depends(limit_viewer)],
+    dependencies=[Depends(require_viewer), Depends(limit_viewer), Depends(roi_by_vendor_rate_limiter())],
 )
 async def roi_by_vendor(session: AsyncSession = Depends(get_async_session)) -> RoiByVendorResponse:
     if not _sql_mode_enabled():

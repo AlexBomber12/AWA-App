@@ -111,6 +111,36 @@ HTTP_REQUEST_DURATION_SECONDS = Histogram(
     buckets=HTTP_BUCKETS,
     registry=REGISTRY,
 )
+OIDC_JWKS_REFRESH_TOTAL = Counter(
+    "oidc_jwks_refresh_total",
+    "JWKS refresh attempts by issuer",
+    ("issuer", *BASE_LABELS),
+    registry=REGISTRY,
+)
+OIDC_JWKS_REFRESH_FAILURES_TOTAL = Counter(
+    "oidc_jwks_refresh_failures_total",
+    "JWKS refresh failures by issuer",
+    ("issuer", *BASE_LABELS),
+    registry=REGISTRY,
+)
+OIDC_JWKS_AGE_SECONDS = Gauge(
+    "oidc_jwks_age_seconds",
+    "Age of the cached JWKS payload in seconds",
+    ("issuer", *BASE_LABELS),
+    registry=REGISTRY,
+)
+OIDC_VALIDATE_FAILURES_TOTAL = Counter(
+    "oidc_validate_failures_total",
+    "OIDC validation failures grouped by reason",
+    ("reason", *BASE_LABELS),
+    registry=REGISTRY,
+)
+HTTP_429_TOTAL = Counter(
+    "http_429_total",
+    "HTTP 429 responses grouped by route and role",
+    ("route", "role", *BASE_LABELS),
+    registry=REGISTRY,
+)
 AWA_INGEST_UPLOAD_BYTES_TOTAL = Counter(
     "awa_ingest_upload_bytes_total",
     "Bytes accepted by /upload and /ingest streaming flows",
@@ -765,6 +795,40 @@ def record_ingest_download_failure(*, scheme: str | None, reason: str) -> None:
     AWA_INGEST_DOWNLOAD_FAILURES_TOTAL.labels(**labels).inc()
 
 
+def record_oidc_jwks_refresh(
+    issuer: str,
+    *,
+    success: bool,
+    age_seconds: float | None = None,
+    count: bool = True,
+) -> None:
+    """Track JWKS refresh attempts plus cache age.
+
+    Set ``count=False`` to update the gauge without incrementing the counters.
+    """
+    issuer_label = (issuer or "unknown").strip() or "unknown"
+    labels = _with_base_labels(issuer=issuer_label)
+    if count:
+        OIDC_JWKS_REFRESH_TOTAL.labels(**labels).inc()
+        if not success:
+            OIDC_JWKS_REFRESH_FAILURES_TOTAL.labels(**labels).inc()
+    if age_seconds is not None:
+        OIDC_JWKS_AGE_SECONDS.labels(**labels).set(max(age_seconds, 0.0))
+
+
+def record_oidc_validation_failure(reason: str) -> None:
+    """Increment validation failure counter with a normalised reason."""
+    label = (reason or "unknown").lower() or "unknown"
+    OIDC_VALIDATE_FAILURES_TOTAL.labels(**_with_base_labels(reason=label)).inc()
+
+
+def record_http_429(route: str, role: str) -> None:
+    """Record HTTP 429 responses by route template and caller role."""
+    route_label = (route or "unknown").strip() or "unknown"
+    role_label = (role or "unknown").strip().lower() or "unknown"
+    HTTP_429_TOTAL.labels(**_with_base_labels(route=route_label, role=role_label)).inc()
+
+
 async def monitor_event_loop_lag(interval_s: float = 0.5, *, warn_threshold_s: float | None = None) -> None:
     """Track event loop scheduling delay."""
     loop = asyncio.get_running_loop()
@@ -843,6 +907,7 @@ __all__ = [
     "CONTENT_TYPE_LATEST",
     "HTTP_REQUESTS_TOTAL",
     "HTTP_REQUEST_DURATION_SECONDS",
+    "HTTP_429_TOTAL",
     "AWA_INGEST_UPLOAD_BYTES_TOTAL",
     "AWA_INGEST_UPLOAD_SECONDS",
     "AWA_INGEST_UPLOAD_INFLIGHT",
@@ -865,6 +930,10 @@ __all__ = [
     "AWA_INGEST_DOWNLOAD_FAILURES_TOTAL",
     "HTTP_CLIENT_REQUESTS_TOTAL",
     "HTTP_CLIENT_REQUEST_DURATION_SECONDS",
+    "OIDC_JWKS_REFRESH_TOTAL",
+    "OIDC_JWKS_REFRESH_FAILURES_TOTAL",
+    "OIDC_JWKS_AGE_SECONDS",
+    "OIDC_VALIDATE_FAILURES_TOTAL",
     "QUEUE_BACKLOG",
     "EVENT_LOOP_LAG_SECONDS",
     "PRICE_IMPORTER_VALIDATE_SECONDS",
@@ -890,6 +959,9 @@ __all__ = [
     "record_ingest_upload_failure",
     "record_ingest_download",
     "record_ingest_download_failure",
+    "record_oidc_jwks_refresh",
+    "record_oidc_validation_failure",
+    "record_http_429",
     "record_http_client_request",
     "record_logistics_rows",
     "record_logistics_error",

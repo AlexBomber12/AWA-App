@@ -127,6 +127,9 @@ class Settings(BaseSettings):
     RATE_LIMIT_VIEWER: str = "30/minute"
     RATE_LIMIT_OPS: str = "120/minute"
     RATE_LIMIT_ADMIN: str = "240/minute"
+    RATE_LIMIT_WINDOW_SECONDS: int = 60
+    RATE_LIMIT_SCORE_PER_USER: int = 8
+    RATE_LIMIT_ROI_BY_VENDOR_PER_USER: int = 12
     MAX_REQUEST_BYTES: int = 268_435_456  # 256 MB ceiling for uploads
     INGEST_STREAMING_ENABLED: bool = True
     INGEST_CHUNK_SIZE_MB: int = 8
@@ -177,12 +180,19 @@ class Settings(BaseSettings):
     LLM_PROVIDER: Literal["STUB", "OPENAI", "VLLM"] = "STUB"
     OPENAI_API_BASE: str | None = None
     OPENAI_API_KEY: str | None = None
+    LLM_REQUEST_TIMEOUT_S: float = 60.0
 
     # Auth configuration (Keycloak OIDC)
     OIDC_ISSUER: str = Field(default="https://keycloak.local/realms/awa")
     OIDC_AUDIENCE: str = Field(default="awa-webapp")
     OIDC_JWKS_URL: str | None = None
-    OIDC_JWKS_TTL_SECONDS: int = 900
+    OIDC_JWKS_TTL_SECONDS: int = 300
+    OIDC_JWKS_STALE_GRACE_SECONDS: int = 120
+    OIDC_JWKS_TIMEOUT_CONNECT_S: float = 2.0
+    OIDC_JWKS_TIMEOUT_READ_S: float = 2.0
+    OIDC_JWKS_TIMEOUT_TOTAL_S: float = 5.0
+    OIDC_JWKS_POOL_LIMIT: int = 8
+    OIDC_JWKS_BACKGROUND_REFRESH: bool = True
 
     # Audit trail
     SECURITY_ENABLE_AUDIT: bool = True

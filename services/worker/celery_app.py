@@ -1,13 +1,18 @@
 from __future__ import annotations
 
+import asyncio
 import importlib
 import os
+from collections.abc import Callable
+from typing import Any
 
 import structlog
 from celery import Celery
 from celery.schedules import crontab
+from celery.signals import worker_process_init, worker_process_shutdown
 
 from awa_common.logging import configure_logging
+from awa_common.loop_lag import start_loop_lag_monitor
 from awa_common.metrics import enable_celery_metrics, init as metrics_init, start_worker_metrics_http_if_enabled
 from awa_common.sentry import init_sentry
 from awa_common.settings import settings
@@ -64,6 +69,68 @@ def _env_flag(name: str, default: bool) -> bool:
     if raw is None:
         return default
     return raw.lower() in ("1", "true", "yes")
+
+
+def _loop_lag_monitor_enabled() -> bool:
+    raw = os.getenv("CELERY_LOOP_LAG_MONITOR")
+    if raw is None:
+        return True
+    return raw.lower() not in {"0", "false", "no"}
+
+
+_loop_lag_stop: Callable[[], None] | None = None
+
+
+def is_loop_lag_monitor_active() -> bool:
+    """Return True when the worker loop-lag monitor is currently running."""
+    return _loop_lag_stop is not None
+
+
+def _resolve_worker_loop() -> asyncio.AbstractEventLoop | None:
+    policy = asyncio.get_event_loop_policy()
+    try:
+        loop = policy.get_event_loop()
+    except RuntimeError:
+        return None
+    if loop.is_closed():
+        return None
+    return loop
+
+
+def _start_worker_loop_lag_monitor(**_: Any) -> None:
+    global _loop_lag_stop
+    if not _loop_lag_monitor_enabled():
+        return
+    if _loop_lag_stop is not None:
+        return
+    loop = _resolve_worker_loop()
+    if loop is None:
+        structlog.get_logger(__name__).warning("loop_lag_monitor.loop_missing")
+        return
+    raw_interval = os.getenv("CELERY_LOOP_LAG_INTERVAL_S")
+    if raw_interval:
+        interval = float(raw_interval)
+    else:
+        interval = float(getattr(settings, "LOOP_LAG_INTERVAL_S", 1.0) or 1.0)
+    try:
+        stopper = start_loop_lag_monitor(loop, interval_s=interval)
+    except Exception:
+        structlog.get_logger(__name__).warning("loop_lag_monitor.start_failed", exc_info=True)
+        return
+    _loop_lag_stop = stopper
+    structlog.get_logger(__name__).info("loop_lag_monitor.started", interval=interval)
+
+
+def _stop_worker_loop_lag_monitor(**_: Any) -> None:
+    global _loop_lag_stop
+    stopper = _loop_lag_stop
+    _loop_lag_stop = None
+    if stopper is None:
+        return
+    try:
+        stopper()
+    except Exception:
+        structlog.get_logger(__name__).warning("loop_lag_monitor.stop_failed", exc_info=True)
 
 
 if os.getenv("ENABLE_METRICS", "1") != "0":
@@ -156,6 +223,9 @@ _beat_schedule["alerts-telegram-health"] = {
     "task": "alerts.rules_health",
     "schedule": crontab(minute="0", hour="*", day_of_month="*", month_of_year="*", day_of_week="*"),
 }
+
+worker_process_init.connect(_start_worker_loop_lag_monitor, weak=False)
+worker_process_shutdown.connect(_stop_worker_loop_lag_monitor, weak=False)
 
 if _beat_schedule:
     celery_app.conf.beat_schedule = _beat_schedule

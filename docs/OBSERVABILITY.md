@@ -45,7 +45,20 @@ debug incidents.
 - `packages/awa_common/metrics.MetricsMiddleware` records:
   - `http_requests_total{method,path_template,status,service,env,version}`
   - `http_request_duration_seconds_bucket` and the derived histogram quantiles.
+- Rate-limit saturation is tracked via `http_429_total{route,role,service,env,version}`. Grafana
+  panels typically split this counter by route so `/score` and `/stats/roi_by_vendor` can be observed
+  independently from generic viewer traffic.
 - Labels always include `(service, env, version)` as a base.
+
+### Authentication
+
+- `oidc_jwks_refresh_total{issuer,service,env,version}` increments whenever the async JWKS cache
+  refreshes (including background stale-while-revalidate). The companion counter
+  `oidc_jwks_refresh_failures_total` highlights upstream instability.
+- `oidc_jwks_age_seconds{issuer,...}` exposes the age of the cached JWKS document. Grafana panels
+  alert when the gauge exceeds the configured TTL+grace so rotation lag is visible.
+- `oidc_validate_failures_total{reason,service,env,version}` breaks down auth failures by reason
+  (`signature`, `aud`, `exp`, `claims`).
 
 ### Workers & Celery
 

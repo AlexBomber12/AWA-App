@@ -12,23 +12,54 @@ LAN_KEY = os.getenv("LLM_API_KEY", "")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 
+try:  # pragma: no cover - safeguards import order during bootstrapping
+    from awa_common.settings import settings as _settings
+except Exception:  # pragma: no cover - during bootstrap
+    _settings = None
+
 
 _LLM_PROVIDER_ENV = "LLM_PROVIDER"
 LLM_PROVIDER = os.getenv(_LLM_PROVIDER_ENV, "lan").strip().lower()
 LLM_PROVIDER_FALLBACK = os.getenv("LLM_PROVIDER_FALLBACK", "stub").strip().lower()
 _LLM_TIMEOUT_ENV = "LLM_TIMEOUT_SECS"
 _REMOTE_URL_ENV = "LLM_REMOTE_URL"
+_LLM_REQUEST_TIMEOUT_ENV = "LLM_REQUEST_TIMEOUT_S"
+
+
+def _default_timeout_setting() -> float:
+    if _settings is None:
+        return 60.0
+    try:
+        return float(getattr(_settings, "LLM_REQUEST_TIMEOUT_S", 60.0))
+    except Exception:
+        return 60.0
+
+
+_DEFAULT_LLM_TIMEOUT_S = _default_timeout_setting()
 
 
 def _selected_provider() -> str:
     return (os.getenv("LLM_PROVIDER") or "lan").strip().lower()
 
 
-def _timeout_seconds(default: float = 60.0) -> float:
-    try:
-        return float(os.getenv(_LLM_TIMEOUT_ENV, str(default)))
-    except Exception:  # pragma: no cover - env parsing failure
+def _timeout_seconds(default: float | None = None) -> float:
+    if default is not None:
+        raw = os.getenv(_LLM_TIMEOUT_ENV)
+        if raw is not None:
+            try:
+                return float(raw)
+            except Exception:  # pragma: no cover - env parsing failure
+                return default
         return default
+    for env_var in (_LLM_TIMEOUT_ENV, _LLM_REQUEST_TIMEOUT_ENV):
+        raw = os.getenv(env_var)
+        if raw is None:
+            continue
+        try:
+            return float(raw)
+        except Exception:  # pragma: no cover - env parsing failure
+            continue
+    return _DEFAULT_LLM_TIMEOUT_S
 
 
 async def _local_llm(prompt: str, temp: float, max_toks: int, timeout: float) -> str:

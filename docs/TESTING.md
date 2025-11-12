@@ -8,6 +8,7 @@ CI has three logical test groups plus an e2e smoke check that rides on top of in
 ### Unit
 - **Scope:** Pure Python logic, FastAPI routes with mocked dependencies, and helpers that do not require Docker services.
 - **Command:** `./scripts/ci/run_unit.sh` (wraps `pytest -q -m "not integration and not live"` with coverage enabled)
+- **Speed tips:** Use `NO_COV=1 make unit` to skip coverage in local loops, or `make unit-fast` (auto-disables third-party plugins and falls back when `xdist` is missing) for a minimal pytest run. Pair with `-m "not slow"` to keep the suite snappy.
 - **Expectations:** Deterministic, hermetic, no external I/O (network, SMTP, or databases). Use the fixtures from `tests/conftest.py` (`faker_seed`, `env_overrides`, `http_mock`, `smtp_mock`, `now_utc`, etc.) to stub side effects.
 - **CI:** Runs in the `unit` job (`make qa` delegates to the same subset) and collects coverage.
 

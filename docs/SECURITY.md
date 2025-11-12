@@ -9,14 +9,24 @@ single source of truth reflected in the codebase.
 - **Realm / Client:** Keycloak realm `awa` with confidential client `awa-webapp`.
 - The API reads issuer and audience from `OIDC_ISSUER` and `OIDC_AUDIENCE` (defaults in
   `.env.example`). Discovery happens at `${OIDC_ISSUER}/.well-known/openid-configuration`.
-- `packages/awa_common/security/oidc.py` pulls JWKS via Authlib. Cache lifetime is controlled by
-  `OIDC_JWKS_TTL_SECONDS` (default 900 s). `OIDC_JWKS_URL` can override discovery.
-- Validation requires: a signed token (RS/PS algorithms), `iss` equal to `OIDC_ISSUER`, `aud`
-  containing `OIDC_AUDIENCE`, an `exp` in the future, an `iat` within 24 h, and a non-empty `sub`.
-- Email is read from `email` or `preferred_username`. Roles prefer the top-level `roles` claim but
-  fall back to `realm_access.roles` or `resource_access[OIDC_AUDIENCE].roles`.
-- `services/api/security.current_user` invokes `validate_access_token`, stores the resulting
-  `UserCtx` on `request.state.user`, and binds `user_sub` into the logging context for observability.
+- `packages/awa_common/security/oidc.AsyncJwksProvider` fetches JWKS asynchronously via httpx with a
+  shared `AsyncClient` (pool size configurable by `OIDC_JWKS_POOL_LIMIT`). Keys are cached for
+  `OIDC_JWKS_TTL_SECONDS` (300 s by default) with an additional stale window
+  (`OIDC_JWKS_STALE_GRACE_SECONDS`, default 120 s) that serves stale keys while a background refresh
+  runs. Refreshers honour ETag/If-None-Match, retry with tenacity (jittered backoff), and record the
+  Prometheus metrics `oidc_jwks_refresh_total`, `oidc_jwks_refresh_failures_total`, and
+  `oidc_jwks_age_seconds`.
+- `services/api/main.lifespan` initialises the provider once per process and shuts it down
+  gracefully. `services/api/security.current_user` awaits `validate_access_token`; if the JWKS cache
+  is empty and refresh fails the dependency returns HTTP 503 with `application/problem+json`
+  payload. Signature/audience/expiry failures increment `oidc_validate_failures_total` with the
+  reason labels `signature`, `aud`, `exp`, or `claims`.
+- Validation requirements are unchanged: signed (RS/PS) token, `iss == OIDC_ISSUER`,
+  `aud` containing `OIDC_AUDIENCE`, future `exp`, `iat` within ±24 h, and a non-empty `sub`. Email is
+  read from `email` or `preferred_username`. Roles prefer the top-level `roles` claim but fall back
+  to `realm_access.roles` or `resource_access[OIDC_AUDIENCE].roles`.
+- Successful authentication still stores `UserCtx` on `request.state.user` and binds `user_sub` into
+  structlog for downstream correlation.
 
 ## Role-Based Access Control
 
@@ -64,15 +74,21 @@ single source of truth reflected in the codebase.
 
 ## Rate Limits
 
-- Role-aware throttling uses Redis via `packages/awa_common/security/ratelimit.RoleBasedRateLimiter`.
-- Defaults from `packages/awa_common/settings.Settings`:
-  - `RATE_LIMIT_VIEWER=30/minute`
-  - `RATE_LIMIT_OPS=120/minute`
-  - `RATE_LIMIT_ADMIN=240/minute`
-- Limits accept strings like `45/sec`. `FastAPILimiter` initialises during startup; in `stage/prod` a
-  missing Redis connection raises HTTP 503 to avoid running unprotected.
-- Requests exempt from rate limits (`/ready`, `/health`, `/metrics`) use the provided `@no_rate_limit`
-  decorator.
+- `services/api/rate_limit.SmartRateLimiter` centralises throttling. `build_rate_key()` composes
+  `tenant:sub:role:route_template` with the tenant derived from the token issuer (fallback
+  `"public"`), the subject (or IP for unauthenticated requests), the highest resolved role (viewer,
+  ops, admin, or `anon`), and the resolved FastAPI route template.
+- Default quotas remain role-based and configurable (`RATE_LIMIT_VIEWER`, `RATE_LIMIT_OPS`,
+  `RATE_LIMIT_ADMIN`). Redis is accessed through `fastapi-limiter`; when the connection is missing on
+  stage/prod the dependency responds with HTTP 503.
+- Heavy endpoints have dedicated overlays:
+  - `POST /score` uses `RATE_LIMIT_SCORE_PER_USER` requests per `RATE_LIMIT_WINDOW_SECONDS`.
+  - `GET /stats/roi_by_vendor` uses `RATE_LIMIT_ROI_BY_VENDOR_PER_USER` requests per
+    `RATE_LIMIT_WINDOW_SECONDS`.
+- When a bucket is exhausted the response carries `Retry-After` plus the standard
+  `X-RateLimit-*` headers, logs a structured `rate_limit_exceeded` event, and increments the metric
+  `http_429_total{route,role}` for observability. `/ready`, `/health`, and `/metrics` remain exempt
+  via `@no_rate_limit`.
 
 ## Request Size & Timeout Guards
 
