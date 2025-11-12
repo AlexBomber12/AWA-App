@@ -1,0 +1,31 @@
+version: 1
+defaults:
+  enabled: true
+  chat_id:
+    - "@awa_ops"
+  parse_mode: HTML
+rules:
+  - id: roi_drop
+    type: roi_drop
+    schedule: "@every 5m"
+    template: |
+      ⚠️ ROI dropped below {{ params.min_roi_pct }}% for {{ events|length }} SKUs.
+    params:
+      min_roi_pct: 5
+      min_days: 30
+  - id: buybox_loss
+    type: buybox_loss
+    schedule: "*/10 * * * *"
+    chat_id:
+      - "-100123456789"
+    template: |
+      🏷️ Lost Buy Box on {{ events|length }} listings. Review pricing strategy.
+  - id: custom_escalation
+    type: custom
+    enabled: false
+    schedule: "@every 1h"
+    chat_id:
+      - "@awa_incidents"
+      - "@awa_ops"
+    template: |
+      🚨 Custom alert triggered with payload: {{ data | tojson }}

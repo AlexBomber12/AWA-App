@@ -372,6 +372,63 @@ ALERTS_RULE_DURATION_SECONDS = Histogram(
     buckets=HTTP_BUCKETS,
     registry=REGISTRY,
 )
+ALERTBOT_RULES_EVALUATED_TOTAL = Counter(
+    "alertbot_rules_evaluated_total",
+    "Alert bot rule evaluations by outcome",
+    ("rule", "outcome", *BASE_LABELS),
+    registry=REGISTRY,
+)
+ALERTBOT_EVENTS_EMITTED_TOTAL = Counter(
+    "alertbot_events_emitted_total",
+    "Alert events emitted by rule",
+    ("rule", *BASE_LABELS),
+    registry=REGISTRY,
+)
+ALERTBOT_MESSAGES_SENT_TOTAL = Counter(
+    "alertbot_messages_sent_total",
+    "Telegram messages attempted by rule and status",
+    ("rule", "status", *BASE_LABELS),
+    registry=REGISTRY,
+)
+ALERTBOT_TELEGRAM_ERRORS_TOTAL = Counter(
+    "alertbot_telegram_errors_total",
+    "Telegram API errors grouped by error_code",
+    ("error_code", *BASE_LABELS),
+    registry=REGISTRY,
+)
+ALERTBOT_RULE_EVAL_DURATION_SECONDS = Histogram(
+    "alertbot_rule_eval_duration_seconds",
+    "Latency for evaluating a single alert rule",
+    ("rule", *BASE_LABELS),
+    buckets=HTTP_BUCKETS,
+    registry=REGISTRY,
+)
+ALERTBOT_SEND_LATENCY_SECONDS = Histogram(
+    "alertbot_send_latency_seconds",
+    "Latency for sending Telegram messages",
+    (*BASE_LABELS,),
+    buckets=HTTP_BUCKETS,
+    registry=REGISTRY,
+)
+ALERTBOT_BATCH_DURATION_SECONDS = Histogram(
+    "alertbot_batch_duration_seconds",
+    "Latency for completing a full alert bot batch",
+    (*BASE_LABELS,),
+    buckets=HTTP_BUCKETS,
+    registry=REGISTRY,
+)
+ALERTBOT_INFLIGHT_SENDS = Gauge(
+    "alertbot_inflight_sends",
+    "Number of in-flight Telegram send operations",
+    (*BASE_LABELS,),
+    registry=REGISTRY,
+)
+ALERTBOT_STARTUP_VALIDATION_OK = Gauge(
+    "alertbot_startup_validation_ok",
+    "Whether alert bot startup validation succeeded (1) or not (0)",
+    (*BASE_LABELS,),
+    registry=REGISTRY,
+)
 EVENT_LOOP_LAG_SECONDS = Gauge(
     "event_loop_lag_seconds",
     "Observed event loop scheduling lag",
