@@ -53,8 +53,8 @@ def _unsupported_file_error(filename: str | None) -> IngestRequestError:
 
 
 def _validate_extension(filename: str | None) -> None:
-    suffix = Path(filename or "").suffix.lower()
-    if suffix not in _SUPPORTED_SUFFIXES:
+    lowered = (filename or "").lower()
+    if not any(lowered.endswith(ext) for ext in _SUPPORTED_SUFFIXES):
         raise _unsupported_file_error(filename)
 
 

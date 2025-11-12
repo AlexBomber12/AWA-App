@@ -33,7 +33,7 @@ components in `packages/awa_common` to deliver repeatable pipelines that survive
 
 ## Shared validation & retry helpers
 
-- Ingest endpoints now return a structured [`ErrorResponse`](../services/api/schemas.py) with machine
+- Ingest endpoints now return a structured `ErrorResponse` (defined in `services/api/schemas.py`) with machine
   readable codes (`unsupported_file_format`, `bad_request`, `unprocessable_entity`, `validation_error`)
   and the `X-Request-ID` echoed back to the caller. The FastAPI layer increments
   `api_ingest_4xx_total{code}`/`api_ingest_5xx_total` and logs the user sub, route, and error code so
