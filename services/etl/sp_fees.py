@@ -3,9 +3,9 @@ from __future__ import annotations
 import argparse
 import json
 import os
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import structlog
 from sqlalchemy import create_engine
@@ -15,6 +15,7 @@ from awa_common.dsn import build_dsn
 from awa_common.etl.guard import process_once
 from awa_common.etl.idempotency import build_payload_meta, compute_idempotency_key
 from awa_common.metrics import record_etl_run, record_etl_skip
+from awa_common.retries import RetryConfig, retry
 from services.fees_h10 import repository as repo
 
 logger = structlog.get_logger(__name__)
@@ -86,7 +87,7 @@ def build_rows_from_live(
     )
     rows: list[dict[str, Any]] = []
     for asin in skus:
-        response = api.get_my_fees_estimate_for_sku(asin)
+        response = _fetch_sp_fee(api, asin)
         total_fee = response["payload"]["FeesEstimateResult"]["FeesEstimate"]["TotalFeesEstimate"]["Amount"]
         rows.append(
             {
@@ -100,6 +101,17 @@ def build_rows_from_live(
             }
         )
     return rows
+
+
+RetryFunc = Callable[[Callable[[], dict[str, Any]]], Callable[[], dict[str, Any]]]
+_SP_API_RETRY = cast(RetryFunc, retry(RetryConfig(operation="sp_api_fee", retry_on=(Exception,))))
+
+
+def _fetch_sp_fee(api: Any, asin: str) -> dict[str, Any]:
+    def _call() -> dict[str, Any]:
+        return cast(dict[str, Any], api.get_my_fees_estimate_for_sku(asin))
+
+    return _SP_API_RETRY(_call)()
 
 
 def build_rows_from_fixture(path: Path) -> list[dict[str, Any]]:

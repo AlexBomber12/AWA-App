@@ -2,15 +2,16 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import AsyncIterator, Generator, Sequence
-from dataclasses import dataclass
-from decimal import Decimal, InvalidOperation
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pandas as pd
 import structlog
 
+from awa_common.metrics import record_etl_normalize_error, record_etl_rows_normalized
 from awa_common.settings import Settings
+from awa_common.types import PriceRow as PriceRowDict, PriceRowModel
+from awa_common.vendor import normalize_currency, normalize_sku, parse_decimal
 
 from .normaliser import normalise
 from .reader import detect_format
@@ -20,53 +21,6 @@ logger = structlog.get_logger(__name__)
 SETTINGS = Settings()
 DEFAULT_BATCH_SIZE = SETTINGS.PRICE_IMPORTER_CHUNK_ROWS
 VALIDATION_WORKERS = SETTINGS.PRICE_IMPORTER_VALIDATION_WORKERS
-
-
-@dataclass(frozen=True)
-class PriceRow:
-    sku: str
-    cost: Decimal
-    currency: str
-    moq: int
-    lead_time_days: int
-
-
-def _parse_sku(value: Any) -> str:
-    sku = str(value or "").strip()
-    if not sku:
-        raise ValueError("sku missing")
-    return sku
-
-
-def _parse_currency(value: Any) -> str:
-    currency = str(value or "").strip().upper()
-    if not currency:
-        raise ValueError("currency missing")
-    if len(currency) != 3:
-        raise ValueError("currency must be a 3-letter ISO code")
-    return currency
-
-
-def _parse_cost(value: Any) -> Decimal:
-    if value is None:
-        raise ValueError("cost missing")
-    if isinstance(value, (int, float, Decimal)):
-        candidate = Decimal(str(value))
-    else:
-        text = str(value).strip()
-        if not text:
-            raise ValueError("cost missing")
-        if "," in text and "." not in text:
-            text = text.replace(",", ".")
-        try:
-            candidate = Decimal(text)
-        except InvalidOperation as exc:
-            raise ValueError("cost not numeric") from exc
-    if candidate.is_nan():
-        raise ValueError("cost NaN")
-    if candidate < 0:
-        raise ValueError("cost negative")
-    return candidate
 
 
 def _parse_int(value: Any, *, default: int = 0) -> int:
@@ -84,27 +38,38 @@ def _parse_int(value: Any, *, default: int = 0) -> int:
         return default
 
 
-def validate_price_rows(rows: Sequence[dict[str, Any]]) -> list[PriceRow]:
+def validate_price_rows(rows: Sequence[dict[str, Any]]) -> list[PriceRowDict]:
     """Validate and normalise a batch of price rows."""
-    valid: list[PriceRow] = []
+    valid: list[PriceRowDict] = []
     errors: list[dict[str, Any]] = []
 
     for idx, raw in enumerate(rows):
         try:
-            sku = _parse_sku(raw.get("sku"))
-            cost = _parse_cost(raw.get("cost"))
-            currency = _parse_currency(raw.get("currency"))
+            sku = normalize_sku(raw.get("sku"))
+            cost = parse_decimal(raw.get("cost"))
+            if cost < 0:
+                raise ValueError("cost negative")
+            currency = normalize_currency(raw.get("currency"))
             moq = _parse_int(raw.get("moq"), default=0)
             lead_time = _parse_int(raw.get("lead_time_days"), default=0)
-            valid.append(PriceRow(sku=sku, cost=cost, currency=currency, moq=moq, lead_time_days=lead_time))
+            payload = PriceRowModel(
+                sku=sku,
+                unit_price=cost,
+                currency=currency,
+                moq=moq,
+                lead_time_d=lead_time,
+            ).model_dump()
+            valid.append(cast(PriceRowDict, payload))
         except ValueError as exc:
             errors.append({"index": idx, "error": str(exc), "row": dict(raw)})
 
     if errors:
+        record_etl_normalize_error("price_import", "row_validation", len(errors))
         sample = errors[:3]
         raise ValueError(
             f"{len(errors)} invalid price rows; sample={sample}",
         )
+    record_etl_rows_normalized("price_import", len(valid))
     return valid
 
 
@@ -185,12 +150,12 @@ def _next_frame(iterator: Generator[pd.DataFrame]) -> pd.DataFrame | None:
         return None
 
 
-async def _validate_frame(frame: pd.DataFrame, sem: asyncio.Semaphore) -> list[PriceRow]:
+async def _validate_frame(frame: pd.DataFrame, sem: asyncio.Semaphore) -> list[PriceRowDict]:
     async with sem:
         return await asyncio.to_thread(_normalize_and_validate, frame)
 
 
-def _normalize_and_validate(frame: pd.DataFrame) -> list[PriceRow]:
+def _normalize_and_validate(frame: pd.DataFrame) -> list[PriceRowDict]:
     cleaned = normalise(frame)
     records = cleaned.to_dict(orient="records")
     if not records:
@@ -202,7 +167,7 @@ async def iter_price_batches(
     path: str | Path,
     batch_size: int | None = None,
     max_workers: int | None = None,
-) -> AsyncIterator[list[PriceRow]]:
+) -> AsyncIterator[list[PriceRowDict]]:
     """
     Yield validated, normalised price rows with bounded concurrency.
 
@@ -213,7 +178,7 @@ async def iter_price_batches(
     worker_limit = max(1, int(max_workers or VALIDATION_WORKERS))
     iterator = _frame_iterator(path, target_batch)
     sem = asyncio.Semaphore(worker_limit)
-    pending: dict[int, asyncio.Task[list[PriceRow]]] = {}
+    pending: dict[int, asyncio.Task[list[PriceRowDict]]] = {}
     next_yield = 0
     idx = 0
 
@@ -243,7 +208,7 @@ async def iter_price_batches(
             task.cancel()
 
 
-async def _await_ordered(pending: dict[int, asyncio.Task[list[PriceRow]]], order: int) -> list[PriceRow]:
+async def _await_ordered(pending: dict[int, asyncio.Task[list[PriceRowDict]]], order: int) -> list[PriceRowDict]:
     task = pending.pop(order, None)
     if task is None:
         raise RuntimeError("price importer batch ordering mismatch")

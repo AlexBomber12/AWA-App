@@ -5,6 +5,7 @@ from __future__ import annotations
 import io
 import sys
 from datetime import datetime
+from decimal import Decimal
 from types import SimpleNamespace
 from urllib.parse import urlparse
 
@@ -36,8 +37,8 @@ async def test_fetch_sources_csv_normalizes_rows(monkeypatch):
     entry = snapshots[0]
     rows = entry["rows"]
     assert rows[0]["carrier"] == "DHL"
-    assert rows[0]["eur_per_kg"] == pytest.approx(1.25)
-    assert rows[0]["effective_to"] is None
+    assert rows[0]["eur_per_kg"] == Decimal("1.25")
+    assert rows[0]["valid_to"] is None
     monkeypatch.delenv("LOGISTICS_SOURCES", raising=False)
 
 
@@ -167,7 +168,7 @@ async def test_fetch_sources_excel(monkeypatch):
     monkeypatch.setattr(client, "_download_with_retries", fake_download)
     snapshots = await client.fetch_sources()
     assert snapshots[0]["rows"][0]["carrier"] == "Maersk"
-    assert snapshots[0]["rows"][0]["eur_per_kg"] == pytest.approx(0.85)
+    assert snapshots[0]["rows"][0]["eur_per_kg"] == Decimal("0.85")
     monkeypatch.delenv("LOGISTICS_SOURCES", raising=False)
 
 

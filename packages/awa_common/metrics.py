@@ -166,6 +166,31 @@ AWA_INGEST_UPLOAD_FAILURES_TOTAL = Counter(
     ("extension", "reason", *BASE_LABELS),
     registry=REGISTRY,
 )
+API_INGEST_4XX_TOTAL = Counter(
+    "api_ingest_4xx_total",
+    "ETL ingest API 4xx responses grouped by error code",
+    ("code", *BASE_LABELS),
+    registry=REGISTRY,
+)
+API_INGEST_5XX_TOTAL = Counter(
+    "api_ingest_5xx_total",
+    "ETL ingest API 5xx responses",
+    (*BASE_LABELS,),
+    registry=REGISTRY,
+)
+AWA_RETRY_ATTEMPTS_TOTAL = Counter(
+    "awa_retry_attempts_total",
+    "Retry attempts grouped by operation",
+    ("operation", *BASE_LABELS),
+    registry=REGISTRY,
+)
+AWA_RETRY_SLEEP_SECONDS = Histogram(
+    "awa_retry_sleep_seconds",
+    "Sleep duration before retry attempts",
+    ("operation", *BASE_LABELS),
+    buckets=HTTP_BUCKETS,
+    registry=REGISTRY,
+)
 
 TASK_RUNS_TOTAL = Counter(
     "task_runs_total",
@@ -197,6 +222,18 @@ ETL_PROCESSED_RECORDS_TOTAL = Counter(
     "etl_processed_records_total",
     "Records processed per ETL batch",
     ("job", *BASE_LABELS),
+    registry=REGISTRY,
+)
+ETL_ROW_NORMALIZED_TOTAL = Counter(
+    "etl_row_normalized_total",
+    "Normalized row counts per ETL job",
+    ("job", *BASE_LABELS),
+    registry=REGISTRY,
+)
+ETL_NORMALIZE_ERRORS_TOTAL = Counter(
+    "etl_normalize_errors_total",
+    "Normalization errors grouped by job and reason",
+    ("job", "reason", *BASE_LABELS),
     registry=REGISTRY,
 )
 ETL_RETRY_TOTAL = Counter(
@@ -660,6 +697,20 @@ def record_etl_retry(job: str, reason: str) -> None:
     ETL_RETRY_TOTAL.labels(**labels).inc()
 
 
+def record_etl_rows_normalized(job: str, rows: int) -> None:
+    if rows <= 0:
+        return
+    labels = _with_base_labels(job=job or "unknown")
+    ETL_ROW_NORMALIZED_TOTAL.labels(**labels).inc(max(rows, 0))
+
+
+def record_etl_normalize_error(job: str, reason: str, count: int = 1) -> None:
+    if count <= 0:
+        return
+    labels = _with_base_labels(job=job or "unknown", reason=(reason or "unknown"))
+    ETL_NORMALIZE_ERRORS_TOTAL.labels(**labels).inc(max(count, 0))
+
+
 def record_http_client_request(target: str, method: str, status_code: int | None, duration_s: float) -> None:
     """Record outbound HTTP client metrics."""
     target = (target or "unknown").lower()
@@ -795,6 +846,26 @@ def record_ingest_download_failure(*, scheme: str | None, reason: str) -> None:
     AWA_INGEST_DOWNLOAD_FAILURES_TOTAL.labels(**labels).inc()
 
 
+def record_api_ingest_4xx_total(code: str) -> None:
+    label = (code or "unknown").strip() or "unknown"
+    API_INGEST_4XX_TOTAL.labels(**_with_base_labels(code=label)).inc()
+
+
+def record_api_ingest_5xx_total() -> None:
+    API_INGEST_5XX_TOTAL.labels(**_with_base_labels()).inc()
+
+
+def record_retry_attempt(operation: str) -> None:
+    label = (operation or "unknown").strip().lower() or "unknown"
+    AWA_RETRY_ATTEMPTS_TOTAL.labels(**_with_base_labels(operation=label)).inc()
+
+
+def record_retry_sleep(operation: str, seconds: float | None) -> None:
+    label = (operation or "unknown").strip().lower() or "unknown"
+    duration = max(float(seconds or 0.0), 0.0)
+    AWA_RETRY_SLEEP_SECONDS.labels(**_with_base_labels(operation=label)).observe(duration)
+
+
 def record_oidc_jwks_refresh(
     issuer: str,
     *,
@@ -912,11 +983,17 @@ __all__ = [
     "AWA_INGEST_UPLOAD_SECONDS",
     "AWA_INGEST_UPLOAD_INFLIGHT",
     "AWA_INGEST_UPLOAD_FAILURES_TOTAL",
+    "API_INGEST_4XX_TOTAL",
+    "API_INGEST_5XX_TOTAL",
+    "AWA_RETRY_ATTEMPTS_TOTAL",
+    "AWA_RETRY_SLEEP_SECONDS",
     "TASK_RUNS_TOTAL",
     "TASK_DURATION_SECONDS",
     "TASK_ERRORS_TOTAL",
     "ETL_RUNS_TOTAL",
     "ETL_PROCESSED_RECORDS_TOTAL",
+    "ETL_ROW_NORMALIZED_TOTAL",
+    "ETL_NORMALIZE_ERRORS_TOTAL",
     "ETL_RETRY_TOTAL",
     "ETL_DURATION_SECONDS",
     "LOGISTICS_ETL_TASKS_INFLIGHT",
@@ -955,10 +1032,16 @@ __all__ = [
     "record_etl_batch",
     "record_etl_run",
     "record_etl_skip",
+    "record_etl_rows_normalized",
+    "record_etl_normalize_error",
     "record_ingest_upload",
     "record_ingest_upload_failure",
     "record_ingest_download",
     "record_ingest_download_failure",
+    "record_api_ingest_4xx_total",
+    "record_api_ingest_5xx_total",
+    "record_retry_attempt",
+    "record_retry_sleep",
     "record_oidc_jwks_refresh",
     "record_oidc_validation_failure",
     "record_http_429",

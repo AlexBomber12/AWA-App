@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from pydantic import Field
 
@@ -8,6 +8,17 @@ if TYPE_CHECKING:
     from pydantic import BaseModel as BaseStrictModel
 else:
     from awa_common.schemas import BaseStrictModel
+
+ErrorCode = Literal["unsupported_file_format", "bad_request", "unprocessable_entity", "validation_error"]
+
+
+class ErrorResponse(BaseStrictModel):
+    """Standard error payload returned by ETL ingest routes."""
+
+    code: ErrorCode = Field(..., description="Machine-readable error code")
+    detail: str = Field(..., description="Human-readable description of the error")
+    hint: str | None = Field(None, description="Optional recovery guidance")
+    request_id: str = Field(..., description="Correlation identifier echoed from the request")
 
 
 class RoiRow(BaseStrictModel):
@@ -112,6 +123,8 @@ class SkuApprovalResponse(BaseStrictModel):
 
 
 __all__ = [
+    "ErrorCode",
+    "ErrorResponse",
     "RoiRow",
     "RoiApprovalResponse",
     "StatsKPI",

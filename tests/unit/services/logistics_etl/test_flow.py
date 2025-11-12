@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from datetime import date
+from decimal import Decimal
+
 import pytest
 
 from services.logistics_etl import client, flow, repository
@@ -26,9 +29,9 @@ async def test_full_idempotent_skips_second_run(monkeypatch):
                 "origin": "DE",
                 "dest": "FR",
                 "service": "Express",
-                "eur_per_kg": 1.25,
-                "effective_from": "2024-01-01",
-                "effective_to": None,
+                "eur_per_kg": Decimal("1.25"),
+                "valid_from": date(2024, 1, 1),
+                "valid_to": None,
                 "source": "http://example.com/rates.csv",
             }
         ],

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import json
 from io import BytesIO
 
 import pytest
-from fastapi import HTTPException, UploadFile
+from fastapi import UploadFile
 from starlette.requests import Request
 
 from services.api.routes import upload as upload_module
@@ -41,7 +42,7 @@ async def test_upload_streams_and_dispatches_task(monkeypatch):
 def test_ensure_size_limit_enforces_header():
     request = Request({"type": "http", "headers": [(b"content-length", b"1024")]})
     upload_module._ensure_size_limit(request, max_bytes=2048)
-    with pytest.raises(HTTPException):
+    with pytest.raises(upload_module.IngestRequestError):
         upload_module._ensure_size_limit(request, max_bytes=100)
 
 
@@ -53,7 +54,7 @@ def test_ensure_size_limit_ignores_bad_header():
 @pytest.mark.asyncio
 async def test_upload_records_failure(monkeypatch):
     async def failing(*_a, **_k):
-        raise HTTPException(status_code=413, detail="too big")
+        raise upload_module.IngestRequestError(status_code=413, code="bad_request", detail="too big")
 
     fail_called = {}
 
@@ -64,6 +65,9 @@ async def test_upload_records_failure(monkeypatch):
     request = Request({"type": "http", "headers": []})
     upload = UploadFile(filename="name.csv", file=BytesIO(b"data"))
 
-    with pytest.raises(HTTPException):
-        await upload_module.upload(request, upload)
+    response = await upload_module.upload(request, upload)
+    assert response.status_code == 413
+    payload = json.loads(response.body.decode())
+    assert payload["code"] == "bad_request"
+    assert payload["detail"] == "too big"
     assert fail_called.get("called") is True

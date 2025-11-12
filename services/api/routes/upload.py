@@ -10,19 +10,22 @@ from pathlib import Path
 from typing import Any
 
 import aioboto3
+import structlog
 from botocore.config import Config
-from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, Request, UploadFile
 from fastapi.responses import JSONResponse
 
 from awa_common.files import sanitize_upload_name
 from awa_common.metrics import ingest_upload_inflight, record_ingest_upload, record_ingest_upload_failure
 from awa_common.settings import settings
+from services.api.routes.ingest_errors import IngestRequestError, ingest_error_response, respond_with_ingest_error
 from services.api.security import limit_ops, require_ops
 from services.worker.celery_app import celery_app
 from services.worker.tasks import task_import_file
 
 BUCKET = os.getenv("MINIO_BUCKET", "awa-bucket")
 router = APIRouter()
+logger = structlog.get_logger(__name__)
 
 
 def _s3_client_kwargs() -> dict[str, Any]:
@@ -35,6 +38,16 @@ def _s3_client_kwargs() -> dict[str, Any]:
         "aws_secret_access_key": os.getenv("MINIO_SECRET_KEY", "minio123"),
         "region_name": os.getenv("AWS_REGION", "us-east-1"),
     }
+
+
+def _route_path(request: Request) -> str:
+    path = request.scope.get("path")
+    if isinstance(path, str) and path:
+        return path
+    try:
+        return request.url.path
+    except KeyError:
+        return "/"
 
 
 async def _iter_upload_chunks(upload: UploadFile, chunk_size: int) -> AsyncIterator[bytes]:
@@ -60,7 +73,12 @@ async def _upload_stream_to_s3(  # pragma: no cover - exercised via integration 
         async for chunk in _iter_upload_chunks(file, chunk_size):
             total += len(chunk)
             if total > max_bytes:
-                raise HTTPException(status_code=413, detail="Upload exceeds maximum size limit")
+                raise IngestRequestError(
+                    status_code=413,
+                    code="bad_request",
+                    detail="Upload exceeds maximum size limit",
+                    hint="Split the file or reduce report size and retry.",
+                )
             hasher.update(chunk)
             yield chunk
 
@@ -110,11 +128,15 @@ async def _upload_stream_to_s3(  # pragma: no cover - exercised via integration 
                     UploadId=upload_id,
                     MultipartUpload={"Parts": parts},
                 )
-        except Exception:
+        except Exception as exc:
             if upload_id:
                 with suppress(Exception):
                     await client.abort_multipart_upload(Bucket=BUCKET, Key=key, UploadId=upload_id)
-            raise
+            raise IngestRequestError(
+                status_code=500,
+                code="bad_request",
+                detail="Failed to upload file to object storage",
+            ) from exc
 
     return total, hasher.hexdigest()
 
@@ -128,7 +150,12 @@ def _ensure_size_limit(request: Request, *, max_bytes: int) -> None:
     except ValueError:
         return
     if length > max_bytes:
-        raise HTTPException(status_code=413, detail="Upload exceeds maximum size limit")
+        raise IngestRequestError(
+            status_code=413,
+            code="bad_request",
+            detail="Upload exceeds maximum size limit",
+            hint="Split the file or reduce report size and retry.",
+        )
 
 
 @router.post("/", status_code=202)
@@ -138,55 +165,82 @@ async def upload(
     _: object = Depends(require_ops),
     __: None = Depends(limit_ops),
 ) -> JSONResponse:
-    if not file.filename:
-        raise HTTPException(status_code=400, detail="Filename is required")
-    try:
-        safe_name = sanitize_upload_name(file.filename)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-    max_bytes = int(settings.MAX_REQUEST_BYTES)
-    _ensure_size_limit(request, max_bytes=max_bytes)
-    chunk_size = max(1, int(settings.INGEST_CHUNK_SIZE_MB) * 1024 * 1024)
-    today = datetime.date.today().strftime("%Y-%m")
-    key = f"raw/amazon/{today}/{safe_name}"
-    extension = Path(safe_name).suffix.lstrip(".") or "unknown"
-
+    route = _route_path(request)
     start = time.perf_counter()
-    with ingest_upload_inflight():
-        try:
-            total_bytes, idempotency_key = await _upload_stream_to_s3(
-                file,
-                key=key,
-                chunk_size=chunk_size,
-                max_bytes=max_bytes,
+    total_bytes = 0
+    idempotency_key: str | None = None
+    try:
+        if not file.filename:
+            raise IngestRequestError(
+                status_code=400,
+                code="bad_request",
+                detail="Filename is required",
             )
-        except HTTPException as exc:
-            record_ingest_upload_failure(extension=extension, reason=str(exc.status_code))
-            raise
-        except Exception as exc:  # pragma: no cover - defensive
-            record_ingest_upload_failure(extension=extension, reason=exc.__class__.__name__)
-            raise HTTPException(status_code=500, detail="Failed to upload file") from exc
-
-    await file.close()
-    duration = time.perf_counter() - start
-    record_ingest_upload(total_bytes, duration, extension=extension)
-
-    async_result = task_import_file.apply_async(
-        args=[f"minio://{key}"],
-        kwargs={"report_type": None, "force": False, "idempotency_key": idempotency_key},
-        queue="ingest",
-    )
-    if celery_app.conf.task_always_eager:
         try:
-            async_result.get(propagate=False)
-        except Exception:
-            pass
-    return JSONResponse(
-        status_code=202,
-        content={
-            "task_id": async_result.id,
-            "object_key": key,
-            "idempotency_key": idempotency_key,
-        },
-    )
+            safe_name = sanitize_upload_name(file.filename)
+        except ValueError as exc:
+            message = str(exc)
+            code = "unsupported_file_format" if "Unsupported file extension" in message else "bad_request"
+            raise IngestRequestError(status_code=400, code=code, detail=message) from exc
+
+        max_bytes = int(settings.MAX_REQUEST_BYTES)
+        _ensure_size_limit(request, max_bytes=max_bytes)
+        chunk_size = max(1, int(settings.INGEST_CHUNK_SIZE_MB) * 1024 * 1024)
+        today = datetime.date.today().strftime("%Y-%m")
+        key = f"raw/amazon/{today}/{safe_name}"
+        extension = Path(safe_name).suffix.lstrip(".") or "unknown"
+
+        with ingest_upload_inflight():
+            try:
+                total_bytes, idempotency_key = await _upload_stream_to_s3(
+                    file,
+                    key=key,
+                    chunk_size=chunk_size,
+                    max_bytes=max_bytes,
+                )
+            except IngestRequestError as exc:
+                record_ingest_upload_failure(extension=extension, reason=exc.code)
+                raise
+            except Exception as exc:  # pragma: no cover - defensive
+                record_ingest_upload_failure(extension=extension, reason=exc.__class__.__name__)
+                raise IngestRequestError(
+                    status_code=500,
+                    code="bad_request",
+                    detail="Failed to upload file",
+                ) from exc
+
+        duration = time.perf_counter() - start
+        record_ingest_upload(total_bytes, duration, extension=extension)
+
+        async_result = task_import_file.apply_async(
+            args=[f"minio://{key}"],
+            kwargs={"report_type": None, "force": False, "idempotency_key": idempotency_key},
+            queue="ingest",
+        )
+        if celery_app.conf.task_always_eager:
+            try:
+                async_result.get(propagate=False)
+            except Exception:
+                pass
+        return JSONResponse(
+            status_code=202,
+            content={
+                "task_id": async_result.id,
+                "object_key": key,
+                "idempotency_key": idempotency_key,
+            },
+        )
+    except IngestRequestError as exc:
+        return respond_with_ingest_error(request, exc, route=route)
+    except Exception:
+        logger.exception("upload.failed", route=route)
+        return ingest_error_response(
+            request,
+            status_code=500,
+            code="bad_request",
+            detail="Failed to enqueue upload",
+            route=route,
+        )
+    finally:
+        with suppress(Exception):
+            await file.close()

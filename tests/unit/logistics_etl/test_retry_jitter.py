@@ -34,14 +34,15 @@ async def test_download_with_retries_logs_attempts(monkeypatch: pytest.MonkeyPat
         raising=False,
     )
 
-    logs: list[tuple[str, tuple, dict]] = []
+    from awa_common import retries as retry_module
+
+    logs: list[tuple[str, dict[str, object]]] = []
 
     monkeypatch.setattr(
-        client,
+        retry_module,
         "logger",
         SimpleNamespace(
-            warning=lambda msg, *args, **kwargs: logs.append((msg, args, kwargs)),
-            exception=lambda *args, **kwargs: None,
+            warning=lambda msg, **kwargs: logs.append((msg, kwargs)),
         ),
         raising=False,
     )
@@ -50,4 +51,4 @@ async def test_download_with_retries_logs_attempts(monkeypatch: pytest.MonkeyPat
 
     assert body == b"ok"
     assert meta["content_type"] == "text/csv"
-    assert any("Retrying download" in entry[0] for entry in logs)
+    assert any(entry[0] == "retry.scheduled" for entry in logs)

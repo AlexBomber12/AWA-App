@@ -147,10 +147,23 @@ async def _handle_snapshot(snapshot: dict[str, Any], *, dry_run: bool) -> dict[s
             skipped = True
 
     if not skipped and not dry_run and rows:
+        db_rows = [
+            {
+                "carrier": row["carrier"],
+                "origin": row["origin"],
+                "dest": row["dest"],
+                "service": row["service"],
+                "eur_per_kg": row["eur_per_kg"],
+                "effective_from": row["valid_from"],
+                "effective_to": row["valid_to"],
+                "source": row.get("source"),
+            }
+            for row in rows
+        ]
         summary = await repository.upsert_many(
             table="logistics_rates",
             key_cols=["carrier", "origin", "dest", "service", "effective_from"],
-            rows=rows,
+            rows=db_rows,
             update_columns=["eur_per_kg", "effective_to", "updated_at"],
         )
         rows_upserted = (summary or {}).get("inserted", 0) + (summary or {}).get("updated", 0)
