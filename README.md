@@ -14,6 +14,8 @@ The AWA App monorepo powers wholesale automation: ETL agents ingest marketplace 
    pre-commit install
    cp .env.example .env.local
    cp .env.postgres.example .env.postgres
+   # Optional: copy .env.sample when bootstrapping the alert/notification stack
+   # and append its knobs to your .env.local (it documents Telegram + alert bot toggles).
    ```
 3. **Run the core stack**  
    ```bash
