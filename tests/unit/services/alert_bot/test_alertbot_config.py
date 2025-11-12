@@ -147,3 +147,29 @@ def test_config_manager_reload_detects_changes(tmp_path: Path, monkeypatch: pyte
     updated = manager.maybe_reload()
     assert updated is not None
     assert updated.version == "2"
+
+
+def test_coerce_chat_list_and_normalize_id() -> None:
+    assert alert_config._normalize_rule_id(" ROI ") == "roi"  # type: ignore[attr-defined]
+    chats = alert_config._coerce_chat_list(["@ops", "  "])  # type: ignore[attr-defined]
+    assert chats == ["@ops"]
+
+
+def test_config_manager_no_watch(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(alert_config.signal, "signal", lambda *args, **kwargs: None)
+    monkeypatch.setattr(alert_config.AlertConfigManager, "_signal_installed", False, raising=False)
+    path = _write_yaml(
+        tmp_path,
+        """
+        version: 1
+        defaults:
+          chat_id: "@ops"
+        rules:
+          - id: roi_drop
+            type: roi_drop
+        """,
+    )
+    manager = alert_config.AlertConfigManager(path=path, watch=False)
+    runtime = manager.load(force=True)
+    assert runtime is not None
+    assert manager.maybe_reload() is runtime

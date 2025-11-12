@@ -3,6 +3,7 @@ from __future__ import annotations
 import types
 from typing import Any
 
+import httpx
 import pytest
 
 from awa_common import telegram
@@ -154,3 +155,61 @@ async def test_get_me_and_get_chat(monkeypatch: pytest.MonkeyPatch) -> None:
     assert me.ok is True
     chat = await client.get_chat(123)
     assert chat.ok is True
+
+
+@pytest.mark.asyncio
+async def test_aclose_closes_owned_client() -> None:
+    client = telegram.AsyncTelegramClient(token="12345:ABCDE")
+
+    class DummyClient:
+        def __init__(self) -> None:
+            self.closed = False
+
+        async def aclose(self) -> None:
+            self.closed = True
+
+    dummy = DummyClient()
+    client._client = dummy  # type: ignore[attr-defined]
+    client._owns_client = True  # type: ignore[attr-defined]
+    await client.aclose()
+    assert dummy.closed is True
+
+
+@pytest.mark.asyncio
+async def test_send_message_sets_disable_notification() -> None:
+    stub_client = StubAsyncClient([StubResponse(200, payload={"ok": True})])
+    client = telegram.AsyncTelegramClient(token="12345:ABCDE", client=stub_client)
+    await client.send_message(chat_id=1, text="hi", disable_notification=False)
+    assert stub_client.calls[0][1]["disable_notification"] is False
+
+
+@pytest.mark.asyncio
+async def test_request_handles_http_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    class RaisingClient:
+        async def post(self, url, json):
+            raise httpx.RequestError("boom", request=httpx.Request("POST", url))
+
+    client = telegram.AsyncTelegramClient(token="12345:ABCDE", client=RaisingClient())
+    response = await client._request("sendMessage", payload={})  # type: ignore[attr-defined]
+    assert response.ok is False
+    assert "RequestError" in (response.description or "")
+
+
+@pytest.mark.asyncio
+async def test_request_handles_invalid_json() -> None:
+    class InvalidJsonResponse(StubResponse):
+        def json(self) -> dict[str, Any]:
+            raise ValueError("bad")
+
+    stub_client = StubAsyncClient([InvalidJsonResponse(200, payload=None, text="raw")])
+    client = telegram.AsyncTelegramClient(token="12345:ABCDE", client=stub_client)
+    response = await client._request("sendMessage", payload={})  # type: ignore[attr-defined]
+    assert response.ok is True
+    assert response.payload is None
+
+
+def test_coerce_chat_id_returns_string() -> None:
+    client = telegram.AsyncTelegramClient(token="12345:ABCDE", client=StubAsyncClient([]))
+    value, reason = client._coerce_chat_id("@channel")  # type: ignore[attr-defined]
+    assert value == "@channel"
+    assert reason is None
