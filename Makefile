@@ -24,6 +24,11 @@ PIP := $(PY) -m pip
 PYTEST := $(PY) -m pytest
 MYPY := $(PY) -m mypy
 RUFF := $(PY) -m ruff
+UNIT_PYTEST_ARGS := -vv -s -m 'not integration and not slow' -n auto --dist=loadfile --durations=20
+UNIT_NO_COV :=
+ifeq ($(NO_COV),1)
+  UNIT_NO_COV := --no-cov
+endif
 
 .PHONY: up down logs sh fmt lint type test unit unit-fast unit-all integ qa qa-fix install-dev bootstrap-dev ensure-bootstrap bootstrap ci-fast ci-local ci-validate migrations-local integration-local ci-all doctor secrets.print-age-recipient secrets.encrypt secrets.decrypt backup-now restore-check
 
@@ -55,13 +60,21 @@ type: ensure-bootstrap
 	$(MYPY) .
 
 unit: ensure-bootstrap
-	mkdir -p $(ART)
-	ENABLE_LOOP_LAG_MONITOR=0 PYTHONUNBUFFERED=1 $(PYTEST) -vv -s -m "not integration and not slow" \
-	  -n auto --dist=loadfile --durations=20 \
-	| tee $(ART)/unit.log ; test $${PIPESTATUS[0]} -eq 0
+	@set -o pipefail; \
+	mkdir -p $(ART); \
+	ENABLE_LOOP_LAG_MONITOR=0 CELERY_LOOP_LAG_MONITOR=0 PYTHONUNBUFFERED=1 $(PYTEST) $(UNIT_PYTEST_ARGS) $(UNIT_NO_COV) 2>&1 | tee $(ART)/unit.log; \
+	rc=$${PIPESTATUS[0]}; \
+	echo "pytest exit code: $$rc"; \
+	exit $$rc
 
 unit-fast:
-	PYTHONUNBUFFERED=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 $(PYTEST) -q -m "not integration"
+	@set -o pipefail; \
+	if python -c "import importlib.util,sys; sys.exit(0 if importlib.util.find_spec('xdist') else 1)" >/dev/null 2>&1; then \
+		plugin="-p xdist"; \
+	else \
+		plugin=""; \
+	fi; \
+	PYTHONUNBUFFERED=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 $(PYTEST) $$plugin -q -m "not integration"
 
 unit-all: ensure-bootstrap
 	@set -o pipefail; \
@@ -89,9 +102,9 @@ install-dev: bootstrap-dev
 
 qa: ensure-bootstrap
 	mkdir -p $(ART)
-	ENABLE_LOOP_LAG_MONITOR=0 $(MAKE) lint
-	ENABLE_LOOP_LAG_MONITOR=0 $(MAKE) type
-	ENABLE_LOOP_LAG_MONITOR=0 $(MAKE) unit
+	ENABLE_LOOP_LAG_MONITOR=0 CELERY_LOOP_LAG_MONITOR=0 $(MAKE) lint
+	ENABLE_LOOP_LAG_MONITOR=0 CELERY_LOOP_LAG_MONITOR=0 $(MAKE) type
+	ENABLE_LOOP_LAG_MONITOR=0 CELERY_LOOP_LAG_MONITOR=0 $(MAKE) unit
 
 qa-fix: ensure-bootstrap
 	@set -o pipefail; \

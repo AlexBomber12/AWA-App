@@ -14,8 +14,9 @@ from starlette.responses import Response
 from awa_common.logging import bind_user_sub
 from awa_common.security import oidc
 from awa_common.security.models import Role, UserCtx
-from awa_common.security.ratelimit import RoleBasedRateLimiter, no_rate_limit
+from awa_common.security.ratelimit import no_rate_limit
 from awa_common.settings import settings
+from services.api.rate_limit import rate_limit_dependency
 
 logger = structlog.get_logger(__name__)
 _bearer = HTTPBearer(auto_error=False)
@@ -67,7 +68,20 @@ async def current_user(
             headers=_AUTH_HEADERS,
         )
     try:
-        user = oidc.validate_access_token(token, cfg=settings)
+        user = await oidc.validate_access_token(token, cfg=settings)
+    except oidc.OIDCJwksUnavailableError as exc:
+        logger.error("auth_jwks_unavailable", error=str(exc))
+        problem = {
+            "type": "about:blank",
+            "title": "Authentication temporarily unavailable",
+            "status": status.HTTP_503_SERVICE_UNAVAILABLE,
+            "detail": "Unable to refresh signing keys",
+        }
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=problem,
+            headers={"Content-Type": "application/problem+json"},
+        ) from exc
     except oidc.OIDCValidationError as exc:
         logger.warning("auth_token_invalid", error=str(exc))
         raise HTTPException(
@@ -109,15 +123,15 @@ def _role_limiter(dependency: Any) -> RoleLimiter:
 
 
 def limit_viewer() -> Callable[[Request], Awaitable[None]]:
-    return _role_limiter(RoleBasedRateLimiter(settings=settings))
+    return _role_limiter(rate_limit_dependency(cfg=settings))
 
 
 def limit_ops() -> Callable[[Request], Awaitable[None]]:
-    return _role_limiter(RoleBasedRateLimiter(settings=settings))
+    return _role_limiter(rate_limit_dependency(cfg=settings))
 
 
 def limit_admin() -> Callable[[Request], Awaitable[None]]:
-    return _role_limiter(RoleBasedRateLimiter(settings=settings))
+    return _role_limiter(rate_limit_dependency(cfg=settings))
 
 
 def install_security(app: FastAPI) -> None:

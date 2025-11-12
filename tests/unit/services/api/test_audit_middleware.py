@@ -35,7 +35,7 @@ def audit_app(monkeypatch: pytest.MonkeyPatch):  # noqa: C901
     def session_factory() -> DummySession:
         return DummySession()
 
-    def _stub_validate(token: str, *, cfg=None) -> UserCtx:
+    async def _stub_validate(token: str, *, cfg=None) -> UserCtx:
         mapping = {
             "viewer": [Role.viewer],
             "ops": [Role.ops],

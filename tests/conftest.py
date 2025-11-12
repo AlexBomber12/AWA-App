@@ -14,6 +14,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
+import anyio
 import pytest
 
 from awa_common.dsn import build_dsn
@@ -29,6 +30,7 @@ def _test_env_defaults(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("LLM_PROVIDER", "STUB")
     monkeypatch.setenv("SENTRY_DSN", "")
     monkeypatch.setenv("SENTRY_METRICS_ENABLED", "0")
+    monkeypatch.setenv("CELERY_LOOP_LAG_MONITOR", "0")
 
 
 @pytest.fixture(autouse=True)
@@ -78,6 +80,16 @@ pytest_plugins = tuple(
         }
     )
 )
+
+
+@pytest.fixture(autouse=True)
+def _env_fast_flags(monkeypatch: pytest.MonkeyPatch):
+    """Disable background refreshers and favor tiny timeouts during unit tests."""
+    monkeypatch.setenv("OIDC_JWKS_BACKGROUND_REFRESH", "0")
+    monkeypatch.setenv("LLM_REQUEST_TIMEOUT_S", "0.05")
+    monkeypatch.setattr(settings, "OIDC_JWKS_BACKGROUND_REFRESH", False, raising=False)
+    monkeypatch.setattr(settings, "LLM_REQUEST_TIMEOUT_S", 0.05, raising=False)
+
 
 __all__ = [
     "pytest_configure",
@@ -436,7 +448,7 @@ def migrated_session(db_engine):
 
 
 @pytest.fixture(autouse=True)
-def _fast_sleep_all(monkeypatch, request):
+def _fast_sleep_shim(monkeypatch, request):
     # Opt-out with @pytest.mark.real_sleep on tests that must keep true timing
     if request.node.get_closest_marker("real_sleep"):
         return
@@ -444,10 +456,14 @@ def _fast_sleep_all(monkeypatch, request):
     async def _fast_asyncio_sleep(_delay=0, *_a, **_k):
         return None
 
+    async def _fast_anyio_sleep(_delay=0, *_a, **_k):
+        return None
+
     def _fast_time_sleep(_delay=0):
         return None
 
     monkeypatch.setattr(asyncio, "sleep", _fast_asyncio_sleep, raising=True)
+    monkeypatch.setattr(anyio, "sleep", _fast_anyio_sleep, raising=False)
     monkeypatch.setattr(time, "sleep", _fast_time_sleep, raising=True)
 
 

@@ -115,7 +115,7 @@ def RoleBasedRateLimiter(  # noqa: C901
             scheme, _, token = auth_header.partition(" ")
             if scheme.lower() == "bearer" and token:
                 try:
-                    user = oidc.validate_access_token(token.strip(), cfg)
+                    user = await oidc.validate_access_token(token.strip(), cfg)
                     request.state.user = user
                 except oidc.OIDCValidationError:
                     logger.debug("rate_limit_token_invalid", path=request.url.path)

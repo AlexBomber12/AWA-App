@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from awa_common.db.async_session import get_async_session
 from services.api import roi_repository
+from services.api.rate_limit import score_rate_limiter
 from services.api.roi_views import InvalidROIViewError, get_roi_view_name
 from services.api.security import limit_viewer, require_viewer
 
@@ -48,7 +49,7 @@ router = APIRouter(prefix="/score", tags=["score"])
 @router.post(
     "",
     response_model=ScoreResponse,
-    dependencies=[Depends(require_viewer), Depends(limit_viewer)],
+    dependencies=[Depends(require_viewer), Depends(limit_viewer), Depends(score_rate_limiter())],
 )
 async def score(
     body: ScoreRequest,

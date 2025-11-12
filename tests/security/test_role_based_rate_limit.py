@@ -291,7 +291,7 @@ async def test_role_limiter_handles_invalid_token(monkeypatch):
     monkeypatch.setattr("awa_common.security.ratelimit.RateLimiter", limiter_factory, raising=True)
     monkeypatch.setattr(FastAPILimiter, "redis", object(), raising=False)
 
-    def _raise_invalid(token: str, cfg: Any) -> None:
+    async def _raise_invalid(token: str, cfg: Any) -> None:
         raise ratelimit.oidc.OIDCValidationError("invalid")
 
     monkeypatch.setattr(ratelimit.oidc, "validate_access_token", _raise_invalid, raising=True)

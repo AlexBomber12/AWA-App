@@ -7,6 +7,11 @@ import pytest
 pytestmark = [pytest.mark.unit, pytest.mark.slow]
 
 
+@pytest.fixture(autouse=True)
+def _force_fast_llm_timeout(monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("LLM_REQUEST_TIMEOUT_S", "0.05")
+
+
 def _reload_llm():
     if "awa_common.llm" in list(importlib.sys.modules):
         importlib.reload(importlib.import_module("awa_common.llm"))
