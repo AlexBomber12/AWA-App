@@ -229,17 +229,14 @@ alertbot_schedule = crontab(
     month_of_year=alerts_cron_parts[3],
     day_of_week=alerts_cron_parts[4],
 )
-_beat_schedule["alertbot-run"] = {
-    "task": "alertbot.run",
-    "schedule": alertbot_schedule,
-}
-_beat_schedule.setdefault(
-    "alerts-evaluate-rules",
+alertbot_entry = _beat_schedule.setdefault(
+    "alertbot-run",
     {
         "task": "alertbot.run",
         "schedule": alertbot_schedule,
     },
 )
+_beat_schedule.setdefault("alerts-evaluate-rules", alertbot_entry)
 _beat_schedule.setdefault(
     "alerts-telegram-health",
     {
