@@ -20,7 +20,10 @@ import type { z } from "zod";
 import type { ApiError } from "@/lib/api/fetchFromApi";
 import { cn } from "@/lib/utils";
 
-type FormProps<TFieldValues extends FieldValues, TSchema extends z.ZodType<TFieldValues>> = {
+type FormProps<
+  TFieldValues extends FieldValues,
+  TSchema extends z.ZodType<TFieldValues, z.ZodTypeDef, TFieldValues>,
+> = {
   schema: TSchema;
   defaultValues: TFieldValues;
   children: (form: UseFormReturn<TFieldValues>) => ReactNode;
