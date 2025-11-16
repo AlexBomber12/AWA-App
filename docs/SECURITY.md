@@ -37,6 +37,10 @@ single source of truth reflected in the codebase.
   limiter; `/jobs/{task_id}` allows any `viewer` or higher.
 - When a token is missing or role checks fail, the API responds with 401/403 and logs
   `auth_missing_credentials`/`auth_forbidden` events via structlog.
+- The Next.js frontend mirrors this map in `webapp/lib/permissions.ts` so sidebar visibility,
+  `PermissionGuard`, and BFF routes stay aligned with the FastAPI checks. Roles flow from Keycloak
+  claims (top-level `roles`, `realm_access`, or `resource_access`) into the NextAuth session before
+  reaching the browser.
 
 ## CORS Policy
 
