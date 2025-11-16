@@ -67,7 +67,7 @@ export function Form<TFieldValues extends FieldValues, TSchema extends z.ZodType
   className,
 }: FormProps<TFieldValues, TSchema>) {
   const form = useForm<TFieldValues>({
-    resolver: zodResolver<TFieldValues>(schema),
+    resolver: zodResolver<TFieldValues, Record<string, never>, TFieldValues>(schema),
     defaultValues,
     mode: "onSubmit",
   });
