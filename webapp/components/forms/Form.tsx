@@ -20,12 +20,15 @@ import type { z } from "zod";
 import type { ApiError } from "@/lib/api/fetchFromApi";
 import { cn } from "@/lib/utils";
 
-type FormProps<TSchema extends z.ZodType<FieldValues>> = {
+type FormProps<
+  TFieldValues extends FieldValues,
+  TSchema extends z.ZodType<TFieldValues, any, TFieldValues>,
+> = {
   schema: TSchema;
-  defaultValues: z.input<TSchema>;
-  children: (form: UseFormReturn<z.input<TSchema>, unknown, z.output<TSchema>>) => ReactNode;
-  onSubmit: (values: z.output<TSchema>) => void | Promise<void>;
-  onError?: SubmitErrorHandler<z.input<TSchema>>;
+  defaultValues: TFieldValues;
+  children: (form: UseFormReturn<TFieldValues>) => ReactNode;
+  onSubmit: (values: TFieldValues) => void | Promise<void>;
+  onError?: SubmitErrorHandler<TFieldValues>;
   apiError?: ApiError | null;
   id?: string;
   className?: string;
@@ -56,7 +59,10 @@ const FormErrorAlert = ({ message }: { message: string }) => (
   </div>
 );
 
-export function Form<TSchema extends z.ZodType<FieldValues>>({
+export function Form<
+  TFieldValues extends FieldValues,
+  TSchema extends z.ZodType<TFieldValues, any, TFieldValues>,
+>({
   schema,
   defaultValues,
   children,
@@ -65,8 +71,8 @@ export function Form<TSchema extends z.ZodType<FieldValues>>({
   apiError = null,
   id,
   className,
-}: FormProps<TSchema>) {
-  const form = useForm<z.input<TSchema>, unknown, z.output<TSchema>>({
+}: FormProps<TFieldValues, TSchema>) {
+  const form = useForm<TFieldValues>({
     resolver: zodResolver(schema),
     defaultValues,
     mode: "onSubmit",
