@@ -8,7 +8,6 @@ import {
   FormProvider,
   type FieldPath,
   type FieldValues,
-  type Resolver,
   type SubmitErrorHandler,
   type UseFormReturn,
   useForm,
@@ -16,13 +15,16 @@ import {
 } from "react-hook-form";
 import { Slot } from "@radix-ui/react-slot";
 import { createContext, useContext, type ReactNode, useEffect, useId, useState } from "react";
-import type { Schema } from "zod";
+import type { z } from "zod";
 
 import type { ApiError } from "@/lib/api/fetchFromApi";
 import { cn } from "@/lib/utils";
 
-type FormProps<TFieldValues extends FieldValues> = {
-  schema: Schema<TFieldValues>;
+type FormProps<
+  TFieldValues extends FieldValues,
+  TSchema extends z.ZodType<TFieldValues, FieldValues>,
+> = {
+  schema: TSchema;
   defaultValues: TFieldValues;
   children: (form: UseFormReturn<TFieldValues>) => ReactNode;
   onSubmit: (values: TFieldValues) => void | Promise<void>;
@@ -57,7 +59,7 @@ const FormErrorAlert = ({ message }: { message: string }) => (
   </div>
 );
 
-export function Form<TFieldValues extends FieldValues>({
+export function Form<TFieldValues extends FieldValues, TSchema extends z.ZodType<TFieldValues, FieldValues>>({
   schema,
   defaultValues,
   children,
@@ -66,9 +68,9 @@ export function Form<TFieldValues extends FieldValues>({
   apiError = null,
   id,
   className,
-}: FormProps<TFieldValues>) {
+}: FormProps<TFieldValues, TSchema>) {
   const form = useForm<TFieldValues>({
-    resolver: zodResolver(schema) as Resolver<TFieldValues>,
+    resolver: zodResolver(schema),
     defaultValues,
     mode: "onSubmit",
   });
