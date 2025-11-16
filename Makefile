@@ -30,7 +30,7 @@ ifeq ($(NO_COV),1)
   UNIT_NO_COV := --no-cov
 endif
 
-.PHONY: up down logs sh fmt lint type test unit unit-fast unit-all integ qa qa-fix install-dev bootstrap-dev ensure-bootstrap bootstrap ci-fast ci-local ci-validate migrations-local integration-local ci-all doctor secrets.print-age-recipient secrets.encrypt secrets.decrypt backup-now restore-check
+.PHONY: up down logs sh webapp-up fmt lint type test unit unit-fast unit-all integ qa qa-fix install-dev bootstrap-dev ensure-bootstrap bootstrap ci-fast ci-local ci-validate migrations-local integration-local ci-all doctor secrets.print-age-recipient secrets.encrypt secrets.decrypt backup-now restore-check
 
 up:
 	docker compose up -d --build --wait db redis api worker
@@ -43,6 +43,9 @@ logs:
 
 sh:
 	docker compose exec api sh -lc "bash || sh"
+
+webapp-up:
+	docker compose up -d --build webapp
 
 fmt:
 	$(RUFF) format . || true

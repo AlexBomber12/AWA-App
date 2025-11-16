@@ -1,78 +1,63 @@
 # Frontend Guide
 
-The web console lives under `webapp/` and is built with Next.js 14 (App Router) and NextAuth’s
-Keycloak provider. This section documents the required configuration and how it integrates with the
-API’s security model.
+This guide is the single source of truth for all AWA web UI work. Every new frontend change **must**
+follow the conventions below.
 
-## Structure
+## Architecture blueprint
+1. **Browser → Next.js webapp (App Router).** The web console lives under `webapp/` and uses
+   Next.js 14+ with the App Router and TypeScript-only modules. Component code renders on the
+   server by default and opt into client interactivity when needed in `/components`.
+2. **Next.js BFF routes (`app/api/bff/*`).** Back-end-for-frontend (BFF) handlers will be added in
+   PR-UI-1B. They sit next to the App Router pages, proxy authenticated calls, and apply any UI
+   specific shaping before forwarding to the API.
+3. **FastAPI backend (`services/api`).** Remains the system of record for auth, RBAC, business
+   workflows, and event ingestion. UI calls it via `NEXT_PUBLIC_API_URL` through the upcoming BFF
+   layer or directly for simple read-only endpoints.
 
-- `webapp/app/` contains the App Router pages (`page.tsx`, `(auth)/login`, profile routes).
-- `webapp/lib/auth.ts` exports the canonical `authOptions` used by NextAuth, along with helpers to
-  decode Keycloak tokens and normalise roles.
-- Tooling is managed via `webapp/package.json` and `webapp/tsconfig.json`; the repo ships with
-  `package-lock.json`, so use `npm install` for deterministic installs.
+## Project layout
+- `webapp/app/`
+  - `layout.tsx` wires the global `<AppShell />`, fonts, and providers.
+  - `page.tsx` redirects to `/dashboard`.
+  - `app/dashboard|roi|sku|ingest|returns|inbox|decision|settings/page.tsx` are presentational stub
+    routes so navigation can be validated visually.
+  - `app/api/bff/*` will host API handlers that terminate in FastAPI once PR-UI-1B lands.
+- `webapp/components/layout/AppShell.tsx` defines the sidebar, header, and responsive layout.
+- `webapp/components/ui/` contains shadcn/ui primitives (currently only `Button`). Expand this folder
+  instead of inlining ad-hoc components.
+- `webapp/lib/` collects shared helpers (`utils.ts` currently exports `cn`). Future API clients,
+  hooks, and formatting utilities should be colocated here.
+- `webapp/tests/unit` and `webapp/tests/e2e` host Jest + React Testing Library unit tests and
+  Playwright smoke tests.
 
-## Authentication Flow
+Tailwind CSS provides the design tokens. Update `tailwind.config.ts` and `app/globals.css` when
+adding new semantic colors or radii so the entire UI stays consistent.
 
-1. A user visits the console and triggers **Sign in**.
-2. NextAuth redirects to the Keycloak realm configured by `KEYCLOAK_ISSUER`.
-3. After the user authenticates, NextAuth receives the tokens, calls
-   `rolesFromToken` (`webapp/lib/auth.ts`) to collect roles from the top-level `roles` claim,
-   `realm_access.roles`, or resource access entries, and stores them on `session.user.roles`.
-4. Subsequent API requests include session cookies; the FastAPI backend reads the same roles (see
-   `docs/SECURITY.md`) so RBAC stays aligned end-to-end.
+## Tooling & commands
+The repo uses **npm** (see `package-lock.json`). Run these from `webapp/`:
 
-## Environment Variables
+| Command | Purpose |
+| ------- | ------- |
+| `npm install` | Install dependencies. |
+| `npm run dev` | Start the Next.js dev server with the App Router. |
+| `npm run lint` | ESLint with Next.js + TypeScript rules. |
+| `npm run format` / `format:write` | Prettier in check or write mode. |
+| `npm run test:unit` | Jest + React Testing Library smoke tests. |
+| `npm run test:e2e` | Playwright sidebar/navigation smoke covering the AppShell. |
+| `npm run build` | Production build used by docker-compose and CI. |
 
-| Variable | Description |
-| -------- | ----------- |
-| `NEXTAUTH_URL` | Public base URL for callbacks (e.g. `http://localhost:3000` in dev). |
-| `NEXTAUTH_SECRET` | Random 32+ byte secret for NextAuth session encryption. |
-| `KEYCLOAK_ISSUER` | Keycloak issuer, typically `https://<host>/realms/awa`. |
-| `KEYCLOAK_CLIENT_ID` | Keycloak client identifier for the webapp (`awa-webapp`). |
-| `KEYCLOAK_SECRET` | Client secret registered with the Keycloak client. |
-| `NEXT_PUBLIC_API_URL` | Base URL for API requests; defaults to `http://localhost:8000`. |
+CI executes `lint`, `test:unit`, `test:e2e`, and `build` in the `webapp-build` job. Local docker
+runs use `make webapp-up` which builds the Next.js image and exposes it on port `3000`.
 
-The API derives its own CORS origins from `CORS_ORIGINS` / `APP_ENV` (see `services/api/main.py`), so
-ensure the values above match the allowed origins in your deployment.
+## Roadmap & scope guardrails
+- **PR-UI-1A (this change):** Bootstrap App Router, Tailwind design tokens, shadcn/ui wiring,
+  navigation stubs, Jest + Playwright smoke coverage, docker + docs integration.
+- **PR-UI-1B:** Add NextAuth with Keycloak, BFF routes under `app/api/bff`, and Settings controls
+  for environment + RBAC toggles.
+- **Later milestones:** Fill in ROI, SKU, Ingest, Returns, Inbox, and Decision Engine workflows as
+  described in the ROI and Virtual Buyer specifications.
 
-## CORS and API Interaction
-
-- Development (`APP_ENV=dev`): if `CORS_ORIGINS` is unset the API automatically allows
-  `http://localhost:3000`, which matches the Next.js dev server.
-- Stage/Prod: set `CORS_ORIGINS` explicitly (comma-separated list) and avoid wildcards. Startup fails
-  if the list is empty or contains `"*"`.
-- The webapp reads `NEXT_PUBLIC_API_URL` to call backend routes; keep this aligned with the API host
-  exposed to browsers.
-
-## Local Development
-
-1. Start the backend stack:
-   ```bash
-   docker compose up -d --build --wait db redis api worker
-   ```
-   or `make up` which wraps the same command.
-2. Create `webapp/.env.local` with the required variables, for example:
-   ```ini
-   NEXTAUTH_URL=http://localhost:3000
-   NEXTAUTH_SECRET=replace-with-generated-secret
-   KEYCLOAK_ISSUER=https://keycloak.local/realms/awa
-   KEYCLOAK_CLIENT_ID=awa-webapp
-   KEYCLOAK_SECRET=replace-with-dev-secret
-   NEXT_PUBLIC_API_URL=http://localhost:8000
-   ```
-3. Install dependencies and run the dev server:
-   ```bash
-   cd webapp
-   npm install
-   npm run dev
-   ```
-4. Navigate to `http://localhost:3000`. The profile page (`/profile`) shows the decoded roles and
-   helps verify Keycloak claims during setup.
-5. Confirm the API is reachable (`curl http://localhost:8000/ready`) before testing UI flows.
-
-## Role-Based UI Hints
-
-Components can inspect `session.user.roles` to conditionally render features. Align role names with
-those documented in `docs/SECURITY.md` (`viewer`, `ops`, `admin`) so backend enforcement and UI hints
-stay in sync. When adding new protected sections, guard both the API route and the React component.
+Until PR-UI-1B lands:
+- **Do not** ship Keycloak/NextAuth wiring, API mutations, or RBAC switches. Keep routes stubbed.
+- **Do not** add bespoke layout shells. Extend `AppShell` instead so navigation stays uniform.
+- **Do** keep all new code in TypeScript (`.ts`/`.tsx`) and follow the Tailwind tokens defined in
+  `globals.css`.
