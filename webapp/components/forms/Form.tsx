@@ -16,13 +16,13 @@ import {
 } from "react-hook-form";
 import { Slot } from "@radix-ui/react-slot";
 import { createContext, useContext, type ReactNode, useEffect, useId, useState } from "react";
-import type { z } from "zod";
+import type { Schema } from "zod";
 
 import type { ApiError } from "@/lib/api/fetchFromApi";
 import { cn } from "@/lib/utils";
 
 type FormProps<TFieldValues extends FieldValues> = {
-  schema: z.ZodType<TFieldValues>;
+  schema: Schema<TFieldValues>;
   defaultValues: TFieldValues;
   children: (form: UseFormReturn<TFieldValues>) => ReactNode;
   onSubmit: (values: TFieldValues) => void | Promise<void>;
