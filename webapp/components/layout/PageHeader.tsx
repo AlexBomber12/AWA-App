@@ -29,7 +29,7 @@ export function PageHeader({
       <div className="flex flex-col justify-between gap-6 sm:flex-row sm:items-center">
         <div className="space-y-2">
           <div>
-            <p className="text-3xl font-semibold tracking-tight">{title}</p>
+            <h1 className="text-3xl font-semibold tracking-tight">{title}</h1>
             {description ? <p className="text-base text-muted-foreground">{description}</p> : null}
           </div>
           {children}
