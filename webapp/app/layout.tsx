@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 
 import { AppShell } from "@/components/layout/AppShell";
+import { getServerAuthSession } from "@/lib/auth";
 
 import "./globals.css";
 
@@ -19,11 +20,13 @@ type RootLayoutProps = {
   children: React.ReactNode;
 };
 
-export default function RootLayout({ children }: RootLayoutProps) {
+export default async function RootLayout({ children }: RootLayoutProps) {
+  const session = await getServerAuthSession();
+
   return (
     <html lang="en">
       <body className={inter.className}>
-        <AppShell>{children}</AppShell>
+        <AppShell initialSession={session}>{children}</AppShell>
       </body>
     </html>
   );

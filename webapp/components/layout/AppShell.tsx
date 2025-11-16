@@ -1,32 +1,73 @@
 "use client";
 
 import Link from "next/link";
+import { SessionProvider } from "next-auth/react";
+import type { Session } from "next-auth";
 import { usePathname } from "next/navigation";
 import { type ReactNode, useMemo } from "react";
 
 import { Button } from "@/components/ui/button";
+import { type Action, type Resource, type Role, usePermissions } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 
-const NAV_ITEMS = [
-  { href: "/dashboard", label: "Dashboard" },
-  { href: "/roi", label: "ROI" },
-  { href: "/sku", label: "SKU" },
-  { href: "/ingest", label: "Ingest" },
-  { href: "/returns", label: "Returns" },
-  { href: "/inbox", label: "Inbox" },
-  { href: "/decision", label: "Decision" },
-  { href: "/settings", label: "Settings" },
+type NavItem = {
+  href: string;
+  label: string;
+  permission?: {
+    resource: Resource;
+    action: Action;
+  };
+};
+
+const NAV_ITEMS: NavItem[] = [
+  { href: "/dashboard", label: "Dashboard", permission: { resource: "dashboard", action: "view" } },
+  { href: "/roi", label: "ROI", permission: { resource: "roi", action: "view" } },
+  { href: "/sku", label: "SKU", permission: { resource: "sku", action: "view" } },
+  { href: "/ingest", label: "Ingest", permission: { resource: "ingest", action: "view" } },
+  { href: "/returns", label: "Returns", permission: { resource: "returns", action: "view" } },
+  { href: "/inbox", label: "Inbox", permission: { resource: "inbox", action: "view" } },
+  { href: "/decision", label: "Decision", permission: { resource: "decision", action: "configure" } },
+  { href: "/settings", label: "Settings", permission: { resource: "settings", action: "view" } },
 ];
 
 const appEnvLabel = (process.env.NEXT_PUBLIC_APP_ENV ?? "local").toUpperCase();
+const viewerFallback: Role[] = ["viewer"];
 
 type AppShellProps = {
   children: ReactNode;
+  initialSession?: Session | null;
 };
 
-export function AppShell({ children }: AppShellProps) {
+export function AppShell({ children, initialSession }: AppShellProps) {
+  return (
+    <SessionProvider session={initialSession}>
+      <AppShellContent>{children}</AppShellContent>
+    </SessionProvider>
+  );
+}
+
+type AppShellContentProps = {
+  children: ReactNode;
+};
+
+function AppShellContent({ children }: AppShellContentProps) {
   const pathname = usePathname();
+  const { roles, can } = usePermissions();
   const activeHref = useMemo(() => pathname ?? "/dashboard", [pathname]);
+
+  const menuRoles = roles.length > 0 ? roles : viewerFallback;
+
+  const visibleNavItems = useMemo(
+    () =>
+      NAV_ITEMS.filter((item) => {
+        if (!item.permission) {
+          return true;
+        }
+
+        return can({ ...item.permission, roles: menuRoles });
+      }),
+    [can, menuRoles]
+  );
 
   return (
     <div className="flex min-h-screen bg-background text-foreground">
@@ -36,7 +77,7 @@ export function AppShell({ children }: AppShellProps) {
           <p className="text-lg font-semibold">Operator Console</p>
         </div>
         <nav className="flex-1 space-y-1 px-2 pb-6">
-          {NAV_ITEMS.map((item) => {
+          {visibleNavItems.map((item) => {
             const isActive = activeHref.startsWith(item.href);
             return (
               <Link
@@ -73,7 +114,7 @@ export function AppShell({ children }: AppShellProps) {
         <div className="flex flex-1 flex-col lg:flex-row">
           <div className="border-b border-border bg-muted/50 px-4 py-2 lg:hidden">
             <div className="flex items-center gap-3 overflow-x-auto">
-              {NAV_ITEMS.map((item) => {
+              {visibleNavItems.map((item) => {
                 const isActive = activeHref.startsWith(item.href);
                 return (
                   <Link

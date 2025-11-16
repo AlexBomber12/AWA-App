@@ -32,6 +32,28 @@ follow the conventions below.
 Tailwind CSS provides the design tokens. Update `tailwind.config.ts` and `app/globals.css` when
 adding new semantic colors or radii so the entire UI stays consistent.
 
+## Auth & RBAC
+- **Flow:** Browser → NextAuth (App Router) → Next.js BFF → FastAPI. Keycloak runs in confidential
+  client mode using `KEYCLOAK_ISSUER`, `KEYCLOAK_CLIENT_ID`, `KEYCLOAK_CLIENT_SECRET`,
+  `NEXTAUTH_URL`, and `NEXTAUTH_SECRET`. Tokens stay on the server; the BFF layer forwards them as
+  `Authorization: Bearer <token>` to FastAPI.
+- **Session helper:** `lib/auth.ts` centralises `authOptions` plus `getServerAuthSession()` so server
+  components, layouts, and API routes reuse the same wiring. Sessions include `session.accessToken`
+  and `session.user.roles` derived from Keycloak's `roles`, `realm_access`, or `resource_access`.
+- **BFF helper:** `lib/api/fetchFromApi.ts` enforces the "one way into FastAPI" rule. It loads the
+  session, applies the bearer token, builds URLs from `NEXT_PUBLIC_API_URL`, and maps API errors into
+  `{ code, message, status, details }`. BFF routes (e.g. `app/api/bff/stats/route.ts`) should call
+  `fetchFromApi("/stats/kpi")` and translate `ApiError`s into `NextResponse`.
+- **Permissions source of truth:** `lib/permissions.ts` defines `Role`, `Resource`, `Action`, and the
+  ACL that matches `docs/SECURITY.md` (viewer, ops, admin). Use:
+  - `getUserRolesFromSession(session)` when you already have a server session.
+  - `usePermissions()` in client components to read `{ roles, can, hasRole }`.
+  - `PermissionGuard` (`// Pattern: wrap protected buttons/sections...`) to hide sections or buttons.
+- **Sidebar & guards:** `AppShell` uses `usePermissions()` so Inbox/Decision Engine/Settings only
+  render for the correct roles. Page sections (ROI bulk approve, inbox actions) should wrap their UI
+  in `PermissionGuard` or a hook call, and any future middleware must rely on
+  `getServerAuthSession()` so RBAC stays in sync across the stack.
+
 ## Tooling & commands
 The repo uses **npm** (see `package-lock.json`). Run these from `webapp/`:
 

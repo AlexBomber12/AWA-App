@@ -11,6 +11,10 @@ Library, and Playwright smoke tests.
 3. Set `NEXT_PUBLIC_API_URL` in `.env.local` if you need to point at a different
    FastAPI endpoint. `NEXT_PUBLIC_APP_ENV` controls the header badge shown in the
    AppShell.
+4. Configure Keycloak + NextAuth variables (`KEYCLOAK_ISSUER`,
+   `KEYCLOAK_CLIENT_ID`, `KEYCLOAK_CLIENT_SECRET`, `NEXTAUTH_URL`,
+   `NEXTAUTH_SECRET`) so the dev server can complete the OIDC loop and surface
+   roles to the UI.
 
 ## Scripts
 - `npm run lint`: ESLint with the Next.js recommended + TypeScript rules.
