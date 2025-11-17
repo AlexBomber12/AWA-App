@@ -14,6 +14,8 @@ import {
 
 type RoiRow = components["schemas"]["RoiRow"];
 
+export const dynamic = "force-dynamic";
+
 const OBSERVE_ONLY_ROI_THRESHOLD = 20;
 
 const getMarginValue = (row: RoiRow): number => {

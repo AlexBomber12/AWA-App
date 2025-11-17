@@ -1,6 +1,6 @@
 "use client";
 
-import { type ReactNode, useCallback, useState } from "react";
+import { Suspense, type ReactNode, useCallback, useState } from "react";
 
 import { PageBody, PageHeader } from "@/components/layout";
 import { usePermissions } from "@/lib/permissions";
@@ -31,7 +31,9 @@ export function RoiPage() {
         actions={actions}
       />
       <PageBody>
-        <RoiTableContainer canApprove={canApprove} onActionsChange={handleActionsChange} />
+        <Suspense fallback={<div className="rounded-xl border border-border bg-background/80 p-6 shadow-sm">Loading ROI review…</div>}>
+          <RoiTableContainer canApprove={canApprove} onActionsChange={handleActionsChange} />
+        </Suspense>
       </PageBody>
     </>
   );

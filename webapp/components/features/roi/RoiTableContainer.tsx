@@ -57,7 +57,7 @@ export function RoiTableContainer({ canApprove, onActionsChange }: RoiTableConta
       const query = serializedState ? `?${serializedState}` : "";
       return fetchFromBff<RoiListResponse>(`${ROI_BFF_ENDPOINT}${query}`);
     },
-    keepPreviousData: true,
+    placeholderData: (previousData) => previousData,
   });
 
   const handleSelectRow = (asin: string, checked: boolean) => {
