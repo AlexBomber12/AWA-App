@@ -39,7 +39,7 @@ export function RoiTableContainer({ canApprove, onActionsChange }: RoiTableConta
     RoiTableFilters
   >({
     defaults: ROI_TABLE_DEFAULTS,
-    parseFromSearchParams,
+    parseFromSearchParams: parseRoiSearchParams,
     serializeToSearchParams,
   });
 

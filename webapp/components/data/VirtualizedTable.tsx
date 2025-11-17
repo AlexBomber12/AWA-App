@@ -17,8 +17,8 @@ import { cn } from "@/lib/utils";
 import { EmptyState } from "./EmptyState";
 import { SkeletonTable } from "./SkeletonTable";
 
-type VirtualizedTableProps<TData, TValue> = {
-  columns: ColumnDef<TData, TValue>[];
+type VirtualizedTableProps<TData> = {
+  columns: ColumnDef<TData, unknown>[];
   data: TData[];
   getRowId?: (originalRow: TData, index: number) => string;
   height?: number;
@@ -43,7 +43,7 @@ const renderEmptyState = (emptyState?: ReactNode) =>
     />
   );
 
-const renderHeader = <TData, TValue>(table: TanstackTable<TData>, columnCount: number) => {
+const renderHeader = <TData,>(table: TanstackTable<TData>, columnCount: number) => {
   const headerGroups = table.getHeaderGroups();
   return (
     <thead className="sticky top-0 z-10 bg-muted/70 text-left text-xs uppercase tracking-wide text-muted-foreground">
@@ -65,7 +65,7 @@ const renderHeader = <TData, TValue>(table: TanstackTable<TData>, columnCount: n
   );
 };
 
-export function VirtualizedTable<TData, TValue>({
+export function VirtualizedTable<TData>({
   columns,
   data,
   getRowId,
@@ -77,7 +77,7 @@ export function VirtualizedTable<TData, TValue>({
   emptyState,
   onRowClick,
   getRowClassName,
-}: VirtualizedTableProps<TData, TValue>) {
+}: VirtualizedTableProps<TData>) {
   const table = useReactTable({
     data,
     columns,

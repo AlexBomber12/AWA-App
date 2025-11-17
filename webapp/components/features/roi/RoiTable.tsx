@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 
 import { PaginationControls, VirtualizedTable } from "@/components/data";
 import { Checkbox } from "@/components/ui";
-import { cn } from "@/lib/utils";
 
 import type { RoiListResponse, RoiRow } from "./types";
 import type { RoiSort } from "./tableState";
