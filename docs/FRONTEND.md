@@ -73,7 +73,30 @@ Example structure for a hypothetical feature named `foo`:
 5. Add at least one Storybook story for the primary feature component so UI regressions can be
    caught visually (`npm run storybook`).
 6. Add or update unit tests that cover critical primitives (tables, permissions, etc.) under
-   `webapp/tests/unit`.
+  `webapp/tests/unit`.
+
+## Detail page pattern: SKU example
+
+Use `SkuPage` as the reference implementation for every future "detail" surface. The flow is:
+
+- `app/api/bff/sku/route.ts` proxies FastAPI with `fetchFromApi`, merges summary + history data, and
+  translates backend failures into `ApiError` payloads.
+- `lib/api/skuClient.ts` exposes a strongly typed `getSkuDetail()` + `useSkuDetailQuery()` pair. All
+  client components call the BFF through this client (never FastAPI directly) so React Query caches
+  stay consistent.
+- `app/sku/[asin]/page.tsx` is the server entry point. It composes `PageHeader`/`PageBody`, enforces
+  RBAC via `getServerAuthSession()` + `can({ resource: "sku", action: "view" })`, and renders the
+  client-side feature component.
+- Feature UI lives in `components/features/sku/*` with a top-level orchestrator (`SkuPage`) that
+  loads data via `useSkuDetailQuery` and composes presentational leaves (`SkuCard`,
+  `SkuPriceHistoryChart`). Contextual navigation (e.g., "Back to ROI") is handled here.
+- Every detail slice ships with Storybook coverage (`stories/features/sku/SkuPage.stories.tsx`) that
+  feeds the feature mock data, plus dedicated Jest/RTL tests (see `tests/unit/sku-page.test.tsx` and
+  `tests/unit/sku-client.test.ts`).
+
+Future detail-heavy screens (returns detail, vendor detail, etc.) should follow the same layering:
+App Router page → BFF route → typed client + query hook → feature slice → story + tests. This keeps
+the UX consistent and gives Codex prompts an obvious blueprint to extend.
 
 Use the shared states as starting points:
 

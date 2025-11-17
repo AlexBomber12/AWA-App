@@ -23,6 +23,7 @@ type GlobalWithPolyfills = typeof globalThis & {
   Headers?: typeof Headers;
   Request?: typeof Request;
   Response?: typeof Response;
+  ResizeObserver?: typeof ResizeObserver;
 };
 
 const globalThisWithPolyfills = globalThis as GlobalWithPolyfills;
@@ -74,4 +75,19 @@ if (!globalThisWithPolyfills.Request) {
 if (!globalThisWithPolyfills.Response) {
   const { Response } = loadUndici();
   globalThisWithPolyfills.Response = Response as GlobalWithPolyfills["Response"];
+}
+
+if (!("ResizeObserver" in globalThisWithPolyfills)) {
+  class MockResizeObserver {
+    observe() {
+      return undefined;
+    }
+    unobserve() {
+      return undefined;
+    }
+    disconnect() {
+      return undefined;
+    }
+  }
+  globalThisWithPolyfills.ResizeObserver = MockResizeObserver as typeof ResizeObserver;
 }
