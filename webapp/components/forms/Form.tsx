@@ -8,7 +8,6 @@ import {
   FormProvider,
   type FieldPath,
   type FieldValues,
-  type Resolver,
   type SubmitErrorHandler,
   type UseFormReturn,
   useForm,
