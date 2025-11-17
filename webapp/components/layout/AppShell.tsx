@@ -6,6 +6,7 @@ import type { Session } from "next-auth";
 import { usePathname } from "next/navigation";
 import { type ReactNode, useMemo } from "react";
 
+import { ReactQueryProvider } from "@/components/providers/ReactQueryProvider";
 import { Button } from "@/components/ui";
 import { type Action, type Resource, type Role, usePermissions } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
@@ -51,7 +52,9 @@ type AppShellProps = {
 export function AppShell({ children, initialSession, initialPath }: AppShellProps) {
   return (
     <SessionProvider session={initialSession}>
-      <AppShellContent initialPath={initialPath}>{children}</AppShellContent>
+      <ReactQueryProvider>
+        <AppShellContent initialPath={initialPath}>{children}</AppShellContent>
+      </ReactQueryProvider>
     </SessionProvider>
   );
 }
