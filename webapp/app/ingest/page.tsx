@@ -1,3 +1,4 @@
+import { IngestPage as IngestPageClient } from "@/components/features/ingest/IngestPage";
 import { PageBody, PageHeader } from "@/components/layout";
 
 export default function IngestPage() {
@@ -5,15 +6,14 @@ export default function IngestPage() {
     <>
       <PageHeader
         title="Ingest"
-        description="Data ingestion monitors and replay tooling will surface in this area."
+        description="Kick off ingest jobs, replay historical files, and monitor Celery progress in real time."
+        breadcrumbs={[
+          { label: "Dashboard", href: "/dashboard" },
+          { label: "Ingest", active: true },
+        ]}
       />
       <PageBody>
-        <div className="rounded-xl border bg-background/80 p-6 shadow-sm">
-          <p className="text-muted-foreground">
-            Monitor AWS pipelines, replay failed batches, and trace SKU impacts once integration
-            specs are complete.
-          </p>
-        </div>
+        <IngestPageClient />
       </PageBody>
     </>
   );
