@@ -1,7 +1,7 @@
+import { RoiReviewTable } from "@/components/features/roi/RoiReviewTable";
 import { PageBody, PageHeader } from "@/components/layout";
 
 import { RoiActions } from "./RoiActions";
-import { RoiReviewSection } from "./RoiReviewSection";
 
 export default function RoiPage() {
   return (
@@ -16,7 +16,7 @@ export default function RoiPage() {
         actions={<RoiActions />}
       />
       <PageBody>
-        <RoiReviewSection />
+        <RoiReviewTable />
       </PageBody>
     </>
   );

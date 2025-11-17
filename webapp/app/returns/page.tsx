@@ -1,24 +1,15 @@
-import { EmptyState } from "@/components/data";
+import { ReturnsQueueTable } from "@/components/features/returns/ReturnsQueueTable";
 import { PageBody, PageHeader } from "@/components/layout";
-import { Button } from "@/components/ui";
 
 export default function ReturnsPage() {
   return (
     <>
       <PageHeader
         title="Returns"
-        description="Return-triage workflows and metrics will be added in subsequent UI milestones."
+        description="Returns triage queues surface backlog items from the SP-API feeds."
       />
       <PageBody>
-        <EmptyState
-          title="No return batches yet"
-          description="Once ingestion streams returns data, this workspace will show decision queues and audit history."
-          action={
-            <Button variant="outline" size="sm">
-              Upload preview sample
-            </Button>
-          }
-        />
+        <ReturnsQueueTable />
       </PageBody>
     </>
   );

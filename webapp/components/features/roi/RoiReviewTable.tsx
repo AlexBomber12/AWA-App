@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 
@@ -18,7 +19,14 @@ const ROI_COLUMNS: ColumnDef<RoiScenario>[] = [
   {
     header: "SKU",
     accessorKey: "sku",
-    cell: ({ row }) => <span className="font-medium">{row.original.sku}</span>,
+    cell: ({ row }) => (
+      <Link
+        href={{ pathname: `/sku/${row.original.sku}`, query: { from: "roi" } }}
+        className="font-semibold text-brand hover:underline"
+      >
+        {row.original.sku}
+      </Link>
+    ),
   },
   {
     header: "Owner",
@@ -51,7 +59,7 @@ const DEFAULT_FILTERS = {
   status: "all",
 };
 
-export function RoiReviewSection() {
+export function RoiReviewTable() {
   const [draftFilters, setDraftFilters] = useState(DEFAULT_FILTERS);
   const [filters, setFilters] = useState(DEFAULT_FILTERS);
   const [page, setPage] = useState(1);
