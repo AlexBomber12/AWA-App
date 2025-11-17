@@ -25,7 +25,7 @@ const resolveErrorMessage = (value: unknown) => {
 
 import type { ApiError } from "@/lib/api/apiError";
 
-type UseApiQueryOptions<
+export type UseApiQueryOptions<
   TQueryFnData,
   TError = ApiError,
   TData = TQueryFnData,
