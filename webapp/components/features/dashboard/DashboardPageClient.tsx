@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { type ComponentProps, useMemo } from "react";
 
 import { ErrorState, SkeletonTable } from "@/components/data";
 import { statsClient } from "@/lib/api/statsClient";
@@ -21,6 +21,15 @@ const formatNumber = (value?: number | null) => {
     return "–";
   }
   return value.toLocaleString();
+};
+
+type DashboardCard = {
+  title: string;
+  value: string;
+  helperText?: string;
+  tooltip?: string;
+  deltaLabel?: string;
+  severity?: ComponentProps<typeof DashboardKpiCard>["severity"];
 };
 
 export function DashboardPageClient() {
@@ -44,7 +53,7 @@ export function DashboardPageClient() {
     queryFn: () => statsClient.getRoiTrend(),
   });
 
-  const kpiCards = useMemo(() => {
+  const kpiCards: DashboardCard[] = useMemo(() => {
     if (!kpi) {
       return [];
     }
@@ -73,7 +82,7 @@ export function DashboardPageClient() {
         helperText: "Vendors represented across ROI SKUs.",
         tooltip: "Number of distinct vendors contributing to ROI KPIs.",
       },
-    ] as const;
+    ];
   }, [kpi]);
 
   return (

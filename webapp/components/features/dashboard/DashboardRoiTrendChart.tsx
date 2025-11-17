@@ -41,7 +41,11 @@ const buildChartData = (roiTrend: DashboardStatsResponse["roiTrend"]): ChartPoin
   }));
 };
 
-const CustomTooltip = ({ active, payload }: TooltipProps<number, string>) => {
+type RoiTooltipProps = TooltipProps<number, string> & {
+  payload?: Array<{ payload: ChartPoint }>;
+};
+
+const CustomTooltip = ({ active, payload }: RoiTooltipProps) => {
   if (!active || !payload || payload.length === 0) {
     return null;
   }

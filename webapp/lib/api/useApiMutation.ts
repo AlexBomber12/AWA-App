@@ -21,11 +21,11 @@ export function useApiMutation<
   return useMutation({
     retry,
     ...rest,
-    onError: (error, variables, context) => {
+    onError: (error, variables, context, mutation) => {
       console.error("useApiMutation error", {
         message: (error as ApiError | Error)?.message,
       });
-      onError?.(error, variables, context);
+      onError?.(error, variables, context, mutation);
     },
   });
 }

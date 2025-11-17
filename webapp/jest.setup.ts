@@ -12,34 +12,43 @@ process.env.KEYCLOAK_CLIENT_SECRET ??= "jest-secret";
 process.env.NEXTAUTH_URL ??= "http://localhost:3000";
 process.env.NEXTAUTH_SECRET ??= "jest-nextauth-secret";
 
-if (typeof global.TextEncoder === "undefined") {
-  // @ts-expect-error - jsdom types don't include util encoders
-  global.TextEncoder = TextEncoder;
+type GlobalWithPolyfills = typeof globalThis & {
+  TextEncoder?: typeof TextEncoder;
+  TextDecoder?: typeof TextDecoder;
+  ReadableStream?: typeof ReadableStream;
+  WritableStream?: typeof WritableStream;
+  TransformStream?: typeof TransformStream;
+  BroadcastChannel?: typeof BroadcastChannel;
+  fetch?: typeof fetch;
+  Headers?: typeof Headers;
+  Request?: typeof Request;
+  Response?: typeof Response;
+};
+
+const globalThisWithPolyfills = globalThis as GlobalWithPolyfills;
+
+if (!globalThisWithPolyfills.TextEncoder) {
+  globalThisWithPolyfills.TextEncoder = TextEncoder as GlobalWithPolyfills["TextEncoder"];
 }
 
-if (typeof global.TextDecoder === "undefined") {
-  // @ts-expect-error - jsdom types don't include util encoders
-  global.TextDecoder = TextDecoder;
+if (!globalThisWithPolyfills.TextDecoder) {
+  globalThisWithPolyfills.TextDecoder = TextDecoder as GlobalWithPolyfills["TextDecoder"];
 }
 
-if (typeof global.ReadableStream === "undefined") {
-  // @ts-expect-error - jsdom types don't include stream/web globals
-  global.ReadableStream = ReadableStream;
+if (!globalThisWithPolyfills.ReadableStream) {
+  globalThisWithPolyfills.ReadableStream = ReadableStream as GlobalWithPolyfills["ReadableStream"];
 }
 
-if (typeof global.WritableStream === "undefined") {
-  // @ts-expect-error - jsdom types don't include stream/web globals
-  global.WritableStream = WritableStream;
+if (!globalThisWithPolyfills.WritableStream) {
+  globalThisWithPolyfills.WritableStream = WritableStream as GlobalWithPolyfills["WritableStream"];
 }
 
-if (typeof global.TransformStream === "undefined") {
-  // @ts-expect-error - jsdom types don't include stream/web globals
-  global.TransformStream = TransformStream;
+if (!globalThisWithPolyfills.TransformStream) {
+  globalThisWithPolyfills.TransformStream = TransformStream as GlobalWithPolyfills["TransformStream"];
 }
 
-if (typeof global.BroadcastChannel === "undefined") {
-  // @ts-expect-error - BroadcastChannel types are provided by worker_threads here
-  global.BroadcastChannel = BroadcastChannel;
+if (!globalThisWithPolyfills.BroadcastChannel) {
+  globalThisWithPolyfills.BroadcastChannel = BroadcastChannel as GlobalWithPolyfills["BroadcastChannel"];
 }
 
 const loadUndici = () => {
@@ -47,26 +56,22 @@ const loadUndici = () => {
   return require("undici");
 };
 
-if (typeof global.fetch === "undefined") {
+if (!globalThisWithPolyfills.fetch) {
   const { fetch } = loadUndici();
-  // @ts-expect-error - undici types align with the Fetch API
-  global.fetch = fetch;
+  globalThisWithPolyfills.fetch = fetch as GlobalWithPolyfills["fetch"];
 }
 
-if (typeof global.Headers === "undefined") {
+if (!globalThisWithPolyfills.Headers) {
   const { Headers } = loadUndici();
-  // @ts-expect-error - undici types align with the Fetch API
-  global.Headers = Headers;
+  globalThisWithPolyfills.Headers = Headers as GlobalWithPolyfills["Headers"];
 }
 
-if (typeof global.Request === "undefined") {
+if (!globalThisWithPolyfills.Request) {
   const { Request } = loadUndici();
-  // @ts-expect-error - undici types align with the Fetch API
-  global.Request = Request;
+  globalThisWithPolyfills.Request = Request as GlobalWithPolyfills["Request"];
 }
 
-if (typeof global.Response === "undefined") {
+if (!globalThisWithPolyfills.Response) {
   const { Response } = loadUndici();
-  // @ts-expect-error - undici types align with the Fetch API
-  global.Response = Response;
+  globalThisWithPolyfills.Response = Response as GlobalWithPolyfills["Response"];
 }
