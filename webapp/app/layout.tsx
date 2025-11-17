@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 
-import { AppShell } from "@/components/layout/AppShell";
+import { AppShell } from "@/components/layout";
 import { getServerAuthSession } from "@/lib/auth";
 
 import "./globals.css";

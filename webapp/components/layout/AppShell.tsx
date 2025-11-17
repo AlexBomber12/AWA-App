@@ -6,7 +6,7 @@ import type { Session } from "next-auth";
 import { usePathname } from "next/navigation";
 import { type ReactNode, useMemo } from "react";
 
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui";
 import { type Action, type Resource, type Role, usePermissions } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
 
@@ -33,27 +33,43 @@ const NAV_ITEMS: NavItem[] = [
 const appEnvLabel = (process.env.NEXT_PUBLIC_APP_ENV ?? "local").toUpperCase();
 const viewerFallback: Role[] = ["viewer"];
 
+const useSafePathname = () => {
+  try {
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    return usePathname();
+  } catch {
+    return null;
+  }
+};
+
 type AppShellProps = {
   children: ReactNode;
   initialSession?: Session | null;
+  initialPath?: string;
 };
 
-export function AppShell({ children, initialSession }: AppShellProps) {
+export function AppShell({ children, initialSession, initialPath }: AppShellProps) {
   return (
     <SessionProvider session={initialSession}>
-      <AppShellContent>{children}</AppShellContent>
+      <AppShellContent initialPath={initialPath}>{children}</AppShellContent>
     </SessionProvider>
   );
 }
 
 type AppShellContentProps = {
   children: ReactNode;
+  initialPath?: string;
 };
 
-function AppShellContent({ children }: AppShellContentProps) {
-  const pathname = usePathname();
+function AppShellContent({ children, initialPath }: AppShellContentProps) {
+  const currentPathname = useSafePathname();
   const { roles, can } = usePermissions();
-  const activeHref = useMemo(() => pathname ?? "/dashboard", [pathname]);
+  const activeHref = useMemo(() => {
+    if (initialPath) {
+      return initialPath;
+    }
+    return currentPathname ?? "/dashboard";
+  }, [initialPath, currentPathname]);
 
   const menuRoles = roles.length > 0 ? roles : viewerFallback;
 

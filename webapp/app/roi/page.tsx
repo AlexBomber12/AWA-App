@@ -1,15 +1,23 @@
+import { PageBody, PageHeader } from "@/components/layout";
+
 import { RoiActions } from "./RoiActions";
+import { RoiReviewSection } from "./RoiReviewSection";
 
 export default function RoiPage() {
   return (
-    <section className="space-y-4">
-      <div className="space-y-3">
-        <h2 className="text-3xl font-semibold tracking-tight">ROI review</h2>
-        <p className="text-muted-foreground">
-          ROI scenarios and guardrails will plug into this workspace in upcoming releases.
-        </p>
-      </div>
-      <RoiActions />
-    </section>
+    <>
+      <PageHeader
+        title="ROI review"
+        description="ROI scenarios and guardrails will plug into this workspace in upcoming releases."
+        breadcrumbs={[
+          { label: "Dashboard", href: "/dashboard" },
+          { label: "ROI", active: true },
+        ]}
+        actions={<RoiActions />}
+      />
+      <PageBody>
+        <RoiReviewSection />
+      </PageBody>
+    </>
   );
 }
