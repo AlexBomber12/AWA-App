@@ -5,9 +5,11 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import {
   Controller,
   type ControllerProps,
+  type DefaultValues,
   FormProvider,
   type FieldPath,
   type FieldValues,
+  type Resolver,
   type SubmitErrorHandler,
   type UseFormReturn,
   useForm,
@@ -20,12 +22,14 @@ import type { z } from "zod";
 import type { ApiError } from "@/lib/api/fetchFromApi";
 import { cn } from "@/lib/utils";
 
-type FormProps<TFieldValues extends FieldValues> = {
-  schema: z.ZodType<TFieldValues, z.ZodTypeDef, TFieldValues>;
-  defaultValues: TFieldValues;
-  children: (form: UseFormReturn<TFieldValues>) => ReactNode;
-  onSubmit: (values: TFieldValues) => void | Promise<void>;
-  onError?: SubmitErrorHandler<TFieldValues>;
+type SchemaValues<TSchema extends z.ZodTypeAny> = z.infer<TSchema> & FieldValues;
+
+type FormProps<TSchema extends z.ZodTypeAny> = {
+  schema: TSchema;
+  defaultValues: SchemaValues<TSchema>;
+  children: (form: UseFormReturn<SchemaValues<TSchema>>) => ReactNode;
+  onSubmit: (values: SchemaValues<TSchema>) => void | Promise<void>;
+  onError?: SubmitErrorHandler<SchemaValues<TSchema>>;
   apiError?: ApiError | null;
   id?: string;
   className?: string;
@@ -56,7 +60,7 @@ const FormErrorAlert = ({ message }: { message: string }) => (
   </div>
 );
 
-export function Form<TFieldValues extends FieldValues>({
+export function Form<TSchema extends z.ZodTypeAny>({
   schema,
   defaultValues,
   children,
@@ -65,10 +69,13 @@ export function Form<TFieldValues extends FieldValues>({
   apiError = null,
   id,
   className,
-}: FormProps<TFieldValues>) {
-  const form = useForm<TFieldValues>({
-    resolver: zodResolver(schema),
-    defaultValues,
+}: FormProps<TSchema>) {
+  const buildResolver = zodResolver as unknown as (
+    targetSchema: z.ZodTypeAny
+  ) => Resolver<SchemaValues<TSchema>>;
+  const form = useForm<SchemaValues<TSchema>>({
+    resolver: buildResolver(schema),
+    defaultValues: defaultValues as DefaultValues<SchemaValues<TSchema>>,
     mode: "onSubmit",
   });
 
@@ -84,7 +91,7 @@ export function Form<TFieldValues extends FieldValues>({
     const fieldErrors = extractFieldErrors(apiError.details);
     if (fieldErrors) {
       Object.entries(fieldErrors).forEach(([field, errorMessage]) => {
-        form.setError(field as FieldPath<TFieldValues>, {
+        form.setError(field as FieldPath<SchemaValues<TSchema>>, {
           type: "server",
           message: errorMessage,
         });
