@@ -9,6 +9,39 @@ import { RoiTableContainer } from "@/components/features/roi/RoiTableContainer";
 
 const user = userEvent.setup();
 
+jest.mock("@/components/features/roi/RoiTable", () => ({
+  RoiTable: ({
+    rows,
+    page,
+    onPageChange,
+    onSelectRow,
+    isLoading,
+  }: {
+    rows: Array<{ asin: string }>;
+    page: number;
+    onPageChange: (page: number) => void;
+    onSelectRow: (asin: string, checked: boolean) => void;
+    isLoading?: boolean;
+  }) => (
+    <div data-testid="mock-roi-table">
+      {isLoading ? <div>Loading…</div> : null}
+      {rows.map((row) => (
+        <div key={row.asin} className="flex items-center gap-2">
+          <span>{row.asin}</span>
+          <label>
+            <input
+              type="checkbox"
+              aria-label={`Select ${row.asin}`}
+              onChange={(event) => onSelectRow(row.asin, event.target.checked)}
+            />
+          </label>
+        </div>
+      ))}
+      <button onClick={() => onPageChange(page + 1)}>Next</button>
+    </div>
+  ),
+}));
+
 jest.mock("next/navigation", () => {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const React = require("react");

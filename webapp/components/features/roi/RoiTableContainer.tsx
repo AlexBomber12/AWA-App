@@ -40,7 +40,7 @@ export function RoiTableContainer({ canApprove, onActionsChange }: RoiTableConta
   >({
     defaults: ROI_TABLE_DEFAULTS,
     parseFromSearchParams: parseRoiSearchParams,
-    serializeToSearchParams,
+    serializeToSearchParams: serializeRoiSearchParams,
   });
 
   const serializedState = useMemo(() => serializeRoiSearchParams(state).toString(), [state]);
