@@ -34,3 +34,4 @@ export {
   DrawerTrigger,
 } from "./drawer";
 export { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./tooltip";
+export { Checkbox } from "./checkbox";
