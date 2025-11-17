@@ -1,21 +1,8 @@
 import { getServerAuthSession } from "@/lib/auth";
 
-export type ApiError = {
-  code: string;
-  message: string;
-  status: number;
-  details?: unknown;
-};
-
-export const isApiError = (value: unknown): value is ApiError => {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "code" in value &&
-    "message" in value &&
-    "status" in value
-  );
-};
+import { createApiError } from "./apiError";
+export type { ApiError } from "./apiError";
+export { isApiError } from "./apiError";
 
 const buildApiUrl = (path: string): URL => {
   const baseUrl = process.env.NEXT_PUBLIC_API_URL;
@@ -25,8 +12,6 @@ const buildApiUrl = (path: string): URL => {
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
   return new URL(normalizedPath, baseUrl);
 };
-
-const createApiError = (params: ApiError): ApiError => params;
 
 const parseErrorMessage = (details: unknown): string | undefined => {
   if (!details) {
