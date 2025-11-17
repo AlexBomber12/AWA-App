@@ -60,7 +60,7 @@ export function SimulationPanel({
 
   const handleSubmit: React.FormEventHandler<HTMLFormElement> = (event) => {
     event.preventDefault();
-    if (!selectedRule) {
+    if (!selectedRule || !canConfigure) {
       return;
     }
     const payload = {
