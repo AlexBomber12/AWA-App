@@ -36,23 +36,24 @@ describe("ingestClient", () => {
   });
 
   it("sends multipart form data when a file is provided", async () => {
-    let fileSeen: string | null = null;
-    apiServer.use(
-      rest.post("http://localhost:3000/api/bff/ingest", async (req, res, ctx) => {
-        if (req.body instanceof FormData) {
-          const uploaded = req.body.get("file");
-          if (uploaded && uploaded instanceof File) {
-            fileSeen = uploaded.name;
-          }
-        }
-        return res(ctx.json(mockJob));
+    const fetchSpy = jest.spyOn(global, "fetch").mockResolvedValue(
+      new Response(JSON.stringify(mockJob), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
       })
     );
 
     const file = new File(["a,b\n1,2"], "session.csv", { type: "text/csv" });
     await startIngestJob({ file });
 
-    expect(fileSeen).toBe("session.csv");
+    const [, init] = fetchSpy.mock.calls[0] as [RequestInfo, RequestInit];
+    const body = init?.body as FormData;
+    expect(body).toBeInstanceOf(FormData);
+    expect(body?.get("file")).toBeInstanceOf(File);
+    const uploaded = body?.get("file") as File;
+    expect(uploaded?.name).toBe("session.csv");
+
+    fetchSpy.mockRestore();
   });
 
   it("surfaces ApiErrors when the BFF responds with an error", async () => {

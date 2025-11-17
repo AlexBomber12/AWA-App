@@ -1,130 +1,106 @@
-import type { ReactElement } from "react";
-
-import { act, render } from "@testing-library/react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { renderHook } from "@testing-library/react";
 
 import { usePollingQuery } from "@/lib/api/usePollingQuery";
+
+jest.mock("@/lib/api/useApiQuery", () => ({
+  useApiQuery: jest.fn(),
+}));
+
+import { useApiQuery } from "@/lib/api/useApiQuery";
 
 type TestData = {
   state: string;
 };
 
-const renderWithClient = (ui: ReactElement) => {
-  const queryClient = new QueryClient({
-    defaultOptions: {
-      queries: {
-        retry: 0,
-      },
-    },
-  });
-
-  return render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>);
-};
+const mockUseApiQuery = useApiQuery as jest.MockedFunction<typeof useApiQuery>;
 
 describe("usePollingQuery", () => {
   beforeEach(() => {
-    jest.useFakeTimers();
+    mockUseApiQuery.mockReset();
   });
 
-  afterEach(() => {
-    jest.useRealTimers();
-  });
-
-  it("polls until the stopWhen predicate returns true", async () => {
-    let calls = 0;
-    const queryFn = jest.fn().mockImplementation(() => {
-      calls += 1;
-      const state = calls >= 2 ? "done" : "pending";
-      return Promise.resolve({ state });
-    });
-
+  it("returns the polling interval until stopWhen is true", () => {
+    let capturedInterval: ((query: { state: { data?: TestData }; dataUpdatedAt?: number }) => number | false) | null = null;
     const stopWhen = (data?: TestData) => data?.state === "done";
 
-    const Harness = () => {
+    mockUseApiQuery.mockImplementation((options) => {
+      capturedInterval = options.refetchInterval as typeof capturedInterval;
+      return {} as any;
+    });
+
+    const nowSpy = jest.spyOn(Date, "now");
+    const baseTime = 1_000_000;
+    nowSpy.mockReturnValue(baseTime);
+
+    renderHook(() =>
       usePollingQuery<TestData>({
-        queryKey: ["polling", "stopWhen"],
-        queryFn,
+        queryKey: ["poll", "stop"],
+        queryFn: jest.fn(),
         stopWhen,
         pollingIntervalMs: 1000,
-      });
-      return null;
-    };
+      })
+    );
 
-    renderWithClient(<Harness />);
+    expect(capturedInterval).toBeTruthy();
+    const intervalFn = capturedInterval!;
+    expect(intervalFn({ state: { data: { state: "pending" } }, dataUpdatedAt: baseTime })).toBe(1000);
+    expect(intervalFn({ state: { data: { state: "done" } }, dataUpdatedAt: baseTime })).toBe(false);
 
-    expect(queryFn).toHaveBeenCalledTimes(1);
-
-    await act(async () => {
-      jest.advanceTimersByTime(1000);
-    });
-
-    expect(queryFn).toHaveBeenCalledTimes(2);
-
-    await act(async () => {
-      jest.advanceTimersByTime(3000);
-    });
-
-    expect(queryFn).toHaveBeenCalledTimes(2);
+    nowSpy.mockRestore();
   });
 
-  it("stops polling after maxDurationMs is reached", async () => {
-    const queryFn = jest.fn().mockResolvedValue({ state: "pending" });
+  it("halts polling after maxDurationMs is exceeded", () => {
+    let capturedInterval: ((query: { state: { data?: TestData }; dataUpdatedAt?: number }) => number | false) | null = null;
+    const nowSpy = jest.spyOn(Date, "now");
 
-    const Harness = () => {
+    mockUseApiQuery.mockImplementation((options) => {
+      capturedInterval = options.refetchInterval as typeof capturedInterval;
+      return {} as any;
+    });
+
+    renderHook(() =>
       usePollingQuery<TestData>({
-        queryKey: ["polling", "maxDuration"],
-        queryFn,
+        queryKey: ["poll", "duration"],
+        queryFn: jest.fn(),
         stopWhen: () => false,
         pollingIntervalMs: 500,
         maxDurationMs: 1500,
-      });
-      return null;
-    };
+      })
+    );
 
-    renderWithClient(<Harness />);
+    expect(capturedInterval).toBeTruthy();
+    const intervalFn = capturedInterval!;
 
-    expect(queryFn).toHaveBeenCalledTimes(1);
+    const baseTime = 5_000;
+    nowSpy.mockReturnValue(baseTime);
+    expect(intervalFn({ state: { data: { state: "pending" } }, dataUpdatedAt: baseTime })).toBe(500);
 
-    await act(async () => {
-      jest.advanceTimersByTime(2000);
-    });
+    nowSpy.mockReturnValue(baseTime + 2_000);
+    expect(intervalFn({ state: { data: { state: "pending" } }, dataUpdatedAt: baseTime })).toBe(false);
 
-    expect(queryFn).toHaveBeenCalledTimes(3);
-
-    await act(async () => {
-      jest.advanceTimersByTime(2000);
-    });
-
-    expect(queryFn).toHaveBeenCalledTimes(3);
+    nowSpy.mockRestore();
   });
 
-  it("stops polling when the component unmounts", async () => {
-    const queryFn = jest.fn().mockResolvedValue({ state: "pending" });
+  it("returns false when polling is disabled", () => {
+    let capturedInterval: ((query: { state: { data?: TestData }; dataUpdatedAt?: number }) => number | false) | null = null;
 
-    const Harness = () => {
+    mockUseApiQuery.mockImplementation((options) => {
+      capturedInterval = options.refetchInterval as typeof capturedInterval;
+      return {} as any;
+    });
+
+    renderHook(() =>
       usePollingQuery<TestData>({
-        queryKey: ["polling", "unmount"],
-        queryFn,
+        queryKey: ["poll", "disabled"],
+        queryFn: jest.fn(),
         stopWhen: () => false,
-        pollingIntervalMs: 500,
-      });
-      return null;
-    };
+        pollingIntervalMs: 1000,
+        enabled: false,
+      })
+    );
 
-    const { unmount } = renderWithClient(<Harness />);
-
-    await act(async () => {
-      jest.advanceTimersByTime(500);
-    });
-
-    expect(queryFn).toHaveBeenCalledTimes(2);
-
-    unmount();
-
-    await act(async () => {
-      jest.advanceTimersByTime(2000);
-    });
-
-    expect(queryFn).toHaveBeenCalledTimes(2);
+    expect(capturedInterval).toBeTruthy();
+    const intervalFn = capturedInterval!;
+    expect(intervalFn({ state: { data: { state: "pending" } }, dataUpdatedAt: 0 })).toBe(false);
   });
 });

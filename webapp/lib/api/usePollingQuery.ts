@@ -56,6 +56,7 @@ export function usePollingQuery<
     ...queryOptions,
     refetchInterval: (query) => {
       const data = query.state.data as TData | undefined;
+      const fetchedAt = query.state.dataUpdatedAt as number | undefined;
 
       if (stopWhen(data)) {
         startTimeRef.current = null;
@@ -67,10 +68,14 @@ export function usePollingQuery<
       }
 
       if (!startTimeRef.current) {
-        startTimeRef.current = Date.now();
+        if (typeof fetchedAt === "number" && Number.isFinite(fetchedAt)) {
+          startTimeRef.current = fetchedAt;
+        } else {
+          startTimeRef.current = Date.now();
+        }
       }
 
-      if (maxDurationMs && startTimeRef.current) {
+      if (maxDurationMs && startTimeRef.current !== null) {
         const elapsed = Date.now() - startTimeRef.current;
         if (elapsed >= maxDurationMs) {
           return false;
