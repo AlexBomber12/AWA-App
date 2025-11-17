@@ -140,3 +140,31 @@ export const TransitionToSuccess: Story = {
     );
   },
 };
+
+export const PollingErrors: Story = {
+  render: () => {
+    const handlers = useMemo<FetchMockHandler[]>(() => {
+      return [
+        {
+          predicate: ({ url }) => url.includes("/api/bff/ingest/jobs/TASK-ERR"),
+          response: () =>
+            new Response(
+              JSON.stringify({
+                code: "RETRYABLE",
+                message: "Temporary ingest service outage",
+              }),
+              { status: 503, headers: { "Content-Type": "application/json" } }
+            ),
+        },
+      ];
+    }, []);
+
+    return (
+      <FetchMock handlers={handlers}>
+        <div className="mx-auto max-w-3xl p-6">
+          <IngestJobStatus taskId="TASK-ERR" pollingIntervalMs={1000} />
+        </div>
+      </FetchMock>
+    );
+  },
+};

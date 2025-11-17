@@ -40,34 +40,47 @@ const summaryResponse: ReturnsSummary = {
   topAsinRefundAmount: 1999.99,
 };
 
-const handlers: FetchMockHandler[] = [
+type ReturnsStoryMode = {
+  list: "default" | "empty" | "error" | "loading";
+  stats: "default" | "loading";
+};
+
+const delayedResponse = (response: Response, delayMs = 2000) =>
+  new Promise<Response>((resolve) => {
+    setTimeout(() => resolve(response), delayMs);
+  });
+
+const buildHandlers = (mode: ReturnsStoryMode): FetchMockHandler[] => [
   {
-    predicate: ({ url, method }) => {
-      if (method !== "GET" || !url.includes("/api/bff/returns")) {
-        return false;
+    predicate: ({ url, method }) => method === "GET" && url.includes("/api/bff/returns") && new URL(url).searchParams.get("resource") === "list",
+    response: () => {
+      if (mode.list === "error") {
+        return new Response(JSON.stringify({ code: "BFF_ERROR", message: "Failed to load returns list." }), {
+          status: 500,
+          headers: { "Content-Type": "application/json" },
+        });
       }
-      const resource = new URL(url).searchParams.get("resource");
-      return resource === "list";
+      if (mode.list === "empty") {
+        return new Response(
+          JSON.stringify({
+            items: [],
+            pagination: { page: 1, pageSize: 25, total: 0, totalPages: 1 },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+      const payload = JSON.stringify(listResponse);
+      const response = new Response(payload, { status: 200, headers: { "Content-Type": "application/json" } });
+      return mode.list === "loading" ? delayedResponse(response) : response;
     },
-    response: () =>
-      new Response(JSON.stringify(listResponse), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }),
   },
   {
-    predicate: ({ url, method }) => {
-      if (method !== "GET" || !url.includes("/api/bff/returns")) {
-        return false;
-      }
-      const resource = new URL(url).searchParams.get("resource");
-      return resource === "stats";
+    predicate: ({ url, method }) => method === "GET" && url.includes("/api/bff/returns") && new URL(url).searchParams.get("resource") === "stats",
+    response: () => {
+      const payload = JSON.stringify(summaryResponse);
+      const response = new Response(payload, { status: 200, headers: { "Content-Type": "application/json" } });
+      return mode.stats === "loading" ? delayedResponse(response) : response;
     },
-    response: () =>
-      new Response(JSON.stringify(summaryResponse), {
-        status: 200,
-        headers: { "Content-Type": "application/json" },
-      }),
   },
 ];
 
@@ -85,7 +98,37 @@ type Story = StoryObj<typeof ReturnsPage>;
 
 export const Default: Story = {
   render: () => (
-    <FetchMock handlers={handlers}>
+    <FetchMock handlers={buildHandlers({ list: "default", stats: "default" })}>
+      <AppShell initialSession={mockSession} initialPath="/returns">
+        <ReturnsPage />
+      </AppShell>
+    </FetchMock>
+  ),
+};
+
+export const EmptyState: Story = {
+  render: () => (
+    <FetchMock handlers={buildHandlers({ list: "empty", stats: "default" })}>
+      <AppShell initialSession={mockSession} initialPath="/returns">
+        <ReturnsPage />
+      </AppShell>
+    </FetchMock>
+  ),
+};
+
+export const LoadingState: Story = {
+  render: () => (
+    <FetchMock handlers={buildHandlers({ list: "loading", stats: "loading" })}>
+      <AppShell initialSession={mockSession} initialPath="/returns">
+        <ReturnsPage />
+      </AppShell>
+    </FetchMock>
+  ),
+};
+
+export const ErrorState: Story = {
+  render: () => (
+    <FetchMock handlers={buildHandlers({ list: "error", stats: "default" })}>
       <AppShell initialSession={mockSession} initialPath="/returns">
         <ReturnsPage />
       </AppShell>

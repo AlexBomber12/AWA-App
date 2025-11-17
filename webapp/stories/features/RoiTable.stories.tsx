@@ -23,6 +23,11 @@ const meta: Meta<typeof RoiTable> = {
   parameters: {
     layout: "fullscreen",
   },
+  argTypes: {
+    canApprove: {
+      control: { type: "boolean" },
+    },
+  },
   args: {
     isLoading: false,
     canApprove: true,
@@ -120,4 +125,50 @@ export const LoadingState: Story = {
       <RoiTable {...args} selectedAsins={new Set()} />
     </div>
   ),
+};
+
+export const EmptyState: Story = {
+  args: {
+    rows: [],
+    pagination: { page: 1, pageSize: 20, total: 0, totalPages: 1 },
+    page: 1,
+    pageSize: 20,
+    sort: "roi_pct_desc",
+    canApprove: false,
+    onSelectRow: () => undefined,
+    onSelectVisibleRows: () => undefined,
+    onPageChange: () => undefined,
+    onPageSizeChange: () => undefined,
+    onSortChange: () => undefined,
+  },
+  render: (args) => (
+    <div className="p-6">
+      <RoiTable {...args} selectedAsins={new Set()} />
+    </div>
+  ),
+};
+
+export const ReadOnlySelection: Story = {
+  render: (args) => {
+    const [selected] = useState(new Set<string>(["ASIN-0001", "ASIN-0002"]));
+    return (
+      <div className="p-6">
+        <RoiTable
+          {...args}
+          canApprove={false}
+          selectedAsins={selected}
+          rows={MOCK_ROWS.slice(0, 10)}
+          pagination={{ page: 1, pageSize: 10, total: 50, totalPages: 5 }}
+          page={1}
+          pageSize={10}
+          sort="asin_asc"
+          onPageChange={() => undefined}
+          onPageSizeChange={() => undefined}
+          onSortChange={() => undefined}
+          onSelectRow={() => undefined}
+          onSelectVisibleRows={() => undefined}
+        />
+      </div>
+    );
+  },
 };

@@ -56,4 +56,19 @@ describe("PermissionGuard", () => {
 
     expect(screen.getByText("No access")).toBeInTheDocument();
   });
+
+  it("renders nothing when access is denied and no fallback is provided", () => {
+    mockUseSession.mockReturnValueOnce({
+      data: buildSession(["viewer"]),
+      status: "authenticated",
+    });
+
+    const { container } = render(
+      <PermissionGuard resource="inbox" action="view">
+        <span>Hidden</span>
+      </PermissionGuard>
+    );
+
+    expect(container).toBeEmptyDOMElement();
+  });
 });

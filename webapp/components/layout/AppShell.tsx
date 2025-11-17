@@ -21,6 +21,12 @@ type NavItem = {
   };
 };
 
+const toNavTestId = (label: string) =>
+  label
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+
 const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", permission: { resource: "dashboard", action: "view" } },
   { href: "/roi", label: "ROI", permission: { resource: "roi", action: "view" } },
@@ -105,6 +111,7 @@ function AppShellContent({ children, initialPath }: AppShellContentProps) {
               <Link
                 key={item.href}
                 href={item.href}
+                data-testid={`nav-${toNavTestId(item.label)}`}
                 className={cn(
                   "flex items-center rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-muted/60",
                   isActive ? "bg-muted text-foreground" : "text-muted-foreground"
@@ -142,6 +149,7 @@ function AppShellContent({ children, initialPath }: AppShellContentProps) {
                   <Link
                     key={item.href}
                     href={item.href}
+                    data-testid={`nav-${toNavTestId(item.label)}`}
                     className={cn(
                       "rounded-full px-3 py-1 text-xs font-medium",
                       isActive

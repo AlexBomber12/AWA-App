@@ -7,6 +7,8 @@ The `CI` workflow keeps feedback fast by splitting validation into three stages:
 - **test** runs in parallel per service from the discovered matrix. Each shard installs only the dependencies declared for its service (pinning to `constraints.txt`), executes `pytest -q`, and publishes a per-service coverage XML artifact.
 - **migrations** executes a full Alembic round-trip (`upgrade → downgrade → upgrade`) against a PostgreSQL 16 service using `services/api/alembic.ini`, ensuring irreversible migrations are caught early.
 
+Frontend code rides alongside these stages through the `webapp-qa` job, which installs `webapp/` dependencies on Node 20 and runs linting, Jest coverage, Storybook build, Playwright e2e, Lighthouse, and a production `next build`. The job is wired to pull requests that touch `webapp/` plus all pushes to `main`, so UI regressions are caught before merge.
+
 All jobs inherit BuildKit defaults (`DOCKER_BUILDKIT=1`, `COMPOSE_DOCKER_CLI_BUILD=1`) and use `actions/setup-python@v5` with pip caching keyed on `constraints.txt` plus each service's `requirements*.txt`. Caching keeps dependency installs fast while still respecting the global constraints lockfile.
 
 Every job produces a `debug-bundle-<job>.tar.gz` artifact even on success. The bundle captures:

@@ -16,12 +16,14 @@ jest.mock("@/components/features/roi/RoiTable", () => ({
     onPageChange,
     onSelectRow,
     isLoading,
+    onSortChange,
   }: {
     rows: Array<{ asin: string }>;
     page: number;
     onPageChange: (page: number) => void;
     onSelectRow: (asin: string, checked: boolean) => void;
     isLoading?: boolean;
+    onSortChange: (sort: string) => void;
   }) => (
     <div data-testid="mock-roi-table">
       {isLoading ? <div>Loading…</div> : null}
@@ -38,6 +40,22 @@ jest.mock("@/components/features/roi/RoiTable", () => ({
         </div>
       ))}
       <button onClick={() => onPageChange(page + 1)}>Next</button>
+      <button onClick={() => onSortChange("margin_desc")}>Sort margin</button>
+    </div>
+  ),
+}));
+
+jest.mock("@/components/features/roi/RoiFilters", () => ({
+  RoiFilters: ({
+    onApply,
+    onReset,
+  }: {
+    onApply: (filters: { vendor?: string }) => void;
+    onReset: () => void;
+  }) => (
+    <div data-testid="roi-filters">
+      <button onClick={() => onApply({ vendor: "42" })}>Apply vendor 42</button>
+      <button onClick={() => onReset()}>Reset filters</button>
     </div>
   ),
 }));
@@ -215,5 +233,17 @@ describe("RoiTableContainer integration", () => {
 
     await waitFor(() => expect(screen.getByRole("button", { name: /Bulk approve/i })).toBeDisabled());
     expect(getCalls.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("applies filters and sort changes via query params", async () => {
+    renderWithClient(<RoiHarness />);
+
+    await waitFor(() => expect(screen.getByText("ASIN-0001")).toBeInTheDocument());
+
+    await user.click(screen.getByText("Apply vendor 42"));
+    await waitFor(() => expect(getCalls.at(-1)).toContain("filter%5Bvendor%5D=42"));
+
+    await user.click(screen.getByText("Sort margin"));
+    await waitFor(() => expect(getCalls.at(-1)).toContain("sort=margin_desc"));
   });
 });

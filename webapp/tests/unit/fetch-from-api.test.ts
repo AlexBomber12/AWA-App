@@ -63,4 +63,38 @@ describe("fetchFromApi", () => {
       }
     }
   });
+
+  it("forwards method and body to the underlying request", async () => {
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: true,
+      status: 204,
+      headers: new Headers(),
+      json: jest.fn(),
+    });
+
+    await fetchFromApi("/roi-review/approve", {
+      method: "POST",
+      body: JSON.stringify({ asins: ["B00-TEST"] }),
+      headers: { "Content-Type": "application/json" },
+    });
+
+    expect(global.fetch).toHaveBeenCalledWith(expect.any(URL), expect.objectContaining({
+      method: "POST",
+      body: JSON.stringify({ asins: ["B00-TEST"] }),
+    }));
+  });
+
+  it("normalises forbidden responses", async () => {
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: false,
+      status: 403,
+      headers: new Headers({ "content-type": "application/json" }),
+      json: jest.fn().mockResolvedValue({ detail: "Forbidden." }),
+    });
+
+    await expect(fetchFromApi("/roi")).rejects.toMatchObject({
+      code: "FORBIDDEN",
+      status: 403,
+    });
+  });
 });

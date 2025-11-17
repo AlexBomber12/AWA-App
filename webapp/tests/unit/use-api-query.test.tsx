@@ -1,6 +1,7 @@
-import type { ReactElement } from "react";
+import { type ReactElement, useState } from "react";
 
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { rest } from "msw";
 import { setupServer } from "msw/node";
@@ -9,6 +10,7 @@ import { statsClient } from "@/lib/api/statsClient";
 import { useApiQuery } from "@/lib/api/useApiQuery";
 
 const server = setupServer();
+const user = userEvent.setup();
 
 beforeAll(() => server.listen());
 afterEach(() => server.resetHandlers());
@@ -83,5 +85,58 @@ describe("useApiQuery", () => {
     await waitFor(() => {
       expect(screen.getByTestId("error-message")).toHaveTextContent("nope");
     });
+  });
+
+  it("respects the enabled flag before firing the query", async () => {
+    const queryFn = jest.fn().mockResolvedValue({ alpha: 1 });
+
+    const Harness = () => {
+      const [enabled, setEnabled] = useState(false);
+      const { data } = useApiQuery({
+        queryKey: ["test", "enabled"],
+        queryFn,
+        enabled,
+      });
+
+      return (
+        <div>
+          <button onClick={() => setEnabled(true)}>Enable</button>
+          <span data-testid="status">{data ? "loaded" : "idle"}</span>
+        </div>
+      );
+    };
+
+    renderWithClient(<Harness />);
+
+    expect(queryFn).not.toHaveBeenCalled();
+    await user.click(screen.getByText("Enable"));
+    await waitFor(() => expect(queryFn).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent("loaded"));
+  });
+
+  it("invokes the onError callback when the query fails", async () => {
+    const consoleSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+    server.use(
+      rest.get("http://localhost:3000/api/bff/stats", (_req, res, ctx) =>
+        res(ctx.status(500), ctx.json({ code: "BFF_ERROR", message: "boom" }))
+      )
+    );
+    const onError = jest.fn();
+
+    const ErrorHarness = () => {
+      useApiQuery({
+        queryKey: ["dashboard", "stats", "kpi-onerror"],
+        queryFn: () => statsClient.getKpi(),
+        retry: 0,
+        onError,
+      });
+      return null;
+    };
+
+    renderWithClient(<ErrorHarness />);
+
+    await waitFor(() => expect(onError).toHaveBeenCalledTimes(1));
+    expect(consoleSpy).toHaveBeenCalled();
+    consoleSpy.mockRestore();
   });
 });

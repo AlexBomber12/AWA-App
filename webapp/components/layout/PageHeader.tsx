@@ -4,6 +4,12 @@ import { cn } from "@/lib/utils";
 
 import { Breadcrumbs, type BreadcrumbItem } from "./Breadcrumbs";
 
+const toTestId = (value: string) =>
+  value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+
 type PageHeaderProps = {
   title: string;
   description?: string;
@@ -11,6 +17,7 @@ type PageHeaderProps = {
   breadcrumbs?: BreadcrumbItem[];
   className?: string;
   children?: ReactNode;
+  testId?: string;
 };
 
 export function PageHeader({
@@ -20,9 +27,11 @@ export function PageHeader({
   breadcrumbs,
   className,
   children,
+  testId,
 }: PageHeaderProps) {
+  const resolvedTestId = testId ?? `page-header-${toTestId(title)}`;
   return (
-    <div className={cn("mx-auto w-full max-w-6xl space-y-3", className)}>
+    <div className={cn("mx-auto w-full max-w-6xl space-y-3", className)} data-testid={resolvedTestId}>
       {breadcrumbs && breadcrumbs.length > 0 ? (
         <Breadcrumbs items={breadcrumbs} className="text-xs uppercase tracking-wide" />
       ) : null}

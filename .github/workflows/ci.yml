@@ -203,11 +203,11 @@ jobs:
       marker: e2e
       python-version: '3.12'
 
-  webapp-build:
-    name: webapp-build
+  webapp-qa:
+    name: webapp-qa
     runs-on: ubuntu-latest
     needs: unit
-    timeout-minutes: 20
+    timeout-minutes: 35
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -229,13 +229,25 @@ jobs:
         working-directory: webapp
         run: npm run lint
 
-      - name: Frontend unit tests
+      - name: Frontend unit tests with coverage
         working-directory: webapp
-        run: npm run test:unit
+        run: npm run test:coverage
+
+      - name: Upload frontend coverage
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: webapp-coverage
+          path: webapp/coverage
+          if-no-files-found: ignore
 
       - name: Install Playwright browsers
         working-directory: webapp
         run: npx playwright install --with-deps
+
+      - name: Storybook build
+        working-directory: webapp
+        run: npm run storybook:build
 
       - name: Frontend e2e smoke tests
         working-directory: webapp
@@ -251,6 +263,16 @@ jobs:
           NEXT_PUBLIC_API_URL: http://localhost:8000
           NEXT_PUBLIC_APP_ENV: ci
         run: npm run build
+
+      - name: Lighthouse audit
+        working-directory: webapp
+        env:
+          LIGHTHOUSE_URL: http://127.0.0.1:3100/dashboard
+          LIGHTHOUSE_START_COMMAND: "npm run start -- --hostname 127.0.0.1 --port 3100"
+          NEXT_PUBLIC_API_URL: http://localhost:8000
+          NEXT_PUBLIC_APP_ENV: ci
+        continue-on-error: true
+        run: npm run lighthouse
 
   secret-scan:
     name: secret-scan
@@ -287,7 +309,7 @@ jobs:
       - integration
       - e2e
       - secret-scan
-      - webapp-build
+      - webapp-qa
     if: always()
     permissions:
       contents: read

@@ -59,7 +59,7 @@ CI has three logical test groups plus an e2e smoke check that rides on top of in
 3. **decide_integration_needed** — Runs `scripts/ci/should_run_integration.sh` to decide whether DB/ETL changes require the heavy jobs and exposes `run_integration=true|false` to downstream jobs.
 4. **integration** — Spins up Postgres + Redis + MinIO as services, runs `alembic upgrade head`, then `pytest -q -m integration tests/integration` with junit + coverage artifacts. Produces a `mirrorlogs` bundle on failure.
 5. **e2e-smoke** — Builds the API image with Buildx cache, launches a temp stack, and curls `/ready` until success. Logs are uploaded and mirrored if the job fails.
-6. **webapp-build** — Builds the Next.js app with Node 20.
+6. **webapp-qa** — Node 20 job that installs `webapp/` deps, runs lint + Jest coverage, builds Storybook, executes Playwright e2e + Lighthouse, and finishes with a production `next build`.
 7. **secret-scan** — Runs gitleaks when the trigger is a PR.
 8. **mirror-logs** — Collects artifacts from every job and posts a PR summary comment, keeping a consistent triage surface even when some jobs were skipped.
 
