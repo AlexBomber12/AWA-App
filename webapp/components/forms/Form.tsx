@@ -22,7 +22,7 @@ import type { ApiError } from "@/lib/api/fetchFromApi";
 import { cn } from "@/lib/utils";
 
 type FormProps<TFieldValues extends FieldValues> = {
-  schema: z.ZodType<TFieldValues>;
+  schema: z.ZodType<TFieldValues, z.ZodTypeDef, TFieldValues>;
   defaultValues: TFieldValues;
   children: (form: UseFormReturn<TFieldValues>) => ReactNode;
   onSubmit: (values: TFieldValues) => void | Promise<void>;
@@ -68,7 +68,7 @@ export function Form<TFieldValues extends FieldValues>({
   className,
 }: FormProps<TFieldValues>) {
   const form = useForm<TFieldValues>({
-    resolver: zodResolver(schema) as Resolver<TFieldValues>,
+    resolver: zodResolver(schema),
     defaultValues,
     mode: "onSubmit",
   });
