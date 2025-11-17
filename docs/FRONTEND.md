@@ -98,6 +98,24 @@ Future detail-heavy screens (returns detail, vendor detail, etc.) should follow 
 App Router page → BFF route → typed client + query hook → feature slice → story + tests. This keeps
 the UX consistent and gives Codex prompts an obvious blueprint to extend.
 
+## Table patterns: large vs. mid-size grids
+
+- **ROI review (large + virtualized).** `components/features/roi/RoiTableContainer.tsx` pairs
+  `useTableState` with `components/data/VirtualizedTable` so the ROI surface can handle thousands of
+  rows without jank. The flow is `/roi` page → `app/api/bff/roi/route.ts` → `fetchFromApi("/roi")`
+  with client-side sorting, selection, and virtualization. Copy this pattern whenever a table needs
+  bulk actions, virtual scrolling, or hundreds of visible rows.
+- **Returns (mid-size + standard DataTable).** PR-UI-7 turns `/returns` into the canonical
+  server-driven “mid-size table” example: `app/api/bff/returns/route.ts` proxies FastAPI
+  `/stats/returns` for both summary + paginated list responses, `lib/api/returnsClient.ts` exposes
+  `useReturnsListQuery`/`useReturnsStatsQuery`, and `components/features/returns/*` composes the
+  summary cards, filters (`FilterBar`), and `components/data/DataTable`. Both ROI and Returns reuse
+  `lib/tableState/useTableState`, so pagination, sort, and filters stay synced to the URL regardless
+  of table size. Future mid-size tables should mirror the Returns slice: add a BFF route, typed
+  client hook, feature components under `components/features/<feature>`, a Storybook story (see
+  `stories/features/returns/ReturnsPage.stories.tsx`), and Jest coverage
+  (`tests/unit/returns/returns-page.test.tsx`).
+
 Use the shared states as starting points:
 
 - For new tables, copy the TanStack scaffolding in `components/data/DataTable` and pair it with

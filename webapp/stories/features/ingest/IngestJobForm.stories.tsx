@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import { IngestJobForm } from "@/components/features/ingest/IngestJobForm";
 import type { IngestJobStatus } from "@/lib/api/ingestClient";
 
-import { FetchMock, type FetchMockHandler } from "./fetchMock";
+import { FetchMock, type FetchMockHandler } from "../../utils/fetchMock";
 
 const mockJob: IngestJobStatus = {
   task_id: "TASK-STORY-INGEST",
