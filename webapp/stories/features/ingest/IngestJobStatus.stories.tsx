@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import { IngestJobStatus } from "@/components/features/ingest/IngestJobStatus";
 import type { IngestJobStatus as IngestJobStatusType } from "@/lib/api/ingestClient";
 
-import { FetchMock, type FetchMockHandler } from "./fetchMock";
+import { FetchMock, type FetchMockHandler } from "../../utils/fetchMock";
 
 const pendingJob: IngestJobStatusType = {
   task_id: "TASK-PENDING",

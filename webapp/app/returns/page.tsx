@@ -1,16 +1,15 @@
-import { ReturnsQueueTable } from "@/components/features/returns/ReturnsQueueTable";
-import { PageBody, PageHeader } from "@/components/layout";
+import { Suspense } from "react";
 
-export default function ReturnsPage() {
+import { ReturnsPage as ReturnsPageContent } from "@/components/features/returns/ReturnsPage";
+
+export const metadata = {
+  title: "Returns | AWA",
+};
+
+export default function ReturnsRoutePage() {
   return (
-    <>
-      <PageHeader
-        title="Returns"
-        description="Returns triage queues surface backlog items from the SP-API feeds."
-      />
-      <PageBody>
-        <ReturnsQueueTable />
-      </PageBody>
-    </>
+    <Suspense fallback={<div className="rounded-xl border border-border bg-background/80 p-6 shadow-sm">Loading returns…</div>}>
+      <ReturnsPageContent />
+    </Suspense>
   );
 }
