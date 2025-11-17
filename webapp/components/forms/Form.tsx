@@ -22,7 +22,7 @@ import { cn } from "@/lib/utils";
 
 type FormProps<
   TFieldValues extends FieldValues,
-  TSchema extends z.ZodType<TFieldValues, unknown, TFieldValues>,
+  TSchema extends z.ZodType<TFieldValues, FieldValues, TFieldValues>,
 > = {
   schema: TSchema;
   defaultValues: TFieldValues;
@@ -61,7 +61,7 @@ const FormErrorAlert = ({ message }: { message: string }) => (
 
 export function Form<
   TFieldValues extends FieldValues,
-  TSchema extends z.ZodType<TFieldValues, unknown, TFieldValues>,
+  TSchema extends z.ZodType<TFieldValues, FieldValues, TFieldValues>,
 >({
   schema,
   defaultValues,
