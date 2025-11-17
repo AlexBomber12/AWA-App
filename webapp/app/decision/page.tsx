@@ -1,20 +1,39 @@
+import { DecisionEnginePage } from "@/components/features/decision/DecisionEnginePage";
 import { PageBody, PageHeader } from "@/components/layout";
+import { getServerAuthSession } from "@/lib/auth";
+import { can, getUserRolesFromSession } from "@/lib/permissions";
 
-export default function DecisionPage() {
-  return (
-    <>
-      <PageHeader
-        title="Decision Engine"
-        description="Decision Engine modeling and approvals connect here once the ROI/Virtual Buyer specs ship."
-      />
-      <PageBody>
-        <div className="rounded-xl border bg-background/80 p-6 shadow-sm">
-          <p className="text-muted-foreground">
-            Future iterations will plug in guardrail tuning, workflow queues, and what-if models to
-            keep operator approvals auditable.
-          </p>
-        </div>
-      </PageBody>
-    </>
-  );
+export const metadata = {
+  title: "Decision Engine | AWA",
+};
+
+export default async function DecisionRoutePage() {
+  const session = await getServerAuthSession();
+  const roles = getUserRolesFromSession(session);
+  const canViewDecision = can({ resource: "decision", action: "view", roles });
+
+  if (!canViewDecision) {
+    return (
+      <>
+        <PageHeader
+          title="Decision Engine"
+          description="Configure rules and run simulations."
+          breadcrumbs={[
+            { label: "Dashboard", href: "/dashboard" },
+            { label: "Decision Engine", active: true },
+          ]}
+        />
+        <PageBody>
+          <div className="rounded-2xl border border-border bg-muted/30 p-8 text-center">
+            <p className="text-base font-semibold">Not allowed</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Only administrators can access the Decision Engine workspace.
+            </p>
+          </div>
+        </PageBody>
+      </>
+    );
+  }
+
+  return <DecisionEnginePage />;
 }

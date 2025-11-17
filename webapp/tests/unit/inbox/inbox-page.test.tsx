@@ -1,0 +1,105 @@
+import { render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { rest } from "msw";
+import { setupServer } from "msw/node";
+import type { Session } from "next-auth";
+import { SessionProvider } from "next-auth/react";
+import type { ReactNode } from "react";
+
+import { InboxPage } from "@/components/features/inbox/InboxPage";
+import { ToastProvider } from "@/components/providers/ToastProvider";
+import type { InboxListResponse } from "@/lib/api/inboxClient";
+
+const user = userEvent.setup();
+
+const inboxResponse: InboxListResponse = {
+  items: [
+    {
+      id: "test-task-1",
+      source: "decision_engine",
+      entity: { type: "sku", id: "SKU-1", asin: "B00TEST1", label: "Test SKU 1" },
+      summary: "Review mock decision",
+      assignee: "Ops User",
+      due: new Date().toISOString(),
+      state: "open",
+      decision: {
+        decision: "update_price",
+        priority: "high",
+        deadlineAt: new Date().toISOString(),
+        defaultAction: "Increase price by 1%",
+        why: ["ROI dipped below guardrail"],
+        alternatives: ["Request discount"],
+      },
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    },
+  ],
+  total: 1,
+};
+
+const server = setupServer(
+  rest.get("http://localhost:3000/api/bff/inbox", (_req, res, ctx) => {
+    return res(ctx.json(inboxResponse));
+  })
+);
+
+beforeAll(() => server.listen());
+afterEach(() => server.resetHandlers());
+afterAll(() => server.close());
+
+const buildSession = (roles: string[]): Session => ({
+  user: {
+    name: "Test User",
+    email: "ops@example.com",
+    roles,
+  },
+  expires: "",
+});
+
+const renderWithProviders = (ui: ReactNode, roles: string[] = ["ops"]) => {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return render(
+    <SessionProvider session={buildSession(roles)}>
+      <ToastProvider>
+        <QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>
+      </ToastProvider>
+    </SessionProvider>
+  );
+};
+
+describe("InboxPage", () => {
+  it("loads tasks and opens the drawer on row click", async () => {
+    renderWithProviders(<InboxPage />);
+
+    const table = await screen.findByRole("table");
+    const summaryCell = within(table).getAllByText("Review mock decision")[0];
+    await user.click(summaryCell);
+
+    expect(screen.getByRole("heading", { name: /Review mock decision/i })).toBeInTheDocument();
+    const actionRow = screen.getByText("Action:").parentElement;
+    expect(actionRow).toHaveTextContent("update price");
+  });
+
+  it("snoozes a task optimistically and undo restores the previous state", async () => {
+    renderWithProviders(<InboxPage />);
+
+    const table = await screen.findByRole("table");
+    const summaryCell = within(table).getAllByText("Review mock decision")[0];
+    await user.click(summaryCell);
+
+    const undoButton = await screen.findByRole("button", { name: /Undo last action/i });
+    await user.click(screen.getByRole("button", { name: "Snooze" }));
+
+    await waitFor(() => {
+      expect(within(table).getAllByText(/Snoozed/).length).toBeGreaterThan(0);
+    });
+
+    await user.click(undoButton);
+    await waitFor(() => {
+      expect(within(table).getAllByText(/Open/).length).toBeGreaterThan(0);
+    });
+  });
+});

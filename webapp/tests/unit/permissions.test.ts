@@ -24,7 +24,7 @@ describe("permissions helpers", () => {
 
   it("evaluates ACL via can()", () => {
     expect(can({ resource: "dashboard", action: "view", roles: ["viewer"] })).toBe(true);
-    expect(can({ resource: "inbox", action: "view", roles: ["ops"] })).toBe(false);
+    expect(can({ resource: "inbox", action: "view", roles: ["ops"] })).toBe(true);
     expect(can({ resource: "decision", action: "configure", roles: ["admin"] })).toBe(true);
   });
 });

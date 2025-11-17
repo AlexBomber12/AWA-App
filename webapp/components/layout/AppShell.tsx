@@ -7,6 +7,7 @@ import { usePathname } from "next/navigation";
 import { type ReactNode, useMemo } from "react";
 
 import { ReactQueryProvider } from "@/components/providers/ReactQueryProvider";
+import { ToastProvider } from "@/components/providers/ToastProvider";
 import { Button } from "@/components/ui";
 import { type Action, type Resource, type Role, usePermissions } from "@/lib/permissions";
 import { cn } from "@/lib/utils";
@@ -27,7 +28,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/ingest", label: "Ingest", permission: { resource: "ingest", action: "view" } },
   { href: "/returns", label: "Returns", permission: { resource: "returns", action: "view" } },
   { href: "/inbox", label: "Inbox", permission: { resource: "inbox", action: "view" } },
-  { href: "/decision", label: "Decision", permission: { resource: "decision", action: "configure" } },
+  { href: "/decision", label: "Decision Engine", permission: { resource: "decision", action: "view" } },
   { href: "/settings", label: "Settings", permission: { resource: "settings", action: "view" } },
 ];
 
@@ -53,7 +54,9 @@ export function AppShell({ children, initialSession, initialPath }: AppShellProp
   return (
     <SessionProvider session={initialSession}>
       <ReactQueryProvider>
-        <AppShellContent initialPath={initialPath}>{children}</AppShellContent>
+        <ToastProvider>
+          <AppShellContent initialPath={initialPath}>{children}</AppShellContent>
+        </ToastProvider>
       </ReactQueryProvider>
     </SessionProvider>
   );
