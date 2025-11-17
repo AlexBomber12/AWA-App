@@ -1,20 +1,39 @@
+import { InboxPage } from "@/components/features/inbox/InboxPage";
 import { PageBody, PageHeader } from "@/components/layout";
+import { getServerAuthSession } from "@/lib/auth";
+import { can, getUserRolesFromSession } from "@/lib/permissions";
 
-export default function InboxPage() {
-  return (
-    <>
-      <PageHeader
-        title="Inbox"
-        description="The Inbox combines alerts and workflow assignments; stubs exist here until PR-UI-1C."
-      />
-      <PageBody>
-        <div className="rounded-xl border bg-background/80 p-6 shadow-sm">
-          <p className="text-muted-foreground">
-            Alert triage, SLA countdowns, and collaboration history will plug in here once the
-            workflow orchestration service lands.
-          </p>
-        </div>
-      </PageBody>
-    </>
-  );
+export const metadata = {
+  title: "Inbox | AWA",
+};
+
+export default async function InboxRoutePage() {
+  const session = await getServerAuthSession();
+  const roles = getUserRolesFromSession(session);
+  const canViewInbox = can({ resource: "inbox", action: "view", roles });
+
+  if (!canViewInbox) {
+    return (
+      <>
+        <PageHeader
+          title="Inbox"
+          description="Operator triage workspace for Decision Engine and ROI tasks."
+          breadcrumbs={[
+            { label: "Dashboard", href: "/dashboard" },
+            { label: "Inbox", active: true },
+          ]}
+        />
+        <PageBody>
+          <div className="rounded-2xl border border-border bg-muted/30 p-8 text-center">
+            <p className="text-base font-semibold">Not allowed</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Ask an administrator to grant inbox access to view Decision Engine tasks.
+            </p>
+          </div>
+        </PageBody>
+      </>
+    );
+  }
+
+  return <InboxPage />;
 }

@@ -40,11 +40,11 @@ const ACL: Record<Resource, ResourceAcl> = {
     view: ["viewer", "ops", "admin"],
   },
   inbox: {
-    view: ["admin"],
-    configure: ["admin"],
+    view: ["ops", "admin"],
+    configure: ["ops", "admin"],
   },
   decision: {
-    view: ["ops", "admin"],
+    view: ["admin"],
     configure: ["admin"],
   },
   settings: {
