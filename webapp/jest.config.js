@@ -14,12 +14,15 @@ const customJestConfig = {
   testMatch: ["<rootDir>/tests/unit/**/*.test.{ts,tsx}"],
   modulePathIgnorePatterns: ["<rootDir>/node_modules_old"],
   collectCoverageFrom: [
-    "<rootDir>/app/**/*.{ts,tsx}",
     "<rootDir>/components/**/*.{ts,tsx}",
-    "<rootDir>/lib/**/*.{ts,tsx}",
+    "<rootDir>/lib/api/**/*.{ts,tsx}",
+    "<rootDir>/lib/permissions.ts",
+    "<rootDir>/lib/tableState/**/*.{ts,tsx}",
+    "<rootDir>/lib/utils.ts",
     "!<rootDir>/**/index.{ts,tsx}",
     "!<rootDir>/**/stories/**",
     "!<rootDir>/**/types.generated.ts",
+    "!<rootDir>/**/__tests__/**",
   ],
   coverageDirectory: "<rootDir>/coverage",
   coverageThreshold: {
