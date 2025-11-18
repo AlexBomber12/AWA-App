@@ -4,7 +4,7 @@ import React from "react";
 
 import { IngestPage } from "@/components/features/ingest/IngestPage";
 import type { IngestJobStatus as IngestJobStatusType } from "@/lib/api/ingestClient";
-import { usePermissions } from "@/lib/permissions";
+import { usePermissions } from "@/lib/permissions/client";
 
 jest.mock("@/components/features/ingest/IngestJobForm", () => ({
   IngestJobForm: ({ onJobStarted, disabled }: { onJobStarted?: (job: IngestJobStatusType) => void; disabled?: boolean }) => (
@@ -20,7 +20,7 @@ jest.mock("@/components/features/ingest/IngestJobStatus", () => ({
   IngestJobStatus: ({ taskId }: { taskId: string }) => <div data-testid="job-card">Job {taskId}</div>,
 }));
 
-jest.mock("@/lib/permissions", () => ({
+jest.mock("@/lib/permissions/client", () => ({
   usePermissions: jest.fn(),
 }));
 

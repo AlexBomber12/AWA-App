@@ -9,7 +9,14 @@ import { type ReactNode, useMemo } from "react";
 import { ReactQueryProvider } from "@/components/providers/ReactQueryProvider";
 import { ToastProvider } from "@/components/providers/ToastProvider";
 import { Button } from "@/components/ui";
-import { type Action, type Resource, type Role, usePermissions } from "@/lib/permissions";
+import {
+  type Action,
+  type Resource,
+  type Role,
+  PermissionsProvider,
+  usePermissions,
+} from "@/lib/permissions/client";
+import { getUserRolesFromSession } from "@/lib/permissions/server";
 import { cn } from "@/lib/utils";
 
 type NavItem = {
@@ -20,6 +27,12 @@ type NavItem = {
     action: Action;
   };
 };
+
+const toNavTestId = (label: string) =>
+  label
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
 
 const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", permission: { resource: "dashboard", action: "view" } },
@@ -51,12 +64,16 @@ type AppShellProps = {
 };
 
 export function AppShell({ children, initialSession, initialPath }: AppShellProps) {
+  const initialRoles = useMemo(() => getUserRolesFromSession(initialSession ?? null), [initialSession]);
+
   return (
     <SessionProvider session={initialSession}>
       <ReactQueryProvider>
-        <ToastProvider>
-          <AppShellContent initialPath={initialPath}>{children}</AppShellContent>
-        </ToastProvider>
+        <PermissionsProvider roles={initialRoles}>
+          <ToastProvider>
+            <AppShellContent initialPath={initialPath}>{children}</AppShellContent>
+          </ToastProvider>
+        </PermissionsProvider>
       </ReactQueryProvider>
     </SessionProvider>
   );
@@ -105,6 +122,7 @@ function AppShellContent({ children, initialPath }: AppShellContentProps) {
               <Link
                 key={item.href}
                 href={item.href}
+                data-testid={`nav-${toNavTestId(item.label)}`}
                 className={cn(
                   "flex items-center rounded-md px-3 py-2 text-sm font-medium transition-colors hover:bg-muted/60",
                   isActive ? "bg-muted text-foreground" : "text-muted-foreground"
@@ -142,6 +160,7 @@ function AppShellContent({ children, initialPath }: AppShellContentProps) {
                   <Link
                     key={item.href}
                     href={item.href}
+                    data-testid={`nav-${toNavTestId(item.label)}`}
                     className={cn(
                       "rounded-full px-3 py-1 text-xs font-medium",
                       isActive

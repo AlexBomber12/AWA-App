@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 import React from "react";
 
 import { RoiPage } from "@/components/features/roi/RoiPage";
-import { usePermissions } from "@/lib/permissions";
+import { usePermissions } from "@/lib/permissions/client";
 
 jest.mock("@/components/features/roi/RoiTableContainer", () => ({
   RoiTableContainer: ({ canApprove, onActionsChange }: { canApprove: boolean; onActionsChange?: (node: React.ReactNode | null) => void }) => {
@@ -13,7 +13,7 @@ jest.mock("@/components/features/roi/RoiTableContainer", () => ({
   },
 }));
 
-jest.mock("@/lib/permissions", () => ({
+jest.mock("@/lib/permissions/client", () => ({
   usePermissions: jest.fn(),
 }));
 

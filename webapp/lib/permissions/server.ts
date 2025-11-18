@@ -1,7 +1,4 @@
-import { useCallback, useMemo } from "react";
 import type { Session } from "next-auth";
-import { useSession } from "next-auth/react";
-import type { ReactNode } from "react";
 
 export type Role = "viewer" | "ops" | "admin";
 export type Resource =
@@ -88,55 +85,4 @@ export function can({ resource, action, roles }: CanCheck): boolean {
   }
 
   return roles.some((role) => allowedRoles.includes(role));
-}
-
-type CanWithOptionalRoles = Omit<CanCheck, "roles"> & { roles?: Role[] };
-
-type UsePermissionsResult = {
-  roles: Role[];
-  can: (params: CanWithOptionalRoles) => boolean;
-  hasRole: (role: Role, rolesOverride?: Role[]) => boolean;
-};
-
-export function usePermissions(): UsePermissionsResult {
-  const { data: session } = useSession();
-
-  const roles = useMemo(() => getUserRolesFromSession(session ?? null), [session]);
-
-  const canWithRoles = useCallback(
-    ({ roles: overrideRoles, ...rest }: CanWithOptionalRoles) => {
-      const targetRoles = overrideRoles ?? roles;
-      return can({
-        ...rest,
-        roles: targetRoles,
-      });
-    },
-    [roles]
-  );
-
-  const hasRoleWithOverride = useCallback(
-    (role: Role, rolesOverride?: Role[]) => hasRole(role, rolesOverride ?? roles),
-    [roles]
-  );
-
-  return {
-    roles,
-    can: canWithRoles,
-    hasRole: hasRoleWithOverride,
-  };
-}
-
-type PermissionGuardProps = {
-  resource: Resource;
-  action: Action;
-  fallback?: ReactNode;
-  children: ReactNode;
-};
-
-// Pattern: wrap protected buttons/sections so it is easy to reuse in future work.
-export function PermissionGuard({ resource, action, fallback = null, children }: PermissionGuardProps) {
-  const { can } = usePermissions();
-  const isAllowed = can({ resource, action });
-
-  return (isAllowed ? children : fallback) ?? null;
 }

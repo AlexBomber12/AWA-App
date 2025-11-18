@@ -1,9 +1,10 @@
+import { cookies } from "next/headers";
 import { getServerSession, type NextAuthOptions } from "next-auth";
-import type { Account } from "next-auth";
+import type { Account, Session } from "next-auth";
 import KeycloakProvider, { type KeycloakProfile } from "next-auth/providers/keycloak";
 import type { JWT } from "next-auth/jwt";
 
-import { KNOWN_ROLES, type Role } from "@/lib/permissions";
+import { KNOWN_ROLES, type Role } from "@/lib/permissions/server";
 
 type KeycloakAccessProfile = KeycloakProfile & {
   roles?: string[];
@@ -35,6 +36,7 @@ type KeycloakRefreshResponse = {
 };
 
 const ACCESS_TOKEN_EXPIRY_BUFFER_MS = 60_000;
+const TEST_SESSION_COOKIE = "webapp-test-session";
 
 let cachedAuthOptions: NextAuthOptions | null = null;
 
@@ -217,7 +219,45 @@ export const getAuthOptions = (): NextAuthOptions | null => {
   return cachedAuthOptions;
 };
 
+const buildTestSession = (): (Session & { accessToken?: string }) | null => {
+  if (process.env.NODE_ENV === "production") {
+    return null;
+  }
+
+  try {
+    const cookieStore = cookies();
+    const rawCookie = cookieStore.get(TEST_SESSION_COOKIE)?.value;
+    if (!rawCookie) {
+      return null;
+    }
+    const parsed = JSON.parse(rawCookie) as {
+      roles?: string[];
+      name?: string;
+      email?: string;
+      accessToken?: string;
+    };
+    const roles = normalizeRoles(parsed.roles ?? ["admin", "ops", "viewer"]);
+    return {
+      user: {
+        name: parsed.name ?? "QA Test User",
+        email: parsed.email ?? "qa@example.com",
+        roles: roles.length ? roles : ["viewer"],
+      },
+      accessToken: parsed.accessToken ?? "test-access-token",
+      expires: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+    } as Session & { accessToken?: string };
+  } catch (error) {
+    console.warn("Invalid test session cookie payload", error);
+    return null;
+  }
+};
+
 export const getServerAuthSession = async () => {
+  const testSession = buildTestSession();
+  if (testSession) {
+    return testSession;
+  }
+
   const options = getAuthOptions();
   if (!options) {
     return null;

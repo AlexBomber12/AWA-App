@@ -199,6 +199,13 @@ The repo uses **npm** (see `package-lock.json`). Run these from `webapp/`:
 | `npm run storybook` | Start the component library sandbox with layout/ui/data/forms stories. |
 | `npm run build` | Production build used by docker-compose and CI. |
 
+## QA and testing for webapp
+- **Unit + integration tests:** Live in `webapp/tests/unit/**`. They exercise RBAC helpers, API abstractions, table state syncing, ROI containers, and the feature pages themselves. Run them locally with `npm run test:unit` or `npm run test:coverage` (which enables Jest coverage for `app/`, `components/`, and `lib/` with thresholds at ~60% lines/branches).
+- **Storybook:** Component sandboxes are under `webapp/stories/**`, covering layout primitives plus feature slices such as ROI, SKU, Returns, Inbox, and Ingest. Use `npm run storybook` for interactive development and `npm run storybook:build` in CI to ensure new stories compile.
+- **E2E:** Playwright specs live in `webapp/tests/e2e`. The `navigation-flow.spec.ts` script logs in via `/test-login`, walks Dashboard → ROI → SKU → Ingest → Returns → Inbox, and verifies logout. Run `npm run test:e2e`; the Playwright config launches the Next.js dev server automatically.
+- **Lighthouse + accessibility:** `npm run lighthouse` executes `scripts/run-lighthouse.mjs`, optionally bootstrapping a local dev server (`LIGHTHOUSE_SKIP_SERVER=1` skips startup) and failing when the dashboard performance drops below 0.6 or accessibility below 0.8.
+- **Combined QA loop:** `npm run qa` chains linting, unit tests with coverage, Storybook build, Playwright, and Lighthouse so feature PRs can reproduce CI locally.
+
 CI executes `lint`, `test:unit`, `test:e2e`, and `build` in the `webapp-build` job. Local docker
 runs use `make webapp-up` which builds the Next.js image and exposes it on port `3000`.
 

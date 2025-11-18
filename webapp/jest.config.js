@@ -13,6 +13,26 @@ const customJestConfig = {
   },
   testMatch: ["<rootDir>/tests/unit/**/*.test.{ts,tsx}"],
   modulePathIgnorePatterns: ["<rootDir>/node_modules_old"],
+  collectCoverageFrom: [
+    "<rootDir>/components/**/*.{ts,tsx}",
+    "<rootDir>/lib/api/**/*.{ts,tsx}",
+    "<rootDir>/lib/permissions.ts",
+    "<rootDir>/lib/tableState/**/*.{ts,tsx}",
+    "<rootDir>/lib/utils.ts",
+    "!<rootDir>/**/index.{ts,tsx}",
+    "!<rootDir>/**/stories/**",
+    "!<rootDir>/**/types.generated.ts",
+    "!<rootDir>/**/__tests__/**",
+  ],
+  coverageDirectory: "<rootDir>/coverage",
+  coverageThreshold: {
+    global: {
+      branches: 55,
+      functions: 60,
+      lines: 60,
+      statements: 60,
+    },
+  },
 };
 
 module.exports = createJestConfig(customJestConfig);

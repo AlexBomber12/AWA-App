@@ -4,7 +4,7 @@ import { useMemo } from "react";
 
 import { Button, Drawer, DrawerContent, DrawerDescription, DrawerFooter, DrawerHeader, DrawerTitle } from "@/components/ui";
 import type { Task } from "@/lib/api/inboxClient";
-import { PermissionGuard } from "@/lib/permissions";
+import { PermissionGuard } from "@/lib/permissions/client";
 import { cn } from "@/lib/utils";
 
 import {

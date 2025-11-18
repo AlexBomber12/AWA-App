@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 import type { Session } from "next-auth";
 import { useSession } from "next-auth/react";
 
-import { PermissionGuard } from "@/lib/permissions";
+import { PermissionGuard } from "@/lib/permissions/client";
 
 jest.mock("next-auth/react", () => ({
   useSession: jest.fn(),
@@ -55,5 +55,20 @@ describe("PermissionGuard", () => {
     );
 
     expect(screen.getByText("No access")).toBeInTheDocument();
+  });
+
+  it("renders nothing when access is denied and no fallback is provided", () => {
+    mockUseSession.mockReturnValueOnce({
+      data: buildSession(["viewer"]),
+      status: "authenticated",
+    });
+
+    const { container } = render(
+      <PermissionGuard resource="inbox" action="view">
+        <span>Hidden</span>
+      </PermissionGuard>
+    );
+
+    expect(container).toBeEmptyDOMElement();
   });
 });

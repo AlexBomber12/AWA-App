@@ -3,7 +3,7 @@
 import { Suspense, type ReactNode, useCallback, useState } from "react";
 
 import { PageBody, PageHeader } from "@/components/layout";
-import { usePermissions } from "@/lib/permissions";
+import { usePermissions } from "@/lib/permissions/client";
 
 import { RoiTableContainer } from "./RoiTableContainer";
 

@@ -17,7 +17,7 @@ import {
   useRunSimulationMutation,
   useSimulationScenariosQuery,
 } from "@/lib/api/decisionClient";
-import { usePermissions } from "@/lib/permissions";
+import { usePermissions } from "@/lib/permissions/client";
 
 import { useActionFlow } from "@/components/hooks/useActionFlow";
 import { useToast } from "@/components/providers/ToastProvider";

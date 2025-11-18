@@ -3,6 +3,8 @@ import type { Meta, StoryObj } from "@storybook/react";
 import { SkuPage } from "@/components/features/sku/SkuPage";
 import type { SkuDetail } from "@/lib/api/skuClient";
 
+import { FetchMock, type FetchMockHandler } from "../../utils/fetchMock";
+
 const mockDetail: SkuDetail = {
   asin: "B00-STORY-001",
   title: "Storybook Prime Hydration Pack",
@@ -46,5 +48,50 @@ export const SparseHistory: Story = {
       roi: 18.2,
       fees: 15.4,
     },
+  },
+};
+
+export const Loading: Story = {
+  args: {
+    initialData: undefined,
+    fetchEnabled: false,
+  },
+};
+
+export const MissingAsin: Story = {
+  args: {
+    asin: "",
+    fetchEnabled: false,
+  },
+};
+
+export const ErrorState: Story = {
+  args: {
+    initialData: undefined,
+    fetchEnabled: true,
+  },
+  render: (args) => {
+    const handlers: FetchMockHandler[] = [
+      {
+        predicate: ({ url }) => url.includes("/api/bff/sku"),
+        response: () =>
+          new Response(
+            JSON.stringify({
+              code: "BFF_ERROR",
+              message: "Simulated failure fetching SKU detail.",
+            }),
+            {
+              status: 500,
+              headers: { "Content-Type": "application/json" },
+            }
+          ),
+      },
+    ];
+
+    return (
+      <FetchMock handlers={handlers}>
+        <SkuPage {...args} />
+      </FetchMock>
+    );
   },
 };
