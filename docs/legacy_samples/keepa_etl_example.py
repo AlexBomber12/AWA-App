@@ -7,9 +7,13 @@ imported by services; it is purely a historical reference.
 
 from __future__ import annotations
 
+import importlib
 import json
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    pass
 
 
 def run_etl(api_key: str, minio_client: Any, etl_log: Any, tmp_path: Path) -> Path:
@@ -20,9 +24,8 @@ def run_etl(api_key: str, minio_client: Any, etl_log: Any, tmp_path: Path) -> Pa
     snippet as reference material rather than callable code.
     """
 
-    import keepa  # type: ignore import-not-found
-
-    keepa_client = keepa.Keepa(api_key)
+    keepa_module = importlib.import_module("keepa")
+    keepa_client = keepa_module.Keepa(api_key)
     data = keepa_client.product_finder({"domainId": 1})
     file_path = tmp_path / "data.json"
     with file_path.open("w") as handle:
