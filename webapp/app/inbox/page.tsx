@@ -1,7 +1,7 @@
 import { InboxPage } from "@/components/features/inbox/InboxPage";
 import { PageBody, PageHeader } from "@/components/layout";
 import { getServerAuthSession } from "@/lib/auth";
-import { can, getUserRolesFromSession } from "@/lib/permissions";
+import { can, getUserRolesFromSession } from "@/lib/permissions/server";
 
 export const metadata = {
   title: "Inbox | AWA",

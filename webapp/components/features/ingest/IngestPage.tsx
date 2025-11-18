@@ -6,7 +6,7 @@ import { EmptyState } from "@/components/data";
 import { IngestJobForm } from "@/components/features/ingest/IngestJobForm";
 import { IngestJobStatus } from "@/components/features/ingest/IngestJobStatus";
 import type { IngestJobStatus as IngestJobStatusType } from "@/lib/api/ingestClient";
-import { usePermissions } from "@/lib/permissions";
+import { usePermissions } from "@/lib/permissions/client";
 
 type SessionJob = {
   taskId: string;

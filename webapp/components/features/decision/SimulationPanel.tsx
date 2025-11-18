@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 
 import type { Rule, SimulationScenario } from "@/lib/api/decisionClient";
-import { PermissionGuard } from "@/lib/permissions";
+import { PermissionGuard } from "@/lib/permissions/client";
 import { cn } from "@/lib/utils";
 
 import { Button, Input } from "@/components/ui";

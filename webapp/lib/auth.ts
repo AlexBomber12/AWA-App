@@ -4,7 +4,7 @@ import type { Account, Session } from "next-auth";
 import KeycloakProvider, { type KeycloakProfile } from "next-auth/providers/keycloak";
 import type { JWT } from "next-auth/jwt";
 
-import { KNOWN_ROLES, type Role } from "@/lib/permissions";
+import { KNOWN_ROLES, type Role } from "@/lib/permissions/server";
 
 type KeycloakAccessProfile = KeycloakProfile & {
   roles?: string[];

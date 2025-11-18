@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 
 import { Button } from "@/components/ui";
-import type { Role } from "@/lib/permissions";
+import type { Role } from "@/lib/permissions/server";
 
 const ROLE_PRESETS: Record<"admin" | "ops" | "viewer", Role[]> = {
   admin: ["viewer", "ops", "admin"],

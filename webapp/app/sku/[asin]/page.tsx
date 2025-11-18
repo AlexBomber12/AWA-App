@@ -1,7 +1,7 @@
 import { SkuPage } from "@/components/features/sku/SkuPage";
 import { PageBody, PageHeader, type BreadcrumbItem } from "@/components/layout";
 import { getServerAuthSession } from "@/lib/auth";
-import { can, getUserRolesFromSession } from "@/lib/permissions";
+import { can, getUserRolesFromSession } from "@/lib/permissions/server";
 
 const normalizeSource = (value?: string | string[] | null): "roi" | "returns" | null => {
   if (typeof value !== "string") {

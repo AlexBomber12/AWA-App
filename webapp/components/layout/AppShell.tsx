@@ -9,7 +9,14 @@ import { type ReactNode, useMemo } from "react";
 import { ReactQueryProvider } from "@/components/providers/ReactQueryProvider";
 import { ToastProvider } from "@/components/providers/ToastProvider";
 import { Button } from "@/components/ui";
-import { type Action, type Resource, type Role, usePermissions } from "@/lib/permissions";
+import {
+  type Action,
+  type Resource,
+  type Role,
+  PermissionsProvider,
+  usePermissions,
+} from "@/lib/permissions/client";
+import { getUserRolesFromSession } from "@/lib/permissions/server";
 import { cn } from "@/lib/utils";
 
 type NavItem = {
@@ -57,12 +64,16 @@ type AppShellProps = {
 };
 
 export function AppShell({ children, initialSession, initialPath }: AppShellProps) {
+  const initialRoles = useMemo(() => getUserRolesFromSession(initialSession ?? null), [initialSession]);
+
   return (
     <SessionProvider session={initialSession}>
       <ReactQueryProvider>
-        <ToastProvider>
-          <AppShellContent initialPath={initialPath}>{children}</AppShellContent>
-        </ToastProvider>
+        <PermissionsProvider roles={initialRoles}>
+          <ToastProvider>
+            <AppShellContent initialPath={initialPath}>{children}</AppShellContent>
+          </ToastProvider>
+        </PermissionsProvider>
       </ReactQueryProvider>
     </SessionProvider>
   );

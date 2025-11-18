@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 import type { Session } from "next-auth";
 import { useSession } from "next-auth/react";
 
-import { PermissionGuard } from "@/lib/permissions";
+import { PermissionGuard } from "@/lib/permissions/client";
 
 jest.mock("next-auth/react", () => ({
   useSession: jest.fn(),

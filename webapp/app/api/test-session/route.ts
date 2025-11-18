@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 
-import { KNOWN_ROLES, type Role } from "@/lib/permissions";
+import { KNOWN_ROLES, type Role } from "@/lib/permissions/server";
 
 const COOKIE_NAME = "webapp-test-session";
 

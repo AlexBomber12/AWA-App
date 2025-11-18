@@ -1,6 +1,6 @@
 import type { Session } from "next-auth";
 
-import { can, getUserRolesFromSession, hasRole } from "@/lib/permissions";
+import { can, getUserRolesFromSession, hasRole } from "@/lib/permissions/server";
 
 const buildSession = (roles: string[]): Session => ({
   user: {
