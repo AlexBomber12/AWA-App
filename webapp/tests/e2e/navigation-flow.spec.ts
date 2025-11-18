@@ -151,7 +151,7 @@ test("navigates through the primary operator surfaces", async ({ page }) => {
 
   await expect(page.getByTestId("page-header-dashboard")).toBeVisible();
 
-  await page.getByTestId("nav-roi").click();
+  await page.getByTestId("nav-roi").first().click();
   await expect(page.getByTestId("page-header-roi-review")).toBeVisible();
   await expect(page.getByRole("button", { name: "B00-NAV-001" })).toBeVisible();
 
@@ -161,13 +161,13 @@ test("navigates through the primary operator surfaces", async ({ page }) => {
   await page.goBack();
   await expect(page.getByTestId("page-header-roi-review")).toBeVisible();
 
-  await page.getByTestId("nav-ingest").click();
+  await page.getByTestId("nav-ingest").first().click();
   await expect(page.getByTestId("page-header-ingest")).toBeVisible();
 
-  await page.getByTestId("nav-returns").click();
+  await page.getByTestId("nav-returns").first().click();
   await expect(page.getByTestId("page-header-returns")).toBeVisible();
 
-  await page.getByTestId("nav-inbox").click();
+  await page.getByTestId("nav-inbox").first().click();
   await expect(page.getByTestId("page-header-inbox")).toBeVisible();
   await expect(page.getByText(/Review ROI thresholds/)).toBeVisible();
 
