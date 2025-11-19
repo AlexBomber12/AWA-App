@@ -99,7 +99,7 @@ components in `packages/awa_common` to deliver repeatable pipelines that survive
 ## Adding a Connector (Checklist)
 
 1. Decide on a stable `source` name and include it in alerts/metrics.
-2. Fetch data with `awa_common.etl.http.request` or `.download`; avoid raw `httpx` calls.
+2. Fetch data with `awa_common.http_client.HTTPClient` / `AsyncHTTPClient`; avoid raw `httpx` calls.
 3. Build deterministic idempotency keys and metadata with `compute_idempotency_key` /
    `build_payload_meta`.
 4. Wrap database writes in `process_once` and emit `record_etl_run`, `record_etl_batch`, and

@@ -20,7 +20,9 @@ Fetches product metrics from the Keepa API. Results are written to a CSV object 
 Downloads FBA fee data from Helium10. It reads `HELIUM_API_KEY` and `DATABASE_URL` to populate the `fees_raw` table. When run with `ENABLE_LIVE=1` it queries the live API, otherwise it loads fixture data for tests.
 
 ### sp_fees_ingestor
-Retrieves fee estimates from Amazon’s Selling Partner API for a list of SKUs. Required variables are `SP_REFRESH_TOKEN`, `SP_CLIENT_ID`, `SP_CLIENT_SECRET`, `REGION`, and `DATABASE_URL`.
+Retrieves fee estimates from Amazon’s Selling Partner API for a list of SKUs. Required variables are
+`SP_REFRESH_TOKEN`, `SP_CLIENT_ID`, `SP_CLIENT_SECRET`, `REGION`, `DATABASE_URL`, and optionally
+`SP_API_BASE_URL` when pointing at a mock endpoint.
 
 ### sku_scoring_engine
 Processes SKU information each night and updates the `scores` table with performance indicators used by other services.

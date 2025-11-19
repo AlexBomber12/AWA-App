@@ -50,6 +50,12 @@ debug incidents.
   independently from generic viewer traffic.
 - Labels always include `(service, env, version)` as a base.
 
+### External HTTP clients
+
+- `external_http_requests_total{integration,method,outcome,service,env,version}` tracks outbound outcomes.
+- `external_http_request_duration_seconds_bucket{integration,method,service,env,version}` records latency.
+- `external_http_retries_total{integration,method,reason,service,env,version}` counts retries grouped by reason.
+
 ### Authentication
 
 - `oidc_jwks_refresh_total{issuer,service,env,version}` increments whenever the async JWKS cache

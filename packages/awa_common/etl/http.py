@@ -1,33 +1,51 @@
+"""Deprecated ETL HTTP helpers. Use awa_common.http_client instead."""
+
 from __future__ import annotations
 
 import contextlib
-import time
+import warnings
 from collections.abc import Callable
-from datetime import UTC, datetime
-from email.utils import parsedate_to_datetime
 from pathlib import Path
 from typing import Any
 
 import httpx
-import structlog
-from tenacity import (
-    RetryCallState,
-    RetryError,
-    Retrying,
-    retry_if_exception_type,
-    stop_after_attempt,
-    stop_after_delay,
-    wait_random_exponential,
+
+from awa_common import metrics as _metrics
+from awa_common.http_client import (
+    HTTPClient,
+    HTTPClientError,
+    RetryableStatusError,
+    _RetryWait as _CoreRetryWait,
 )
 
-from awa_common import metrics
-from awa_common.settings import settings as SETTINGS
-
-logger = structlog.get_logger(__name__)
+_CLIENTS: dict[str, HTTPClient] = {}
+metrics = _metrics
 
 
-class ETLHTTPError(Exception):
-    """Wrap HTTP client errors with ETL context."""
+def _retry_reason_label(exc: Exception | None) -> str:
+    if isinstance(exc, RetryableStatusError) and exc.response is not None:
+        return str(exc.response.status_code)
+    if isinstance(exc, httpx.HTTPStatusError) and exc.response is not None:
+        return str(exc.response.status_code)
+    if isinstance(exc, httpx.TimeoutException):
+        return "timeout"
+    if exc is None:
+        return "unknown"
+    return exc.__class__.__name__
+
+
+class _ETLHTTPClient(HTTPClient):
+    def _log_retry(self, retry_state, *, method: str, url: str) -> None:
+        super()._log_retry(retry_state, method=method, url=url)
+        source = getattr(self, "integration", None)
+        exc = retry_state.outcome.exception() if retry_state.outcome and retry_state.outcome.failed else None
+        reason = _retry_reason_label(exc)
+        if source:
+            metrics.record_etl_retry(source, reason)
+
+
+class ETLHTTPError(HTTPClientError):
+    """Deprecated ETL HTTP exception preserving legacy attributes."""
 
     def __init__(
         self,
@@ -36,10 +54,11 @@ class ETLHTTPError(Exception):
         source: str | None,
         url: str,
         task_id: str | None,
-        status_code: int | None = None,
-        request_id: str | None = None,
+        status_code: int | None,
+        request_id: str | None,
+        original: Exception | None = None,
     ) -> None:
-        super().__init__(message)
+        super().__init__(message, original=original)
         self.source = source
         self.url = url
         self.task_id = task_id
@@ -47,94 +66,20 @@ class ETLHTTPError(Exception):
         self.request_id = request_id
 
 
-class RetryableHTTPStatusError(Exception):
-    """Internal exception used to trigger retries on retryable status codes."""
-
-    def __init__(self, response: httpx.Response, retry_after: float | None = None) -> None:
-        super().__init__(f"HTTP {response.status_code}")
-        self.response = response
-        self.retry_after = retry_after
-
-
-def _default_timeout() -> httpx.Timeout:
-    return httpx.Timeout(
-        timeout=SETTINGS.ETL_TOTAL_TIMEOUT_S,
-        connect=SETTINGS.ETL_CONNECT_TIMEOUT_S,
-        read=SETTINGS.ETL_READ_TIMEOUT_S,
-        write=SETTINGS.ETL_READ_TIMEOUT_S,
-        pool=SETTINGS.ETL_CONNECT_TIMEOUT_S,
-    )
+def _client_for(source: str | None) -> HTTPClient:
+    key = (source or "etl_http").strip().lower() or "etl_http"
+    client = _CLIENTS.get(key)
+    if client is None:
+        client = _ETLHTTPClient(integration=key)
+        _CLIENTS[key] = client
+    return client
 
 
-def _parse_retry_after(value: str | None) -> float | None:
-    if not value:
-        return None
-    value = value.strip()
-    if not value:
-        return None
-    if value.isdigit():
-        try:
-            seconds = float(value)
-        except ValueError:
-            return None
-        return max(0.0, seconds)
-    with contextlib.suppress((TypeError, ValueError)):
-        dt = parsedate_to_datetime(value)
-        if dt:
-            now = datetime.now(UTC)
-            if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=UTC)
-            return max(0.0, (dt - now).total_seconds())
-    return None
+def _run_with_retries(func: Callable[[], httpx.Response], **kwargs: Any) -> httpx.Response:
+    return func()
 
 
-def _before_sleep(
-    retry_state: RetryCallState,
-    *,
-    source: str | None,
-    url: str,
-    task_id: str | None,
-    request_id: str | None,
-) -> None:
-    sleep = 0.0
-    status_code: int | None = None
-    metric_code: str | None = None
-    if retry_state.outcome is not None:
-        if retry_state.outcome.failed:
-            exc = retry_state.outcome.exception()
-            if isinstance(exc, RetryableHTTPStatusError):
-                status_code = exc.response.status_code
-                metric_code = str(status_code)
-            elif isinstance(exc, httpx.HTTPStatusError):
-                status_code = exc.response.status_code if exc.response is not None else None
-                metric_code = str(status_code) if status_code is not None else exc.__class__.__name__
-            else:
-                metric_code = exc.__class__.__name__
-        else:
-            result = retry_state.outcome.result()
-            if isinstance(result, httpx.Response):
-                status_code = result.status_code
-                metric_code = str(status_code)
-    if retry_state.next_action is not None:
-        sleep = retry_state.next_action.sleep
-    logger.warning(
-        "etl_http_retry",
-        attempt=retry_state.attempt_number,
-        sleep=float(sleep),
-        status_code=status_code,
-        source=source,
-        url=url,
-        task_id=task_id,
-        request_id=request_id,
-        service=SETTINGS.SERVICE_NAME,
-        env=SETTINGS.APP_ENV,
-        version=SETTINGS.APP_VERSION,
-    )
-    if source and metric_code:
-        metrics.record_etl_retry(source, metric_code)
-
-
-def _wrap_with_context(
+def _wrap_exception(
     exc: Exception,
     *,
     source: str | None,
@@ -142,71 +87,19 @@ def _wrap_with_context(
     task_id: str | None,
     request_id: str | None,
 ) -> ETLHTTPError:
-    status: int | None = None
-    if isinstance(exc, httpx.HTTPStatusError):
-        status = exc.response.status_code
-    elif isinstance(exc, RetryableHTTPStatusError):
-        status = exc.response.status_code
+    status_code: int | None = None
+    if isinstance(exc, httpx.HTTPStatusError) and exc.response is not None:
+        status_code = exc.response.status_code
     message = f"Failed to fetch {url}"
     return ETLHTTPError(
         message,
         source=source,
         url=url,
         task_id=task_id,
-        status_code=status,
+        status_code=status_code,
         request_id=request_id,
+        original=exc,
     )
-
-
-def _run_with_retries(
-    func: Callable[[], httpx.Response],
-    *,
-    source: str | None,
-    url: str,
-    task_id: str | None,
-    request_id: str | None,
-    total_timeout: float,
-) -> httpx.Response:
-    retrying = Retrying(
-        stop=stop_after_attempt(SETTINGS.ETL_MAX_RETRIES) | stop_after_delay(total_timeout),
-        wait=_RetryWait(multiplier=SETTINGS.ETL_BACKOFF_BASE_S, max=SETTINGS.ETL_BACKOFF_MAX_S),
-        retry=retry_if_exception_type((httpx.RequestError, RetryableHTTPStatusError)),
-        reraise=True,
-        before_sleep=lambda state: _before_sleep(
-            state,
-            source=source,
-            url=url,
-            task_id=task_id,
-            request_id=request_id,
-        ),
-    )
-    try:
-        return retrying(func)
-    except RetryError as exc:
-        outcome = exc.last_attempt.outcome if exc.last_attempt is not None else None
-        if outcome is not None:
-            if outcome.failed:
-                inner_exc = outcome.exception()
-                raise _wrap_with_context(
-                    inner_exc, source=source, url=url, task_id=task_id, request_id=request_id
-                ) from exc
-            result = outcome.result()
-            if isinstance(result, httpx.Response):
-                raise _wrap_with_context(
-                    RetryableHTTPStatusError(result),
-                    source=source,
-                    url=url,
-                    task_id=task_id,
-                    request_id=request_id,
-                ) from exc
-        raise _wrap_with_context(exc, source=source, url=url, task_id=task_id, request_id=request_id) from exc
-    except Exception as exc:  # pragma: no cover - safeguard
-        raise _wrap_with_context(exc, source=source, url=url, task_id=task_id, request_id=request_id) from exc
-
-
-def _prepare_client(timeout: Any) -> httpx.Client:
-    resolved_timeout = timeout or _default_timeout()
-    return httpx.Client(timeout=resolved_timeout)
 
 
 def request(
@@ -223,50 +116,26 @@ def request(
     task_id: str | None = None,
     request_id: str | None = None,
 ) -> httpx.Response:
-    """Perform an HTTP request with retries and structured logging."""
-    target = source or "unknown"
-    method_name = method.upper()
-
-    def _do_request() -> httpx.Response:
-        with _prepare_client(timeout) as client:
-            response: httpx.Response | None = None
-            start = time.perf_counter()
-            try:
-                response = client.request(
-                    method,
-                    url,
-                    params=params,
-                    headers=headers,
-                    json=json,
-                    data=data,
-                    files=files,
-                )
-                if response.status_code in SETTINGS.ETL_RETRY_STATUS_CODES:
-                    retry_after = _parse_retry_after(response.headers.get("Retry-After"))
-                    response.close()
-                    raise RetryableHTTPStatusError(response, retry_after=retry_after)
-                response.raise_for_status()
-            except Exception as exc:
-                duration = time.perf_counter() - start
-                status = None
-                if isinstance(exc, httpx.HTTPStatusError) and exc.response is not None:
-                    status = exc.response.status_code
-                elif isinstance(exc, RetryableHTTPStatusError) and exc.response is not None:
-                    status = exc.response.status_code
-                metrics.record_http_client_request(target, method_name, status, duration)
-                raise
-            duration = time.perf_counter() - start
-            metrics.record_http_client_request(target, method_name, response.status_code, duration)
-            return response
-
-    return _run_with_retries(
-        _do_request,
-        source=source,
-        url=url,
-        task_id=task_id,
-        request_id=request_id,
-        total_timeout=SETTINGS.ETL_TOTAL_TIMEOUT_S,
+    """Deprecated wrapper around awa_common.http_client.HTTPClient.request."""
+    warnings.warn(
+        "awa_common.etl.http is deprecated; use awa_common.http_client.HTTPClient instead.",
+        DeprecationWarning,
+        stacklevel=2,
     )
+    client = _client_for(source)
+    try:
+        return client.request(
+            method,
+            url,
+            params=params,
+            headers=headers,
+            json=json,
+            data=data,
+            files=files,
+            timeout=timeout,
+        )
+    except Exception as exc:  # pragma: no cover - compatibility shim
+        raise _wrap_exception(exc, source=source, url=url, task_id=task_id, request_id=request_id) from exc
 
 
 def download(
@@ -279,49 +148,44 @@ def download(
     task_id: str | None = None,
     request_id: str | None = None,
 ) -> Path:
-    """Download a URL to a destination path with retries."""
+    """Deprecated wrapper around awa_common.http_client.HTTPClient.download_to_file."""
+    warnings.warn(
+        "awa_common.etl.http is deprecated; use awa_common.http_client.HTTPClient instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    client = _client_for(source)
 
-    def _stream() -> httpx.Response:
-        with _prepare_client(timeout) as client:
-            with client.stream("GET", url) as response:
-                if response.status_code in SETTINGS.ETL_RETRY_STATUS_CODES:
-                    retry_after = _parse_retry_after(response.headers.get("Retry-After"))
-                    raise RetryableHTTPStatusError(response, retry_after=retry_after)
-                response.raise_for_status()
-                dest_path.parent.mkdir(parents=True, exist_ok=True)
-                with dest_path.open("wb") as handle:
-                    for chunk in response.iter_bytes(chunk_size=chunk_size):
-                        handle.write(chunk)
-                return response
+    def _download_action() -> Path:
+        client.download_to_file(
+            url,
+            dest_path=dest_path,
+            chunk_size=chunk_size,
+            method="GET",
+            timeout=timeout,
+        )
+        return dest_path
 
     try:
-        _run_with_retries(
-            _stream,
-            source=source,
-            url=url,
-            task_id=task_id,
-            request_id=request_id,
-            total_timeout=SETTINGS.ETL_TOTAL_TIMEOUT_S,
-        )
-    except ETLHTTPError:
+        return _run_with_retries(_download_action, source=source)
+    except Exception as exc:  # pragma: no cover - compatibility shim
         with contextlib.suppress(FileNotFoundError):
             dest_path.unlink()
-        raise
-    return dest_path
+        raise _wrap_exception(exc, source=source, url=url, task_id=task_id, request_id=request_id) from exc
 
 
-class _RetryWait(wait_random_exponential):
-    def __call__(self, retry_state: RetryCallState) -> float:
-        retry_after: float | None = None
-        if retry_state.outcome is not None:
-            if retry_state.outcome.failed:
-                exc = retry_state.outcome.exception()
-                if isinstance(exc, RetryableHTTPStatusError):
-                    retry_after = exc.retry_after
-            else:
-                result = retry_state.outcome.result()
-                if isinstance(result, httpx.Response):
-                    retry_after = _parse_retry_after(result.headers.get("Retry-After"))
-        if retry_after is not None:
-            return min(retry_after, SETTINGS.ETL_BACKOFF_MAX_S)
-        return super().__call__(retry_state)
+class RetryableHTTPStatusError(RetryableStatusError):
+    """Backward-compatible exception for tests expecting the legacy constructor."""
+
+    def __init__(self, response: httpx.Response, retry_after: float | None = None) -> None:
+        message = f"HTTP {response.status_code}"
+        super().__init__(message, request=response.request, response=response, retry_after=retry_after)
+
+
+class _RetryWait(_CoreRetryWait):
+    """Expose legacy _RetryWait for tests."""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        if "jitter" not in kwargs:
+            kwargs["jitter"] = 0.0
+        super().__init__(*args, **kwargs)

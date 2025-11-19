@@ -1,22 +1,24 @@
 from __future__ import annotations
 
+import asyncio
 import csv
 import io
 from dataclasses import asdict, dataclass
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Any
+from typing import Any, cast
 from urllib.parse import parse_qs, urlparse
 
 import anyio
+import httpx
 import structlog
 
+from awa_common.http_client import AsyncHTTPClient
 from awa_common.metrics import record_etl_normalize_error, record_etl_rows_normalized
 from awa_common.retries import RetryConfig, aretry
 from awa_common.settings import Settings
 from awa_common.types import RateRowModel
 from awa_common.vendor import parse_date as vendor_parse_date, parse_decimal
-from services.etl import http_client
 
 URL = Settings().FREIGHT_API_URL
 
@@ -29,6 +31,8 @@ __all__ = [
 ]
 
 logger = structlog.get_logger(__name__).bind(component="logistics_etl.client")
+_HTTP_CLIENT: AsyncHTTPClient | None = None
+_HTTP_LOCK = asyncio.Lock()
 
 
 class UnsupportedExcelError(RuntimeError):
@@ -122,7 +126,20 @@ async def fetch_rates() -> list[dict[str, object]]:
     return rows
 
 
+async def _ensure_http_client() -> AsyncHTTPClient:
+    global _HTTP_CLIENT
+    client = _HTTP_CLIENT
+    if client is not None:
+        return client
+    async with _HTTP_LOCK:
+        if _HTTP_CLIENT is None:
+            _HTTP_CLIENT = AsyncHTTPClient(integration="logistics_etl")
+        return _HTTP_CLIENT
+
+
 async def _download_with_retries(url_or_uri: str, *, timeout_s: int, retries: int) -> tuple[bytes, dict[str, Any]]:
+    parsed = urlparse(url_or_uri)
+    scheme = (parsed.scheme or "").lower()
     cfg = Settings()
     attempts = max(1, int(cfg.ETL_RETRY_ATTEMPTS), int(retries))
     raw_jitter = getattr(cfg, "ETL_RETRY_JITTER_S", 0.0)
@@ -139,43 +156,93 @@ async def _download_with_retries(url_or_uri: str, *, timeout_s: int, retries: in
         retry_on=(Exception,),
     )
 
+    if scheme in ("http", "https"):
+
+        async def target() -> tuple[bytes, dict[str, Any]]:
+            return await _download_http(url_or_uri, timeout_s=timeout_s)
+    elif scheme == "s3":
+
+        async def target() -> tuple[bytes, dict[str, Any]]:
+            return await _download_s3(parsed, timeout_s)
+    elif scheme == "ftp":
+
+        async def target() -> tuple[bytes, dict[str, Any]]:
+            return await _download_ftp(parsed, timeout_s)
+    else:
+        raise ValueError(f"Unsupported logistics source scheme: {scheme or 'unknown'}")
+
     @aretry(retry_cfg)
     async def _download() -> tuple[bytes, dict[str, Any]]:
-        return await _download_once(url_or_uri, timeout_s=timeout_s)
+        return await target()
 
     return await _download()
 
 
-async def _download_once(url_or_uri: str, *, timeout_s: int) -> tuple[bytes, dict[str, Any]]:
-    parsed = urlparse(url_or_uri)
-    scheme = (parsed.scheme or "").lower()
-    if scheme in ("http", "https"):
-        return await _download_http(url_or_uri, timeout_s=timeout_s)
-    if scheme == "s3":
-        return await _download_s3(parsed, timeout_s)
-    if scheme == "ftp":
-        return await _download_ftp(parsed, timeout_s)
-    raise ValueError(f"Unsupported logistics source scheme: {scheme or 'unknown'}")
+class _LegacyHTTPWrapper:
+    async def get_client(self) -> httpx.AsyncClient:
+        client = await _ensure_http_client()
+        raw = getattr(client, "httpx_client", None)
+        return cast(httpx.AsyncClient, raw or client)
+
+
+http_client = _LegacyHTTPWrapper()
 
 
 async def _download_http(url: str, timeout_s: int | None = None) -> tuple[bytes, dict[str, Any]]:
-    client = await http_client.get_client()
-    async with client.stream("GET", url, follow_redirects=True) as response:
-        response.raise_for_status()
-        if hasattr(response, "aread"):
-            body = await response.aread()
-        else:  # pragma: no cover - compatibility with test doubles
-            body = getattr(response, "content", b"")
-        etag = response.headers.get("etag")
-        meta = {
-            "content_type": response.headers.get("content-type"),
-            "etag": etag.strip('"') if etag else None,
-            "last_modified": response.headers.get("last-modified"),
-        }
-        seqno = response.headers.get("x-amz-version-id") or meta.get("etag")
-        if seqno:
-            meta["seqno"] = seqno.strip('"')
-        return body, meta
+    get_client_fn = getattr(http_client, "get_client", None)
+    raw_client: Any | None = None
+    if callable(get_client_fn):
+        raw_client = await get_client_fn()
+    if raw_client is None:
+        raw_client = await _ensure_http_client()
+
+    stream = getattr(raw_client, "stream", None)
+    request = getattr(raw_client, "request", None)
+
+    if callable(stream):
+        async with stream("GET", url, follow_redirects=True, timeout=timeout_s) as response:
+            if hasattr(response, "raise_for_status"):
+                response.raise_for_status()
+            if hasattr(response, "aread"):
+                body = await response.aread()
+            else:
+                body = getattr(response, "content", b"")
+            etag = response.headers.get("etag")
+            meta = {
+                "content_type": response.headers.get("content-type"),
+                "etag": etag.strip('"') if etag else None,
+                "last_modified": response.headers.get("last-modified"),
+            }
+            seqno = response.headers.get("x-amz-version-id") or meta.get("etag")
+            if seqno:
+                meta["seqno"] = seqno.strip('"')
+            return body, meta
+
+    if callable(request):
+        response = await request("GET", url, follow_redirects=True, timeout=timeout_s)
+        try:
+            if hasattr(response, "raise_for_status"):
+                response.raise_for_status()
+            if hasattr(response, "aread"):
+                body = await response.aread()
+            else:
+                body = getattr(response, "content", b"")
+        finally:
+            close = getattr(response, "aclose", None)
+            if callable(close):
+                await close()
+            elif hasattr(response, "close"):
+                response.close()
+    etag = response.headers.get("etag")
+    meta = {
+        "content_type": response.headers.get("content-type"),
+        "etag": etag.strip('"') if etag else None,
+        "last_modified": response.headers.get("last-modified"),
+    }
+    seqno = response.headers.get("x-amz-version-id") or meta.get("etag")
+    if seqno:
+        meta["seqno"] = seqno.strip('"')
+    return body, meta
 
 
 async def _download_s3(parsed, timeout_s: int) -> tuple[bytes, dict[str, Any]]:

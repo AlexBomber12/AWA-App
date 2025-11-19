@@ -213,34 +213,54 @@ class Settings(BaseSettings):
     CHECK_INTERVAL_MIN: int | None = None
     TZ: str = "UTC"
 
-    # ETL reliability defaults
-    ETL_CONNECT_TIMEOUT_S: float = 5.0
-    ETL_READ_TIMEOUT_S: float = 30.0
-    ETL_TOTAL_TIMEOUT_S: float = 60.0
-    ETL_POOL_TIMEOUT_S: float = Field(
+    # Shared HTTP client defaults
+    HTTP_CONNECT_TIMEOUT_S: float = Field(
         default=5.0,
-        validation_alias=AliasChoices("ETL_POOL_TIMEOUT_S", "ETL_HTTP_POOL_QUEUE_TIMEOUT_S"),
+        validation_alias=AliasChoices("HTTP_CONNECT_TIMEOUT_S", "ETL_CONNECT_TIMEOUT_S"),
     )
-    ETL_HTTP_KEEPALIVE: int = Field(
+    HTTP_READ_TIMEOUT_S: float = Field(
+        default=30.0,
+        validation_alias=AliasChoices("HTTP_READ_TIMEOUT_S", "ETL_READ_TIMEOUT_S"),
+    )
+    HTTP_TOTAL_TIMEOUT_S: float = Field(
+        default=60.0,
+        validation_alias=AliasChoices("HTTP_TOTAL_TIMEOUT_S", "ETL_TOTAL_TIMEOUT_S"),
+    )
+    HTTP_POOL_TIMEOUT_S: float = Field(
+        default=5.0,
+        validation_alias=AliasChoices("HTTP_POOL_TIMEOUT_S", "ETL_POOL_TIMEOUT_S", "ETL_HTTP_POOL_QUEUE_TIMEOUT_S"),
+    )
+    HTTP_MAX_CONNECTIONS: int = Field(
+        default=20,
+        validation_alias=AliasChoices("HTTP_MAX_CONNECTIONS", "ETL_HTTP_MAX_CONNECTIONS"),
+    )
+    HTTP_MAX_KEEPALIVE_CONNECTIONS: int = Field(
         default=5,
-        validation_alias=AliasChoices("ETL_HTTP_KEEPALIVE", "ETL_HTTP_KEEPALIVE_CONNECTIONS"),
+        validation_alias=AliasChoices(
+            "HTTP_MAX_KEEPALIVE_CONNECTIONS", "ETL_HTTP_KEEPALIVE", "ETL_HTTP_KEEPALIVE_CONNECTIONS"
+        ),
     )
-    ETL_HTTP_MAX_CONNECTIONS: int = 20
-    ETL_RETRY_ATTEMPTS: int = Field(
+    HTTP_MAX_RETRIES: int = Field(
         default=5,
-        validation_alias=AliasChoices("ETL_RETRY_ATTEMPTS", "ETL_MAX_RETRIES"),
+        validation_alias=AliasChoices("HTTP_MAX_RETRIES", "ETL_RETRY_ATTEMPTS", "ETL_MAX_RETRIES"),
     )
-    ETL_RETRY_BASE_S: float = Field(
+    HTTP_BACKOFF_BASE_S: float = Field(
         default=0.5,
-        validation_alias=AliasChoices("ETL_RETRY_BASE_S", "ETL_BACKOFF_BASE_S"),
+        validation_alias=AliasChoices("HTTP_BACKOFF_BASE_S", "ETL_RETRY_BASE_S", "ETL_BACKOFF_BASE_S"),
+    )
+    HTTP_BACKOFF_MAX_S: float = Field(
+        default=30.0,
+        validation_alias=AliasChoices("HTTP_BACKOFF_MAX_S", "ETL_RETRY_MAX_S", "ETL_BACKOFF_MAX_S"),
+    )
+    HTTP_BACKOFF_JITTER_S: float = Field(
+        default=1.0,
+        validation_alias=AliasChoices("HTTP_BACKOFF_JITTER_S", "ETL_RETRY_JITTER_S"),
+    )
+    HTTP_RETRY_STATUS_CODES: list[int] = Field(
+        default_factory=lambda: [429, 500, 502, 503, 504],
+        validation_alias=AliasChoices("HTTP_RETRY_STATUS_CODES", "ETL_RETRY_STATUS_CODES"),
     )
     ETL_RETRY_MIN_S: float = 0.5
-    ETL_RETRY_MAX_S: float = Field(
-        default=30.0,
-        validation_alias=AliasChoices("ETL_RETRY_MAX_S", "ETL_BACKOFF_MAX_S"),
-    )
-    ETL_RETRY_JITTER_S: float = 1.0
-    ETL_RETRY_STATUS_CODES: list[int] = Field(default_factory=lambda: [429, 500, 502, 503, 504])
     ENABLE_LIVE: bool = False
     TASK_ID: str | None = None
     HELIUM_API_KEY: str | None = None
@@ -250,6 +270,7 @@ class Settings(BaseSettings):
     SP_REFRESH_TOKEN: str | None = None
     SP_CLIENT_ID: str | None = None
     SP_CLIENT_SECRET: str | None = None
+    SP_API_BASE_URL: str | None = None
 
     # Optional: LLM placeholders (no usage change in this PR)
     LLM_PROVIDER: str = Field(default="STUB")
@@ -436,24 +457,68 @@ class Settings(BaseSettings):
         return float(self.WAIT_FOR_DB_DELAY_S or default)
 
     @property
+    def ETL_CONNECT_TIMEOUT_S(self) -> float:  # pragma: no cover - compatibility shim
+        return self.HTTP_CONNECT_TIMEOUT_S
+
+    @property
+    def ETL_READ_TIMEOUT_S(self) -> float:  # pragma: no cover - compatibility shim
+        return self.HTTP_READ_TIMEOUT_S
+
+    @property
+    def ETL_TOTAL_TIMEOUT_S(self) -> float:  # pragma: no cover - compatibility shim
+        return self.HTTP_TOTAL_TIMEOUT_S
+
+    @property
+    def ETL_POOL_TIMEOUT_S(self) -> float:  # pragma: no cover - compatibility shim
+        return self.HTTP_POOL_TIMEOUT_S
+
+    @property
+    def ETL_HTTP_KEEPALIVE(self) -> int:  # pragma: no cover - compatibility shim
+        return self.HTTP_MAX_KEEPALIVE_CONNECTIONS
+
+    @property
     def ETL_HTTP_KEEPALIVE_CONNECTIONS(self) -> int:  # pragma: no cover - compatibility shim
-        return self.ETL_HTTP_KEEPALIVE
+        return self.HTTP_MAX_KEEPALIVE_CONNECTIONS
 
     @property
     def ETL_HTTP_POOL_QUEUE_TIMEOUT_S(self) -> float:  # pragma: no cover - compatibility shim
-        return self.ETL_POOL_TIMEOUT_S
+        return self.HTTP_POOL_TIMEOUT_S
+
+    @property
+    def ETL_HTTP_MAX_CONNECTIONS(self) -> int:  # pragma: no cover - compatibility shim
+        return self.HTTP_MAX_CONNECTIONS
 
     @property
     def ETL_MAX_RETRIES(self) -> int:  # pragma: no cover - compatibility shim
-        return self.ETL_RETRY_ATTEMPTS
+        return self.HTTP_MAX_RETRIES
+
+    @property
+    def ETL_RETRY_ATTEMPTS(self) -> int:  # pragma: no cover - compatibility shim
+        return self.HTTP_MAX_RETRIES
+
+    @property
+    def ETL_RETRY_BASE_S(self) -> float:  # pragma: no cover - compatibility shim
+        return self.HTTP_BACKOFF_BASE_S
 
     @property
     def ETL_BACKOFF_BASE_S(self) -> float:  # pragma: no cover - compatibility shim
-        return self.ETL_RETRY_BASE_S
+        return self.HTTP_BACKOFF_BASE_S
+
+    @property
+    def ETL_RETRY_MAX_S(self) -> float:  # pragma: no cover - compatibility shim
+        return self.HTTP_BACKOFF_MAX_S
 
     @property
     def ETL_BACKOFF_MAX_S(self) -> float:  # pragma: no cover - compatibility shim
-        return self.ETL_RETRY_MAX_S
+        return self.HTTP_BACKOFF_MAX_S
+
+    @property
+    def ETL_RETRY_JITTER_S(self) -> float:  # pragma: no cover - compatibility shim
+        return self.HTTP_BACKOFF_JITTER_S
+
+    @property
+    def ETL_RETRY_STATUS_CODES(self) -> list[int]:  # pragma: no cover - compatibility shim
+        return list(self.HTTP_RETRY_STATUS_CODES)
 
     def redacted(self) -> dict:
         def _mask(url: str | None) -> str | None:
