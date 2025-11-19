@@ -12,6 +12,7 @@ import anyio
 import structlog
 
 from awa_common.metrics import record_etl_normalize_error, record_etl_rows_normalized
+from awa_common.minio import create_boto3_client
 from awa_common.retries import RetryConfig, aretry
 from awa_common.settings import Settings
 from awa_common.types import RateRowModel
@@ -190,12 +191,14 @@ async def _download_s3(parsed, timeout_s: int) -> tuple[bytes, dict[str, Any]]:
 
     def _get() -> tuple[bytes, dict[str, Any]]:
         try:
-            import boto3
             from botocore.exceptions import BotoCoreError, ClientError
         except Exception as exc:  # pragma: no cover - boto3 optional in tests
             raise RuntimeError("boto3 is required for S3 logistics sources") from exc
 
-        client = boto3.client("s3")
+        try:
+            client = create_boto3_client()
+        except RuntimeError as exc:  # pragma: no cover - boto3 optional in tests
+            raise RuntimeError("boto3 is required for S3 logistics sources") from exc
         try:
             response = client.get_object(Bucket=bucket, Key=key, **extra)
         except (

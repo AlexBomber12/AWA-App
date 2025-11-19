@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import hashlib
-import os
 import tempfile
 import time
 from collections.abc import AsyncIterator
@@ -26,6 +25,7 @@ from awa_common.metrics import (
     record_ingest_upload,
     record_ingest_upload_failure,
 )
+from awa_common.minio import get_s3_client_kwargs
 from awa_common.settings import settings
 from etl.load_csv import ImportFileError
 from services.api.routes.ingest_errors import IngestRequestError, ingest_error_response, respond_with_ingest_error
@@ -57,26 +57,6 @@ def _validate_extension(filename: str | None) -> None:
     lowered = (filename or "").lower()
     if not any(lowered.endswith(ext) for ext in _SUPPORTED_SUFFIXES):
         raise _unsupported_file_error(filename)
-
-
-def _s3_client_kwargs() -> dict[str, Any]:
-    s3_cfg = getattr(settings, "s3", None)
-    endpoint = os.getenv("MINIO_ENDPOINT") or (s3_cfg.endpoint if s3_cfg else "minio:9000")
-    secure_flag = os.getenv("MINIO_SECURE")
-    if secure_flag is None:
-        secure = bool(s3_cfg.secure if s3_cfg else False)
-    else:
-        secure = secure_flag.lower() in {"1", "true", "yes"}
-    access = os.getenv("MINIO_ACCESS_KEY") or (s3_cfg.access_key if s3_cfg else "minio")
-    secret = os.getenv("MINIO_SECRET_KEY") or (s3_cfg.secret_key if s3_cfg else "minio123")
-    region = os.getenv("AWS_REGION") or (s3_cfg.region if s3_cfg else "us-east-1")
-    scheme = "https" if secure else "http"
-    return {
-        "endpoint_url": f"{scheme}://{endpoint}",
-        "aws_access_key_id": access,
-        "aws_secret_access_key": secret,
-        "region_name": region,
-    }
 
 
 def _failure_status_and_detail(info: Any) -> tuple[int, str]:
@@ -309,7 +289,7 @@ async def _download_minio(parsed: ParseResult) -> tuple[Path, str]:  # pragma: n
     )
     start = time.perf_counter()
     try:
-        async with session.client("s3", config=config, **_s3_client_kwargs()) as client:
+        async with session.client("s3", config=config, **get_s3_client_kwargs()) as client:
             response = await client.get_object(Bucket=bucket, Key=key)
             async with response["Body"] as body:
                 path, digest, size_bytes = await _write_stream_to_temp(body.iter_chunks(), scheme=parsed.scheme)
