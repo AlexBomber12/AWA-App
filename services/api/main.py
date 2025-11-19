@@ -16,7 +16,13 @@ from fastapi_limiter import FastAPILimiter
 from sqlalchemy import text as sa_text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from awa_common.cache import normalize_namespace
+from awa_common.cache import (
+    cache as shared_cache,
+    close_cache,
+    configure_cache_backend,
+    normalize_namespace,
+    ping_cache,
+)
 from awa_common.db.async_session import (
     dispose_async_engine,
     get_async_engine,
@@ -123,7 +129,6 @@ async def lifespan(_app: FastAPI):
     await _check_llm()
     redis_url = settings.REDIS_URL
     limiter_redis: aioredis.Redis | None = None
-    stats_cache: aioredis.Redis | None = None
     _app.state.stats_cache = None
     _app.state.stats_cache_namespace = normalize_namespace(getattr(settings, "STATS_CACHE_NAMESPACE", "stats:"))
     _app.state.redis_health = {
@@ -155,18 +160,19 @@ async def lifespan(_app: FastAPI):
             raise
     try:
         if getattr(settings, "STATS_ENABLE_CACHE", False):
-            stats_cache = aioredis.from_url(redis_url, encoding="utf-8", decode_responses=True)
-            await stats_cache.ping()
-            _app.state.stats_cache = stats_cache
+            cache_url = getattr(settings, "CACHE_REDIS_URL", None) or redis_url
+            await configure_cache_backend(cache_url, suppress=False)
+            cache_ok = await ping_cache()
+            if not cache_ok:
+                raise RuntimeError("stats cache backend unavailable")
+            _app.state.stats_cache = shared_cache
             _update_redis_health(_app.state, status="ok")
     except Exception as exc:
         log.error("stats_cache_unavailable", error=str(exc))
         record_redis_error("stats_cache", "ping", key="stats_cache")
         sentry_sdk.capture_exception(exc)
-        if stats_cache is not None:
-            await stats_cache.aclose()
-        stats_cache = None
         _app.state.stats_cache = None
+        await close_cache()
         _update_redis_health(_app.state, status="degraded", error=str(exc))
         if getattr(settings, "REDIS_HEALTH_CRITICAL", False):
             raise
@@ -180,8 +186,8 @@ async def lifespan(_app: FastAPI):
             _app.state.loop_lag_stop = None
         if jwks_started:
             await oidc_provider.shutdown_async_jwks_provider()
-        if stats_cache is not None:
-            await _close_redis_client(stats_cache)
+        if getattr(settings, "STATS_ENABLE_CACHE", False):
+            await close_cache()
             _app.state.stats_cache = None
         if limiter_redis is not None:
             try:

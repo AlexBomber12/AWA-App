@@ -111,6 +111,9 @@ class Settings(BaseSettings):
     DATABASE_URL: str = Field(default="postgresql+psycopg://app:app@db:5432/app")
     PG_ASYNC_DSN: str | None = None
     REDIS_URL: str = Field(default="redis://redis:6379/0")
+    CACHE_REDIS_URL: str | None = None
+    CACHE_DEFAULT_TTL_S: int = 300
+    CACHE_NAMESPACE: str = "cache:"
     BROKER_URL: str | None = Field(
         default=None,
         validation_alias=AliasChoices("BROKER_URL", "CELERY_BROKER_URL"),

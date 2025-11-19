@@ -152,6 +152,8 @@ all environments.
 - `/stats/returns` enforces a bounded date range via `STATS_MAX_DAYS` (default 365). When
   `REQUIRE_CLAMP=false` the API clamps `date_from` to stay within the window; when set to `true` it
   returns HTTP 422 so callers must adjust the request client-side.
-- Redis read-through caching can be enabled with `STATS_ENABLE_CACHE=true`. Keys live under
-  `STATS_CACHE_NAMESPACE` (default `stats:`), expire after `STATS_CACHE_TTL_S` seconds, and are
-  automatically invalidated after the MV refresh task completes.
+- Redis read-through caching relies on the shared cache backend configured through
+  `CACHE_REDIS_URL` (defaults to `REDIS_URL`) and `CACHE_NAMESPACE`. Enable stats caching with
+  `STATS_ENABLE_CACHE=true`; those keys live under `STATS_CACHE_NAMESPACE` (default `stats:`), expire
+  after `STATS_CACHE_TTL_S` seconds, and are automatically invalidated after the MV refresh task
+  completes.

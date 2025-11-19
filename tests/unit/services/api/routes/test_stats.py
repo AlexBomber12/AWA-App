@@ -3,8 +3,10 @@ from types import SimpleNamespace
 from typing import Any
 
 import pytest
+from cashews.exceptions import CacheBackendInteractionError
 from sqlalchemy.exc import SQLAlchemyError
 
+from awa_common import cache as cache_module
 from services.api.routes import stats as stats_module
 from services.api.schemas import (
     ReturnsStatsResponse,
@@ -12,7 +14,11 @@ from services.api.schemas import (
     RoiTrendResponse,
     StatsKPIResponse,
 )
-from tests.fakes import FakeRedis
+
+
+@pytest.fixture(autouse=True)
+def disable_stats_cache(monkeypatch):
+    monkeypatch.setattr(stats_module.settings, "STATS_ENABLE_CACHE", False, raising=False)
 
 
 class DummyMappings:
@@ -44,8 +50,8 @@ class DummyDB:
         return DummyResult(self.rows)
 
 
-def _fake_request(cache_client=None, namespace="stats:"):
-    state = SimpleNamespace(stats_cache=cache_client, stats_cache_namespace=namespace)
+def _fake_request(namespace="stats:"):
+    state = SimpleNamespace(stats_cache=None, stats_cache_namespace=namespace)
     app = SimpleNamespace(state=state)
     return SimpleNamespace(app=app)
 
@@ -76,12 +82,15 @@ def _returns_row(
 
 @pytest.mark.asyncio
 async def test_kpi_handles_redis_errors(monkeypatch):
-    class BrokenRedis:
-        async def get(self, key):
-            raise RuntimeError("boom")
+    monkeypatch.setattr(stats_module.settings, "STATS_ENABLE_CACHE", True, raising=False)
+    await cache_module.cache.clear()
+
+    async def broken_get(*_args, **_kwargs):
+        raise CacheBackendInteractionError()
 
     rows = [{"roi_avg": 1.0, "products": 1, "vendors": 1}]
-    request = _fake_request(cache_client=BrokenRedis())
+    monkeypatch.setattr(cache_module.cache, "get", broken_get, raising=False)
+    request = _fake_request()
     result = await stats_module.kpi(session=DummyDB(rows), request=request)
     assert isinstance(result, StatsKPIResponse)
 
@@ -250,7 +259,6 @@ async def test_returns_stats_ignores_vendor_when_column_missing(monkeypatch):
 
 def test_stats_namespace_defaults(monkeypatch):
     monkeypatch.setattr(stats_module.settings, "STATS_CACHE_NAMESPACE", "custom:", raising=False)
-    assert stats_module._stats_cache_client(None) is None
     assert stats_module._stats_namespace(None) == "custom:"
 
 
@@ -266,8 +274,8 @@ async def test_returns_stats_uses_cache(monkeypatch):
     monkeypatch.setenv("STATS_USE_SQL", "1")
     monkeypatch.setattr(stats_module.settings, "STATS_ENABLE_CACHE", True, raising=False)
     monkeypatch.setattr(stats_module.settings, "STATS_CACHE_TTL_S", 5, raising=False)
-    cache_client = FakeRedis()
-    request = _fake_request(cache_client)
+    await cache_module.cache.clear()
+    request = _fake_request()
     rows = [_returns_row("C1", 5, 7.5)]
     db = DummyDB(rows)
 
@@ -287,6 +295,11 @@ async def test_returns_stats_uses_cache(monkeypatch):
     assert resp2.total_returns == 1
     assert resp1.summary.total_refund_amount == pytest.approx(7.5)
     assert len(db.calls) == 1
-    cache_keys = list(cache_client._kv.keys())
-    assert any(key.startswith("stats:returns") for key in cache_keys)
-    assert any(key.endswith(":meta") for key in cache_keys)
+    from_keys = [key async for key in cache_module.cache.scan("stats:returns*", batch_size=10)]
+    assert any(key.startswith("stats:returns") for key in from_keys)
+    meta_found = False
+    async for key in cache_module.cache.scan("stats:returns*:meta", batch_size=10):
+        if key.endswith(":meta"):
+            meta_found = True
+            break
+    assert meta_found

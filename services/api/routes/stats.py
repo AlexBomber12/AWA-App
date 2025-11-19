@@ -26,13 +26,7 @@ from sqlalchemy import (
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from awa_common.cache import (
-    build_cache_key,
-    get_json,
-    normalize_namespace,
-    set_json,
-    set_returns_metadata,
-)
+from awa_common.cache import build_cache_key, get_json, normalize_namespace, set_json, set_returns_metadata
 from awa_common.db.async_session import get_async_session
 from awa_common.metrics import (
     record_stats_cache_hit,
@@ -196,14 +190,6 @@ def _stats_cache_enabled() -> bool:
         return True
 
 
-def _stats_cache_client(request: Request | None):
-    if request is None:
-        return None
-    app = getattr(request, "app", None)
-    state = getattr(app, "state", None) if app is not None else None
-    return getattr(state, "stats_cache", None)
-
-
 def _stats_namespace(request: Request | None) -> str:
     state_ns = None
     if request is not None:
@@ -232,34 +218,32 @@ async def _maybe_get_cached_response(
     *,
     endpoint: str,
     params: Mapping[str, Any] | None = None,
-) -> tuple[Any | None, str | None, Any]:
-    client = _stats_cache_client(request) if _stats_cache_enabled() else None
-    if client is None:
-        return None, None, None
+) -> tuple[Any | None, str | None]:
+    if not _stats_cache_enabled():
+        return None, None
     cache_key = build_cache_key(_stats_namespace(request), endpoint, params)
-    payload = await get_json(client, cache_key)
+    payload = await get_json(cache_key)
     if payload is not None:
         record_stats_cache_hit(endpoint)
         logger.debug("stats_cache_hit", endpoint=endpoint, cache_key=cache_key)
-        return payload, cache_key, client
+        return payload, cache_key
     record_stats_cache_miss(endpoint)
     logger.debug("stats_cache_miss", endpoint=endpoint, cache_key=cache_key)
-    return None, cache_key, client
+    return None, cache_key
 
 
 async def _store_cached_response(
-    cache_client,
     *,
     cache_key: str | None,
     endpoint: str,
     payload: Any,
 ) -> None:
-    if cache_client is None or not cache_key:
+    if cache_key is None:
         return
     ttl = _cache_ttl()
     if ttl <= 0:
         return
-    stored = await set_json(cache_client, cache_key, payload, ttl)
+    stored = await set_json(cache_key, payload, ttl)
     if not stored:
         logger.debug("stats_cache_store_failed", endpoint=endpoint, cache_key=cache_key)
 
@@ -323,7 +307,7 @@ async def kpi(
     if not _sql_mode_enabled():
         return StatsKPIResponse(kpi=StatsKPI(roi_avg=0.0, products=0, vendors=0))
 
-    cached, cache_key, cache_client = await _maybe_get_cached_response(request, endpoint="kpi")
+    cached, cache_key = await _maybe_get_cached_response(request, endpoint="kpi")
     if isinstance(cached, dict):
         return StatsKPIResponse.model_validate(cached)
 
@@ -341,7 +325,7 @@ async def kpi(
         vendors=int(row.get("vendors") or 0),
     )
     response = StatsKPIResponse(kpi=metrics)
-    await _store_cached_response(cache_client, cache_key=cache_key, endpoint="kpi", payload=response.model_dump())
+    await _store_cached_response(cache_key=cache_key, endpoint="kpi", payload=response.model_dump())
     return response
 
 
@@ -432,7 +416,7 @@ async def returns_stats(
         "page_size": str(normalized_page_size),
         "sort": sort,
     }
-    cached, cache_key, cache_client = await _maybe_get_cached_response(
+    cached, cache_key = await _maybe_get_cached_response(
         request,
         endpoint="returns",
         params=cache_params,
@@ -546,10 +530,10 @@ async def returns_stats(
     )
     response = ReturnsStatsResponse(items=items, total_returns=total_asins, pagination=pagination, summary=summary)
     payload = response.model_dump()
-    await _store_cached_response(cache_client, cache_key=cache_key, endpoint="returns", payload=payload)
+    await _store_cached_response(cache_key=cache_key, endpoint="returns", payload=payload)
     ttl = _cache_ttl()
-    if cache_client is not None and cache_key and ttl > 0:
-        await set_returns_metadata(cache_client, cache_key, date_from=bounded_from, date_to=bounded_to, ttl_s=ttl)
+    if cache_key and ttl > 0:
+        await set_returns_metadata(cache_key, date_from=bounded_from, date_to=bounded_to, ttl_s=ttl)
     return response
 
 
@@ -565,7 +549,7 @@ async def roi_trend(
     if not _sql_mode_enabled():
         return RoiTrendResponse(points=[])
 
-    cached, cache_key, cache_client = await _maybe_get_cached_response(request, endpoint="roi_trend")
+    cached, cache_key = await _maybe_get_cached_response(request, endpoint="roi_trend")
     if isinstance(cached, dict):
         return RoiTrendResponse.model_validate(cached)
 
@@ -597,10 +581,8 @@ async def roi_trend(
                 for row in rows
             ]
             response = RoiTrendResponse(points=points)
-            await _store_cached_response(
-                cache_client, cache_key=cache_key, endpoint="roi_trend", payload=response.model_dump()
-            )
+            await _store_cached_response(cache_key=cache_key, endpoint="roi_trend", payload=response.model_dump())
             return response
     empty = RoiTrendResponse(points=[])
-    await _store_cached_response(cache_client, cache_key=cache_key, endpoint="roi_trend", payload=empty.model_dump())
+    await _store_cached_response(cache_key=cache_key, endpoint="roi_trend", payload=empty.model_dump())
     return empty

@@ -41,6 +41,8 @@ Use `settings.db.url` for SQLAlchemy engines and `settings.db.async_dsn` for asy
 | Variable | Description |
 | --- | --- |
 | `REDIS_URL` | Primary Redis (cache + broker) |
+| `CACHE_REDIS_URL` | Override for the shared cache backend (defaults to `REDIS_URL`) |
+| `CACHE_NAMESPACE`, `CACHE_DEFAULT_TTL_S` | Cache key prefix + default TTL for helpers |
 | `BROKER_URL` | Optional Celery broker override |
 | `QUEUE_NAMES` | Comma-separated queue list for metrics |
 | `CELERY_*` (`CELERY_WORKER_PREFETCH_MULTIPLIER`, `CELERY_TASK_TIME_LIMIT`, `CELERY_TASK_ALWAYS_EAGER`, etc.) | Worker tunables |

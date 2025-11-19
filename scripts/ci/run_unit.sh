@@ -29,3 +29,4 @@ echo "Executing: ${PYTEST_CMD[*]}"
 "${PYTEST_CMD[@]}"
 
 coverage report -m --rcfile=.github/coverage.ini > coverage.txt
+coverage xml --rcfile=.github/coverage.ini -o coverage.xml
