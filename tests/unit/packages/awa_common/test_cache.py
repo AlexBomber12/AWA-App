@@ -85,6 +85,38 @@ async def test_set_json_handles_errors(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_configure_cache_backend_swallow_cancel(monkeypatch):
+    calls = {"close": 0, "setup": 0}
+
+    async def broken_close():
+        calls["close"] += 1
+        raise asyncio.CancelledError()
+
+    monkeypatch.setattr(cache.cache, "close", broken_close, raising=False)
+    monkeypatch.setattr(cache.cache, "setup", lambda *_a, **_k: calls.__setitem__("setup", calls["setup"] + 1))
+    monkeypatch.setattr(
+        cache, "logger", type("L", (), {"warning": lambda *a, **k: None, "info": lambda *a, **k: None})()
+    )
+
+    await cache.configure_cache_backend("mem://")
+    assert calls["close"] == 1
+    assert calls["setup"] == 1
+
+
+@pytest.mark.asyncio
+async def test_close_cache_swallow_cancel(monkeypatch):
+    async def broken_close():
+        raise asyncio.CancelledError()
+
+    monkeypatch.setattr(cache.cache, "close", broken_close, raising=False)
+    monkeypatch.setattr(
+        cache, "logger", type("L", (), {"warning": lambda *a, **k: None, "info": lambda *a, **k: None})()
+    )
+
+    await cache.close_cache()
+
+
+@pytest.mark.asyncio
 async def test_set_returns_metadata_records_window():
     await cache.cache.clear()
     key = cache.build_cache_key("stats:", "returns", None)

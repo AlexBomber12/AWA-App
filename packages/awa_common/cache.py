@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import datetime as dt
 import hashlib
 import json
@@ -66,7 +67,16 @@ async def configure_cache_backend(
 ) -> None:
     """Configure the shared cache backend, closing any existing connections."""
     global _current_backend_url, _current_backend_prefix
-    await cache.close()
+    try:
+        await cache.close()
+    except asyncio.CancelledError:  # pragma: no cover - cashews may cancel close internally
+        logger.warning(
+            "cache_close_cancelled",
+            backend=_current_backend_url,
+            prefix=_current_backend_prefix,
+        )
+    except NotConfiguredError:
+        logger.debug("cache_close_skipped_unconfigured")
     cache.setup(url, prefix=prefix, suppress=suppress, **kwargs)
     _current_backend_url = url
     _current_backend_prefix = prefix
@@ -75,7 +85,16 @@ async def configure_cache_backend(
 
 async def close_cache() -> None:
     """Close any active cache backend connections."""
-    await cache.close()
+    try:
+        await cache.close()
+    except asyncio.CancelledError:  # pragma: no cover - benign during shutdown
+        logger.warning(
+            "cache_close_cancelled",
+            backend=_current_backend_url,
+            prefix=_current_backend_prefix,
+        )
+    except NotConfiguredError:
+        logger.debug("cache_close_skipped_unconfigured")
 
 
 async def ping_cache() -> bool:
