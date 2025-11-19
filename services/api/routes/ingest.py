@@ -60,14 +60,22 @@ def _validate_extension(filename: str | None) -> None:
 
 
 def _s3_client_kwargs() -> dict[str, Any]:
-    endpoint = os.getenv("MINIO_ENDPOINT", "minio:9000")
-    secure = os.getenv("MINIO_SECURE", "false").lower() in {"1", "true", "yes"}
+    s3_cfg = getattr(settings, "s3", None)
+    endpoint = os.getenv("MINIO_ENDPOINT") or (s3_cfg.endpoint if s3_cfg else "minio:9000")
+    secure_flag = os.getenv("MINIO_SECURE")
+    if secure_flag is None:
+        secure = bool(s3_cfg.secure if s3_cfg else False)
+    else:
+        secure = secure_flag.lower() in {"1", "true", "yes"}
+    access = os.getenv("MINIO_ACCESS_KEY") or (s3_cfg.access_key if s3_cfg else "minio")
+    secret = os.getenv("MINIO_SECRET_KEY") or (s3_cfg.secret_key if s3_cfg else "minio123")
+    region = os.getenv("AWS_REGION") or (s3_cfg.region if s3_cfg else "us-east-1")
     scheme = "https" if secure else "http"
     return {
         "endpoint_url": f"{scheme}://{endpoint}",
-        "aws_access_key_id": os.getenv("MINIO_ACCESS_KEY", "minio"),
-        "aws_secret_access_key": os.getenv("MINIO_SECRET_KEY", "minio123"),
-        "region_name": os.getenv("AWS_REGION", "us-east-1"),
+        "aws_access_key_id": access,
+        "aws_secret_access_key": secret,
+        "region_name": region,
     }
 
 
@@ -124,7 +132,8 @@ async def submit_ingest(
     route = _route_path(request)
     request_id = get_request_id(request)
     ingest_source = "upload" if file else "uri"
-    log = logger.bind(route=route, request_id=request_id, ingest_source=ingest_source, env=settings.ENV)
+    app_env = getattr(getattr(settings, "app", None), "env", getattr(settings, "ENV", "local"))
+    log = logger.bind(route=route, request_id=request_id, ingest_source=ingest_source, env=app_env)
     resolved_uri: str | None = None
     try:
         if not file and uri is None:

@@ -47,7 +47,7 @@ from .routes.upload import router as upload_router
 
 async def ready_db(session: AsyncSession = Depends(get_async_session)) -> dict[str, str]:
     """Return 200 only when migrations are at head."""
-    alembic_config = os.getenv("ALEMBIC_CONFIG", "services/api/alembic.ini")
+    alembic_config = getattr(getattr(settings, "app", None), "config_path", "services/api/alembic.ini")
     cfg = Config(alembic_config)
     head = ScriptDirectory.from_config(cfg).get_current_head()
     result = await session.execute(sa_text("SELECT version_num FROM alembic_version"))
@@ -79,10 +79,15 @@ def _normalize_cors_origins(value: str | Iterable[str] | None) -> list[str]:
 def resolve_cors_origins(
     app_env: str | None = None, configured_origins: str | Iterable[str] | None = None
 ) -> list[str]:
-    env = (app_env or getattr(settings, "APP_ENV", "dev")).strip().lower()
+    env = app_env or os.getenv("APP_ENV") or getattr(settings, "APP_ENV", "dev")
+    env = (env or "dev").strip().lower()
     raw_origins = configured_origins
     if raw_origins is None:
-        raw_origins = getattr(settings, "CORS_ORIGINS", None)
+        security_cfg = getattr(settings, "security", None)
+        if security_cfg and security_cfg.cors_origins:
+            raw_origins = security_cfg.cors_origins
+        else:
+            raw_origins = getattr(settings, "CORS_ORIGINS", None)
 
     origins = _normalize_cors_origins(raw_origins)
 
@@ -232,16 +237,12 @@ app = create_app()
 
 
 async def _wait_for_db(max_attempts: int | None = None, delay_s: float | None = None) -> None:
-    env = os.getenv("ENV", getattr(settings, "ENV", "local")).lower()
+    app_cfg = getattr(settings, "app", None)
+    env = (app_cfg.env if app_cfg else getattr(settings, "ENV", "local")).lower()
     if max_attempts is None:
-        max_attempts = int(
-            os.getenv(
-                "WAIT_FOR_DB_MAX_ATTEMPTS",
-                "10" if env in {"local", "test"} else "50",
-            )
-        )
+        max_attempts = settings.wait_for_db_max_attempts
     if delay_s is None:
-        delay_s = float(os.getenv("WAIT_FOR_DB_DELAY_S", "0.05" if env in {"local", "test"} else "0.2"))
+        delay_s = settings.wait_for_db_delay_s
     engine = get_async_engine()
     last_err: Exception | None = None
     for _ in range(max_attempts):
@@ -276,18 +277,22 @@ async def _check_llm() -> None:
     we fall back to the stub provider so the service can continue running.
     """
 
-    provider = os.getenv("LLM_PROVIDER", getattr(settings, "LLM_PROVIDER", "stub")).lower()
-    lan_base = os.getenv("LAN_BASE", "http://lan-llm:8000")
+    llm_cfg = getattr(settings, "llm", None)
+    provider = (
+        os.getenv("LLM_PROVIDER") or (llm_cfg.provider if llm_cfg else getattr(settings, "LLM_PROVIDER", "stub"))
+    ).lower()
+    lan_base = os.getenv("LAN_BASE") or (llm_cfg.lan_health_base_url if llm_cfg else None) or "http://lan-llm:8000"
     if provider != "lan":
         return
     try:
         async with httpx.AsyncClient(timeout=1.0) as client:
             await client.get(f"{lan_base}/ready")
     except Exception:
-        fallback = os.getenv("LLM_PROVIDER_FALLBACK", "stub").lower()
+        fallback = (os.getenv("LLM_PROVIDER_FALLBACK") or (llm_cfg.fallback_provider if llm_cfg else "stub")).lower()
         os.environ["LLM_PROVIDER"] = fallback
         try:
             settings.LLM_PROVIDER = fallback  # type: ignore[attr-defined]
+            settings.__dict__.pop("llm", None)
         except Exception:
             pass
 

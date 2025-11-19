@@ -61,13 +61,18 @@ from services.api.security import limit_viewer, require_viewer
 router = APIRouter(prefix="/stats", tags=["stats"])
 logger = structlog.get_logger(__name__)
 
-RETURNS_VIEW_ENV = "RETURNS_STATS_VIEW_NAME"
 DEFAULT_RETURNS_VIEW = "returns_raw"
 TREND_DATE_CANDIDATES: tuple[str, ...] = ("dt", "date", "snapshot_date", "created_at")
 
 
 def _sql_mode_enabled() -> bool:
-    return os.getenv("STATS_USE_SQL") == "1"
+    raw = os.getenv("STATS_USE_SQL")
+    if raw is not None:
+        return raw.strip() in {"1", "true", "TRUE"}
+    stats_cfg = getattr(settings, "stats", None)
+    if stats_cfg is None:
+        return False
+    return bool(stats_cfg.use_sql)
 
 
 def _split_identifier(identifier: str) -> tuple[str | None, str]:
@@ -78,7 +83,8 @@ def _split_identifier(identifier: str) -> tuple[str | None, str]:
 
 
 def _returns_view_name() -> str:
-    raw = (os.getenv(RETURNS_VIEW_ENV) or DEFAULT_RETURNS_VIEW).strip()
+    stats_cfg = getattr(settings, "stats", None)
+    raw = (stats_cfg.returns_view_name if stats_cfg else DEFAULT_RETURNS_VIEW).strip()
     return raw or DEFAULT_RETURNS_VIEW
 
 

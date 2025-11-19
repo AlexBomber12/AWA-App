@@ -13,7 +13,6 @@ from jinja2 import Environment, StrictUndefined, TemplateError
 
 from awa_common.dsn import build_dsn
 from awa_common.settings import settings as SETTINGS
-from awa_common.utils.env import env_str
 from services.alert_bot.config import AlertRule
 
 # Logging --------------------------------------------------------------------
@@ -23,20 +22,9 @@ _LOGGER = structlog.get_logger(__name__).bind(
     version=SETTINGS.VERSION,
     component="alert_rules",
 )
-
-
 # Database connection settings ------------------------------------------------
-def _first_non_empty(*values: str | None) -> str | None:
-    for value in values:
-        if value is None:
-            continue
-        stripped = value.strip()
-        if stripped:
-            return stripped
-    return None
-
-
-DSN = _first_non_empty(env_str("PG_ASYNC_DSN"), SETTINGS.PG_ASYNC_DSN) or build_dsn(sync=False)
+db_cfg = getattr(SETTINGS, "db", None)
+DSN = db_cfg.async_dsn if db_cfg else (SETTINGS.PG_ASYNC_DSN or build_dsn(sync=False))
 
 ALERT_DB_POOL_MIN_SIZE = SETTINGS.ALERT_DB_POOL_MIN_SIZE
 ALERT_DB_POOL_MAX_SIZE = max(ALERT_DB_POOL_MIN_SIZE, SETTINGS.ALERT_DB_POOL_MAX_SIZE)

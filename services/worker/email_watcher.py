@@ -11,7 +11,7 @@ from sqlalchemy import create_engine, text
 from awa_common.settings import settings
 from services.etl import load_csv
 
-BUCKET = "awa-bucket"
+BUCKET = getattr(getattr(settings, "s3", None), "bucket", "awa-bucket")
 
 
 def main() -> dict[str, str]:
@@ -19,19 +19,30 @@ def main() -> dict[str, str]:
 
     Returns {"status": "success"} when processing completes.
     """
-    host = os.environ["IMAP_HOST"]
-    user = os.environ["IMAP_USER"]
-    password = os.environ["IMAP_PASS"]
-    endpoint = os.getenv("MINIO_ENDPOINT", "minio:9000")
-    access = os.getenv("MINIO_ACCESS_KEY", "minio")
-    secret = os.getenv("MINIO_SECRET_KEY", "minio123")
+    email_cfg = getattr(settings, "email", None)
+    host = os.getenv("IMAP_HOST") or (email_cfg.host if email_cfg else None)
+    user = os.getenv("IMAP_USER") or (email_cfg.username if email_cfg else None)
+    password = os.getenv("IMAP_PASS") or (email_cfg.password if email_cfg else None)
+    if not host or not user or not password:
+        raise RuntimeError("IMAP configuration is missing")
+    s3_cfg = getattr(settings, "s3", None)
+    if s3_cfg:
+        endpoint = s3_cfg.endpoint
+        access = s3_cfg.access_key
+        secret = s3_cfg.secret_key
+        scheme = "https" if s3_cfg.secure else "http"
+    else:
+        endpoint = "minio:9000"
+        access = "minio"
+        secret = "minio123"
+        scheme = "http"
 
     s3 = boto3.client(
         "s3",
-        endpoint_url=f"http://{endpoint}",
+        endpoint_url=f"{scheme}://{endpoint}",
         aws_access_key_id=access,
         aws_secret_access_key=secret,
-        region_name="us-east-1",
+        region_name=getattr(s3_cfg, "region", "us-east-1") if s3_cfg else "us-east-1",
     )
 
     with IMAPClient(host) as client:

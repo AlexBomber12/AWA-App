@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any, cast
@@ -16,6 +15,7 @@ from awa_common.etl.guard import process_once
 from awa_common.etl.idempotency import build_payload_meta, compute_idempotency_key
 from awa_common.metrics import record_etl_run, record_etl_skip
 from awa_common.retries import RetryConfig, retry
+from awa_common.settings import settings
 from services.fees_h10 import repository as repo
 
 logger = structlog.get_logger(__name__)
@@ -60,7 +60,8 @@ def build_parser() -> argparse.ArgumentParser:
 def resolve_live(cli_live: bool | None) -> bool:
     if cli_live is not None:
         return cli_live
-    return os.getenv("ENABLE_LIVE") == "1"
+    etl_cfg = getattr(settings, "etl", None)
+    return bool(etl_cfg.enable_live if etl_cfg else False)
 
 
 def build_rows_from_live(
@@ -97,7 +98,7 @@ def build_rows_from_live(
                 "amount": total_fee,
                 "currency": "USD",
                 "source": "sp",
-                "effective_date": os.getenv("SP_FEES_DATE"),
+                "effective_date": getattr(getattr(settings, "etl", None), "sp_fees_date", None),
             }
         )
     return rows
@@ -141,7 +142,11 @@ def build_idempotency(
 ) -> tuple[str, dict[str, Any]]:
     if live:
         payload = json.dumps(
-            {"mode": "live", "skus": sorted(skus), "date": os.getenv("SP_FEES_DATE")},
+            {
+                "mode": "live",
+                "skus": sorted(skus),
+                "date": getattr(getattr(settings, "etl", None), "sp_fees_date", None),
+            },
             sort_keys=True,
             separators=(",", ":"),
         ).encode("utf-8")
@@ -150,7 +155,7 @@ def build_idempotency(
             extra={
                 "mode": "live",
                 "sku_count": len(skus),
-                "region": os.getenv("REGION"),
+                "region": getattr(getattr(settings, "etl", None), "region", None),
             }
         )
         return key, meta
@@ -168,7 +173,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         skus=args.skus,
         fixture_path=fixture_path,
     )
-    task_id = os.getenv("TASK_ID")
+    task_id = getattr(getattr(settings, "etl", None), "task_id", None)
 
     engine = create_engine(build_dsn(sync=True), future=True)
     SessionLocal = sessionmaker(bind=engine, expire_on_commit=False, future=True)
@@ -194,17 +199,20 @@ def main(argv: Sequence[str] | None = None) -> int:
                     if live:
                         rows = build_rows_from_live(
                             args.skus,
-                            refresh_token=os.getenv("SP_REFRESH_TOKEN", ""),
-                            client_id=os.getenv("SP_CLIENT_ID", ""),
-                            client_secret=os.getenv("SP_CLIENT_SECRET", ""),
-                            region=os.getenv("REGION", "US"),
+                            refresh_token=getattr(getattr(settings, "etl", None), "sp_refresh_token", ""),
+                            client_id=getattr(getattr(settings, "etl", None), "sp_client_id", ""),
+                            client_secret=getattr(getattr(settings, "etl", None), "sp_client_secret", ""),
+                            region=getattr(getattr(settings, "etl", None), "region", "US"),
                         )
                     else:
                         rows = build_rows_from_fixture(fixture_path)
                     if not rows:
                         logger.info("etl.no_data", source=SOURCE_NAME)
                         return 0
-                    repo.upsert_fees_raw(engine, rows, testing=os.getenv("TESTING") == "1")
+                    app_cfg = getattr(settings, "app", None)
+                    repo.upsert_fees_raw(
+                        engine, rows, testing=bool(app_cfg.testing if app_cfg else getattr(settings, "TESTING", False))
+                    )
             except Exception:
                 logger.exception("sp_fees.failed", source=SOURCE_NAME)
                 raise

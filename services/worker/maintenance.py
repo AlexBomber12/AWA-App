@@ -30,9 +30,20 @@ def task_analyze_table(table_fqname: str) -> dict[str, str]:
 
 @celery_app.task(name="ingest.maintenance_nightly")  # type: ignore[misc]
 def task_maintenance_nightly() -> dict[str, Any]:
-    tables_cfg = os.getenv("TABLE_MAINTENANCE_LIST", "public.reimbursements_raw,public.returns_raw")
-    tables: list[str] = [t.strip() for t in tables_cfg.split(",") if t.strip()]
-    vacuum = os.getenv("VACUUM_ENABLE", "false").lower() in ("1", "true", "yes")
+    maintenance_cfg = getattr(settings, "maintenance", None)
+    if maintenance_cfg and maintenance_cfg.table_list:
+        tables = maintenance_cfg.table_list
+    else:
+        tables = [
+            tbl.strip()
+            for tbl in (settings.TABLE_MAINTENANCE_LIST or "public.reimbursements_raw,public.returns_raw").split(",")
+            if tbl.strip()
+        ]
+    vacuum_env = os.getenv("VACUUM_ENABLE")
+    if vacuum_env is not None:
+        vacuum = vacuum_env.lower() in {"1", "true", "yes"}
+    else:
+        vacuum = bool(maintenance_cfg.vacuum_enabled if maintenance_cfg else False)
     engine = create_engine(settings.DATABASE_URL)
     processed: list[str] = []
     try:

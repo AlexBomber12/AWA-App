@@ -34,7 +34,9 @@ HTTP_BUCKETS = (0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10)
 
 def _create_registry() -> CollectorRegistry:
     registry = CollectorRegistry()
-    multiproc_dir = os.getenv("PROMETHEUS_MULTIPROC_DIR")
+    multiproc_dir = os.getenv("PROMETHEUS_MULTIPROC_DIR") or getattr(
+        getattr(settings, "observability", None), "prometheus_multiproc_dir", None
+    )
     if multiproc_dir:
         collector = _load_multiprocess_collector()
         if collector is not None:
@@ -59,20 +61,20 @@ _TEXTFILE_LOCK = threading.Lock()
 
 
 def _default_labels(service: str | None, env: str | None, version: str | None) -> dict[str, str]:
-    resolved_service = (service or getattr(settings, "SERVICE_NAME", "") or os.getenv("SERVICE_NAME") or "").strip()
+    app_cfg = getattr(settings, "app", None)
+    resolved_service = (
+        service or (app_cfg.service_name if app_cfg else getattr(settings, "SERVICE_NAME", "")) or ""
+    ).strip()
     if not resolved_service:
         resolved_service = "api"
-    resolved_env = env or getattr(settings, "APP_ENV", None) or os.getenv("APP_ENV") or os.getenv("ENV") or ""
-    resolved_env = (resolved_env or "").strip() or "local"
-    resolved_version = (
-        version
-        or getattr(settings, "VERSION", None)
-        or os.getenv("APP_VERSION")
-        or os.getenv("RELEASE")
-        or os.getenv("GIT_SHA")
+    resolved_env = (
+        env
+        or (app_cfg.runtime_env if app_cfg else getattr(settings, "APP_ENV", None))
+        or getattr(settings, "ENV", "")
         or ""
     )
-    resolved_version = (resolved_version or "").strip() or "0.0.0"
+    resolved_env = (resolved_env or "").strip() or "local"
+    resolved_version = (version or getattr(settings, "VERSION", "") or "").strip() or "0.0.0"
     return {
         "service": resolved_service,
         "env": resolved_env,
@@ -663,14 +665,23 @@ def _maybe_start_backlog_probe(  # noqa: C901
 
 
 def start_worker_metrics_http_if_enabled(port_env: str = "WORKER_METRICS_PORT") -> None:
-    """Start HTTP exporter for worker metrics if enabled via env."""
-    if os.getenv("WORKER_METRICS_HTTP", "0") not in {"1", "true", "TRUE"}:
+    """Start HTTP exporter for worker metrics if enabled via configuration/env."""
+    raw_flag = os.getenv("WORKER_METRICS_HTTP")
+    observability = getattr(settings, "observability", None)
+    if raw_flag is not None:
+        enabled = raw_flag in {"1", "true", "TRUE"}
+    else:
+        enabled = bool(observability and observability.worker_metrics_http)
+    if not enabled:
         return
-    port_value = os.getenv(port_env, "9108")
-    try:
-        port = int(port_value)
-    except ValueError:
-        port = 9108
+    raw_port = os.getenv(port_env)
+    if raw_port is not None:
+        try:
+            port = int(raw_port)
+        except ValueError:
+            port = 9108
+    else:
+        port = int(observability.worker_metrics_port if observability else 9108)
     start_http_server(port, registry=REGISTRY)
 
 

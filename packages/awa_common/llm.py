@@ -6,64 +6,67 @@ try:
     import httpx
 except Exception:  # pragma: no cover - httpx is available in production
     httpx = None
-LOCAL_URL = os.getenv("LLM_URL", "http://llm:8000/llm")
-LAN_BASE = os.getenv("LLM_BASE_URL", "http://localhost:8000")
-LAN_KEY = os.getenv("LLM_API_KEY", "")
-OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
-
 try:  # pragma: no cover - safeguards import order during bootstrapping
     from awa_common.settings import settings as _settings
 except Exception:  # pragma: no cover - during bootstrap
     _settings = None
 
 
-_LLM_PROVIDER_ENV = "LLM_PROVIDER"
-LLM_PROVIDER = os.getenv(_LLM_PROVIDER_ENV, "lan").strip().lower()
-LLM_PROVIDER_FALLBACK = os.getenv("LLM_PROVIDER_FALLBACK", "stub").strip().lower()
-_LLM_TIMEOUT_ENV = "LLM_TIMEOUT_SECS"
-_REMOTE_URL_ENV = "LLM_REMOTE_URL"
-_LLM_REQUEST_TIMEOUT_ENV = "LLM_REQUEST_TIMEOUT_S"
+def _config():
+    try:
+        return getattr(_settings, "llm", None)
+    except Exception:  # pragma: no cover - settings not initialised yet
+        return None
 
 
 def _default_timeout_setting() -> float:
-    if _settings is None:
+    env_override = os.getenv("LLM_TIMEOUT_SECS") or os.getenv("LLM_REQUEST_TIMEOUT_S")
+    if env_override:
+        try:
+            return float(env_override)
+        except ValueError:
+            pass
+    cfg = _config()
+    if cfg is None:
         return 60.0
-    try:
-        return float(getattr(_settings, "LLM_REQUEST_TIMEOUT_S", 60.0))
-    except Exception:
-        return 60.0
+    return float(cfg.request_timeout_s)
 
 
 _DEFAULT_LLM_TIMEOUT_S = _default_timeout_setting()
 
 
 def _selected_provider() -> str:
-    return (os.getenv("LLM_PROVIDER") or "lan").strip().lower()
+    cfg = _config()
+    if cfg is None:
+        return "lan"
+    return (cfg.provider or "lan").lower()
+
+
+def _fallback_provider() -> str:
+    cfg = _config()
+    if cfg is None:
+        return "stub"
+    return (cfg.fallback_provider or "stub").lower()
 
 
 def _timeout_seconds(default: float | None = None) -> float:
     if default is not None:
-        raw = os.getenv(_LLM_TIMEOUT_ENV)
-        if raw is not None:
-            try:
-                return float(raw)
-            except Exception:  # pragma: no cover - env parsing failure
-                return default
         return default
-    for env_var in (_LLM_TIMEOUT_ENV, _LLM_REQUEST_TIMEOUT_ENV):
-        raw = os.getenv(env_var)
-        if raw is None:
-            continue
+    env_override = os.getenv("LLM_TIMEOUT_SECS") or os.getenv("LLM_REQUEST_TIMEOUT_S")
+    if env_override:
         try:
-            return float(raw)
-        except Exception:  # pragma: no cover - env parsing failure
-            continue
-    return _DEFAULT_LLM_TIMEOUT_S
+            return float(env_override)
+        except ValueError:
+            pass
+    cfg = _config()
+    if cfg is None:
+        return _DEFAULT_LLM_TIMEOUT_S
+    return float(cfg.request_timeout_s)
 
 
 async def _local_llm(prompt: str, temp: float, max_toks: int, timeout: float) -> str:
-    url = os.getenv(_REMOTE_URL_ENV) or LOCAL_URL
+    cfg = _config()
+    url = (cfg.remote_url if cfg else None) or (cfg.local_url if cfg else None) or "http://llm:8000/llm"
     async with httpx.AsyncClient(timeout=timeout) as cli:
         r = await cli.post(url, json={"prompt": prompt, "temperature": temp, "max_tokens": max_toks})
         r.raise_for_status()
@@ -76,9 +79,13 @@ async def _local_llm(prompt: str, temp: float, max_toks: int, timeout: float) ->
 
 async def _openai_llm(prompt: str, temp: float, max_toks: int, timeout: float) -> str:
     openai: Any = importlib.import_module("openai")  # pragma: no cover - network
-    openai.api_key = OPENAI_API_KEY
+    cfg = _config()
+    openai.api_key = (cfg.openai_api_key if cfg else None) or ""
+    if cfg and cfg.openai_api_base:
+        openai.api_base = cfg.openai_api_base
+    model = (cfg.openai_model if cfg else None) or "gpt-4o-mini"
     rsp = await openai.ChatCompletion.acreate(  # pragma: no cover - network
-        model=OPENAI_MODEL,
+        model=model,
         messages=[{"role": "user", "content": prompt}],
         temperature=temp,
         max_tokens=max_toks,
@@ -94,7 +101,8 @@ async def _remote_generate(base: str, key: str | None, prompt: str, max_tokens: 
         "messages": [{"role": "user", "content": prompt}],
         "max_tokens": max_tokens,
     }
-    url = os.getenv(_REMOTE_URL_ENV) or f"{base}/v1/chat/completions"
+    cfg = _config()
+    url = (cfg.remote_url if cfg else None) or f"{base}/v1/chat/completions"
     async with httpx.AsyncClient(timeout=timeout) as cli:
         resp = await cli.post(url, json=payload, headers=headers)
         resp.raise_for_status()  # pragma: no cover - network error path
@@ -128,7 +136,11 @@ async def _generate_with_provider(
     if provider == "lan":
         if httpx is None:  # pragma: no cover - dependency guard
             raise RuntimeError("httpx not available for lan provider")
-        return await _remote_generate(LAN_BASE, LAN_KEY or None, prompt, max_tokens, OPENAI_MODEL, timeout=to)
+        cfg = _config()
+        base = (cfg.lan_api_base_url if cfg else None) or "http://localhost:8000"
+        key = (cfg.lan_api_key if cfg else None) or ""
+        model = (cfg.openai_model if cfg else None) or "gpt-4o-mini"
+        return await _remote_generate(base, key or None, prompt, max_tokens, model, timeout=to)
     if provider == "local":
         if httpx is None:  # pragma: no cover - dependency guard
             raise RuntimeError("httpx not available for local provider")
@@ -151,12 +163,15 @@ async def generate(
     *,
     timeout: float | None = None,
 ) -> str:
-    env_prov = _selected_provider()
-    prov = (provider or env_prov).lower()
+    preferred = (provider or _selected_provider()).lower()
+    fallback = _fallback_provider()
     providers = ["lan", "local", "openai", "stub"]
-    if prov in providers:
-        providers.remove(prov)
-        providers.insert(0, prov)
+    if preferred in providers:
+        providers.remove(preferred)
+    providers.insert(0, preferred)
+    if fallback in providers:
+        providers.remove(fallback)
+    providers.append(fallback)
     last_exc: Exception | None = None
     for p in providers:
         try:

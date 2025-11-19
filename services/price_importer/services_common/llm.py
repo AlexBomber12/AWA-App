@@ -1,17 +1,19 @@
 from __future__ import annotations
 
 import importlib
-import os
 from typing import Any, cast
 
 import httpx
 
-LLM_PROVIDER = os.getenv("LLM_PROVIDER", "lan").lower()
-LOCAL_URL = os.getenv("LLM_URL", "http://llm:8000/llm")
-LAN_BASE = os.getenv("LLM_BASE_URL", "http://localhost:8000")
-LAN_KEY = os.getenv("LLM_API_KEY", "")
-OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+from awa_common.settings import settings
+
+_LLM_CFG = getattr(settings, "llm", None)
+LLM_PROVIDER = (_LLM_CFG.provider if _LLM_CFG else "lan").lower()
+LOCAL_URL = (_LLM_CFG.local_url if _LLM_CFG else None) or "http://llm:8000/llm"
+LAN_BASE = (_LLM_CFG.lan_api_base_url if _LLM_CFG else None) or "http://localhost:8000"
+LAN_KEY = (_LLM_CFG.lan_api_key if _LLM_CFG else None) or ""
+OPENAI_MODEL = (_LLM_CFG.openai_model if _LLM_CFG else None) or "gpt-4o-mini"
+OPENAI_API_KEY = (_LLM_CFG.openai_api_key if _LLM_CFG else None) or ""
 
 
 async def _local_llm(prompt: str, temp: float, max_toks: int) -> str:

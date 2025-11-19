@@ -26,14 +26,22 @@ from services.worker.celery_app import celery_app
 
 
 def _s3_client_kwargs() -> dict[str, Any]:
-    endpoint = os.getenv("MINIO_ENDPOINT", "minio:9000")
-    secure = os.getenv("MINIO_SECURE", "false").lower() in {"1", "true", "yes"}
+    s3_cfg = getattr(settings, "s3", None)
+    endpoint = os.getenv("MINIO_ENDPOINT") or (s3_cfg.endpoint if s3_cfg else "minio:9000")
+    secure_raw = os.getenv("MINIO_SECURE")
+    if secure_raw is None:
+        secure = bool(s3_cfg.secure if s3_cfg else False)
+    else:
+        secure = secure_raw.lower() in {"1", "true", "yes"}
+    access = os.getenv("MINIO_ACCESS_KEY") or (s3_cfg.access_key if s3_cfg else "minio")
+    secret = os.getenv("MINIO_SECRET_KEY") or (s3_cfg.secret_key if s3_cfg else "minio123")
+    region = os.getenv("AWS_REGION") or (s3_cfg.region if s3_cfg else "us-east-1")
     scheme = "https" if secure else "http"
     return {
         "endpoint_url": f"{scheme}://{endpoint}",
-        "aws_access_key_id": os.getenv("MINIO_ACCESS_KEY", "minio"),
-        "aws_secret_access_key": os.getenv("MINIO_SECRET_KEY", "minio123"),
-        "region_name": os.getenv("AWS_REGION", "us-east-1"),
+        "aws_access_key_id": access,
+        "aws_secret_access_key": secret,
+        "region_name": region,
     }
 
 
@@ -185,7 +193,7 @@ def task_rebuild_views(self: Any) -> dict[str, Any]:
     return {"status": "success", "message": "noop"}
 
 
-if os.getenv("TESTING") == "1":
+if getattr(getattr(settings, "app", None), "testing", getattr(settings, "TESTING", False)):
 
     @celery_app.task(name="ingest.enqueue_import", bind=True)  # type: ignore[misc]
     def enqueue_import(self: Any, *, uri: str, dialect: str) -> dict[str, Any]:  # pragma: no cover - helper for tests

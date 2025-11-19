@@ -17,10 +17,13 @@ from awa_common.metrics import enable_celery_metrics, init as metrics_init, star
 from awa_common.sentry import init_sentry
 from awa_common.settings import settings
 
-_worker_version = getattr(settings, "APP_VERSION", "0.0.0")
+app_cfg = getattr(settings, "app", None)
+_worker_version = getattr(settings, "APP_VERSION", getattr(app_cfg, "version", "0.0.0"))
 
 configure_logging(service="worker", level=settings.LOG_LEVEL)
-metrics_init(service="worker", env=settings.ENV, version=_worker_version)
+metrics_init(
+    service="worker", env=(app_cfg.env if app_cfg else getattr(settings, "ENV", "local")), version=_worker_version
+)
 
 
 def _init_sentry() -> None:
@@ -32,28 +35,41 @@ _init_sentry()
 structlog.get_logger(__name__).info("worker.settings", settings=settings.redacted())
 
 
+def _env_bool(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.lower() in {"1", "true", "yes"}
+
+
 def make_celery() -> Celery:
-    broker = settings.REDIS_URL
-    backend = settings.REDIS_URL
+    celery_cfg = getattr(settings, "celery", None)
+    broker = os.getenv("BROKER_URL") or (celery_cfg.broker_url if celery_cfg else settings.REDIS_URL)
+    backend = os.getenv("RESULT_BACKEND") or (celery_cfg.result_backend if celery_cfg else settings.REDIS_URL)
     app = Celery("awa_app", broker=broker, backend=backend)
+    worker_prefetch = int(
+        os.getenv("CELERY_WORKER_PREFETCH_MULTIPLIER") or (celery_cfg.prefetch_multiplier if celery_cfg else 1)
+    )
+    task_time_limit = int(os.getenv("CELERY_TASK_TIME_LIMIT") or (celery_cfg.task_time_limit if celery_cfg else 3600))
+    store_eager = _env_bool(
+        "CELERY_TASK_STORE_EAGER_RESULT", bool(celery_cfg.store_eager_result if celery_cfg else False)
+    )
+    result_expires = int(os.getenv("CELERY_RESULT_EXPIRES") or (celery_cfg.result_expires if celery_cfg else 86_400))
+    timezone = os.getenv("TZ") or (celery_cfg.timezone if celery_cfg else "UTC")
     app.conf.update(
         task_acks_late=True,
-        worker_prefetch_multiplier=int(os.getenv("CELERY_WORKER_PREFETCH_MULTIPLIER", "1")),
-        task_time_limit=int(os.getenv("CELERY_TASK_TIME_LIMIT", "3600")),
+        worker_prefetch_multiplier=worker_prefetch,
+        task_time_limit=task_time_limit,
         task_default_queue="ingest",
         task_default_rate_limit=None,
         task_ignore_result=False,
         task_track_started=True,
-        task_store_eager_result=(os.getenv("CELERY_TASK_STORE_EAGER_RESULT", "false").lower() in ("1", "true", "yes")),
-        result_expires=int(os.getenv("CELERY_RESULT_EXPIRES", "86400")),
-        timezone=os.getenv("TZ", "UTC"),
+        task_store_eager_result=store_eager,
+        result_expires=result_expires,
+        timezone=timezone,
         enable_utc=True,
     )
-    always_eager = os.getenv("CELERY_TASK_ALWAYS_EAGER", "false").lower() in (
-        "1",
-        "true",
-        "yes",
-    )
+    always_eager = _env_bool("CELERY_TASK_ALWAYS_EAGER", bool(celery_cfg.always_eager if celery_cfg else False))
     if always_eager:
         app.conf.update(task_always_eager=True, task_eager_propagates=True)
     return app
@@ -64,18 +80,11 @@ celery_app = make_celery()
 _beat_schedule = dict(getattr(celery_app.conf, "beat_schedule", {}) or {})
 
 
-def _env_flag(name: str, default: bool) -> bool:
-    raw = os.getenv(name)
-    if raw is None:
-        return default
-    return raw.lower() in ("1", "true", "yes")
-
-
 def _loop_lag_monitor_enabled() -> bool:
-    raw = os.getenv("CELERY_LOOP_LAG_MONITOR")
-    if raw is None:
+    celery_cfg = getattr(settings, "celery", None)
+    if celery_cfg is None:
         return True
-    return raw.lower() not in {"0", "false", "no"}
+    return bool(celery_cfg.loop_lag_monitor_enabled)
 
 
 _loop_lag_stop: Callable[[], None] | None = None
@@ -107,11 +116,12 @@ def _start_worker_loop_lag_monitor(**_: Any) -> None:
     if loop is None:
         structlog.get_logger(__name__).warning("loop_lag_monitor.loop_missing")
         return
-    raw_interval = os.getenv("CELERY_LOOP_LAG_INTERVAL_S")
-    if raw_interval:
-        interval = float(raw_interval)
-    else:
-        interval = float(getattr(settings, "LOOP_LAG_INTERVAL_S", 1.0) or 1.0)
+    celery_cfg = getattr(settings, "celery", None)
+    interval = float(
+        celery_cfg.loop_lag_interval_s
+        if celery_cfg and celery_cfg.loop_lag_interval_s
+        else getattr(settings, "LOOP_LAG_INTERVAL_S", 1.0) or 1.0
+    )
     try:
         stopper = start_loop_lag_monitor(loop, interval_s=interval)
     except Exception:
@@ -142,15 +152,26 @@ def _run_alertbot_startup_validation(**_: Any) -> None:
         structlog.get_logger(__name__).warning("alertbot.startup_validation_failed", exc_info=True)
 
 
-if os.getenv("ENABLE_METRICS", "1") != "0":
-    broker_url = getattr(settings, "BROKER_URL", None) or settings.REDIS_URL
-    queue_names_env = getattr(settings, "QUEUE_NAMES", None)
+if getattr(getattr(settings, "observability", None), "enable_metrics", True):
+    broker_url = getattr(getattr(settings, "redis", None), "broker_url", None) or settings.REDIS_URL
+    redis_cfg = getattr(settings, "redis", None)
+    raw_queue_names = os.getenv("QUEUE_NAMES") or getattr(settings, "QUEUE_NAMES", None)
     queue_names: list[str] | None
-    if isinstance(queue_names_env, str) and queue_names_env:
-        queue_names = [item.strip() for item in queue_names_env.split(",") if item.strip()]
+    if isinstance(raw_queue_names, str) and raw_queue_names.strip():
+        queue_names = [item.strip() for item in raw_queue_names.split(",") if item.strip()]
+    elif redis_cfg and redis_cfg.queue_names:
+        queue_names = redis_cfg.queue_names
     else:
         queue_names = None
-    interval_s = int(os.getenv("BACKLOG_PROBE_SECONDS", "15"))
+    celery_cfg = getattr(settings, "celery", None)
+    raw_interval = os.getenv("BACKLOG_PROBE_SECONDS")
+    if raw_interval:
+        try:
+            interval_s = int(raw_interval)
+        except ValueError:
+            interval_s = int(celery_cfg.backlog_probe_seconds if celery_cfg else 15)
+    else:
+        interval_s = int(celery_cfg.backlog_probe_seconds if celery_cfg else 15)
     enable_celery_metrics(
         celery_app,
         broker_url=broker_url,
@@ -159,11 +180,19 @@ if os.getenv("ENABLE_METRICS", "1") != "0":
     )
     start_worker_metrics_http_if_enabled()
 
-if os.getenv("SCHEDULE_NIGHTLY_MAINTENANCE", "true").lower() in ("1", "true", "yes"):
-    cron_expr = os.getenv("NIGHTLY_MAINTENANCE_CRON", "30 2 * * *")
+celery_cfg = getattr(settings, "celery", None)
+
+nightly_enabled = _env_bool(
+    "SCHEDULE_NIGHTLY_MAINTENANCE",
+    bool(celery_cfg.schedule_nightly_maintenance if celery_cfg else True),
+)
+if nightly_enabled:
+    cron_expr = os.getenv("NIGHTLY_MAINTENANCE_CRON") or (
+        celery_cfg.nightly_maintenance_cron if celery_cfg else "30 2 * * *"
+    )
     cron = cron_expr.split()
     if len(cron) != 5:
-        cron = "30 2 * * *".split()
+        cron = (celery_cfg.nightly_maintenance_cron if celery_cfg else "30 2 * * *").split()
     _beat_schedule["nightly-maintenance"] = {
         "task": "ingest.maintenance_nightly",
         "schedule": crontab(
@@ -175,11 +204,18 @@ if os.getenv("SCHEDULE_NIGHTLY_MAINTENANCE", "true").lower() in ("1", "true", "y
         ),
     }
 
-if _env_flag("SCHEDULE_MV_REFRESH", getattr(settings, "SCHEDULE_MV_REFRESH", True)):
-    cron_expr = os.getenv("MV_REFRESH_CRON", getattr(settings, "MV_REFRESH_CRON", "30 2 * * *"))
+mv_refresh_enabled = _env_bool(
+    "SCHEDULE_MV_REFRESH",
+    bool(celery_cfg.schedule_mv_refresh if celery_cfg else getattr(settings, "SCHEDULE_MV_REFRESH", True)),
+)
+if mv_refresh_enabled:
+    cron_expr = os.getenv("MV_REFRESH_CRON") or (
+        celery_cfg.mv_refresh_cron if celery_cfg else getattr(settings, "MV_REFRESH_CRON", "30 2 * * *")
+    )
     mv_cron = cron_expr.split()
     if len(mv_cron) != 5:
-        mv_cron = getattr(settings, "MV_REFRESH_CRON", "30 2 * * *").split()
+        fallback_expr = celery_cfg.mv_refresh_cron if celery_cfg else getattr(settings, "MV_REFRESH_CRON", "30 2 * * *")
+        mv_cron = fallback_expr.split()
     _beat_schedule["refresh-roi-fees-mvs"] = {
         "task": "db.refresh_roi_mvs",
         "schedule": crontab(
@@ -191,8 +227,8 @@ if _env_flag("SCHEDULE_MV_REFRESH", getattr(settings, "SCHEDULE_MV_REFRESH", Tru
         ),
     }
 
-if os.getenv("SCHEDULE_LOGISTICS_ETL", "false").lower() in ("1", "true", "yes"):
-    cron_expr = os.getenv("LOGISTICS_CRON", "0 3 * * *")
+if celery_cfg.schedule_logistics_etl if celery_cfg else False:
+    cron_expr = celery_cfg.logistics_cron if celery_cfg else "0 3 * * *"
     logistics_cron = cron_expr.split()
     if len(logistics_cron) != 5:
         logistics_cron = "0 3 * * *".split()
@@ -207,17 +243,24 @@ if os.getenv("SCHEDULE_LOGISTICS_ETL", "false").lower() in ("1", "true", "yes"):
         ),
     }
 
-alert_schedule_override = os.getenv("ALERT_SCHEDULE_CRON")
-if alert_schedule_override:
-    alerts_cron = alert_schedule_override.strip() or settings.ALERTS_EVALUATION_INTERVAL_CRON or "*/5 * * * *"
-else:
-    alerts_cron = settings.ALERTS_EVALUATION_INTERVAL_CRON or "*/5 * * * *"
-legacy_minutes = os.getenv("CHECK_INTERVAL_MIN")
-if legacy_minutes:
+base_alerts_cron = (
+    os.getenv("ALERTS_EVALUATION_INTERVAL_CRON")
+    or (celery_cfg.alerts_schedule_cron if celery_cfg and celery_cfg.alerts_schedule_cron else None)
+    or getattr(settings, "ALERTS_EVALUATION_INTERVAL_CRON", "*/5 * * * *")
+)
+alerts_cron = str(base_alerts_cron)
+override_minutes = os.getenv("CHECK_INTERVAL_MIN")
+if override_minutes:
     try:
-        minutes = max(1, int(legacy_minutes))
+        minutes = max(1, int(override_minutes))
         alerts_cron = f"*/{minutes} * * * *"
     except ValueError:
+        pass
+elif celery_cfg and celery_cfg.alerts_check_interval_min:
+    try:
+        minutes = max(1, int(celery_cfg.alerts_check_interval_min))
+        alerts_cron = f"*/{minutes} * * * *"
+    except (TypeError, ValueError):
         pass
 alerts_cron_parts = alerts_cron.split()
 if len(alerts_cron_parts) != 5:

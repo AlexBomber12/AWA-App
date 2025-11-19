@@ -4,7 +4,6 @@ import argparse
 import datetime as dt
 import io
 import json
-import os
 import time
 from collections.abc import Sequence
 from pathlib import Path
@@ -19,6 +18,7 @@ from awa_common.dsn import build_dsn
 from awa_common.etl.guard import process_once
 from awa_common.etl.idempotency import build_payload_meta, compute_idempotency_key
 from awa_common.metrics import record_etl_run, record_etl_skip
+from awa_common.settings import settings
 
 logger = structlog.get_logger(__name__)
 
@@ -61,7 +61,8 @@ def build_parser() -> argparse.ArgumentParser:
 def resolve_live(cli_live: bool | None) -> bool:
     if cli_live is not None:
         return cli_live
-    return os.getenv("ENABLE_LIVE") == "1"
+    etl_cfg = getattr(settings, "etl", None)
+    return bool(etl_cfg.enable_live if etl_cfg else False)
 
 
 def load_offline_fixture(path: Path) -> list[dict[str, Any]]:
@@ -160,7 +161,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         fixture_path=fixture_path,
         offline_output=offline_output,
     )
-    task_id = os.getenv("TASK_ID")
+    etl_cfg = getattr(settings, "etl", None)
+    task_id = etl_cfg.task_id if etl_cfg else None
 
     engine = create_engine(build_dsn(sync=True), future=True)
     SessionLocal = sessionmaker(bind=engine, expire_on_commit=False, future=True)
@@ -184,16 +186,16 @@ def main(argv: Sequence[str] | None = None) -> int:
             start = time.perf_counter()
             with record_etl_run(SOURCE_NAME):
                 if live:
-                    keepa_key = os.getenv("KEEPA_KEY")
+                    keepa_key = etl_cfg.keepa_key if etl_cfg else None
                     if not keepa_key:
                         raise RuntimeError("KEEPA_KEY not set")
                     asins = _fetch_live_asins(keepa_key, task_id=task_id)
                     data = json.dumps(asins).encode("utf-8")
                     minio_path = _upload_to_minio(
                         data,
-                        endpoint=os.getenv("MINIO_ENDPOINT", "minio:9000"),
-                        access=os.getenv("MINIO_ACCESS_KEY", "minio"),
-                        secret=os.getenv("MINIO_SECRET_KEY", "minio123"),
+                        endpoint=getattr(getattr(settings, "s3", None), "endpoint", "minio:9000"),
+                        access=getattr(getattr(settings, "s3", None), "access_key", "minio"),
+                        secret=getattr(getattr(settings, "s3", None), "secret_key", "minio123"),
                     )
                     logger.info(
                         "keepa.uploaded",

@@ -4,7 +4,6 @@ import asyncio
 import base64
 import contextlib
 import json
-import os
 import time
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
@@ -75,11 +74,7 @@ class AsyncJwksProvider:
         self._background_task: asyncio.Task[None] | None = None
         self._closed = False
         self._refresh_interval = max(30.0, min(float(self._ttl), 120.0))
-        env_flag = os.getenv("OIDC_JWKS_BACKGROUND_REFRESH")
-        if env_flag is not None:
-            self._background_enabled = env_flag.strip().lower() not in {"0", "false", "no"}
-        else:
-            self._background_enabled = bool(getattr(self._cfg_default, "OIDC_JWKS_BACKGROUND_REFRESH", True))
+        self._background_enabled = bool(getattr(self._cfg_default, "OIDC_JWKS_BACKGROUND_REFRESH", True))
 
     def start(self) -> None:
         if self._background_task is not None or self._closed or not self._background_enabled:
