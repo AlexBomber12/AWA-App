@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-import re
+import ast
 import subprocess
 from pathlib import Path
 
-LEGACY_PATTERN = re.compile(r"^(?:from|import)\s+legacy(?:\.|\s|$)", re.MULTILINE)
+LEGACY_MODULES = ("legacy", "etl.legacy")
 
 
 def _tracked_python_files() -> list[Path]:
@@ -18,6 +18,29 @@ def _tracked_python_files() -> list[Path]:
     return files
 
 
+def _has_legacy_import(content: str) -> bool:
+    try:
+        module = ast.parse(content)
+    except SyntaxError:
+        return False
+    for node in ast.walk(module):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if _is_legacy_name(alias.name):
+                    return True
+        elif isinstance(node, ast.ImportFrom):
+            module_name = node.module or ""
+            if _is_legacy_name(module_name):
+                return True
+            if module_name == "etl" and any(alias.name == "legacy" for alias in node.names):
+                return True
+    return False
+
+
+def _is_legacy_name(name: str) -> bool:
+    return any(name == mod or name.startswith(f"{mod}.") for mod in LEGACY_MODULES)
+
+
 def test_no_legacy_imports() -> None:
     offenders = []
     for path in _tracked_python_files():
@@ -25,6 +48,6 @@ def test_no_legacy_imports() -> None:
             content = path.read_text(encoding="utf-8")
         except OSError:
             continue
-        if LEGACY_PATTERN.search(content):
+        if _has_legacy_import(content):
             offenders.append(path)
     assert not offenders, "Legacy imports found:\n" + "\n".join(str(p) for p in offenders)
