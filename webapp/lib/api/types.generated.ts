@@ -271,6 +271,32 @@ export interface components {
             detail?: components["schemas"]["ValidationError"][];
         };
         /**
+         * PaginationMeta
+         * @description Common pagination envelope returned by list endpoints.
+         */
+        PaginationMeta: {
+            /**
+             * Page
+             * @description Current 1-based page number
+             */
+            page: number;
+            /**
+             * Page Size
+             * @description Configured page size
+             */
+            page_size: number;
+            /**
+             * Total
+             * @description Total number of rows that match the filters
+             */
+            total: number;
+            /**
+             * Total Pages
+             * @description Total pages derived from the total and page size
+             */
+            total_pages: number;
+        };
+        /**
          * ReturnsStatsItem
          * @description Aggregated returns information for a single ASIN.
          */
@@ -297,6 +323,44 @@ export interface components {
             items: components["schemas"]["ReturnsStatsItem"][];
             /** Total Returns */
             total_returns: number;
+            pagination: components["schemas"]["PaginationMeta"];
+            summary: components["schemas"]["ReturnsSummary"];
+        };
+        /**
+         * ReturnsSummary
+         * @description Aggregate metrics used by the returns table summary widgets.
+         */
+        ReturnsSummary: {
+            /**
+             * Total Asins
+             * @description Total ASINs that matched the filters
+             */
+            total_asins: number;
+            /**
+             * Total Units
+             * @description Total quantity of units returned for the filters
+             */
+            total_units: number;
+            /**
+             * Total Refund Amount
+             * @description Total refund amount issued for the filters
+             */
+            total_refund_amount: number;
+            /**
+             * Avg Refund Per Unit
+             * @description Average refund per returned unit
+             */
+            avg_refund_per_unit: number;
+            /**
+             * Top Asin
+             * @description ASIN with the highest refund amount for the filters
+             */
+            top_asin?: string | null;
+            /**
+             * Top Refund Amount
+             * @description Refund amount associated with the ASIN that ranked first
+             */
+            top_refund_amount?: number | null;
         };
         /**
          * RoiApprovalResponse
@@ -344,6 +408,15 @@ export interface components {
             items: components["schemas"]["RoiByVendorItem"][];
             /** Total Vendors */
             total_vendors: number;
+        };
+        /**
+         * RoiListResponse
+         * @description Paginated ROI response returned by /roi.
+         */
+        RoiListResponse: {
+            /** Items */
+            items: components["schemas"]["RoiRow"][];
+            pagination: components["schemas"]["PaginationMeta"];
         };
         /**
          * RoiRow
@@ -659,6 +732,12 @@ export interface operations {
                 roi_min?: number;
                 vendor?: number | null;
                 category?: string | null;
+                page?: number;
+                page_size?: number;
+                sort?: "roi_pct_desc" | "roi_pct_asc" | "asin_asc" | "asin_desc" | "margin_desc" | "margin_asc" | "vendor_asc" | "vendor_desc";
+                search?: string | null;
+                observe_only?: boolean;
+                roi_max?: number | null;
             };
             header?: never;
             path?: never;
@@ -672,7 +751,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["RoiRow"][];
+                    "application/json": components["schemas"]["RoiListResponse"];
                 };
             };
             /** @description Validation Error */
@@ -787,6 +866,9 @@ export interface operations {
                 asin?: string | null;
                 vendor?: string | null;
                 group_by?: string;
+                page?: number;
+                page_size?: number;
+                sort?: "refund_desc" | "refund_asc" | "qty_desc" | "qty_asc" | "asin_asc" | "asin_desc";
             };
             header?: never;
             path?: never;

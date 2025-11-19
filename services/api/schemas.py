@@ -34,6 +34,22 @@ class RoiRow(BaseStrictModel):
     roi_pct: float | None = Field(None, description="Return on investment percentage for the SKU")
 
 
+class PaginationMeta(BaseStrictModel):
+    """Common pagination envelope returned by list endpoints."""
+
+    page: int = Field(..., description="Current 1-based page number")
+    page_size: int = Field(..., description="Configured page size")
+    total: int = Field(..., description="Total number of rows that match the filters")
+    total_pages: int = Field(..., description="Total pages derived from the total and page size")
+
+
+class RoiListResponse(BaseStrictModel):
+    """Paginated ROI response returned by /roi."""
+
+    items: list[RoiRow]
+    pagination: PaginationMeta
+
+
 class RoiApprovalResponse(BaseStrictModel):
     """Result payload for ROI approval actions."""
 
@@ -78,11 +94,26 @@ class ReturnsStatsItem(BaseStrictModel):
     refund_amount: float = Field(..., description="Total refund amount issued for the ASIN")
 
 
+class ReturnsSummary(BaseStrictModel):
+    """Aggregate metrics used by the returns table summary widgets."""
+
+    total_asins: int = Field(..., description="Total ASINs that matched the filters")
+    total_units: int = Field(..., description="Total quantity of units returned for the filters")
+    total_refund_amount: float = Field(..., description="Total refund amount issued for the filters")
+    avg_refund_per_unit: float = Field(..., description="Average refund per returned unit")
+    top_asin: str | None = Field(None, description="ASIN with the highest refund amount for the filters")
+    top_refund_amount: float | None = Field(
+        None, description="Refund amount associated with the ASIN that ranked first"
+    )
+
+
 class ReturnsStatsResponse(BaseStrictModel):
     """Response used by the /stats/returns endpoint."""
 
     items: list[ReturnsStatsItem]
     total_returns: int
+    pagination: PaginationMeta
+    summary: ReturnsSummary
 
 
 class RoiTrendPoint(BaseStrictModel):
@@ -126,6 +157,8 @@ __all__ = [
     "ErrorCode",
     "ErrorResponse",
     "RoiRow",
+    "PaginationMeta",
+    "RoiListResponse",
     "RoiApprovalResponse",
     "StatsKPI",
     "StatsKPIResponse",
@@ -133,6 +166,7 @@ __all__ = [
     "RoiByVendorResponse",
     "ReturnsStatsItem",
     "ReturnsStatsResponse",
+    "ReturnsSummary",
     "RoiTrendPoint",
     "RoiTrendResponse",
     "SkuChartPoint",

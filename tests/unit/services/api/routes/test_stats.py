@@ -1,5 +1,6 @@
 import datetime
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 from sqlalchemy.exc import SQLAlchemyError
@@ -47,6 +48,30 @@ def _fake_request(cache_client=None, namespace="stats:"):
     state = SimpleNamespace(stats_cache=cache_client, stats_cache_namespace=namespace)
     app = SimpleNamespace(state=state)
     return SimpleNamespace(app=app)
+
+
+def _returns_row(
+    asin: str,
+    qty: int,
+    refund: float,
+    *,
+    total: int | None = None,
+    total_units: int | None = None,
+    total_refund: float | None = None,
+) -> dict[str, Any]:
+    total_count = total if total is not None else 1
+    units = total_units if total_units is not None else qty
+    refund_total = total_refund if total_refund is not None else refund
+    return {
+        "asin": asin,
+        "qty": qty,
+        "refund_amount": refund,
+        "total_count": total_count,
+        "total_units": units,
+        "total_refund": refund_total,
+        "top_asin": asin,
+        "top_refund": refund_total,
+    }
 
 
 @pytest.mark.asyncio
@@ -171,7 +196,7 @@ async def test_roi_trend_returns_empty_without_sql(monkeypatch):
 @pytest.mark.asyncio
 async def test_returns_stats_includes_vendor_when_available(monkeypatch):
     monkeypatch.setenv("STATS_USE_SQL", "1")
-    rows = [{"asin": "A1", "qty": 3, "refund_amount": 12.5}]
+    rows = [_returns_row("A1", 3, 12.5)]
     db = DummyDB(rows)
     vendor_calls = 0
 
@@ -192,6 +217,8 @@ async def test_returns_stats_includes_vendor_when_available(monkeypatch):
     assert isinstance(resp, ReturnsStatsResponse)
     assert resp.total_returns == 1
     assert resp.items[0].qty == 3
+    assert resp.pagination.total == 1
+    assert resp.summary.total_units == 3
     stmt, params = db.calls[0]
     compiled = str(stmt)
     assert "vendor" in compiled.lower()
@@ -203,7 +230,7 @@ async def test_returns_stats_includes_vendor_when_available(monkeypatch):
 @pytest.mark.asyncio
 async def test_returns_stats_ignores_vendor_when_column_missing(monkeypatch):
     monkeypatch.setenv("STATS_USE_SQL", "1")
-    rows = [{"asin": "B2", "qty": None, "refund_amount": None}]
+    rows = [_returns_row("B2", 0, 0.0)]
     db = DummyDB(rows)
 
     async def _vendor_missing(session, table_name, schema):
@@ -214,6 +241,7 @@ async def test_returns_stats_ignores_vendor_when_column_missing(monkeypatch):
     resp = await stats_module.returns_stats(vendor="Acme", session=db)
     assert isinstance(resp, ReturnsStatsResponse)
     assert resp.total_returns == 1
+    assert resp.pagination.total == 1
     stmt, params = db.calls[0]
     if params is not None:
         assert "vendor" not in params
@@ -240,7 +268,7 @@ async def test_returns_stats_uses_cache(monkeypatch):
     monkeypatch.setattr(stats_module.settings, "STATS_CACHE_TTL_S", 5, raising=False)
     cache_client = FakeRedis()
     request = _fake_request(cache_client)
-    rows = [{"asin": "C1", "qty": 5, "refund_amount": 7.5}]
+    rows = [_returns_row("C1", 5, 7.5)]
     db = DummyDB(rows)
 
     resp1 = await stats_module.returns_stats(
@@ -257,6 +285,7 @@ async def test_returns_stats_uses_cache(monkeypatch):
     )
     assert resp1.total_returns == 1
     assert resp2.total_returns == 1
+    assert resp1.summary.total_refund_amount == pytest.approx(7.5)
     assert len(db.calls) == 1
     cache_keys = list(cache_client._kv.keys())
     assert any(key.startswith("stats:returns") for key in cache_keys)
