@@ -110,8 +110,9 @@ single source of truth reflected in the codebase.
 
 ## Stats Cache Safety
 
-- `/stats/kpi`, `/stats/returns`, and `/stats/roi_trend` use a Redis read-through cache when
-  `STATS_ENABLE_CACHE=true`. Keys follow the `STATS_CACHE_NAMESPACE` prefix and include only hashed
+- `/stats/kpi`, `/stats/returns`, and `/stats/roi_trend` use the shared cache backend configured via
+  `CACHE_REDIS_URL` (falling back to `REDIS_URL`) and `CACHE_NAMESPACE` when `STATS_ENABLE_CACHE=true`.
+  Stats keys follow the `STATS_CACHE_NAMESPACE` prefix and include only hashed
   endpoint/query-parameter tuples so no raw filter values leak.
 - Cached payloads contain aggregated metrics only; PII never enters the cache and TTL is bounded by
   `STATS_CACHE_TTL_S` (300–600 s by default).

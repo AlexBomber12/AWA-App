@@ -3,20 +3,24 @@ from __future__ import annotations
 import datetime as dt
 import hashlib
 import json
-from collections.abc import Mapping, Sequence
+from collections.abc import AsyncIterator, Awaitable, Callable, Mapping, Sequence
 from typing import Any
 
 import sentry_sdk
 import structlog
-
-try:  # pragma: no cover - redis is optional when cache is disabled
-    import redis.asyncio as aioredis
-except Exception:  # pragma: no cover
-    aioredis = None  # type: ignore[assignment]
+from cashews import Cache
+from cashews.exceptions import CacheBackendInteractionError, NotConfiguredError
 
 from awa_common.metrics import record_redis_error
 
 logger = structlog.get_logger(__name__)
+
+cache = Cache("awa-cache")
+_DEFAULT_BACKEND_URL = "mem://"
+_DEFAULT_BACKEND_PREFIX = ""
+_current_backend_url = _DEFAULT_BACKEND_URL
+_current_backend_prefix = _DEFAULT_BACKEND_PREFIX
+cache.setup(_DEFAULT_BACKEND_URL, prefix=_DEFAULT_BACKEND_PREFIX)
 
 
 def normalize_namespace(namespace: str | None) -> str:
@@ -53,52 +57,49 @@ def build_cache_key(
     return f"{safe_namespace}{endpoint_label}:{digest}"
 
 
-def _log_redis_error(operation: str, command: str, exc: Exception, *, key: str | None = None) -> None:
-    logger.error(
-        "redis_command_failed",
-        operation=operation,
-        command=command,
-        key=key,
-        error=str(exc),
-    )
-    record_redis_error(operation, command, key=key)
-    try:
-        sentry_sdk.capture_exception(exc)
-    except Exception:
-        pass
+async def configure_cache_backend(
+    url: str,
+    *,
+    prefix: str = "",
+    suppress: bool = False,
+    **kwargs: Any,
+) -> None:
+    """Configure the shared cache backend, closing any existing connections."""
+    global _current_backend_url, _current_backend_prefix
+    await cache.close()
+    cache.setup(url, prefix=prefix, suppress=suppress, **kwargs)
+    _current_backend_url = url
+    _current_backend_prefix = prefix
+    logger.info("cache_backend_configured", url=url, prefix=prefix or "")
 
 
-async def get_json(redis_client: aioredis.Redis | None, key: str) -> Any | None:
-    """Return decoded JSON for the cache key or None when missing."""
-    if redis_client is None:
-        return None
-    try:
-        raw = await redis_client.get(key)
-    except Exception as exc:
-        _log_redis_error("stats_cache", "get", exc, key=key)
-        return None
-    if not raw:
-        return None
-    try:
-        return json.loads(raw)
-    except Exception:
-        return None
+async def close_cache() -> None:
+    """Close any active cache backend connections."""
+    await cache.close()
 
 
-async def set_json(redis_client: aioredis.Redis | None, key: str, value: Any, ttl_s: int) -> bool:
-    """Store JSON payload with TTL."""
-    if redis_client is None or ttl_s <= 0:
-        return False
+async def ping_cache() -> bool:
+    """Return True when the cache backend is reachable."""
     try:
-        payload = json.dumps(value, separators=(",", ":"), ensure_ascii=False)
-    except (TypeError, ValueError):
-        return False
-    try:
-        await redis_client.set(key, payload, ex=max(int(ttl_s), 1))
+        await cache.ping()
         return True
-    except Exception as exc:
-        _log_redis_error("stats_cache", "set", exc, key=key)
+    except (CacheBackendInteractionError, NotConfiguredError) as exc:
+        _log_cache_error("stats_cache", "ping", exc)
         return False
+
+
+async def get_json(key: str) -> Any | None:
+    """Return the cached payload or None when missing or on backend errors."""
+    result = await _call_cache("stats_cache", "get", cache.get(key), key=key)
+    return result
+
+
+async def set_json(key: str, value: Any, ttl_s: int) -> bool:
+    """Store a payload with TTL, returning False when disabled or errors occur."""
+    if ttl_s <= 0:
+        return False
+    stored = await _call_cache("stats_cache", "set", cache.set(key, value, expire=float(ttl_s)), key=key)
+    return bool(stored)
 
 
 def returns_metadata_key(cache_key: str) -> str:
@@ -106,63 +107,37 @@ def returns_metadata_key(cache_key: str) -> str:
 
 
 async def set_returns_metadata(
-    redis_client: aioredis.Redis | None,
     cache_key: str,
     *,
     date_from: dt.date | None,
     date_to: dt.date | None,
     ttl_s: int,
 ) -> None:
-    if redis_client is None or ttl_s <= 0:
-        return
     payload = {
         "date_from": date_from.isoformat() if date_from else None,
         "date_to": date_to.isoformat() if date_to else None,
     }
-    await set_json(redis_client, returns_metadata_key(cache_key), payload, ttl_s)
+    await set_json(returns_metadata_key(cache_key), payload, ttl_s)
 
 
 async def purge_prefix(
-    redis_client: aioredis.Redis | None,
     prefix: str,
     *,
-    batch_size: int = 250,
+    batch_size: int = 200,
 ) -> int:
-    """Delete keys matching the prefix using SCAN + pipeline."""
-    if redis_client is None:
-        return 0
+    """Delete keys matching the prefix using SCAN semantics."""
     pattern = f"{prefix}*"
     deleted = 0
-    pipeline = redis_client.pipeline(transaction=False)
-    queued = 0
-
-    async def _flush() -> None:
-        nonlocal deleted, pipeline, queued
-        if not queued:
-            return
-        try:
-            deleted += sum(await pipeline.execute())
-        except Exception as exc:
-            _log_redis_error("stats_cache", "pipeline.execute", exc, key=prefix)
-        finally:
-            pipeline = redis_client.pipeline(transaction=False)
-            queued = 0
-
     try:
-        async for key in redis_client.scan_iter(match=pattern, count=batch_size):
-            pipeline.delete(key)
-            queued += 1
-            if queued >= batch_size:
-                await _flush()
-        await _flush()
-    except Exception as exc:
-        _log_redis_error("stats_cache", "scan_iter", exc, key=prefix)
-        return deleted
+        async for batch in _batched_scan(pattern, batch_size=batch_size):
+            await cache.delete_many(*batch)
+            deleted += len(batch)
+    except (CacheBackendInteractionError, NotConfiguredError) as exc:
+        _log_cache_error("stats_cache", "delete_match", exc, key=prefix)
     return deleted
 
 
 async def purge_returns_cache(
-    redis_client: aioredis.Redis | None,
     namespace: str,
     *,
     date_from: dt.date | None,
@@ -170,46 +145,80 @@ async def purge_returns_cache(
     batch_size: int = 200,
 ) -> int:
     """Delete returns caches that overlap the refreshed window."""
-    if redis_client is None:
-        return 0
     normalized_ns = normalize_namespace(namespace)
     if date_from is None or date_to is None:
-        # No window hint — drop all returns entries.
-        return await purge_prefix(redis_client, f"{normalized_ns}returns")
+        return await purge_prefix(f"{normalized_ns}returns", batch_size=batch_size)
 
     pattern = f"{normalized_ns}returns*:meta"
     deleted = 0
-    pipeline = redis_client.pipeline(transaction=False)
-    queued = 0
-
-    async def _flush() -> None:
-        nonlocal deleted, pipeline, queued
-        if not queued:
-            return
-        try:
-            deleted += sum(await pipeline.execute())
-        except Exception as exc:
-            _log_redis_error("stats_cache", "pipeline.execute", exc, key=normalized_ns)
-        finally:
-            pipeline = redis_client.pipeline(transaction=False)
-            queued = 0
-
     try:
-        async for key in redis_client.scan_iter(match=pattern, count=batch_size):
-            meta = await get_json(redis_client, key)
-            if not _meta_overlaps(meta, date_from, date_to):
-                continue
-            base_key = key[: -len(":meta")] if key.endswith(":meta") else key
-            pipeline.delete(key)
-            pipeline.delete(base_key)
-            queued += 2
-            if queued >= batch_size:
-                await _flush()
-        await _flush()
-    except Exception as exc:
-        _log_redis_error("stats_cache", "scan_iter", exc, key=normalized_ns)
-        return deleted
+        async for batch in _batched_scan(pattern, batch_size=batch_size):
+            to_delete: list[str] = []
+            for key in batch:
+                meta = await get_json(key)
+                if not _meta_overlaps(meta, date_from, date_to):
+                    continue
+                base_key = key[: -len(":meta")] if key.endswith(":meta") else key
+                to_delete.append(key)
+                to_delete.append(base_key)
+            if to_delete:
+                await cache.delete_many(*to_delete)
+                deleted += len(to_delete)
+    except (CacheBackendInteractionError, NotConfiguredError) as exc:
+        _log_cache_error("stats_cache", "delete_returns", exc, key=normalized_ns)
     return deleted
+
+
+def cached(
+    *, ttl: float | int | str, key: str, namespace: str | None = None
+) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+    """Return a decorator that caches function results using the configured cache."""
+    full_key = key
+    if namespace:
+        full_key = f"{normalize_namespace(namespace)}{key}"
+    return cache.cache(ttl=ttl, key=full_key)
+
+
+async def _batched_scan(pattern: str, *, batch_size: int) -> AsyncIterator[list[str]]:
+    batch: list[str] = []
+    async for key in cache.scan(pattern, batch_size=batch_size):
+        batch.append(key)
+        if len(batch) >= batch_size:
+            yield batch
+            batch = []
+    if batch:
+        yield batch
+
+
+async def _call_cache(
+    operation: str,
+    command: str,
+    call: Awaitable[Any],
+    *,
+    key: str | None = None,
+) -> Any | None:
+    try:
+        return await call
+    except (CacheBackendInteractionError, NotConfiguredError) as exc:
+        _log_cache_error(operation, command, exc, key=key)
+        return None
+
+
+def _log_cache_error(operation: str, command: str, exc: Exception, *, key: str | None = None) -> None:
+    logger.warning(
+        "cache_command_failed",
+        operation=operation,
+        command=command,
+        key=key,
+        backend=_current_backend_url,
+        prefix=_current_backend_prefix,
+        error=str(exc),
+    )
+    record_redis_error(operation, command, key=key)
+    try:
+        sentry_sdk.capture_exception(exc)
+    except Exception:
+        pass
 
 
 def _meta_overlaps(meta: Any, window_start: dt.date, window_end: dt.date) -> bool:
@@ -247,8 +256,13 @@ def _stringify(value: Any) -> str:
 
 __all__ = [
     "build_cache_key",
+    "cache",
+    "cached",
+    "close_cache",
+    "configure_cache_backend",
     "get_json",
     "normalize_namespace",
+    "ping_cache",
     "purge_prefix",
     "purge_returns_cache",
     "returns_metadata_key",

@@ -5,11 +5,16 @@ import datetime as dt
 import os
 from typing import Any
 
-import redis.asyncio as aioredis
 from celery.utils.log import get_task_logger
 from sqlalchemy import create_engine, text
 
-from awa_common.cache import normalize_namespace, purge_prefix, purge_returns_cache
+from awa_common.cache import (
+    close_cache,
+    configure_cache_backend,
+    normalize_namespace,
+    purge_prefix,
+    purge_returns_cache,
+)
 from awa_common.roi_views import quote_identifier
 from awa_common.settings import settings
 
@@ -102,20 +107,17 @@ def _bust_stats_cache(date_from: str | None, date_to: str | None) -> dict[str, A
         logger.warning("stats_cache_window_parse_failed", error=str(exc))
 
     async def _purge() -> dict[str, int]:
-        client = aioredis.from_url(  # type: ignore[no-untyped-call]
-            settings.REDIS_URL,
-            encoding="utf-8",
-            decode_responses=True,
-        )
+        cache_url = getattr(settings, "CACHE_REDIS_URL", None) or settings.REDIS_URL
+        await configure_cache_backend(cache_url, suppress=False)
         namespace = normalize_namespace(getattr(settings, "STATS_CACHE_NAMESPACE", "stats:"))
         try:
             deleted = {
-                "kpi": await purge_prefix(client, f"{namespace}kpi"),
-                "roi_trend": await purge_prefix(client, f"{namespace}roi_trend"),
-                "returns": await purge_returns_cache(client, namespace, date_from=start, date_to=end),
+                "kpi": await purge_prefix(f"{namespace}kpi"),
+                "roi_trend": await purge_prefix(f"{namespace}roi_trend"),
+                "returns": await purge_returns_cache(namespace, date_from=start, date_to=end),
             }
         finally:
-            await client.aclose()
+            await close_cache()
         return deleted
 
     try:

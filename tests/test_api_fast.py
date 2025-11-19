@@ -21,6 +21,7 @@ async def fake_get_session():
 
 def test_health_endpoint(monkeypatch):
     app.dependency_overrides[db.get_session] = fake_get_session
+    monkeypatch.setenv("STATS_ENABLE_CACHE", "0")
     with TestClient(app) as client:
         r = client.get("/health")
         assert r.status_code == 200

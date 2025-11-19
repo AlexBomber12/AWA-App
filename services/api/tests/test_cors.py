@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 
 def _get_app(monkeypatch, **env):
     env.setdefault("LLM_PROVIDER", "stub")
+    env.setdefault("STATS_ENABLE_CACHE", "0")
     for key, value in env.items():
         monkeypatch.setenv(key, value)
     import services.api.main as main
