@@ -1,1 +1,1 @@
-# Helper plugins and utilities for tests.
+"""Test helper utilities."""

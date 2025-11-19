@@ -2,20 +2,16 @@ import pytest
 from fastapi.testclient import TestClient
 
 from services.api import db, main
+from tests.helpers.api import prepare_api_for_tests
 
 pytestmark = pytest.mark.slow
-
-
-async def _noop() -> None:  # pragma: no cover - used only for monkeypatch
-    return None
 
 
 @pytest.mark.slow
 @pytest.mark.timeout(0)
 @pytest.mark.parametrize("_", range(5))
 def test_health(monkeypatch, _):
-    monkeypatch.setattr(main, "_wait_for_db", _noop)
-    monkeypatch.setattr(main, "_check_llm", _noop)
+    prepare_api_for_tests(monkeypatch)
 
     class FakeSession:
         async def execute(self, query):

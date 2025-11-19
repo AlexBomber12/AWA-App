@@ -4,6 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from services.api import db, main
+from tests.helpers.api import prepare_api_for_tests
 
 pytestmark = pytest.mark.slow
 
@@ -40,16 +41,11 @@ async def fake_get_session():
     yield FakeSession()
 
 
-async def _noop() -> None:
-    return None
-
-
 @pytest.mark.slow
 @pytest.mark.timeout(0)
 @pytest.mark.parametrize("_", range(5))
 def test_health(monkeypatch, _) -> None:
-    monkeypatch.setattr(main, "_wait_for_db", _noop)
-    monkeypatch.setattr(main, "_check_llm", _noop)
+    prepare_api_for_tests(monkeypatch)
     app = main.app
     app.dependency_overrides[db.get_session] = fake_get_session
     with TestClient(app) as client:
