@@ -86,53 +86,6 @@ const applyFiltersToQuery = (source: URLSearchParams, target: URLSearchParams) =
   });
 };
 
-const sortItems = (items: ReturnsStatsItem[], sort: ReturnsSort): ReturnsStatsItem[] => {
-  const normalizeNumber = (value: number | null | undefined) => (typeof value === "number" && Number.isFinite(value) ? value : 0);
-  const normalized = [...items];
-  normalized.sort((a, b) => {
-    const aRefund = normalizeNumber(a.refund_amount);
-    const bRefund = normalizeNumber(b.refund_amount);
-    const aQty = normalizeNumber(a.qty);
-    const bQty = normalizeNumber(b.qty);
-    const aAsin = a.asin ?? "";
-    const bAsin = b.asin ?? "";
-
-    switch (sort) {
-      case "refund_asc":
-        return aRefund - bRefund;
-      case "refund_desc":
-        return bRefund - aRefund;
-      case "qty_asc":
-        return aQty - bQty;
-      case "qty_desc":
-        return bQty - aQty;
-      case "asin_desc":
-        return bAsin.localeCompare(aAsin);
-      case "asin_asc":
-      default:
-        return aAsin.localeCompare(bAsin);
-    }
-  });
-  return normalized;
-};
-
-const paginateItems = (items: ReturnsStatsItem[], page: number, pageSize: number) => {
-  const total = items.length;
-  const totalPages = total > 0 ? Math.ceil(total / pageSize) : 1;
-  const safePage = Math.min(Math.max(page, 1), Math.max(totalPages, 1));
-  const start = (safePage - 1) * pageSize;
-  const slice = items.slice(start, start + pageSize);
-  return {
-    slice,
-    pagination: {
-      page: safePage,
-      pageSize,
-      total,
-      totalPages,
-    },
-  };
-};
-
 const toListItem = (item: ReturnsStatsItem): ReturnsListItem => {
   const qty = typeof item.qty === "number" && Number.isFinite(item.qty) ? item.qty : 0;
   const refund = typeof item.refund_amount === "number" && Number.isFinite(item.refund_amount) ? item.refund_amount : 0;
@@ -169,10 +122,43 @@ const buildSummary = (items: ReturnsStatsItem[], totalReturns: number): ReturnsS
   };
 };
 
+const buildListResponse = (
+  apiResponse: ReturnsStatsResponse,
+  page: number,
+  pageSize: number
+): ReturnsListResponse => {
+  const pagination = apiResponse.pagination;
+  const total = pagination?.total ?? apiResponse.total_returns ?? apiResponse.items?.length ?? 0;
+  const totalPages = pagination?.total_pages ?? (total > 0 ? Math.ceil(total / pageSize) : 1);
+  return {
+    items: (apiResponse.items ?? []).map(toListItem),
+    pagination: {
+      page: pagination?.page ?? page,
+      pageSize: pagination?.page_size ?? pageSize,
+      total,
+      totalPages,
+    },
+  };
+};
+
+const buildSummaryResponse = (apiResponse: ReturnsStatsResponse): ReturnsSummaryResponse => {
+  const summary = apiResponse.summary;
+  if (summary) {
+    const totalAsins = summary.total_asins ?? apiResponse.total_returns ?? apiResponse.items?.length ?? 0;
+    return {
+      totalAsins,
+      totalUnits: summary.total_units ?? 0,
+      totalRefundAmount: summary.total_refund_amount ?? 0,
+      avgRefundPerUnit: summary.avg_refund_per_unit ?? 0,
+      topAsin: summary.top_asin ?? null,
+      topAsinRefundAmount: summary.top_refund_amount ?? null,
+    };
+  }
+  return buildSummary(apiResponse.items ?? [], apiResponse.total_returns ?? apiResponse.items?.length ?? 0);
+};
+
 async function fetchReturnsStats(params: URLSearchParams): Promise<ReturnsStatsResponse> {
-  const fastApiParams = new URLSearchParams();
-  applyFiltersToQuery(params, fastApiParams);
-  const query = fastApiParams.toString();
+  const query = params.toString();
   const path = query ? `${RETURNS_API_PATH}?${query}` : RETURNS_API_PATH;
   return fetchFromApi<ReturnsStatsResponse>(path);
 }
@@ -180,25 +166,29 @@ async function fetchReturnsStats(params: URLSearchParams): Promise<ReturnsStatsR
 export async function GET(request: NextRequest) {
   const params = request.nextUrl.searchParams;
   const resource = parseResource(params.get("resource"));
+  const filterParams = new URLSearchParams();
+  applyFiltersToQuery(params, filterParams);
 
   try {
-    const stats = await fetchReturnsStats(params);
-    const items = stats.items ?? [];
-
     if (resource === "stats") {
-      return NextResponse.json(buildSummary(items, stats.total_returns ?? items.length));
+      const statsParams = new URLSearchParams(filterParams);
+      statsParams.set("page", "1");
+      statsParams.set("page_size", "1");
+      statsParams.set("sort", "refund_desc");
+      const statsResponse = await fetchReturnsStats(statsParams);
+      return NextResponse.json(buildSummaryResponse(statsResponse));
     }
 
     const page = parsePositiveInt(params.get("page"), DEFAULT_PAGE);
     const pageSize = parsePositiveInt(params.get("page_size"), DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
     const sort = parseSort(params.get("sort"));
 
-    const sorted = sortItems(items, sort);
-    const { slice, pagination } = paginateItems(sorted, page, pageSize);
-    const response: ReturnsListResponse = {
-      items: slice.map(toListItem),
-      pagination,
-    };
+    const listParams = new URLSearchParams(filterParams);
+    listParams.set("page", String(page));
+    listParams.set("page_size", String(pageSize));
+    listParams.set("sort", sort);
+    const apiResponse = await fetchReturnsStats(listParams);
+    const response = buildListResponse(apiResponse, page, pageSize);
 
     return NextResponse.json(response);
   } catch (error) {

@@ -38,6 +38,24 @@ class _FakeDB:
         return _FakeResult(self._rows)
 
 
+def _returns_row(
+    asin: str,
+    qty: int,
+    refund: float,
+    total: int = 1,
+) -> dict[str, Any]:
+    return {
+        "asin": asin,
+        "qty": qty,
+        "refund_amount": refund,
+        "total_count": total,
+        "total_units": qty,
+        "total_refund": refund,
+        "top_asin": asin,
+        "top_refund": refund,
+    }
+
+
 @pytest.mark.asyncio
 async def test_returns_filters_apply(monkeypatch):
     monkeypatch.setenv("STATS_USE_SQL", "1")
@@ -46,11 +64,7 @@ async def test_returns_filters_apply(monkeypatch):
         return True
 
     monkeypatch.setattr(stats, "returns_vendor_column_exists", _always_true)
-    fake_db = _FakeDB(
-        [
-            {"asin": "A1", "qty": 2, "refund_amount": 5.5},
-        ]
-    )
+    fake_db = _FakeDB([_returns_row("A1", 2, 5.5)])
 
     result = await stats.returns_stats(
         date_from="2024-01-01",
@@ -75,17 +89,15 @@ async def test_returns_filters_apply(monkeypatch):
     assert result.items[0].asin == "A1"
     assert result.items[0].qty == 2
     assert result.items[0].refund_amount == pytest.approx(5.5)
+    assert result.pagination.total == 1
+    assert result.summary.total_refund_amount == pytest.approx(5.5)
     monkeypatch.delenv("STATS_USE_SQL", raising=False)
 
 
 @pytest.mark.asyncio
 async def test_returns_no_filters_preserves_shape(monkeypatch):
     monkeypatch.setenv("STATS_USE_SQL", "1")
-    fake_db = _FakeDB(
-        [
-            {"asin": "B2", "qty": 1, "refund_amount": 1.2},
-        ]
-    )
+    fake_db = _FakeDB([_returns_row("B2", 1, 1.2)])
 
     result = await stats.returns_stats(session=fake_db)
     assert "WHERE" not in fake_db.last_query.upper()
@@ -94,6 +106,7 @@ async def test_returns_no_filters_preserves_shape(monkeypatch):
     assert result.items[0].asin == "B2"
     assert result.items[0].qty == 1
     assert result.items[0].refund_amount == pytest.approx(1.2)
+    assert result.pagination.total == 1
     monkeypatch.delenv("STATS_USE_SQL", raising=False)
 
 
@@ -102,7 +115,7 @@ async def test_stats_guardrails_clamp(monkeypatch):
     monkeypatch.setenv("STATS_USE_SQL", "1")
     monkeypatch.setattr(stats.settings, "STATS_MAX_DAYS", 5, raising=False)
     monkeypatch.setattr(stats.settings, "REQUIRE_CLAMP", False, raising=False)
-    fake_db = _FakeDB([{"asin": "C1", "qty": 10, "refund_amount": 12.0}])
+    fake_db = _FakeDB([_returns_row("C1", 10, 12.0)])
 
     result = await stats.returns_stats(
         date_from="2024-01-01",
@@ -114,6 +127,7 @@ async def test_stats_guardrails_clamp(monkeypatch):
     assert fake_db.last_params["date_from"] == dt.date(2024, 1, 28)
     assert fake_db.last_params["date_to"] == dt.date(2024, 2, 1)
     assert result.total_returns == 1
+    assert result.pagination.page == 1
     monkeypatch.delenv("STATS_USE_SQL", raising=False)
 
 

@@ -105,6 +105,10 @@ the UX consistent and gives Codex prompts an obvious blueprint to extend.
   rows without jank. The flow is `/roi` page → `app/api/bff/roi/route.ts` → `fetchFromApi("/roi")`
   with client-side sorting, selection, and virtualization. Copy this pattern whenever a table needs
   bulk actions, virtual scrolling, or hundreds of visible rows.
+- **Server-driven pagination.** Both ROI and Returns BFF routes now forward `page`, `page_size`,
+  `sort`, and filter params to FastAPI. The backend validates sort keys, applies the filters in
+  SQL, and returns a snake_case `pagination` block that the BFF converts to camelCase. When new sort
+  orders are required, extend the backend allow-list + Alembic indexes, not the Node layer.
 - **Returns (mid-size + standard DataTable).** PR-UI-7 turns `/returns` into the canonical
   server-driven “mid-size table” example: `app/api/bff/returns/route.ts` proxies FastAPI
   `/stats/returns` for both summary + paginated list responses, `lib/api/returnsClient.ts` exposes

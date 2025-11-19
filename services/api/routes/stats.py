@@ -5,10 +5,11 @@ import os
 import time
 from collections.abc import Mapping
 from functools import lru_cache
-from typing import Any
+from math import ceil
+from typing import Any, Literal
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import (
     Column,
     Date,
@@ -47,8 +48,10 @@ from services.api.roi_views import (
     returns_vendor_column_exists,
 )
 from services.api.schemas import (
+    PaginationMeta,
     ReturnsStatsItem,
     ReturnsStatsResponse,
+    ReturnsSummary,
     RoiByVendorItem,
     RoiByVendorResponse,
     RoiTrendPoint,
@@ -63,6 +66,11 @@ logger = structlog.get_logger(__name__)
 
 DEFAULT_RETURNS_VIEW = "returns_raw"
 TREND_DATE_CANDIDATES: tuple[str, ...] = ("dt", "date", "snapshot_date", "created_at")
+RETURNS_DEFAULT_PAGE = 1
+RETURNS_DEFAULT_PAGE_SIZE = 25
+RETURNS_MAX_PAGE_SIZE = 100
+ReturnsSort = Literal["refund_desc", "refund_asc", "qty_desc", "qty_asc", "asin_asc", "asin_desc"]
+RETURNS_DEFAULT_SORT: ReturnsSort = "refund_desc"
 
 
 def _sql_mode_enabled() -> bool:
@@ -103,6 +111,74 @@ def _returns_table_info() -> tuple[Table, str, str]:
         schema=schema,
     )
     return table, (schema or "public"), name
+
+
+def _returns_order_clause(sort: ReturnsSort, source) -> tuple[Any, ...]:
+    asin = source.c.asin
+    qty = source.c.qty
+    refund = source.c.refund_amount
+    mapping: dict[ReturnsSort, tuple[Any, ...]] = {
+        "refund_desc": (refund.desc(), asin.asc()),
+        "refund_asc": (refund.asc(), asin.asc()),
+        "qty_desc": (qty.desc(), asin.asc()),
+        "qty_asc": (qty.asc(), asin.asc()),
+        "asin_desc": (asin.desc(),),
+        "asin_asc": (asin.asc(),),
+    }
+    return mapping.get(sort, mapping[RETURNS_DEFAULT_SORT])
+
+
+def _paginate(total: int, page: int, page_size: int) -> tuple[int, int]:
+    total_pages = ceil(total / page_size) if total > 0 else 1
+    safe_page = min(max(page, 1), max(total_pages, 1))
+    return safe_page, total_pages
+
+
+def _safe_positive_int(value: int | None, fallback: int, *, max_value: int | None = None) -> int:
+    if isinstance(value, int) and value > 0:
+        result = value
+    else:
+        result = fallback
+    if max_value is not None:
+        return min(result, max_value)
+    return result
+
+
+async def _fallback_returns_summary(
+    session: AsyncSession, source, params: dict[str, object] | None
+) -> tuple[int, int, float, str | None, float | None]:
+    summary_stmt = select(
+        func.count().label("total_count"),
+        func.coalesce(func.sum(source.c.qty), 0).label("total_units"),
+        func.coalesce(func.sum(source.c.refund_amount), 0).label("total_refund"),
+    ).select_from(source)
+    total = 0
+    total_units = 0
+    total_refund = 0.0
+    top_asin = None
+    top_value = None
+
+    summary_result = await session.execute(summary_stmt, params or None)
+    summary_row = summary_result.mappings().first()
+    if summary_row:
+        total = int(summary_row.get("total_count") or 0)
+        total_units = int(summary_row.get("total_units") or 0)
+        total_refund = float(summary_row.get("total_refund") or 0.0)
+
+    top_stmt = (
+        select(source.c.asin.label("asin"), source.c.refund_amount.label("refund_amount"))
+        .select_from(source)
+        .order_by(source.c.refund_amount.desc(), source.c.asin.asc())
+        .limit(1)
+    )
+    top_result = await session.execute(top_stmt, params or None)
+    top_row = top_result.mappings().first()
+    if top_row:
+        top_asin = top_row.get("asin")
+        value = top_row.get("refund_amount")
+        top_value = float(value) if value is not None else None
+
+    return total, total_units, total_refund, top_asin, top_value
 
 
 def _roi_table_or_400() -> Table:
@@ -312,11 +388,30 @@ async def returns_stats(
     asin: str | None = None,
     vendor: str | None = None,
     group_by: str = "asin",
+    page: int = Query(RETURNS_DEFAULT_PAGE, ge=1),
+    page_size: int = Query(RETURNS_DEFAULT_PAGE_SIZE, ge=1, le=RETURNS_MAX_PAGE_SIZE),
+    sort: ReturnsSort = Query(RETURNS_DEFAULT_SORT),
     session: AsyncSession = Depends(get_async_session),
     request: Request = None,
 ) -> ReturnsStatsResponse:
     if not _sql_mode_enabled():
-        return ReturnsStatsResponse(items=[], total_returns=0)
+        pagination = PaginationMeta(page=page, page_size=page_size, total=0, total_pages=1)
+        summary = ReturnsSummary(
+            total_asins=0,
+            total_units=0,
+            total_refund_amount=0.0,
+            avg_refund_per_unit=0.0,
+            top_asin=None,
+            top_refund_amount=None,
+        )
+        return ReturnsStatsResponse(items=[], total_returns=0, pagination=pagination, summary=summary)
+
+    normalized_page = _safe_positive_int(page, RETURNS_DEFAULT_PAGE)
+    normalized_page_size = _safe_positive_int(
+        page_size,
+        RETURNS_DEFAULT_PAGE_SIZE,
+        max_value=RETURNS_MAX_PAGE_SIZE,
+    )
 
     parsed_from = _parse_date(date_from, "date_from")
     parsed_to = _parse_date(date_to, "date_to")
@@ -333,6 +428,9 @@ async def returns_stats(
         "asin": asin or "",
         "vendor": vendor or "",
         "group_by": normalized_group,
+        "page": str(normalized_page),
+        "page_size": str(normalized_page_size),
+        "sort": sort,
     }
     cached, cache_key, cache_client = await _maybe_get_cached_response(
         request,
@@ -373,17 +471,80 @@ async def returns_stats(
     if clauses:
         stmt = stmt.where(and_(*clauses))
 
-    result = await _observe_query("returns", session.execute(stmt, params or None))
-    rows = result.mappings().all()
-    items = [
-        ReturnsStatsItem(
-            asin=row["asin"],
-            qty=int(row.get("qty") or 0),
-            refund_amount=float(row.get("refund_amount") or 0.0),
+    base_query = stmt.subquery("returns_agg")
+    safe_page = normalized_page
+    safe_size = normalized_page_size
+    offset = (safe_page - 1) * safe_size
+    order_clause = _returns_order_clause(sort, base_query)
+    window_total = func.count().over().label("total_count")
+    window_units = func.coalesce(func.sum(base_query.c.qty).over(), 0).label("total_units")
+    window_refund = func.coalesce(func.sum(base_query.c.refund_amount).over(), 0).label("total_refund")
+    window_top_asin = (
+        func.first_value(base_query.c.asin)
+        .over(order_by=(base_query.c.refund_amount.desc(), base_query.c.asin.asc()))
+        .label("top_asin")
+    )
+    window_top_refund = (
+        func.first_value(base_query.c.refund_amount)
+        .over(order_by=(base_query.c.refund_amount.desc(), base_query.c.asin.asc()))
+        .label("top_refund")
+    )
+
+    items_stmt = (
+        select(
+            base_query.c.asin,
+            base_query.c.qty,
+            base_query.c.refund_amount,
+            window_total,
+            window_units,
+            window_refund,
+            window_top_asin,
+            window_top_refund,
         )
-        for row in rows
-    ]
-    response = ReturnsStatsResponse(items=items, total_returns=len(items))
+        .order_by(*order_clause)
+        .limit(safe_size)
+        .offset(offset)
+    )
+
+    result = await _observe_query("returns", session.execute(items_stmt, params or None))
+    rows = result.mappings().all()
+    items = []
+    for row in rows:
+        qty_value = row.get("qty") or 0
+        refund_value = row.get("refund_amount") or 0.0
+        items.append(
+            ReturnsStatsItem(
+                asin=row.get("asin"),
+                qty=int(qty_value),
+                refund_amount=float(refund_value),
+            )
+        )
+
+    if rows:
+        total = int(rows[0].get("total_count") or 0)
+        total_units = int(rows[0].get("total_units") or 0)
+        total_refund_amount = float(rows[0].get("total_refund") or 0.0)
+        top_asin = rows[0].get("top_asin")
+        top_refund_raw = rows[0].get("top_refund")
+        top_refund_amount = float(top_refund_raw) if top_refund_raw is not None else None
+    else:
+        total, total_units, total_refund_amount, top_asin, top_refund_amount = await _fallback_returns_summary(
+            session, base_query, params
+        )
+
+    total_asins = total
+    safe_page, total_pages = _paginate(total_asins, safe_page, safe_size)
+    pagination = PaginationMeta(page=safe_page, page_size=safe_size, total=total_asins, total_pages=total_pages)
+    avg_refund_per_unit = total_refund_amount / total_units if total_units > 0 else 0.0
+    summary = ReturnsSummary(
+        total_asins=total_asins,
+        total_units=total_units,
+        total_refund_amount=total_refund_amount,
+        avg_refund_per_unit=avg_refund_per_unit,
+        top_asin=top_asin,
+        top_refund_amount=top_refund_amount,
+    )
+    response = ReturnsStatsResponse(items=items, total_returns=total_asins, pagination=pagination, summary=summary)
     payload = response.model_dump()
     await _store_cached_response(cache_client, cache_key=cache_key, endpoint="returns", payload=payload)
     ttl = _cache_ttl()

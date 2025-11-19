@@ -13,15 +13,26 @@ describe("roiClient", () => {
   });
 
   it("fetches ROI rows with the provided query params", async () => {
-    mockFetch.mockResolvedValueOnce([]);
+    mockFetch.mockResolvedValueOnce({ items: [], pagination: { page: 1, page_size: 50, total: 0, total_pages: 1 } });
 
-    await roiClient.listRoiRows({ roiMin: 15, vendor: "42", category: "Beauty" });
+    await roiClient.listRoiRows({
+      page: 2,
+      pageSize: 25,
+      sort: "asin_asc",
+      roiMin: 15,
+      roiMax: 20,
+      vendor: "42",
+      category: "Beauty",
+      search: "headphones",
+    });
 
-    expect(mockFetch).toHaveBeenCalledWith("/roi?roi_min=15&vendor=42&category=Beauty");
+    expect(mockFetch).toHaveBeenCalledWith(
+      "/roi?page=2&page_size=25&sort=asin_asc&roi_min=15&roi_max=20&vendor=42&category=Beauty&search=headphones"
+    );
   });
 
   it("omits empty params from the query string", async () => {
-    mockFetch.mockResolvedValueOnce([]);
+    mockFetch.mockResolvedValueOnce({ items: [], pagination: { page: 1, page_size: 50, total: 0, total_pages: 1 } });
 
     await roiClient.listRoiRows({ roiMin: null, vendor: "", category: undefined });
 

@@ -5,17 +5,19 @@ from fastapi import HTTPException
 from starlette.requests import Request
 
 from services.api.routes import roi as roi_module
-from services.api.schemas import RoiApprovalResponse, RoiRow
+from services.api.schemas import RoiApprovalResponse, RoiListResponse, RoiRow
 from tests.unit.conftest import _StubResult
 
 
 @pytest.mark.asyncio
 async def test_roi_returns_typed_rows(fake_db_session):
-    session = fake_db_session(_StubResult(mappings=[{"asin": "A1", "roi_pct": 12.3}]))
+    session = fake_db_session(_StubResult(mappings=[{"asin": "A1", "roi_pct": 12.3, "total_count": 1}]))
     result = await roi_module.roi(session=session, roi_min=10)
-    assert len(result) == 1
-    assert isinstance(result[0], RoiRow)
-    assert result[0].roi_pct == 12.3
+    assert isinstance(result, RoiListResponse)
+    assert len(result.items) == 1
+    assert isinstance(result.items[0], RoiRow)
+    assert result.items[0].roi_pct == 12.3
+    assert result.pagination.total == 1
 
 
 @pytest.mark.asyncio

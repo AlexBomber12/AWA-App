@@ -1,20 +1,36 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import Any
+from math import ceil
+from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from awa_common.db.async_session import get_async_session
 from awa_common.roi_views import InvalidROIViewError
 from services.api.app.repositories import roi as roi_repository
-from services.api.schemas import RoiApprovalResponse, RoiRow
+from services.api.schemas import PaginationMeta, RoiApprovalResponse, RoiListResponse, RoiRow
 from services.api.security import limit_ops, limit_viewer, require_ops, require_viewer
 
 router = APIRouter()
 templates = Jinja2Templates(directory="templates")
+
+RoiSort = Literal[
+    "roi_pct_desc",
+    "roi_pct_asc",
+    "asin_asc",
+    "asin_desc",
+    "margin_desc",
+    "margin_asc",
+    "vendor_asc",
+    "vendor_desc",
+]
+ROI_DEFAULT_SORT: RoiSort = "roi_pct_desc"
+ROI_DEFAULT_PAGE_SIZE = getattr(roi_repository, "DEFAULT_PAGE_SIZE", 50)
+ROI_MAX_PAGE_SIZE = getattr(roi_repository, "MAX_PAGE_SIZE", 200)
+OBSERVE_ONLY_THRESHOLD = getattr(roi_repository, "OBSERVE_ONLY_THRESHOLD", 20.0)
 
 
 def _to_float(value: Any) -> float | None:
@@ -42,20 +58,68 @@ def _serialize_roi_row(row: Mapping[str, Any]) -> RoiRow:
     )
 
 
-@router.get("/roi", response_model=list[RoiRow])
+def _normalize_text(value: str | None) -> str | None:
+    if not value or not isinstance(value, str):
+        return None
+    candidate = value.strip()
+    return candidate or None
+
+
+def _normalize_positive_int(value: int | None, fallback: int, max_value: int | None = None) -> int:
+    if isinstance(value, int) and value > 0:
+        result = value
+    else:
+        result = fallback
+    if max_value is not None:
+        return min(result, max_value)
+    return result
+
+
+@router.get("/roi", response_model=RoiListResponse)
 async def roi(
     roi_min: float = 0,
     vendor: int | None = None,
     category: str | None = None,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(ROI_DEFAULT_PAGE_SIZE, ge=1, le=ROI_MAX_PAGE_SIZE),
+    sort: RoiSort = Query(ROI_DEFAULT_SORT),
+    search: str | None = Query(None, max_length=64),
+    observe_only: bool = Query(False),
+    roi_max: float | None = Query(None),
     session: AsyncSession = Depends(get_async_session),
     _: object = Depends(require_viewer),
     __: None = Depends(limit_viewer),
-) -> list[RoiRow]:
+) -> RoiListResponse:
+    category_filter = _normalize_text(category)
+    search_filter = _normalize_text(search)
+    roi_max_filter = roi_max
+    if roi_max_filter is None and observe_only:
+        roi_max_filter = OBSERVE_ONLY_THRESHOLD
+
+    safe_page = _normalize_positive_int(page, 1)
+    safe_page_size = _normalize_positive_int(page_size, ROI_DEFAULT_PAGE_SIZE, ROI_MAX_PAGE_SIZE)
+
     try:
-        rows = await roi_repository.fetch_roi_rows(session, roi_min, vendor, category)
+        rows, total = await roi_repository.fetch_roi_rows(
+            session,
+            roi_min,
+            vendor,
+            category_filter.lower() if category_filter else None,
+            page=safe_page,
+            page_size=safe_page_size,
+            sort=sort,
+            search=search_filter,
+            roi_max=roi_max_filter,
+        )
     except InvalidROIViewError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-    return [_serialize_roi_row(dict(row)) for row in rows]
+
+    serialized = [_serialize_roi_row(dict(row)) for row in rows]
+    page_total = total if total > 0 else 0
+    total_pages = ceil(page_total / safe_page_size) if page_total > 0 else 1
+    resolved_page = min(max(safe_page, 1), max(total_pages, 1))
+    pagination = PaginationMeta(page=resolved_page, page_size=safe_page_size, total=page_total, total_pages=total_pages)
+    return RoiListResponse(items=serialized, pagination=pagination)
 
 
 @router.get("/roi-review")
