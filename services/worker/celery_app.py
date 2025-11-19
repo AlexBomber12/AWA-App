@@ -82,9 +82,10 @@ _beat_schedule = dict(getattr(celery_app.conf, "beat_schedule", {}) or {})
 
 def _loop_lag_monitor_enabled() -> bool:
     celery_cfg = getattr(settings, "celery", None)
-    if celery_cfg is None:
-        return True
-    return bool(celery_cfg.loop_lag_monitor_enabled)
+    default = bool(
+        celery_cfg.loop_lag_monitor_enabled if celery_cfg else getattr(settings, "ENABLE_LOOP_LAG_MONITOR", True)
+    )
+    return _env_bool("CELERY_LOOP_LAG_MONITOR", default)
 
 
 _loop_lag_stop: Callable[[], None] | None = None

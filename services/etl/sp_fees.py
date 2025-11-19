@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any, cast
@@ -23,6 +24,7 @@ logger = structlog.get_logger(__name__)
 DEFAULT_FIXTURE_PATH = Path("tests/fixtures/spapi_fees_sample.json")
 DEFAULT_SKUS = ("DUMMY1", "DUMMY2")
 SOURCE_NAME = "sp_fees_ingestor"
+_TRUTHY = {"1", "true", "t", "yes", "y", "on"}
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -209,10 +211,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                     if not rows:
                         logger.info("etl.no_data", source=SOURCE_NAME)
                         return 0
-                    app_cfg = getattr(settings, "app", None)
-                    repo.upsert_fees_raw(
-                        engine, rows, testing=bool(app_cfg.testing if app_cfg else getattr(settings, "TESTING", False))
-                    )
+                    repo.upsert_fees_raw(engine, rows, testing=_testing_enabled())
             except Exception:
                 logger.exception("sp_fees.failed", source=SOURCE_NAME)
                 raise
@@ -225,3 +224,13 @@ if __name__ == "__main__":
     import sys
 
     raise SystemExit(main(sys.argv[1:]))
+
+
+def _testing_enabled() -> bool:
+    override = os.getenv("TESTING")
+    if override is not None:
+        return override.strip().lower() in _TRUTHY
+    app_cfg = getattr(settings, "app", None)
+    if app_cfg:
+        return bool(app_cfg.testing)
+    return bool(getattr(settings, "TESTING", False))
