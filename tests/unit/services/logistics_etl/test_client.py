@@ -125,11 +125,12 @@ async def test_download_s3_uses_etag_when_version_missing(monkeypatch):
     async def fake_run_sync(func, limiter=None):
         return func()
 
+    dummy_boto3 = SimpleNamespace(client=lambda *_a, **_k: DummyS3Client())
     dummy_exceptions = SimpleNamespace(BotoCoreError=Exception, ClientError=Exception)
 
+    monkeypatch.setitem(sys.modules, "boto3", dummy_boto3)
     monkeypatch.setitem(sys.modules, "botocore.exceptions", dummy_exceptions)
     monkeypatch.setattr(client.anyio.to_thread, "run_sync", fake_run_sync)
-    monkeypatch.setattr(client, "create_boto3_client", lambda **_k: DummyS3Client())
 
     parsed = urlparse("s3://rates-bucket/daily/rates.csv")
     raw, meta = await client._download_s3(parsed, timeout_s=5)
