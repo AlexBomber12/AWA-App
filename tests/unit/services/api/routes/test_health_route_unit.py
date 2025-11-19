@@ -82,3 +82,30 @@ async def test_health_fails_when_redis_critical(monkeypatch, fake_db_session):
     assert response.status_code == 503
     payload = json.loads(response.body)
     assert payload["detail"] == "redis_unavailable"
+
+
+@pytest.mark.asyncio
+async def test_health_reports_degraded_when_some_clients_fail(monkeypatch, fake_db_session):
+    session = fake_db_session(_StubResult(scalar=datetime.now(UTC)))
+
+    class GoodRedis:
+        async def ping(self):
+            return True
+
+    class BrokenRedis:
+        async def ping(self):
+            raise RuntimeError("redis down")
+
+    state = SimpleNamespace(
+        stats_cache=GoodRedis(),
+        redis_health={"critical": False, "status": "unknown", "error": None},
+        limiter_redis=BrokenRedis(),
+    )
+    request = _make_request(state)
+    monkeypatch.setattr(health.FastAPILimiter, "redis", BrokenRedis(), raising=False)
+    monkeypatch.setattr(health, "record_redis_error", lambda *args, **kwargs: None)
+    monkeypatch.setattr(health.sentry_sdk, "capture_exception", lambda exc: None)
+    response = await health.health(session=session, request=request)
+    assert response.status_code == 200
+    payload = json.loads(response.body)
+    assert payload["redis"]["status"] == "degraded"

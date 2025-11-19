@@ -82,24 +82,29 @@ async def _redis_health_snapshot(request: Request | None) -> dict[str, Any]:
                 record_redis_error("health", "connect", key="probe")
                 sentry_sdk.capture_exception(exc)
     last_error: str | None = None
+    failures: list[tuple[str, str]] = []
+    successes = 0
     for source, client in clients:
         try:
             await client.ping()
-            if probe is not None and client is probe:
-                await probe.aclose()
-            snapshot = {"status": "ok", "critical": critical}
-            _update_state_snapshot(state, snapshot)
-            return snapshot
+            successes += 1
         except Exception as exc:
             last_error = str(exc)
             logger.error("redis_health_ping_failed", source=source, error=str(exc))
             record_redis_error("health", "ping", key=source)
             sentry_sdk.capture_exception(exc)
+            failures.append((source, last_error or "error"))
     if probe is not None:
         await probe.aclose()
+    if successes == len(clients) and successes > 0:
+        snapshot = {"status": "ok", "critical": critical}
+        _update_state_snapshot(state, snapshot)
+        return snapshot
     degraded_status = "down" if critical else "degraded"
     snapshot = {"status": degraded_status, "critical": critical}
-    if last_error:
+    if failures:
+        snapshot["error"] = ", ".join(f"{source}:{error}" for source, error in failures)
+    elif last_error:
         snapshot["error"] = last_error
     _update_state_snapshot(state, snapshot)
     return snapshot
