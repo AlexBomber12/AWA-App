@@ -13,13 +13,13 @@ async def test_download_with_retries_logs_attempts(monkeypatch: pytest.MonkeyPat
     attempts = {"count": 0}
     request = httpx.Request("GET", "https://example.com")
 
-    async def flaky_once(url: str, timeout_s: int):
+    async def flaky_s3(parsed, timeout_s: int):
         attempts["count"] += 1
         if attempts["count"] < 2:
             raise httpx.HTTPStatusError("boom", request=request, response=httpx.Response(500, request=request))
         return b"ok", {"content_type": "text/csv"}
 
-    monkeypatch.setattr(client, "_download_once", flaky_once, raising=False)
+    monkeypatch.setattr(client, "_download_s3", flaky_s3, raising=False)
 
     monkeypatch.setattr(
         client,
@@ -47,7 +47,7 @@ async def test_download_with_retries_logs_attempts(monkeypatch: pytest.MonkeyPat
         raising=False,
     )
 
-    body, meta = await client._download_with_retries("https://example.com", timeout_s=1, retries=1)
+    body, meta = await client._download_with_retries("s3://bucket/key", timeout_s=1, retries=1)
 
     assert body == b"ok"
     assert meta["content_type"] == "text/csv"

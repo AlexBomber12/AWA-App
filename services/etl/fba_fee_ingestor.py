@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import argparse
+import atexit
 import datetime as dt
 import json
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Iterable, Sequence
 from pathlib import Path
 from typing import Any, cast
 
@@ -13,10 +14,9 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from awa_common.dsn import build_dsn
 from awa_common.etl.guard import process_once
-from awa_common.etl.http import request as http_request
 from awa_common.etl.idempotency import build_payload_meta, compute_idempotency_key
+from awa_common.http_client import HTTPClient
 from awa_common.metrics import record_etl_run, record_etl_skip
-from awa_common.retries import RetryConfig, retry
 from awa_common.settings import settings
 
 logger = structlog.get_logger(__name__)
@@ -66,22 +66,12 @@ def resolve_live(cli_live: bool | None) -> bool:
     return bool(etl_cfg.enable_live if etl_cfg else False)
 
 
-RetryFunc = Callable[[Callable[[], dict[str, Any]]], Callable[[], dict[str, Any]]]
-_HELIUM_RETRY = cast(RetryFunc, retry(RetryConfig(operation="helium_fee", retry_on=(Exception,))))
+_HTTP_CLIENT = HTTPClient(integration=SOURCE_NAME)
+atexit.register(_HTTP_CLIENT.close)
 
 
-def _request_helium_fee(url: str, headers: dict[str, str], task_id: str | None) -> dict[str, Any]:
-    def _call() -> dict[str, Any]:
-        response = http_request(
-            "GET",
-            url,
-            headers=headers,
-            source=SOURCE_NAME,
-            task_id=task_id,
-        )
-        return cast(dict[str, Any], response.json())
-
-    return _HELIUM_RETRY(_call)()
+def _request_helium_fee(url: str, headers: dict[str, str]) -> dict[str, Any]:
+    return cast(dict[str, Any], _HTTP_CLIENT.get_json(url, headers=headers))
 
 
 def fetch_live_fees(asins: Iterable[str], api_key: str, *, task_id: str | None) -> list[tuple[str, float]]:
@@ -91,7 +81,7 @@ def fetch_live_fees(asins: Iterable[str], api_key: str, *, task_id: str | None) 
     headers = {"Authorization": f"Bearer {api_key}"}
     for asin in asins:
         url = f"{HELIUM_ENDPOINT}?asin={asin}"
-        data = _request_helium_fee(url, headers, task_id)
+        data = _request_helium_fee(url, headers)
         results.append((asin, float(data["totalFbaFee"])))
     return results
 

@@ -113,6 +113,25 @@ HTTP_REQUEST_DURATION_SECONDS = Histogram(
     buckets=HTTP_BUCKETS,
     registry=REGISTRY,
 )
+EXTERNAL_HTTP_REQUESTS_TOTAL = Counter(
+    "external_http_requests_total",
+    "Outbound HTTP client request outcomes",
+    ("integration", "method", "outcome", *BASE_LABELS),
+    registry=REGISTRY,
+)
+EXTERNAL_HTTP_REQUEST_DURATION_SECONDS = Histogram(
+    "external_http_request_duration_seconds",
+    "Outbound HTTP client latency in seconds",
+    ("integration", "method", *BASE_LABELS),
+    buckets=HTTP_BUCKETS,
+    registry=REGISTRY,
+)
+EXTERNAL_HTTP_RETRIES_TOTAL = Counter(
+    "external_http_retries_total",
+    "Outbound HTTP retries grouped by reason",
+    ("integration", "method", "reason", *BASE_LABELS),
+    registry=REGISTRY,
+)
 OIDC_JWKS_REFRESH_TOTAL = Counter(
     "oidc_jwks_refresh_total",
     "JWKS refresh attempts by issuer",
@@ -816,6 +835,35 @@ def record_http_client_request(target: str, method: str, status_code: int | None
     HTTP_CLIENT_REQUEST_DURATION_SECONDS.labels(**_with_base_labels(target=target, method=method)).observe(duration)
 
 
+def record_external_http_request(integration: str, method: str, outcome: str) -> None:
+    """Record shared HTTP client outcomes."""
+    labels = _with_base_labels(
+        integration=(integration or "default").strip().lower() or "default",
+        method=(method or "GET").upper(),
+        outcome=(outcome or "error").strip().lower(),
+    )
+    EXTERNAL_HTTP_REQUESTS_TOTAL.labels(**labels).inc()
+
+
+def observe_external_http_latency(integration: str, method: str, duration_s: float) -> None:
+    """Record shared HTTP client latency."""
+    labels = _with_base_labels(
+        integration=(integration or "default").strip().lower() or "default",
+        method=(method or "GET").upper(),
+    )
+    EXTERNAL_HTTP_REQUEST_DURATION_SECONDS.labels(**labels).observe(max(duration_s, 0.0))
+
+
+def record_external_http_retry(integration: str, method: str, reason: str) -> None:
+    """Record retry attempts performed by the shared HTTP client."""
+    labels = _with_base_labels(
+        integration=(integration or "default").strip().lower() or "default",
+        method=(method or "GET").upper(),
+        reason=(reason or "error").strip().lower(),
+    )
+    EXTERNAL_HTTP_RETRIES_TOTAL.labels(**labels).inc()
+
+
 def _status_class(status_code: int | None) -> str:
     if status_code is None:
         return "error"
@@ -1145,6 +1193,9 @@ __all__ = [
     "AWA_REDIS_ERRORS_TOTAL",
     "HTTP_CLIENT_REQUESTS_TOTAL",
     "HTTP_CLIENT_REQUEST_DURATION_SECONDS",
+    "EXTERNAL_HTTP_REQUESTS_TOTAL",
+    "EXTERNAL_HTTP_REQUEST_DURATION_SECONDS",
+    "EXTERNAL_HTTP_RETRIES_TOTAL",
     "OIDC_JWKS_REFRESH_TOTAL",
     "OIDC_JWKS_REFRESH_FAILURES_TOTAL",
     "OIDC_JWKS_AGE_SECONDS",
@@ -1187,6 +1238,9 @@ __all__ = [
     "record_oidc_validation_failure",
     "record_http_429",
     "record_http_client_request",
+    "record_external_http_request",
+    "observe_external_http_latency",
+    "record_external_http_retry",
     "record_logistics_rows",
     "record_logistics_error",
     "record_logistics_task_duration",

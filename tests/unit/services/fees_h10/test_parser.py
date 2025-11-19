@@ -13,18 +13,19 @@ async def test_fetch_fees_normalises_payload(monkeypatch: pytest.MonkeyPatch) ->
 
     calls: dict[str, object] = {}
 
-    async def dummy_request_json(method: str, url: str, **kwargs):
-        calls["method"] = method
-        calls["url"] = url
-        calls["headers"] = kwargs.get("headers")
-        return {
-            "fulfillmentFee": "1.50",
-            "referralFee": 0,
-            "storageFee": "-0.25",
-            "currency": "GBP",
-        }
+    class DummyClient:
+        async def get_json(self, url: str, **kwargs):
+            calls["method"] = "GET"
+            calls["url"] = url
+            calls["headers"] = kwargs.get("headers")
+            return {
+                "fulfillmentFee": "1.50",
+                "referralFee": 0,
+                "storageFee": "-0.25",
+                "currency": "GBP",
+            }
 
-    monkeypatch.setattr(client.http_client, "request_json", dummy_request_json)
+    monkeypatch.setattr(client, "_HTTP_CLIENT", DummyClient(), raising=False)
     monkeypatch.setattr(client, "H10_KEY", "secret", raising=False)
 
     row = await client.fetch_fees("ASIN123")
@@ -41,11 +42,12 @@ async def test_fetch_fees_normalises_payload(monkeypatch: pytest.MonkeyPatch) ->
 async def test_fetch_fees_handles_missing_key(monkeypatch: pytest.MonkeyPatch) -> None:
     from services.fees_h10 import client
 
-    async def dummy_request_json(method: str, url: str, **kwargs):
-        assert kwargs.get("headers") == {}
-        return {"fulfillmentFee": 2}
+    class DummyClient:
+        async def get_json(self, url: str, **kwargs):
+            assert kwargs.get("headers") == {}
+            return {"fulfillmentFee": 2}
 
-    monkeypatch.setattr(client.http_client, "request_json", dummy_request_json)
+    monkeypatch.setattr(client, "_HTTP_CLIENT", DummyClient(), raising=False)
     monkeypatch.setattr(client, "H10_KEY", "", raising=False)
 
     row = await client.fetch_fees("B00TEST")

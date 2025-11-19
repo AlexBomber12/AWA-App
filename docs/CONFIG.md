@@ -102,8 +102,8 @@ Call `settings.s3.client_kwargs()` when constructing boto3/aioboto3 clients.
 | `ENABLE_LIVE` | Run ETL in live mode |
 | `TASK_ID` | External task identifier for Keepa/Helium ETLs |
 | `KEEPA_KEY`, `HELIUM_API_KEY` | Third-party keys |
-| `REGION`, `SP_REFRESH_TOKEN`, `SP_CLIENT_ID`, `SP_CLIENT_SECRET`, `SP_FEES_DATE` | SP API credentials |
-| `ETL_*` (`ETL_CONNECT_TIMEOUT_S`, `ETL_HTTP_MAX_CONNECTIONS`, etc.) | HTTP client tuning |
+| `REGION`, `SP_REFRESH_TOKEN`, `SP_CLIENT_ID`, `SP_CLIENT_SECRET`, `SP_FEES_DATE`, `SP_API_BASE_URL` | SP API credentials and base URL |
+| `HTTP_*` (`HTTP_CONNECT_TIMEOUT_S`, `HTTP_MAX_CONNECTIONS`, etc.) | Shared HTTP client tuning (legacy `ETL_*` aliases still work) |
 
 ## Health checks
 

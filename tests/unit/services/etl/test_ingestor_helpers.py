@@ -17,13 +17,19 @@ def test_fba_build_idempotency_live() -> None:
 
 
 def test_fba_fetch_live_fees(monkeypatch: pytest.MonkeyPatch) -> None:
-    responses = iter(
-        [
-            types.SimpleNamespace(json=lambda: {"totalFbaFee": 1.5}),
-            types.SimpleNamespace(json=lambda: {"totalFbaFee": 2.5}),
-        ]
-    )
-    monkeypatch.setattr(fba_fee_ingestor, "http_request", lambda *a, **k: next(responses))
+    class DummyClient:
+        def __init__(self):
+            self.responses = iter(
+                [
+                    {"totalFbaFee": 1.5},
+                    {"totalFbaFee": 2.5},
+                ]
+            )
+
+        def get_json(self, url, headers=None):
+            return next(self.responses)
+
+    monkeypatch.setattr(fba_fee_ingestor, "_HTTP_CLIENT", DummyClient(), raising=False)
     fees = fba_fee_ingestor.fetch_live_fees(["A1", "A2"], api_key="k", task_id=None)
     assert fees == [("A1", 1.5), ("A2", 2.5)]
 

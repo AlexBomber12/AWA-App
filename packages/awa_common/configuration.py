@@ -416,6 +416,7 @@ class EtlSettings(SettingsGroup):
     sp_refresh_token: str | None
     sp_client_id: str | None
     sp_client_secret: str | None
+    sp_api_base_url: str | None
 
     @classmethod
     def from_settings(cls, cfg: Settings) -> EtlSettings:
@@ -447,6 +448,7 @@ class EtlSettings(SettingsGroup):
             sp_refresh_token=cfg.SP_REFRESH_TOKEN,
             sp_client_id=cfg.SP_CLIENT_ID,
             sp_client_secret=cfg.SP_CLIENT_SECRET,
+            sp_api_base_url=cfg.SP_API_BASE_URL,
         )
 
 
