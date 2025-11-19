@@ -39,7 +39,7 @@ async def test_stats_cache_ttl_roundtrip():
 
 
 @pytest.mark.asyncio
-async def test_get_json_handles_errors():
+async def test_get_json_handles_errors(monkeypatch):
     class BrokenRedis:
         async def get(self, key):
             raise RuntimeError("boom")
@@ -48,12 +48,24 @@ async def test_get_json_handles_errors():
         async def get(self, key):
             return "not-json"
 
+    errors = []
+
+    class DummyLogger:
+        def error(self, event, **kwargs):
+            errors.append((event, kwargs))
+
+    recorded = []
+    monkeypatch.setattr(cache, "logger", DummyLogger())
+    monkeypatch.setattr(cache, "record_redis_error", lambda *args, **kwargs: recorded.append((args, kwargs)))
+
     assert await cache.get_json(BrokenRedis(), "key") is None
     assert await cache.get_json(InvalidRedis(), "key") is None
+    assert errors, "expected redis errors to be logged"
+    assert recorded, "expected redis errors metric"
 
 
 @pytest.mark.asyncio
-async def test_set_json_handles_invalid_payload():
+async def test_set_json_handles_invalid_payload(monkeypatch):
     redis = FakeRedis()
     assert not await cache.set_json(redis, "stats:key", object(), ttl_s=5)
 
@@ -61,7 +73,18 @@ async def test_set_json_handles_invalid_payload():
         async def set(self, *_args, **_kwargs):
             raise RuntimeError("fail")
 
+    errors = []
+
+    class DummyLogger:
+        def error(self, event, **kwargs):
+            errors.append((event, kwargs))
+
+    recorded = []
+    monkeypatch.setattr(cache, "logger", DummyLogger())
+    monkeypatch.setattr(cache, "record_redis_error", lambda *args, **kwargs: recorded.append((args, kwargs)))
+
     assert not await cache.set_json(BrokenRedis(), "stats:key", {"ok": True}, ttl_s=5)
+    assert errors and recorded
     assert not await cache.set_json(redis, "stats:key", {"ok": True}, ttl_s=0)
 
 

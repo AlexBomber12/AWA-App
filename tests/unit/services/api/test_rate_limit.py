@@ -115,3 +115,41 @@ async def test_rate_limiter_uses_token_when_available(monkeypatch: pytest.Monkey
 
     await dependency(request)
     assert captured["token"] == "test-token"
+
+
+@pytest.mark.anyio
+async def test_rate_limit_allows_when_redis_errors(monkeypatch: pytest.MonkeyPatch):
+    class BrokenRedis(FakeRedis):
+        async def incr(self, key):
+            raise RuntimeError("redis down")
+
+    FastAPILimiter.redis = BrokenRedis()
+    limiter = rate_limit.SmartRateLimiter(settings)
+    dependency = limiter.dependency()
+    request = _make_request("/score")
+    request.state.user = _test_user()
+    metrics_calls = {"count": 0}
+    error_calls = {"count": 0}
+    sentry_calls = {"count": 0}
+
+    def _record(*args, **kwargs):
+        metrics_calls["count"] += 1
+
+    class DummyLogger:
+        def error(self, *args, **kwargs):
+            error_calls["count"] += 1
+
+        def warning(self, *args, **kwargs):
+            pass
+
+    def _capture(exc):
+        sentry_calls["count"] += 1
+
+    monkeypatch.setattr(rate_limit, "record_redis_error", _record)
+    monkeypatch.setattr(rate_limit, "logger", DummyLogger())
+    monkeypatch.setattr(rate_limit.sentry_sdk, "capture_exception", _capture)
+
+    await dependency(request)
+    assert metrics_calls["count"] == 1
+    assert error_calls["count"] == 1
+    assert sentry_calls["count"] == 1

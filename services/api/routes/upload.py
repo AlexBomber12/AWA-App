@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 import aioboto3
+import sentry_sdk
 import structlog
 from botocore.config import Config
 from fastapi import APIRouter, Depends, Request, UploadFile
@@ -19,7 +20,7 @@ from awa_common.files import sanitize_upload_name
 from awa_common.metrics import ingest_upload_inflight, record_ingest_upload, record_ingest_upload_failure
 from awa_common.settings import settings
 from services.api.routes.ingest_errors import IngestRequestError, ingest_error_response, respond_with_ingest_error
-from services.api.security import limit_ops, require_ops
+from services.api.security import get_request_id, limit_ops, require_ops
 from services.worker.celery_app import celery_app
 from services.worker.tasks import task_import_file
 
@@ -166,6 +167,8 @@ async def upload(
     __: None = Depends(limit_ops),
 ) -> JSONResponse:
     route = _route_path(request)
+    request_id = get_request_id(request)
+    log = logger.bind(route=route, request_id=request_id, env=settings.ENV)
     start = time.perf_counter()
     total_bytes = 0
     idempotency_key: str | None = None
@@ -232,8 +235,9 @@ async def upload(
         )
     except IngestRequestError as exc:
         return respond_with_ingest_error(request, exc, route=route)
-    except Exception:
-        logger.exception("upload.failed", route=route)
+    except Exception as exc:
+        log.exception("upload.failed")
+        sentry_sdk.capture_exception(exc)
         return ingest_error_response(
             request,
             status_code=500,

@@ -5,6 +5,7 @@ import importlib
 import os
 import shutil
 import tempfile
+import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
@@ -14,7 +15,11 @@ import structlog
 from botocore.config import Config
 from celery import states
 
-from awa_common.metrics import instrument_task as _instrument_task
+from awa_common.metrics import (
+    instrument_task as _instrument_task,
+    record_ingest_task_failure,
+    record_ingest_task_outcome,
+)
 from awa_common.settings import settings
 from services.alert_bot import worker as alerts_worker
 from services.worker.celery_app import celery_app
@@ -130,6 +135,8 @@ def task_import_file(
 
     self.update_state(state=states.STARTED, meta={"stage": "resolve_uri"})
     tmp_dir: Path | None = None
+    start_time = time.perf_counter()
+    success = False
     try:
         local_path = _resolve_uri_to_path(uri)
         if "ingest_" in str(local_path.parent):
@@ -150,13 +157,23 @@ def task_import_file(
             summary.update(result)
         summary.setdefault("status", "success")
         self.update_state(state=states.SUCCESS, meta=summary)
+        success = True
         return summary
     except Exception as exc:  # pragma: no cover - defensive
-        logger.exception("task_import_file failed for %s", uri)
+        task_id = getattr(getattr(self, "request", None), "id", None)
+        logger.exception(
+            "task_import_file.failed",
+            task_id=task_id,
+            uri=uri,
+            report_type=report_type,
+            error=str(exc),
+        )
         meta = {"status": "error", "error": str(exc)}
         self.update_state(state=states.FAILURE, meta=meta)
+        record_ingest_task_failure("ingest.import_file", exc)
         raise
     finally:
+        record_ingest_task_outcome("ingest.import_file", success=success, duration_s=time.perf_counter() - start_time)
         if tmp_dir and tmp_dir.exists():
             shutil.rmtree(tmp_dir, ignore_errors=True)
 

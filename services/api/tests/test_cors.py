@@ -65,7 +65,7 @@ def test_cors_simple_get_allowed(monkeypatch):
     with TestClient(app) as client:
         r = client.get("/health", headers={"Origin": "http://localhost:3000"})
         assert r.status_code == 200
-        assert r.json() == {"status": "ok"}
+        assert r.json().get("status") == "ok"
         assert r.headers.get("access-control-allow-origin") == "http://localhost:3000"
 
 

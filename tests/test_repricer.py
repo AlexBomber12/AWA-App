@@ -24,7 +24,7 @@ client = TestClient(app)  # type: ignore[arg-type]
 def test_health():
     r = client.get("/health")
     assert r.status_code == 200
-    assert r.json() == {"status": "ok"}
+    assert r.json()["status"] == "ok"
 
 
 def test_compute_price():

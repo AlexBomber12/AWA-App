@@ -99,6 +99,22 @@ debug incidents.
   messages that include only the hashed cache key and endpoint. Payloads are intentionally excluded
   so Sentry breadcrumbs never contain PII.
 
+### Ingest & Redis Visibility
+
+- `awa_ingest_task_outcome_total{task,status,service,env,version}` and
+  `awa_ingest_task_seconds{task,status,...}` cover Celery ingest/import tasks so spikes in runtime
+  or failures are immediately visible. Companion counter `awa_ingest_task_failures_total{task,error_type,...}`
+  records the exception class.
+- API and worker paths increment `awa_redis_errors_total{operation,command,key,...}` whenever Redis
+  commands (rate limiter consumption, stats cache reads/writes, health probes) fail. Correlated
+  structlog entries share the same `operation`/`command` context.
+- `/health` now reports both database and Redis status. When Redis is marked critical via
+  `REDIS_HEALTH_CRITICAL=1`, a failed ping degrades the endpoint (HTTP 503, `detail=redis_unavailable`).
+  Non-critical deployments still include the `redis.status` field (`ok`/`degraded`) so operators can
+  spot cache outages even when the API stays up.
+- Sentry captures unexpected ingest route/task exceptions as well as Redis command failures, so the
+  `Ingest` and `Redis` dashboards link directly to error breadcrumbs for triage.
+
 ### Metrics Endpoints
 
 - The API exposes `/metrics` via `packages/awa_common/metrics.register_metrics_endpoint`. Uvicorn

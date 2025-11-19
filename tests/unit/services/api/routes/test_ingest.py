@@ -164,6 +164,41 @@ async def test_submit_ingest_eager_get_exception(monkeypatch, tmp_path):
     assert data["task_id"] == "ok-task"
 
 
+@pytest.mark.asyncio
+async def test_submit_ingest_logs_unexpected_error(monkeypatch, tmp_path):
+    class DummyLogger:
+        def __init__(self):
+            self.exceptions = 0
+
+        def bind(self, **_kwargs):
+            return self
+
+        def exception(self, *args, **kwargs):
+            self.exceptions += 1
+
+        def error(self, *args, **kwargs):
+            self.exceptions += 1
+
+    dummy_logger = DummyLogger()
+    captured: dict[str, Exception] = {}
+
+    def _capture(exc):
+        captured["exc"] = exc
+
+    def boom(*_args, **_kwargs):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(ingest_module, "logger", dummy_logger)
+    monkeypatch.setattr(ingest_module.sentry_sdk, "capture_exception", _capture)
+    monkeypatch.setattr(ingest_module.task_import_file, "apply_async", boom)
+    request = _make_request({})
+    upload = UploadFile(filename="data.csv", file=BytesIO(b"a,b\n1,2\n"))
+    response = await ingest_module.submit_ingest(request, file=upload)
+    assert response.status_code == 500
+    assert "exc" in captured
+    assert dummy_logger.exceptions >= 1
+
+
 def test_failure_status_handles_generic_exception():
     status, detail = ingest_module._failure_status_and_detail(ValueError("oops"))
     assert status == 500

@@ -21,7 +21,7 @@ def test_api_live_health() -> None:
     for _ in range(10):
         try:
             r = requests.get(url, timeout=0.5)
-            if r.status_code == 200 and r.json() == {"status": "ok"}:
+            if r.status_code == 200 and r.json().get("status") == "ok":
                 return
         except Exception:
             pass

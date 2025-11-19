@@ -50,6 +50,18 @@ def _fake_request(cache_client=None, namespace="stats:"):
 
 
 @pytest.mark.asyncio
+async def test_kpi_handles_redis_errors(monkeypatch):
+    class BrokenRedis:
+        async def get(self, key):
+            raise RuntimeError("boom")
+
+    rows = [{"roi_avg": 1.0, "products": 1, "vendors": 1}]
+    request = _fake_request(cache_client=BrokenRedis())
+    result = await stats_module.kpi(session=DummyDB(rows), request=request)
+    assert isinstance(result, StatsKPIResponse)
+
+
+@pytest.mark.asyncio
 async def test_kpi_sql_branch(monkeypatch):
     monkeypatch.setenv("STATS_USE_SQL", "1")
     monkeypatch.setattr(stats_module, "get_roi_view_name", lambda: "v_roi_full")
