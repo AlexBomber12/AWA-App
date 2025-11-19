@@ -4,13 +4,7 @@ import { isApiError } from "@/lib/api/fetchFromApi";
 import { roiClient } from "@/lib/api/roiClient";
 
 import type { components } from "@/lib/api/types.generated";
-import {
-  ROI_TABLE_DEFAULTS,
-  mergeRoiTableStateWithDefaults,
-  parseRoiSearchParams,
-  type RoiSort,
-  type RoiTableFilters,
-} from "@/components/features/roi/tableState";
+import { ROI_TABLE_DEFAULTS, mergeRoiTableStateWithDefaults, parseRoiSearchParams } from "@/components/features/roi/tableState";
 
 type RoiListResponse = components["schemas"]["RoiListResponse"];
 
