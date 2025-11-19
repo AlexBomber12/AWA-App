@@ -108,24 +108,26 @@ def test_task_refresh_roi_mvs_executes_both_views(monkeypatch):
         "_bust_stats_cache",
         lambda *_: {"status": "success", "deleted": {"kpi": 1, "roi_trend": 0, "returns": 0}},
     )
+    monkeypatch.setattr(maintenance_module.settings, "ROI_MATERIALIZED_VIEW_NAME", "custom_roi_mat", raising=False)
     result = maintenance_module.task_refresh_roi_mvs.run()
     assert result == {
         "status": "success",
-        "views": ["mat_v_roi_full", "mat_fees_expanded"],
+        "views": ["custom_roi_mat", "mat_fees_expanded"],
         "cache_bust": {"status": "success", "deleted": {"kpi": 1, "roi_trend": 0, "returns": 0}},
     }
     assert engine.disposed is True
     assert engine.log[0] == ("execution_options", {"isolation_level": "AUTOCOMMIT"})
-    assert engine.log[1] == "REFRESH MATERIALIZED VIEW CONCURRENTLY mat_v_roi_full"
+    assert engine.log[1] == 'REFRESH MATERIALIZED VIEW CONCURRENTLY "custom_roi_mat"'
     assert engine.log[2] == "REFRESH MATERIALIZED VIEW CONCURRENTLY mat_fees_expanded"
 
 
 def test_task_refresh_roi_mvs_raises_and_disposes(monkeypatch):
     engine = RefreshEngine(raise_on_first=True)
     monkeypatch.setattr(maintenance_module, "create_engine", lambda *_: engine)
+    monkeypatch.setattr(maintenance_module.settings, "ROI_MATERIALIZED_VIEW_NAME", "custom_roi_mat", raising=False)
     with pytest.raises(RuntimeError):
         maintenance_module.task_refresh_roi_mvs.run()
     assert engine.disposed is True
     assert engine.log[0] == ("execution_options", {"isolation_level": "AUTOCOMMIT"})
-    assert engine.log[1] == "REFRESH MATERIALIZED VIEW CONCURRENTLY mat_v_roi_full"
+    assert engine.log[1] == 'REFRESH MATERIALIZED VIEW CONCURRENTLY "custom_roi_mat"'
     assert len(engine.log) == 2

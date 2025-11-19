@@ -282,6 +282,7 @@ class LLMSettings(SettingsGroup):
     local_url: str
     lan_api_base_url: str
     lan_health_base_url: str
+    lan_health_timeout_s: float
     lan_api_key: str | None
     remote_url: str | None
     openai_model: str
@@ -297,6 +298,7 @@ class LLMSettings(SettingsGroup):
             local_url=cfg.LLM_URL,
             lan_api_base_url=cfg.LLM_BASE_URL,
             lan_health_base_url=cfg.LAN_BASE_URL,
+            lan_health_timeout_s=float(cfg.LLM_LAN_HEALTH_TIMEOUT_S),
             lan_api_key=cfg.LLM_API_KEY,
             remote_url=cfg.LLM_REMOTE_URL,
             openai_model=cfg.OPENAI_MODEL,
@@ -325,6 +327,18 @@ class StatsSettings(SettingsGroup):
             require_clamp=bool(cfg.REQUIRE_CLAMP),
             use_sql=bool(cfg.STATS_USE_SQL),
             returns_view_name=cfg.RETURNS_STATS_VIEW_NAME,
+        )
+
+
+class RoiSettings(SettingsGroup):
+    view_name: str
+    materialized_view_name: str
+
+    @classmethod
+    def from_settings(cls, cfg: Settings) -> RoiSettings:
+        return cls(
+            view_name=cfg.ROI_VIEW_NAME,
+            materialized_view_name=cfg.ROI_MATERIALIZED_VIEW_NAME,
         )
 
 
@@ -486,6 +500,7 @@ __all__ = [
     "LLMSettings",
     "MaintenanceSettings",
     "ObservabilitySettings",
+    "RoiSettings",
     "RedisSettings",
     "RepricerSettings",
     "S3Settings",

@@ -14,10 +14,11 @@ LAN_BASE = (_LLM_CFG.lan_api_base_url if _LLM_CFG else None) or "http://localhos
 LAN_KEY = (_LLM_CFG.lan_api_key if _LLM_CFG else None) or ""
 OPENAI_MODEL = (_LLM_CFG.openai_model if _LLM_CFG else None) or "gpt-4o-mini"
 OPENAI_API_KEY = (_LLM_CFG.openai_api_key if _LLM_CFG else None) or ""
+LLM_TIMEOUT_S = float(getattr(_LLM_CFG, "request_timeout_s", getattr(settings, "LLM_REQUEST_TIMEOUT_S", 60.0)))
 
 
 async def _local_llm(prompt: str, temp: float, max_toks: int) -> str:
-    async with httpx.AsyncClient(timeout=60) as cli:
+    async with httpx.AsyncClient(timeout=LLM_TIMEOUT_S) as cli:
         r = await cli.post(
             LOCAL_URL,
             json={"prompt": prompt, "temperature": temp, "max_tokens": max_toks},
@@ -45,7 +46,7 @@ async def _remote_generate(base: str, key: str | None, prompt: str, max_tokens: 
         "messages": [{"role": "user", "content": prompt}],
         "max_tokens": max_tokens,
     }
-    async with httpx.AsyncClient(timeout=60) as cli:
+    async with httpx.AsyncClient(timeout=LLM_TIMEOUT_S) as cli:
         resp = await cli.post(f"{base}/v1/chat/completions", json=payload, headers=headers)
         resp.raise_for_status()
         data = resp.json()

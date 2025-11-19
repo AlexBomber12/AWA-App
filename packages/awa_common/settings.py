@@ -22,6 +22,7 @@ from .configuration import (
     ObservabilitySettings,
     RedisSettings,
     RepricerSettings,
+    RoiSettings,
     S3Settings,
     SecuritySettings,
     StatsSettings,
@@ -126,6 +127,7 @@ class Settings(BaseSettings):
     REDIS_HEALTH_CRITICAL: bool = False
     RETURNS_STATS_VIEW_NAME: str = "returns_raw"
     ROI_VIEW_NAME: str = "v_roi_full"
+    ROI_MATERIALIZED_VIEW_NAME: str = "mat_v_roi_full"
 
     @property
     def POSTGRES_DSN(self) -> str:
@@ -180,6 +182,13 @@ class Settings(BaseSettings):
     AWS_REGION: str = "us-east-1"
     ENABLE_LOOP_LAG_MONITOR: bool = False
     LOOP_LAG_INTERVAL_S: float = 1.0
+    HEALTHCHECK_DB_TIMEOUT_S: float = 2.0
+    HEALTHCHECK_REDIS_SOCKET_TIMEOUT_S: float = 2.0
+    HEALTHCHECK_HTTP_TIMEOUT_S: float = 2.0
+    HEALTHCHECK_CELERY_TIMEOUT_S: float = 2.0
+    HEALTHCHECK_INSPECT_TIMEOUT_S: float = 1.0
+    HEALTHCHECK_RETRY_ATTEMPTS: int = 3
+    HEALTHCHECK_RETRY_DELAY_S: float = 1.0
 
     # Webapp
     NEXT_PUBLIC_API_URL: str = Field(default="http://localhost:8000")
@@ -257,6 +266,7 @@ class Settings(BaseSettings):
         default=60.0,
         validation_alias=AliasChoices("LLM_REQUEST_TIMEOUT_S", "LLM_TIMEOUT_SECS"),
     )
+    LLM_LAN_HEALTH_TIMEOUT_S: float = 1.0
 
     # Auth configuration (Keycloak OIDC)
     OIDC_ISSUER: str = Field(default="https://keycloak.local/realms/awa")
@@ -408,6 +418,10 @@ class Settings(BaseSettings):
     @cached_property
     def repricer(self) -> RepricerSettings:
         return RepricerSettings.from_settings(self)
+
+    @cached_property
+    def roi(self) -> RoiSettings:
+        return RoiSettings.from_settings(self)
 
     @property
     def wait_for_db_max_attempts(self) -> int:

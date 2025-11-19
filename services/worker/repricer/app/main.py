@@ -3,11 +3,13 @@ from __future__ import annotations
 import json
 from collections.abc import Iterable
 from decimal import Decimal
+from functools import lru_cache
 
 from fastapi import Depends, FastAPI, HTTPException
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from awa_common.roi_views import InvalidROIViewError, current_roi_view, quote_identifier
 from awa_common.settings import settings
 from services.api.db import get_session
 
@@ -25,13 +27,17 @@ from .schemas import (
 
 app = FastAPI(title="AWA Repricer")
 
-QUERY_REPRICER_INPUT = text(
-    """
-    SELECT cost, fees, buybox_price
-    FROM v_roi_full
-    WHERE asin = :asin
-    """
-)
+
+@lru_cache(maxsize=4)
+def _repricer_query(view_name: str):
+    quoted = quote_identifier(view_name)
+    return text(
+        f"""
+        SELECT cost, fees, buybox_price
+        FROM {quoted}
+        WHERE asin = :asin
+        """
+    )
 
 
 repricer_cfg = getattr(settings, "repricer", None)
@@ -53,7 +59,11 @@ def _strategy_label(applied: Iterable[str]) -> str:
 
 
 async def _fetch_inputs(session: AsyncSession, asin: str) -> dict:
-    result = await session.execute(QUERY_REPRICER_INPUT, {"asin": asin})
+    try:
+        stmt = _repricer_query(current_roi_view())
+    except InvalidROIViewError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    result = await session.execute(stmt, {"asin": asin})
     row = result.mappings().first()
     if row is None:
         raise HTTPException(status_code=404, detail=f"ASIN {asin} not found")

@@ -282,10 +282,14 @@ async def _check_llm() -> None:
         os.getenv("LLM_PROVIDER") or (llm_cfg.provider if llm_cfg else getattr(settings, "LLM_PROVIDER", "stub"))
     ).lower()
     lan_base = os.getenv("LAN_BASE") or (llm_cfg.lan_health_base_url if llm_cfg else None) or "http://lan-llm:8000"
+    lan_timeout = float(
+        os.getenv("LLM_LAN_HEALTH_TIMEOUT_S")
+        or (getattr(llm_cfg, "lan_health_timeout_s", None) or getattr(settings, "LLM_LAN_HEALTH_TIMEOUT_S", 1.0))
+    )
     if provider != "lan":
         return
     try:
-        async with httpx.AsyncClient(timeout=1.0) as client:
+        async with httpx.AsyncClient(timeout=lan_timeout) as client:
             await client.get(f"{lan_base}/ready")
     except Exception:
         fallback = (os.getenv("LLM_PROVIDER_FALLBACK") or (llm_cfg.fallback_provider if llm_cfg else "stub")).lower()

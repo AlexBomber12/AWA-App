@@ -11,9 +11,23 @@ from awa_common.dsn import build_dsn
 from awa_common.settings import settings
 
 
+def _db_timeout() -> float:
+    return float(getattr(settings, "HEALTHCHECK_DB_TIMEOUT_S", 2.0))
+
+
+def _http_timeout() -> float:
+    return float(getattr(settings, "HEALTHCHECK_HTTP_TIMEOUT_S", 2.0))
+
+
+def _retry_budget() -> tuple[int, float]:
+    attempts = int(getattr(settings, "HEALTHCHECK_RETRY_ATTEMPTS", 3) or 3)
+    delay = float(getattr(settings, "HEALTHCHECK_RETRY_DELAY_S", 1.0) or 1.0)
+    return max(attempts, 1), max(delay, 0.0)
+
+
 def check_db() -> None:
     dsn = build_dsn(sync=True).replace("+psycopg", "")
-    with psycopg.connect(dsn, connect_timeout=2) as conn:
+    with psycopg.connect(dsn, connect_timeout=_db_timeout()) as conn:
         with conn.cursor() as cur:
             cur.execute("SELECT 1")
 
@@ -35,10 +49,13 @@ def check_minio() -> None:
     except Exception:
         pass
     req = Request(url, method="GET")
-    urlopen(req, timeout=2)
+    urlopen(req, timeout=_http_timeout())
 
 
-def _retry(fn, attempts=3, delay=1.0, name="check") -> bool:
+def _retry(fn, attempts=None, delay=None, name="check") -> bool:
+    default_attempts, default_delay = _retry_budget()
+    attempts = int(attempts or default_attempts)
+    delay = float(delay if delay is not None else default_delay)
     for i in range(1, attempts + 1):
         try:
             fn()
