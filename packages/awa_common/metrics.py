@@ -166,6 +166,25 @@ AWA_INGEST_UPLOAD_FAILURES_TOTAL = Counter(
     ("extension", "reason", *BASE_LABELS),
     registry=REGISTRY,
 )
+AWA_INGEST_TASK_OUTCOME_TOTAL = Counter(
+    "awa_ingest_task_outcome_total",
+    "Ingest task executions grouped by status",
+    ("task", "status", *BASE_LABELS),
+    registry=REGISTRY,
+)
+AWA_INGEST_TASK_SECONDS = Histogram(
+    "awa_ingest_task_seconds",
+    "Ingest task runtime in seconds",
+    ("task", "status", *BASE_LABELS),
+    buckets=HTTP_BUCKETS,
+    registry=REGISTRY,
+)
+AWA_INGEST_TASK_FAILURES_TOTAL = Counter(
+    "awa_ingest_task_failures_total",
+    "Ingest task failures grouped by error type",
+    ("task", "error_type", *BASE_LABELS),
+    registry=REGISTRY,
+)
 API_INGEST_4XX_TOTAL = Counter(
     "api_ingest_4xx_total",
     "ETL ingest API 4xx responses grouped by error code",
@@ -304,6 +323,12 @@ AWA_INGEST_DOWNLOAD_FAILURES_TOTAL = Counter(
     "awa_ingest_download_failures_total",
     "Download failures by URI scheme",
     ("scheme", "reason", *BASE_LABELS),
+    registry=REGISTRY,
+)
+AWA_REDIS_ERRORS_TOTAL = Counter(
+    "awa_redis_errors_total",
+    "Redis command failures grouped by operation and command",
+    ("operation", "command", "key", *BASE_LABELS),
     registry=REGISTRY,
 )
 STATS_CACHE_HITS_TOTAL = Counter(
@@ -814,6 +839,26 @@ def record_ingest_upload_failure(*, extension: str | None, reason: str) -> None:
     AWA_INGEST_UPLOAD_FAILURES_TOTAL.labels(**labels).inc()
 
 
+def _ingest_task_labels(task: str, status: str) -> dict[str, str]:
+    task_label = (task or "unknown").strip() or "unknown"
+    status_label = (status or "unknown").strip() or "unknown"
+    return _with_base_labels(task=task_label, status=status_label)
+
+
+def record_ingest_task_outcome(task: str, *, success: bool, duration_s: float) -> None:
+    status = "success" if success else "error"
+    labels = _ingest_task_labels(task, status)
+    AWA_INGEST_TASK_OUTCOME_TOTAL.labels(**labels).inc()
+    AWA_INGEST_TASK_SECONDS.labels(**labels).observe(max(duration_s, 0.0))
+
+
+def record_ingest_task_failure(task: str, exc: BaseException) -> None:
+    task_label = (task or "unknown").strip() or "unknown"
+    error_type = getattr(exc, "__class__", type(exc)).__name__
+    labels = _with_base_labels(task=task_label, error_type=error_type or "unknown")
+    AWA_INGEST_TASK_FAILURES_TOTAL.labels(**labels).inc()
+
+
 def logistics_source_label(source: str | None) -> str:
     label = (source or "unknown").strip() or "unknown"
     if len(label) > 80:
@@ -901,6 +946,27 @@ def record_ingest_download_failure(*, scheme: str | None, reason: str) -> None:
     scheme_label = (scheme or "unknown").lower() or "unknown"
     labels = _with_base_labels(scheme=scheme_label, reason=reason or "error")
     AWA_INGEST_DOWNLOAD_FAILURES_TOTAL.labels(**labels).inc()
+
+
+def _redis_key_label(key: str | None) -> str:
+    raw = (key or "unknown").strip()
+    if not raw:
+        return "unknown"
+    if ":" in raw:
+        prefix = raw.split(":", 1)[0]
+        return f"{prefix}:*"
+    if len(raw) > 48:
+        return raw[:48]
+    return raw
+
+
+def record_redis_error(operation: str, command: str, *, key: str | None = None) -> None:
+    labels = _with_base_labels(
+        operation=(operation or "unknown").strip() or "unknown",
+        command=(command or "unknown").strip() or "unknown",
+        key=_redis_key_label(key),
+    )
+    AWA_REDIS_ERRORS_TOTAL.labels(**labels).inc()
 
 
 def record_api_ingest_4xx_total(code: str) -> None:
@@ -1040,6 +1106,9 @@ __all__ = [
     "AWA_INGEST_UPLOAD_SECONDS",
     "AWA_INGEST_UPLOAD_INFLIGHT",
     "AWA_INGEST_UPLOAD_FAILURES_TOTAL",
+    "AWA_INGEST_TASK_OUTCOME_TOTAL",
+    "AWA_INGEST_TASK_SECONDS",
+    "AWA_INGEST_TASK_FAILURES_TOTAL",
     "API_INGEST_4XX_TOTAL",
     "API_INGEST_5XX_TOTAL",
     "AWA_RETRY_ATTEMPTS_TOTAL",
@@ -1062,6 +1131,7 @@ __all__ = [
     "AWA_INGEST_DOWNLOAD_BYTES_TOTAL",
     "AWA_INGEST_DOWNLOAD_SECONDS",
     "AWA_INGEST_DOWNLOAD_FAILURES_TOTAL",
+    "AWA_REDIS_ERRORS_TOTAL",
     "HTTP_CLIENT_REQUESTS_TOTAL",
     "HTTP_CLIENT_REQUEST_DURATION_SECONDS",
     "OIDC_JWKS_REFRESH_TOTAL",
@@ -1093,8 +1163,11 @@ __all__ = [
     "record_etl_normalize_error",
     "record_ingest_upload",
     "record_ingest_upload_failure",
+    "record_ingest_task_outcome",
+    "record_ingest_task_failure",
     "record_ingest_download",
     "record_ingest_download_failure",
+    "record_redis_error",
     "record_api_ingest_4xx_total",
     "record_api_ingest_5xx_total",
     "record_retry_attempt",

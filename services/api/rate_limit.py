@@ -5,11 +5,12 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
 
+import sentry_sdk
 import structlog
 from fastapi import HTTPException, Request
 from fastapi_limiter import FastAPILimiter
 
-from awa_common.metrics import record_http_429
+from awa_common.metrics import record_http_429, record_redis_error
 from awa_common.security import oidc
 from awa_common.security.models import Role, UserCtx
 from awa_common.settings import Settings, parse_rate_limit, settings
@@ -115,6 +116,14 @@ class SmartRateLimiter:
             limits = self._role_limits[Role.viewer]
         return limits
 
+    def _record_redis_error(self, command: str, key: str, exc: Exception) -> None:
+        logger.error("rate_limit_redis_error", command=command, key=key, error=str(exc))
+        record_redis_error("rate_limit", command, key=key)
+        try:
+            sentry_sdk.capture_exception(exc)
+        except Exception:
+            pass
+
     async def _resolve_user(self, request: Request) -> UserCtx | None:
         user = getattr(request.state, "user", None)
         if isinstance(user, UserCtx):
@@ -133,10 +142,22 @@ class SmartRateLimiter:
         return None
 
     async def _consume(self, redis: Any, key: str, limit: int, window: int) -> tuple[bool, int, int]:
-        count = await redis.incr(key)
-        await redis.expire(key, window)
+        try:
+            count = await redis.incr(key)
+        except Exception as exc:
+            self._record_redis_error("incr", key, exc)
+            return True, limit, window
+        try:
+            await redis.expire(key, window)
+        except Exception as exc:
+            self._record_redis_error("expire", key, exc)
+            return True, limit, window
         remaining = max(0, limit - count)
-        ttl = await redis.ttl(key)
+        try:
+            ttl = await redis.ttl(key)
+        except Exception as exc:
+            self._record_redis_error("ttl", key, exc)
+            ttl = window
         reset_in = ttl if isinstance(ttl, int) and ttl > 0 else window
         return count <= limit, remaining, reset_in
 

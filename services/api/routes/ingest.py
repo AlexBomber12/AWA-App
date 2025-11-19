@@ -11,6 +11,7 @@ from urllib.parse import ParseResult, urlparse
 
 import aioboto3
 import httpx
+import sentry_sdk
 import structlog
 from botocore.config import Config
 from celery import states
@@ -29,7 +30,7 @@ from awa_common.settings import settings
 from etl.load_csv import ImportFileError
 from services.api.routes.ingest_errors import IngestRequestError, ingest_error_response, respond_with_ingest_error
 from services.api.schemas import ErrorCode
-from services.api.security import limit_ops, limit_viewer, require_ops, require_viewer
+from services.api.security import get_request_id, limit_ops, limit_viewer, require_ops, require_viewer
 from services.worker.celery_app import celery_app
 from services.worker.tasks import task_import_file
 
@@ -121,6 +122,10 @@ async def submit_ingest(
     __: None = Depends(limit_ops),
 ) -> JSONResponse:
     route = _route_path(request)
+    request_id = get_request_id(request)
+    ingest_source = "upload" if file else "uri"
+    log = logger.bind(route=route, request_id=request_id, ingest_source=ingest_source, env=settings.ENV)
+    resolved_uri: str | None = None
     try:
         if not file and uri is None:
             try:
@@ -152,24 +157,42 @@ async def submit_ingest(
             tmp_path, idempotency_key = await _download_remote(uri)
             resolved_uri = f"file://{tmp_path}"
 
+        log = log.bind(uri=resolved_uri)
         async_result = task_import_file.apply_async(
             args=[resolved_uri],
             kwargs={"report_type": report_type or None, "force": force, "idempotency_key": idempotency_key},
             queue="ingest",
         )
+        log = log.bind(task_id=async_result.id)
         if celery_app.conf.task_always_eager:
             try:
-                async_result.get(propagate=False)
-            except Exception:
-                pass
+                async_result.get(propagate=True)
+            except IngestRequestError:
+                raise
+            except Exception as exc:
+                log.warning(
+                    "ingest_task_get_exception",
+                    task_state=getattr(async_result, "state", "unknown"),
+                    error_detail=str(exc),
+                )
+                sentry_sdk.capture_exception(exc)
             if async_result.failed():
-                error = _error_from_failure(async_result.info)
+                info = async_result.info
+                if isinstance(info, Exception):
+                    sentry_sdk.capture_exception(info)
+                log.error(
+                    "ingest_task_failed",
+                    task_state=getattr(async_result, "state", "unknown"),
+                    error_detail=str(info),
+                )
+                error = _error_from_failure(info)
                 return respond_with_ingest_error(request, error, route=route)
         return JSONResponse({"task_id": async_result.id})
     except IngestRequestError as exc:
         return respond_with_ingest_error(request, exc, route=route)
-    except Exception:
-        logger.exception("submit_ingest.failed", route=route)
+    except Exception as exc:
+        log.exception("submit_ingest.failed")
+        sentry_sdk.capture_exception(exc)
         return ingest_error_response(
             request,
             status_code=500,

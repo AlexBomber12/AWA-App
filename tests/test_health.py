@@ -34,5 +34,5 @@ def test_health(monkeypatch, _):
     with TestClient(main.app) as client:
         resp = client.get("/health")
         assert resp.status_code == 200
-        assert resp.json() == {"status": "ok"}
+        assert resp.json()["status"] == "ok"
     main.app.dependency_overrides.clear()

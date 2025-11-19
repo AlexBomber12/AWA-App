@@ -6,10 +6,17 @@ import json
 from collections.abc import Mapping, Sequence
 from typing import Any
 
+import sentry_sdk
+import structlog
+
 try:  # pragma: no cover - redis is optional when cache is disabled
     import redis.asyncio as aioredis
 except Exception:  # pragma: no cover
     aioredis = None  # type: ignore[assignment]
+
+from awa_common.metrics import record_redis_error
+
+logger = structlog.get_logger(__name__)
 
 
 def normalize_namespace(namespace: str | None) -> str:
@@ -46,13 +53,29 @@ def build_cache_key(
     return f"{safe_namespace}{endpoint_label}:{digest}"
 
 
+def _log_redis_error(operation: str, command: str, exc: Exception, *, key: str | None = None) -> None:
+    logger.error(
+        "redis_command_failed",
+        operation=operation,
+        command=command,
+        key=key,
+        error=str(exc),
+    )
+    record_redis_error(operation, command, key=key)
+    try:
+        sentry_sdk.capture_exception(exc)
+    except Exception:
+        pass
+
+
 async def get_json(redis_client: aioredis.Redis | None, key: str) -> Any | None:
     """Return decoded JSON for the cache key or None when missing."""
     if redis_client is None:
         return None
     try:
         raw = await redis_client.get(key)
-    except Exception:
+    except Exception as exc:
+        _log_redis_error("stats_cache", "get", exc, key=key)
         return None
     if not raw:
         return None
@@ -73,7 +96,8 @@ async def set_json(redis_client: aioredis.Redis | None, key: str, value: Any, tt
     try:
         await redis_client.set(key, payload, ex=max(int(ttl_s), 1))
         return True
-    except Exception:
+    except Exception as exc:
+        _log_redis_error("stats_cache", "set", exc, key=key)
         return False
 
 
@@ -111,17 +135,28 @@ async def purge_prefix(
     deleted = 0
     pipeline = redis_client.pipeline(transaction=False)
     queued = 0
+
+    async def _flush() -> None:
+        nonlocal deleted, pipeline, queued
+        if not queued:
+            return
+        try:
+            deleted += sum(await pipeline.execute())
+        except Exception as exc:
+            _log_redis_error("stats_cache", "pipeline.execute", exc, key=prefix)
+        finally:
+            pipeline = redis_client.pipeline(transaction=False)
+            queued = 0
+
     try:
         async for key in redis_client.scan_iter(match=pattern, count=batch_size):
             pipeline.delete(key)
             queued += 1
             if queued >= batch_size:
-                deleted += sum(await pipeline.execute())
-                pipeline = redis_client.pipeline(transaction=False)
-                queued = 0
-        if queued:
-            deleted += sum(await pipeline.execute())
-    except Exception:
+                await _flush()
+        await _flush()
+    except Exception as exc:
+        _log_redis_error("stats_cache", "scan_iter", exc, key=prefix)
         return deleted
     return deleted
 
@@ -146,6 +181,19 @@ async def purge_returns_cache(
     deleted = 0
     pipeline = redis_client.pipeline(transaction=False)
     queued = 0
+
+    async def _flush() -> None:
+        nonlocal deleted, pipeline, queued
+        if not queued:
+            return
+        try:
+            deleted += sum(await pipeline.execute())
+        except Exception as exc:
+            _log_redis_error("stats_cache", "pipeline.execute", exc, key=normalized_ns)
+        finally:
+            pipeline = redis_client.pipeline(transaction=False)
+            queued = 0
+
     try:
         async for key in redis_client.scan_iter(match=pattern, count=batch_size):
             meta = await get_json(redis_client, key)
@@ -156,12 +204,10 @@ async def purge_returns_cache(
             pipeline.delete(base_key)
             queued += 2
             if queued >= batch_size:
-                deleted += sum(await pipeline.execute())
-                pipeline = redis_client.pipeline(transaction=False)
-                queued = 0
-        if queued:
-            deleted += sum(await pipeline.execute())
-    except Exception:
+                await _flush()
+        await _flush()
+    except Exception as exc:
+        _log_redis_error("stats_cache", "scan_iter", exc, key=normalized_ns)
         return deleted
     return deleted
 

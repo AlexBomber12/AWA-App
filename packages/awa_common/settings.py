@@ -101,6 +101,7 @@ class Settings(BaseSettings):
     STATS_CACHE_NAMESPACE: str = "stats:"
     STATS_MAX_DAYS: int = 365
     REQUIRE_CLAMP: bool = False
+    REDIS_HEALTH_CRITICAL: bool = False
 
     @property
     def POSTGRES_DSN(self) -> str:
