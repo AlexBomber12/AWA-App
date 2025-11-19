@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 import pytest
 
 from awa_common import roi_views
@@ -46,6 +48,22 @@ def test_current_roi_view_respects_new_settings_instance(monkeypatch):
     cfg = Settings()
     roi_views.clear_caches()
     assert roi_views.current_roi_view(cfg=cfg, ttl_seconds=0) == "test_roi_view"
+
+
+def test_current_roi_view_falls_back_to_roi_group(monkeypatch):
+    class DummyCfg:
+        roi = SimpleNamespace(view_name="roi_view")
+
+    roi_views.clear_caches()
+    assert roi_views.current_roi_view(cfg=DummyCfg(), ttl_seconds=0) == "roi_view"
+
+
+def test_current_roi_view_falls_back_to_view_name_attr(monkeypatch):
+    class DummyCfg:
+        view_name = "mat_v_roi_full"
+
+    roi_views.clear_caches()
+    assert roi_views.current_roi_view(cfg=DummyCfg(), ttl_seconds=0) == "mat_v_roi_full"
 
 
 def test_quote_identifier_rejects_empty_segments():

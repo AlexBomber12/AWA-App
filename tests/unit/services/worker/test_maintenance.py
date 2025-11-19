@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 import pytest
 
 from services.worker import maintenance as maintenance_module
@@ -131,3 +133,13 @@ def test_task_refresh_roi_mvs_raises_and_disposes(monkeypatch):
     assert engine.log[0] == ("execution_options", {"isolation_level": "AUTOCOMMIT"})
     assert engine.log[1] == 'REFRESH MATERIALIZED VIEW CONCURRENTLY "custom_roi_mat"'
     assert len(engine.log) == 2
+
+
+def test_roi_materialized_view_name_prefers_roi_group(monkeypatch):
+    stub_settings = SimpleNamespace(
+        ROI_MATERIALIZED_VIEW_NAME="", roi=SimpleNamespace(materialized_view_name="roi_mat")
+    )
+    monkeypatch.setattr(maintenance_module, "settings", stub_settings)
+    name, quoted = maintenance_module._roi_materialized_view_names()
+    assert name == "roi_mat"
+    assert quoted == '"roi_mat"'
