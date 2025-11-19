@@ -4,7 +4,6 @@ import pytest
 from fastapi.testclient import TestClient
 
 from services.api import db, main
-from tests.helpers.api import prepare_api_for_tests
 
 pytestmark = pytest.mark.slow
 
@@ -41,11 +40,40 @@ async def fake_get_session():
     yield FakeSession()
 
 
+def _patch_startup(monkeypatch):
+    async def _noop(*_args, **_kwargs):
+        return None
+
+    class DummyRedis:
+        async def ping(self):
+            return "PONG"
+
+    class DummyLimiter:
+        redis = None
+
+        @staticmethod
+        async def init(redis_client):
+            DummyLimiter.redis = redis_client
+
+        @staticmethod
+        async def close():
+            return None
+
+    async def _fake_wait_for_redis(*_args, **_kwargs):
+        return DummyRedis()
+
+    monkeypatch.setattr(main.settings, "STATS_ENABLE_CACHE", False, raising=False)
+    monkeypatch.setattr(main, "_wait_for_db", _noop)
+    monkeypatch.setattr(main, "_wait_for_redis", _fake_wait_for_redis)
+    monkeypatch.setattr(main, "_check_llm", _noop)
+    monkeypatch.setattr(main, "FastAPILimiter", DummyLimiter)
+
+
 @pytest.mark.slow
 @pytest.mark.timeout(0)
 @pytest.mark.parametrize("_", range(5))
 def test_health(monkeypatch, _) -> None:
-    prepare_api_for_tests(monkeypatch)
+    _patch_startup(monkeypatch)
     app = main.app
     app.dependency_overrides[db.get_session] = fake_get_session
     with TestClient(app) as client:
