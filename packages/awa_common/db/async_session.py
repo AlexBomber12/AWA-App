@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from collections.abc import AsyncGenerator
 from threading import Lock
 from typing import Any
@@ -53,7 +52,9 @@ def init_async_engine(dsn: str | None = None, **engine_kwargs: Any) -> AsyncEngi
         url = _resolve_dsn(dsn)
         kwargs: dict[str, Any] = {"pool_pre_ping": True, "future": True}
         kwargs.update(engine_kwargs)
-        if os.getenv("TESTING") == "1" or getattr(settings, "TESTING", False):
+        app_cfg = getattr(settings, "app", None)
+        is_testing = bool(app_cfg.testing if app_cfg else getattr(settings, "TESTING", False))
+        if is_testing:
             kwargs.setdefault("poolclass", NullPool)
         engine = create_async_engine(url, **kwargs)
         session_factory = async_sessionmaker(

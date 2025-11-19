@@ -25,7 +25,14 @@ class InvalidROIViewError(ValueError):
 
 
 def _raw_roi_view_name(cfg) -> str:
-    return (os.getenv("ROI_VIEW_NAME") or getattr(cfg, "ROI_VIEW_NAME", DEFAULT_ROI_VIEW) or "").strip()
+    raw_env = os.getenv("ROI_VIEW_NAME")
+    if raw_env:
+        return raw_env.strip()
+    try:
+        value = getattr(cfg, "ROI_VIEW_NAME", DEFAULT_ROI_VIEW)
+    except Exception:
+        value = DEFAULT_ROI_VIEW
+    return (value or DEFAULT_ROI_VIEW).strip()
 
 
 def _resolve_roi_view(cfg) -> str:

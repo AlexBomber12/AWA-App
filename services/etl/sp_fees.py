@@ -16,6 +16,7 @@ from awa_common.etl.guard import process_once
 from awa_common.etl.idempotency import build_payload_meta, compute_idempotency_key
 from awa_common.metrics import record_etl_run, record_etl_skip
 from awa_common.retries import RetryConfig, retry
+from awa_common.settings import settings
 from services.fees_h10 import repository as repo
 
 logger = structlog.get_logger(__name__)
@@ -23,6 +24,7 @@ logger = structlog.get_logger(__name__)
 DEFAULT_FIXTURE_PATH = Path("tests/fixtures/spapi_fees_sample.json")
 DEFAULT_SKUS = ("DUMMY1", "DUMMY2")
 SOURCE_NAME = "sp_fees_ingestor"
+_TRUTHY = {"1", "true", "t", "yes", "y", "on"}
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -60,7 +62,8 @@ def build_parser() -> argparse.ArgumentParser:
 def resolve_live(cli_live: bool | None) -> bool:
     if cli_live is not None:
         return cli_live
-    return os.getenv("ENABLE_LIVE") == "1"
+    etl_cfg = getattr(settings, "etl", None)
+    return bool(etl_cfg.enable_live if etl_cfg else False)
 
 
 def build_rows_from_live(
@@ -97,7 +100,7 @@ def build_rows_from_live(
                 "amount": total_fee,
                 "currency": "USD",
                 "source": "sp",
-                "effective_date": os.getenv("SP_FEES_DATE"),
+                "effective_date": getattr(getattr(settings, "etl", None), "sp_fees_date", None),
             }
         )
     return rows
@@ -141,7 +144,11 @@ def build_idempotency(
 ) -> tuple[str, dict[str, Any]]:
     if live:
         payload = json.dumps(
-            {"mode": "live", "skus": sorted(skus), "date": os.getenv("SP_FEES_DATE")},
+            {
+                "mode": "live",
+                "skus": sorted(skus),
+                "date": getattr(getattr(settings, "etl", None), "sp_fees_date", None),
+            },
             sort_keys=True,
             separators=(",", ":"),
         ).encode("utf-8")
@@ -150,7 +157,7 @@ def build_idempotency(
             extra={
                 "mode": "live",
                 "sku_count": len(skus),
-                "region": os.getenv("REGION"),
+                "region": getattr(getattr(settings, "etl", None), "region", None),
             }
         )
         return key, meta
@@ -168,7 +175,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         skus=args.skus,
         fixture_path=fixture_path,
     )
-    task_id = os.getenv("TASK_ID")
+    task_id = getattr(getattr(settings, "etl", None), "task_id", None)
 
     engine = create_engine(build_dsn(sync=True), future=True)
     SessionLocal = sessionmaker(bind=engine, expire_on_commit=False, future=True)
@@ -194,17 +201,17 @@ def main(argv: Sequence[str] | None = None) -> int:
                     if live:
                         rows = build_rows_from_live(
                             args.skus,
-                            refresh_token=os.getenv("SP_REFRESH_TOKEN", ""),
-                            client_id=os.getenv("SP_CLIENT_ID", ""),
-                            client_secret=os.getenv("SP_CLIENT_SECRET", ""),
-                            region=os.getenv("REGION", "US"),
+                            refresh_token=getattr(getattr(settings, "etl", None), "sp_refresh_token", ""),
+                            client_id=getattr(getattr(settings, "etl", None), "sp_client_id", ""),
+                            client_secret=getattr(getattr(settings, "etl", None), "sp_client_secret", ""),
+                            region=getattr(getattr(settings, "etl", None), "region", "US"),
                         )
                     else:
                         rows = build_rows_from_fixture(fixture_path)
                     if not rows:
                         logger.info("etl.no_data", source=SOURCE_NAME)
                         return 0
-                    repo.upsert_fees_raw(engine, rows, testing=os.getenv("TESTING") == "1")
+                    repo.upsert_fees_raw(engine, rows, testing=_testing_enabled())
             except Exception:
                 logger.exception("sp_fees.failed", source=SOURCE_NAME)
                 raise
@@ -217,3 +224,13 @@ if __name__ == "__main__":
     import sys
 
     raise SystemExit(main(sys.argv[1:]))
+
+
+def _testing_enabled() -> bool:
+    override = os.getenv("TESTING")
+    if override is not None:
+        return override.strip().lower() in _TRUTHY
+    app_cfg = getattr(settings, "app", None)
+    if app_cfg:
+        return bool(app_cfg.testing)
+    return bool(getattr(settings, "TESTING", False))

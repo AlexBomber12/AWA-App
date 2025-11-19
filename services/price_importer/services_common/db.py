@@ -8,7 +8,7 @@ from sqlalchemy import text
 from sqlalchemy.engine import Connection, Engine
 
 from awa_common.dsn import build_dsn as _raw_build_dsn
-from awa_common.utils.env import env_bool
+from awa_common.settings import settings
 
 BuildDsnFn = Callable[..., str]
 _build_dsn: BuildDsnFn = cast(BuildDsnFn, _raw_build_dsn)
@@ -16,12 +16,14 @@ _build_dsn: BuildDsnFn = cast(BuildDsnFn, _raw_build_dsn)
 
 def build_sqlalchemy_url() -> str:
     """Return Postgres URL for SQLAlchemy engines."""
-    return _build_dsn(sync=True)
+    db_cfg = getattr(settings, "db", None)
+    return db_cfg.url if db_cfg else _build_dsn(sync=True)
 
 
 def build_asyncpg_dsn() -> str:
     """Return DSN suitable for asyncpg (without driver suffix)."""
-    url = urlparse(_build_dsn(sync=True))
+    db_cfg = getattr(settings, "db", None)
+    url = urlparse(db_cfg.url if db_cfg else _build_dsn(sync=True))
     return urlunparse(
         (
             "postgresql",
@@ -55,7 +57,8 @@ def refresh_mvs(conn: Engine | Connection) -> None:
             refresh_mvs(connection)
         return
 
-    live = env_bool("ENABLE_LIVE", default=True)
+    etl_cfg = getattr(settings, "etl", None)
+    live = bool(etl_cfg.enable_live if etl_cfg else True)
     idx_exists = bool(
         conn.execute(text("SELECT 1 FROM pg_indexes WHERE indexname = 'ix_v_refund_totals_pk'")).scalar()
     ) and bool(conn.execute(text("SELECT 1 FROM pg_indexes WHERE indexname = 'ix_v_reimb_totals_pk'")).scalar())

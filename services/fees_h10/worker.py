@@ -21,7 +21,6 @@ from awa_common.metrics import (
 )
 from awa_common.sentry import init_sentry
 from awa_common.settings import settings as SETTINGS
-from awa_common.utils.env import env_str
 from services.etl import http_client
 
 from . import db_async
@@ -77,7 +76,8 @@ app.conf.beat_schedule = {"refresh-daily": {"task": "fees.refresh", "schedule": 
 
 
 def _database_configured() -> bool:
-    return bool(env_str("DATABASE_URL") or env_str("PG_ASYNC_DSN"))
+    db_cfg = getattr(SETTINGS, "db", None)
+    return bool(db_cfg and db_cfg.url)
 
 
 def list_active_asins() -> list[str]:

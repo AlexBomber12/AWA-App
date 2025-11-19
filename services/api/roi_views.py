@@ -9,6 +9,7 @@ from sqlalchemy import Column, MetaData, String, Table, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from awa_common.roi_views import InvalidROIViewError, current_roi_view, quote_identifier
+from awa_common.settings import settings
 
 
 def _resolve_current_roi_view() -> str:
@@ -37,11 +38,15 @@ _returns_columns = Table(
 
 
 def _ttl_seconds() -> float:
-    raw = os.getenv(ROI_CACHE_TTL_ENV)
-    try:
-        value = float(raw) if raw else DEFAULT_CACHE_TTL_SECONDS
-    except (TypeError, ValueError):
-        value = DEFAULT_CACHE_TTL_SECONDS
+    env_override = os.getenv(ROI_CACHE_TTL_ENV)
+    if env_override:
+        try:
+            value = float(env_override)
+        except ValueError:
+            value = DEFAULT_CACHE_TTL_SECONDS
+    else:
+        stats_cfg = getattr(settings, "stats", None)
+        value = float(stats_cfg.cache_ttl_s if stats_cfg else DEFAULT_CACHE_TTL_SECONDS)
     return value if value > 0 else DEFAULT_CACHE_TTL_SECONDS
 
 

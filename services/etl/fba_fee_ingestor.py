@@ -3,7 +3,6 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
-import os
 from collections.abc import Callable, Iterable, Sequence
 from pathlib import Path
 from typing import Any, cast
@@ -18,6 +17,7 @@ from awa_common.etl.http import request as http_request
 from awa_common.etl.idempotency import build_payload_meta, compute_idempotency_key
 from awa_common.metrics import record_etl_run, record_etl_skip
 from awa_common.retries import RetryConfig, retry
+from awa_common.settings import settings
 
 logger = structlog.get_logger(__name__)
 
@@ -62,7 +62,8 @@ def build_parser() -> argparse.ArgumentParser:
 def resolve_live(cli_live: bool | None) -> bool:
     if cli_live is not None:
         return cli_live
-    return os.getenv("ENABLE_LIVE") == "1"
+    etl_cfg = getattr(settings, "etl", None)
+    return bool(etl_cfg.enable_live if etl_cfg else False)
 
 
 RetryFunc = Callable[[Callable[[], dict[str, Any]]], Callable[[], dict[str, Any]]]
@@ -167,7 +168,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         asins=args.asins,
         fixture_path=fixture_path if not live else None,
     )
-    task_id = os.getenv("TASK_ID")
+    task_id = getattr(getattr(settings, "etl", None), "task_id", None)
 
     engine = create_engine(build_dsn(sync=True), future=True)
     SessionLocal = sessionmaker(bind=engine, expire_on_commit=False, future=True)
@@ -192,7 +193,11 @@ def main(argv: Sequence[str] | None = None) -> int:
             with record_etl_run(SOURCE_NAME):
                 ensure_table(session)
                 if live:
-                    rows = fetch_live_fees(args.asins, os.getenv("HELIUM_API_KEY", ""), task_id=task_id)
+                    rows = fetch_live_fees(
+                        args.asins,
+                        getattr(getattr(settings, "etl", None), "helium_api_key", ""),
+                        task_id=task_id,
+                    )
                 else:
                     rows = load_offline_fees(fixture_path)
                 upsert_fees(session, rows)

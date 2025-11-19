@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from collections.abc import Mapping, Sequence
 from typing import Any
 
@@ -64,9 +63,10 @@ def init_sentry(service: str) -> None:
                 integrations[idx] = integration
 
     env = getattr(settings, "ENV", "local")
-    release = getattr(settings, "VERSION", None) or os.getenv("SENTRY_RELEASE") or os.getenv("COMMIT_SHA")
-    traces_rate = float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0.05"))
-    profiles_rate = float(os.getenv("SENTRY_PROFILES_SAMPLE_RATE", "0.0"))
+    release = getattr(settings, "VERSION", None)
+    observability = getattr(settings, "observability", None)
+    traces_rate = float(getattr(observability, "sentry_traces_sample_rate", 0.05))
+    profiles_rate = float(getattr(observability, "sentry_profiles_sample_rate", 0.0))
 
     BadDsnT: type[BaseException]
     try:

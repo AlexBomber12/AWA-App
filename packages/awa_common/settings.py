@@ -2,12 +2,30 @@ from __future__ import annotations
 
 import os
 import re
+from decimal import Decimal
+from functools import cached_property
 from typing import Literal
 
 from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import make_url
 
+from .configuration import (
+    AlertSettings,
+    AppSettings,
+    CelerySettings,
+    DatabaseSettings,
+    EmailSettings,
+    EtlSettings,
+    LLMSettings,
+    MaintenanceSettings,
+    ObservabilitySettings,
+    RedisSettings,
+    RepricerSettings,
+    S3Settings,
+    SecuritySettings,
+    StatsSettings,
+)
 from .dsn import build_dsn
 
 # Preserve legacy values while supporting new stage/dev env conventions.
@@ -84,6 +102,9 @@ class Settings(BaseSettings):
     SERVICE_NAME: str = "api"
     METRICS_TEXTFILE_DIR: str = ""
     METRICS_FLUSH_INTERVAL_S: float = 15.0
+    ALEMBIC_CONFIG: str = "services/api/alembic.ini"
+    WAIT_FOR_DB_MAX_ATTEMPTS: int | None = None
+    WAIT_FOR_DB_DELAY_S: float | None = None
 
     # Database & cache
     DATABASE_URL: str = Field(default="postgresql+psycopg://app:app@db:5432/app")
@@ -100,8 +121,11 @@ class Settings(BaseSettings):
     STATS_CACHE_TTL_S: int = 600
     STATS_CACHE_NAMESPACE: str = "stats:"
     STATS_MAX_DAYS: int = 365
+    STATS_USE_SQL: bool = False
     REQUIRE_CLAMP: bool = False
     REDIS_HEALTH_CRITICAL: bool = False
+    RETURNS_STATS_VIEW_NAME: str = "returns_raw"
+    ROI_VIEW_NAME: str = "v_roi_full"
 
     @property
     def POSTGRES_DSN(self) -> str:
@@ -119,6 +143,12 @@ class Settings(BaseSettings):
     # Observability / security
     LOG_LEVEL: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
     SENTRY_DSN: str | None = None
+    SENTRY_TRACES_SAMPLE_RATE: float = 0.05
+    SENTRY_PROFILES_SAMPLE_RATE: float = 0.0
+    ENABLE_METRICS: bool = True
+    PROMETHEUS_MULTIPROC_DIR: str | None = None
+    WORKER_METRICS_HTTP: bool = False
+    WORKER_METRICS_PORT: int = 9108
 
     # Security headers / limits
     SECURITY_HSTS_ENABLED: bool = False
@@ -134,10 +164,20 @@ class Settings(BaseSettings):
     MAX_REQUEST_BYTES: int = 268_435_456  # 256 MB ceiling for uploads
     INGEST_STREAMING_ENABLED: bool = True
     INGEST_CHUNK_SIZE_MB: int = 8
+    INGEST_STREAMING_CHUNK_SIZE: int = 50_000
+    INGEST_IDEMPOTENT: bool = True
+    ANALYZE_MIN_ROWS: int = 50_000
+    USE_COPY: bool = True
     S3_USE_AIOBOTO3: bool = True
     S3_MULTIPART_THRESHOLD_MB: int = 16
     S3_MAX_CONNECTIONS: int = 50
     SPOOL_MAX_BYTES: int = 67_108_864  # 64 MB safety cap for SpooledTemporaryFile
+    MINIO_ENDPOINT: str = "minio:9000"
+    MINIO_SECURE: bool = False
+    MINIO_ACCESS_KEY: str = "minio"
+    MINIO_SECRET_KEY: str = "minio123"
+    MINIO_BUCKET: str = "awa-bucket"
+    AWS_REGION: str = "us-east-1"
     ENABLE_LOOP_LAG_MONITOR: bool = False
     LOOP_LAG_INTERVAL_S: float = 1.0
 
@@ -147,6 +187,22 @@ class Settings(BaseSettings):
 
     # Timeouts
     REQUEST_TIMEOUT_S: int = 15
+
+    # Celery / worker
+    CELERY_WORKER_PREFETCH_MULTIPLIER: int = 1
+    CELERY_TASK_TIME_LIMIT: int = 3600
+    CELERY_TASK_STORE_EAGER_RESULT: bool = False
+    CELERY_RESULT_EXPIRES: int = 86_400
+    CELERY_TASK_ALWAYS_EAGER: bool = False
+    CELERY_LOOP_LAG_MONITOR: bool = True
+    CELERY_LOOP_LAG_INTERVAL_S: float | None = None
+    BACKLOG_PROBE_SECONDS: int = 15
+    SCHEDULE_NIGHTLY_MAINTENANCE: bool = True
+    NIGHTLY_MAINTENANCE_CRON: str = "30 2 * * *"
+    SCHEDULE_LOGISTICS_ETL: bool = False
+    LOGISTICS_CRON: str = "0 3 * * *"
+    CHECK_INTERVAL_MIN: int | None = None
+    TZ: str = "UTC"
 
     # ETL reliability defaults
     ETL_CONNECT_TIMEOUT_S: float = 5.0
@@ -176,12 +232,31 @@ class Settings(BaseSettings):
     )
     ETL_RETRY_JITTER_S: float = 1.0
     ETL_RETRY_STATUS_CODES: list[int] = Field(default_factory=lambda: [429, 500, 502, 503, 504])
+    ENABLE_LIVE: bool = False
+    TASK_ID: str | None = None
+    HELIUM_API_KEY: str | None = None
+    KEEPA_KEY: str | None = None
+    REGION: str = "US"
+    SP_FEES_DATE: str | None = None
+    SP_REFRESH_TOKEN: str | None = None
+    SP_CLIENT_ID: str | None = None
+    SP_CLIENT_SECRET: str | None = None
 
     # Optional: LLM placeholders (no usage change in this PR)
-    LLM_PROVIDER: Literal["STUB", "OPENAI", "VLLM"] = "STUB"
+    LLM_PROVIDER: str = Field(default="STUB")
+    LLM_PROVIDER_FALLBACK: str = "stub"
+    LLM_URL: str = "http://llm:8000/llm"
+    LLM_REMOTE_URL: str | None = None
+    LLM_BASE_URL: str = Field(default="http://localhost:8000", validation_alias=AliasChoices("LLM_BASE_URL"))
+    LAN_BASE_URL: str = Field(default="http://lan-llm:8000", validation_alias=AliasChoices("LAN_BASE"))
+    LLM_API_KEY: str | None = None
+    OPENAI_MODEL: str = "gpt-4o-mini"
     OPENAI_API_BASE: str | None = None
     OPENAI_API_KEY: str | None = None
-    LLM_REQUEST_TIMEOUT_S: float = 60.0
+    LLM_REQUEST_TIMEOUT_S: float = Field(
+        default=60.0,
+        validation_alias=AliasChoices("LLM_REQUEST_TIMEOUT_S", "LLM_TIMEOUT_SECS"),
+    )
 
     # Auth configuration (Keycloak OIDC)
     OIDC_ISSUER: str = Field(default="https://keycloak.local/realms/awa")
@@ -255,6 +330,8 @@ class Settings(BaseSettings):
     LOGISTICS_PER_SOURCE_TIMEOUT_SECONDS: int = 60
     LOGISTICS_GATHER_TIMEOUT_SECONDS: int = 120
     LOGISTICS_UPSERT_BATCH_SIZE: int = 20_000
+    TABLE_MAINTENANCE_LIST: str = "public.reimbursements_raw,public.returns_raw"
+    VACUUM_ENABLE: bool = False
 
     # Fees ingestion / external APIs
     HELIUM10_KEY: str | None = None
@@ -265,6 +342,84 @@ class Settings(BaseSettings):
     # Price importer
     PRICE_IMPORTER_CHUNK_ROWS: int = 10_000
     PRICE_IMPORTER_VALIDATION_WORKERS: int = 4
+
+    # Email ingestion
+    IMAP_HOST: str = ""
+    IMAP_USER: str = ""
+    IMAP_PASS: str = ""
+
+    # Repricer defaults
+    REPRICER_MIN_ROI: Decimal = Decimal("0.05")
+    REPRICER_BUYBOX_GAP: Decimal = Decimal("0.05")
+    REPRICER_ROUND: Decimal = Decimal("0.10")
+
+    @cached_property
+    def app(self) -> AppSettings:
+        return AppSettings.from_settings(self)
+
+    @cached_property
+    def db(self) -> DatabaseSettings:
+        return DatabaseSettings.from_settings(self)
+
+    @cached_property
+    def redis(self) -> RedisSettings:
+        return RedisSettings.from_settings(self)
+
+    @cached_property
+    def s3(self) -> S3Settings:
+        return S3Settings.from_settings(self)
+
+    @cached_property
+    def celery(self) -> CelerySettings:
+        return CelerySettings.from_settings(self)
+
+    @cached_property
+    def security(self) -> SecuritySettings:
+        return SecuritySettings.from_settings(self)
+
+    @cached_property
+    def observability(self) -> ObservabilitySettings:
+        return ObservabilitySettings.from_settings(self)
+
+    @cached_property
+    def llm(self) -> LLMSettings:
+        return LLMSettings.from_settings(self)
+
+    @cached_property
+    def stats(self) -> StatsSettings:
+        return StatsSettings.from_settings(self)
+
+    @cached_property
+    def alerts(self) -> AlertSettings:
+        return AlertSettings.from_settings(self)
+
+    @cached_property
+    def etl(self) -> EtlSettings:
+        return EtlSettings.from_settings(self)
+
+    @cached_property
+    def maintenance(self) -> MaintenanceSettings:
+        return MaintenanceSettings.from_settings(self)
+
+    @cached_property
+    def email(self) -> EmailSettings:
+        return EmailSettings.from_settings(self)
+
+    @cached_property
+    def repricer(self) -> RepricerSettings:
+        return RepricerSettings.from_settings(self)
+
+    @property
+    def wait_for_db_max_attempts(self) -> int:
+        env = (self.ENV or "local").strip().lower()
+        default = 10 if env in {"local", "test"} else 50
+        return int(self.WAIT_FOR_DB_MAX_ATTEMPTS or default)
+
+    @property
+    def wait_for_db_delay_s(self) -> float:
+        env = (self.ENV or "local").strip().lower()
+        default = 0.05 if env in {"local", "test"} else 0.2
+        return float(self.WAIT_FOR_DB_DELAY_S or default)
 
     @property
     def ETL_HTTP_KEEPALIVE_CONNECTIONS(self) -> int:  # pragma: no cover - compatibility shim

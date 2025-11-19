@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import sys
 import time
 from urllib.parse import urlparse, urlunparse
@@ -9,6 +8,7 @@ from urllib.request import Request, urlopen
 import psycopg
 
 from awa_common.dsn import build_dsn
+from awa_common.settings import settings
 
 
 def check_db() -> None:
@@ -19,7 +19,8 @@ def check_db() -> None:
 
 
 def check_minio() -> None:
-    endpoint = os.getenv("MINIO_ENDPOINT")
+    s3_cfg = getattr(settings, "s3", None)
+    endpoint = s3_cfg.endpoint if s3_cfg else ""
     if not endpoint:
         return
     # Normalize to include scheme
@@ -54,7 +55,8 @@ def main() -> int:
         ok = False
     # Only check MinIO if configured (defaults to minio:9000 in compose)
     try:
-        endpoint = os.getenv("MINIO_ENDPOINT", "").strip()
+        s3_cfg = getattr(settings, "s3", None)
+        endpoint = (s3_cfg.endpoint if s3_cfg else "").strip()
         if endpoint and not _retry(check_minio, name="minio"):
             ok = False
     except Exception as exc:

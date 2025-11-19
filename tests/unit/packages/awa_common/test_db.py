@@ -82,3 +82,25 @@ def test_refresh_mvs_with_engine(monkeypatch):
     monkeypatch.setattr(db_module, "Engine", (DummyEngine,))
     db_module.refresh_mvs(engine)
     assert len(captures) >= 2
+
+
+def test_refresh_mvs_defaults_to_concurrent(monkeypatch):
+    executed = []
+
+    class DummyConn:
+        def execute(self, stmt):
+            executed.append(str(stmt))
+
+            class R:
+                def scalar(self_inner):
+                    return 1
+
+            return R()
+
+    monkeypatch.delenv("ENABLE_LIVE", raising=False)
+    from awa_common.settings import Settings
+
+    monkeypatch.setattr(db_module, "settings", Settings())
+    db_module.refresh_mvs(DummyConn())
+    refreshes = [stmt for stmt in executed if "REFRESH MATERIALIZED VIEW" in stmt]
+    assert refreshes and all("CONCURRENTLY" in stmt for stmt in refreshes)

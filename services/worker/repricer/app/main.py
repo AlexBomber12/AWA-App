@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 import json
-import os
 from collections.abc import Iterable
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 
 from fastapi import Depends, FastAPI, HTTPException
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from awa_common.settings import settings
 from services.api.db import get_session
 
 from .logic import DEFAULT_MIN_ROI, DEFAULT_QUANT, DEFAULT_UNDERCUT, compute_price, decide_price
@@ -34,20 +34,10 @@ QUERY_REPRICER_INPUT = text(
 )
 
 
-def _load_decimal_env(name: str, default: Decimal) -> Decimal:
-    raw = os.getenv(name)
-    if raw is None:
-        return default
-    try:
-        value = Decimal(raw)
-    except InvalidOperation:
-        return default
-    return value
-
-
-MIN_ROI = _load_decimal_env("REPRICER_MIN_ROI", DEFAULT_MIN_ROI)
-UNDERCUT = _load_decimal_env("REPRICER_BUYBOX_GAP", DEFAULT_UNDERCUT)
-ROUNDING = _load_decimal_env("REPRICER_ROUND", DEFAULT_QUANT)
+repricer_cfg = getattr(settings, "repricer", None)
+MIN_ROI = repricer_cfg.min_roi if repricer_cfg else DEFAULT_MIN_ROI
+UNDERCUT = repricer_cfg.buybox_gap if repricer_cfg else DEFAULT_UNDERCUT
+ROUNDING = repricer_cfg.rounding_quant if repricer_cfg else DEFAULT_QUANT
 
 
 def _strategy_label(applied: Iterable[str]) -> str:

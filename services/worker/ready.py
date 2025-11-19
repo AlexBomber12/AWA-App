@@ -38,4 +38,5 @@ async def ready():
                 "status": "fail",
                 "reason": "celery-exc",
             }, status.HTTP_503_SERVICE_UNAVAILABLE
-    return {"status": "ok", "env": settings.ENV}
+    app_env = getattr(getattr(settings, "app", None), "env", getattr(settings, "ENV", "local"))
+    return {"status": "ok", "env": app_env}

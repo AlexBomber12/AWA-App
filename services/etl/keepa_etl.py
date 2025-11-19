@@ -4,13 +4,13 @@ import argparse
 import datetime
 import io
 import json
-import os
 import time
 from collections.abc import Sequence
 from pathlib import Path
 from typing import cast
 
 from awa_common.dsn import build_dsn
+from awa_common.settings import settings
 from pg_utils import connect
 
 DEFAULT_FIXTURE_PATH = Path("fixtures/keepa_sample.json")
@@ -45,7 +45,8 @@ def build_parser() -> argparse.ArgumentParser:
 def resolve_live(cli_live: bool | None) -> bool:
     if cli_live is not None:
         return cli_live
-    return os.getenv("ENABLE_LIVE") == "1"
+    etl_cfg = getattr(settings, "etl", None)
+    return bool(etl_cfg.enable_live if etl_cfg else False)
 
 
 def load_live_data(key: str) -> bytes:
@@ -70,10 +71,13 @@ def load_offline_data(path: Path) -> bytes:
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(list(argv) if argv is not None else [])
     live = resolve_live(args.live)
-    key = os.getenv("KEEPA_KEY")
-    endpoint = os.getenv("MINIO_ENDPOINT")
-    access = os.getenv("MINIO_ACCESS_KEY")
-    secret = os.getenv("MINIO_SECRET_KEY")
+    etl_cfg = getattr(settings, "etl", None)
+    key = etl_cfg.keepa_key if etl_cfg else None
+    s3_cfg = getattr(settings, "s3", None)
+    endpoint = s3_cfg.endpoint if s3_cfg else None
+    access = s3_cfg.access_key if s3_cfg else None
+    secret = s3_cfg.secret_key if s3_cfg else None
+    secure = bool(s3_cfg.secure) if s3_cfg else False
     if live and not key:
         raise RuntimeError("KEEPA_KEY not set")
     if not endpoint or not access or not secret:
@@ -91,7 +95,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     path = f"raw/{today:%Y/%m/%d}/asins.json"
     from minio import Minio
 
-    mc = Minio(endpoint, access_key=access, secret_key=secret, secure=False)
+    mc = Minio(endpoint, access_key=access, secret_key=secret, secure=secure)
     if not mc.bucket_exists(bucket):
         mc.make_bucket(bucket)
     mc.put_object(bucket, path, io.BytesIO(data), len(data))

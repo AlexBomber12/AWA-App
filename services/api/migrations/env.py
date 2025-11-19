@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import pathlib
 import sys
 from logging.config import fileConfig
@@ -31,10 +30,8 @@ target_metadata = Base.metadata
 
 def _database_url() -> str:
     """Return the canonical sync database URL for migrations."""
-    env_override = (os.getenv("DATABASE_URL") or "").strip()
-    if env_override:
-        return env_override
-    url = getattr(settings, "DATABASE_URL", None)
+    db_cfg = getattr(settings, "db", None)
+    url = db_cfg.url if db_cfg else getattr(settings, "DATABASE_URL", None)
     if not url:
         raise RuntimeError("DATABASE_URL is not configured")
     return str(url)

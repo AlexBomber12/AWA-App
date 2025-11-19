@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import datetime
 import hashlib
-import os
 import time
 from collections.abc import AsyncIterator
 from contextlib import suppress
@@ -24,21 +23,21 @@ from services.api.security import get_request_id, limit_ops, require_ops
 from services.worker.celery_app import celery_app
 from services.worker.tasks import task_import_file
 
-BUCKET = os.getenv("MINIO_BUCKET", "awa-bucket")
+BUCKET = getattr(getattr(settings, "s3", None), "bucket", "awa-bucket")
 router = APIRouter()
 logger = structlog.get_logger(__name__)
 
 
 def _s3_client_kwargs() -> dict[str, Any]:
-    endpoint = os.getenv("MINIO_ENDPOINT", "minio:9000")
-    secure = os.getenv("MINIO_SECURE", "false").lower() in {"1", "true", "yes"}
-    scheme = "https" if secure else "http"
-    return {
-        "endpoint_url": f"{scheme}://{endpoint}",
-        "aws_access_key_id": os.getenv("MINIO_ACCESS_KEY", "minio"),
-        "aws_secret_access_key": os.getenv("MINIO_SECRET_KEY", "minio123"),
-        "region_name": os.getenv("AWS_REGION", "us-east-1"),
-    }
+    s3_cfg = getattr(settings, "s3", None)
+    if s3_cfg is None:
+        return {
+            "endpoint_url": "http://minio:9000",
+            "aws_access_key_id": "minio",
+            "aws_secret_access_key": "minio123",
+            "region_name": "us-east-1",
+        }
+    return s3_cfg.client_kwargs()
 
 
 def _route_path(request: Request) -> str:
@@ -168,7 +167,8 @@ async def upload(
 ) -> JSONResponse:
     route = _route_path(request)
     request_id = get_request_id(request)
-    log = logger.bind(route=route, request_id=request_id, env=settings.ENV)
+    app_env = getattr(getattr(settings, "app", None), "env", getattr(settings, "ENV", "local"))
+    log = logger.bind(route=route, request_id=request_id, env=app_env)
     start = time.perf_counter()
     total_bytes = 0
     idempotency_key: str | None = None
