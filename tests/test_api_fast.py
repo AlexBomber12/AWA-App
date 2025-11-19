@@ -26,10 +26,13 @@ def test_health_endpoint(monkeypatch):
     async def _noop(*_args, **_kwargs):
         return None
 
+    async def _ping_cache(*_args, **_kwargs):
+        return True
+
     monkeypatch.setattr("services.api.main._wait_for_db", _noop)
     monkeypatch.setattr("services.api.main._wait_for_redis", _noop)
     monkeypatch.setattr("services.api.main.configure_cache_backend", _noop)
-    monkeypatch.setattr("services.api.main.ping_cache", lambda *_, **__: True)
+    monkeypatch.setattr("services.api.main.ping_cache", _ping_cache)
     with TestClient(app) as client:
         r = client.get("/health")
         assert r.status_code == 200
