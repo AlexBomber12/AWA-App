@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import importlib
-import os
 import shutil
 import tempfile
 import time
@@ -20,29 +19,10 @@ from awa_common.metrics import (
     record_ingest_task_failure,
     record_ingest_task_outcome,
 )
+from awa_common.minio import get_s3_client_kwargs
 from awa_common.settings import settings
 from services.alert_bot import worker as alerts_worker
 from services.worker.celery_app import celery_app
-
-
-def _s3_client_kwargs() -> dict[str, Any]:
-    s3_cfg = getattr(settings, "s3", None)
-    endpoint = os.getenv("MINIO_ENDPOINT") or (s3_cfg.endpoint if s3_cfg else "minio:9000")
-    secure_raw = os.getenv("MINIO_SECURE")
-    if secure_raw is None:
-        secure = bool(s3_cfg.secure if s3_cfg else False)
-    else:
-        secure = secure_raw.lower() in {"1", "true", "yes"}
-    access = os.getenv("MINIO_ACCESS_KEY") or (s3_cfg.access_key if s3_cfg else "minio")
-    secret = os.getenv("MINIO_SECRET_KEY") or (s3_cfg.secret_key if s3_cfg else "minio123")
-    region = os.getenv("AWS_REGION") or (s3_cfg.region if s3_cfg else "us-east-1")
-    scheme = "https" if secure else "http"
-    return {
-        "endpoint_url": f"{scheme}://{endpoint}",
-        "aws_access_key_id": access,
-        "aws_secret_access_key": secret,
-        "region_name": region,
-    }
 
 
 def _fallback_async_to_sync(func: Callable[..., Any]) -> Callable[..., Any]:
@@ -108,7 +88,7 @@ async def _download_minio_async(uri: str) -> Path:
     )
     tmpdir = Path(tempfile.mkdtemp(prefix="ingest_"))
     dst = tmpdir / Path(key).name
-    async with session.client("s3", config=config, **_s3_client_kwargs()) as client:
+    async with session.client("s3", config=config, **get_s3_client_kwargs()) as client:
         response = await client.get_object(Bucket=bucket, Key=key)
         async with response["Body"] as body:
             with dst.open("wb") as handle:

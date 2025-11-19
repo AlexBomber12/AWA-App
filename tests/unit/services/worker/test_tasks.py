@@ -61,7 +61,7 @@ def test_task_rebuild_views_returns_success():
     }
 
 
-def test_download_minio_to_tmp_uses_env(monkeypatch, tmp_path):
+def test_download_minio_to_tmp_uses_shared_kwargs(monkeypatch, tmp_path):
     tmp_dir = tmp_path / "ingest_case"
     tmp_dir.mkdir()
 
@@ -96,10 +96,16 @@ def test_download_minio_to_tmp_uses_env(monkeypatch, tmp_path):
             captured["aws_secret_access_key"] = kwargs.get("aws_secret_access_key")
             return DummyClient()
 
-    monkeypatch.setenv("MINIO_ENDPOINT", "custom:9000")
-    monkeypatch.setenv("MINIO_ACCESS_KEY", "ak")
-    monkeypatch.setenv("MINIO_SECRET_KEY", "sk")
-    monkeypatch.setenv("MINIO_SECURE", "true")
+    monkeypatch.setattr(
+        tasks_module,
+        "get_s3_client_kwargs",
+        lambda: {
+            "endpoint_url": "https://custom:9000",
+            "aws_access_key_id": "ak",
+            "aws_secret_access_key": "sk",
+            "region_name": "us-east-1",
+        },
+    )
     monkeypatch.setattr(tasks_module.tempfile, "mkdtemp", lambda prefix: str(tmp_dir))
     monkeypatch.setattr(tasks_module.aioboto3, "Session", lambda: DummySession())
 

@@ -8,11 +8,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import boto3
 import pandas as pd
 from sqlalchemy import create_engine, text
 
 from awa_common.dsn import build_dsn
+from awa_common.minio import create_boto3_client, get_bucket_name
 from awa_common.settings import settings
 from services.etl.dialects import (
     amazon_ads_sp_cost,
@@ -43,12 +43,11 @@ class ImportValidationError(ImportFileError):
 
 
 _ETL_CFG = getattr(settings, "etl", None)
-_S3_CFG = getattr(settings, "s3", None)
 USE_COPY = bool(_ETL_CFG.use_copy if _ETL_CFG else getattr(settings, "USE_COPY", True))
 STREAMING_CHUNK_ENV = int(
     _ETL_CFG.ingest_streaming_chunk_size if _ETL_CFG else getattr(settings, "INGEST_STREAMING_CHUNK_SIZE", 50_000)
 )
-BUCKET = _S3_CFG.bucket if _S3_CFG else getattr(settings, "MINIO_BUCKET", "awa-bucket")
+BUCKET = get_bucket_name()
 CSV_EXTENSIONS = {".csv", ".txt", ".tsv"}
 XLSX_EXTENSIONS = {".xlsx", ".xlsm"}
 
@@ -86,21 +85,7 @@ def _sha256_file(path: str | Path) -> str:
 
 
 def _download_from_minio(path: str) -> Path:
-    s3_cfg = getattr(settings, "s3", None)
-    endpoint = s3_cfg.endpoint if s3_cfg else getattr(settings, "MINIO_ENDPOINT", "minio:9000")
-    secure = bool(s3_cfg.secure if s3_cfg else getattr(settings, "MINIO_SECURE", False))
-    access = s3_cfg.access_key if s3_cfg else getattr(settings, "MINIO_ACCESS_KEY", "minio")
-    secret = s3_cfg.secret_key if s3_cfg else getattr(settings, "MINIO_SECRET_KEY", "minio123")
-    region = s3_cfg.region if s3_cfg else getattr(settings, "AWS_REGION", "us-east-1")
-    scheme = "https" if secure else "http"
-    endpoint_url = endpoint if "://" in endpoint else f"{scheme}://{endpoint}"
-    s3 = boto3.client(
-        "s3",
-        endpoint_url=endpoint_url,
-        aws_access_key_id=access,
-        aws_secret_access_key=secret,
-        region_name=region,
-    )
+    s3 = create_boto3_client()
     tmp = tempfile.NamedTemporaryFile(delete=False)
     s3.download_fileobj(BUCKET, path, tmp)
     tmp.close()

@@ -17,27 +17,16 @@ from fastapi.responses import JSONResponse
 
 from awa_common.files import sanitize_upload_name
 from awa_common.metrics import ingest_upload_inflight, record_ingest_upload, record_ingest_upload_failure
+from awa_common.minio import get_bucket_name, get_s3_client_kwargs
 from awa_common.settings import settings
 from services.api.routes.ingest_errors import IngestRequestError, ingest_error_response, respond_with_ingest_error
 from services.api.security import get_request_id, limit_ops, require_ops
 from services.worker.celery_app import celery_app
 from services.worker.tasks import task_import_file
 
-BUCKET = getattr(getattr(settings, "s3", None), "bucket", "awa-bucket")
+BUCKET = get_bucket_name()
 router = APIRouter()
 logger = structlog.get_logger(__name__)
-
-
-def _s3_client_kwargs() -> dict[str, Any]:
-    s3_cfg = getattr(settings, "s3", None)
-    if s3_cfg is None:
-        return {
-            "endpoint_url": "http://minio:9000",
-            "aws_access_key_id": "minio",
-            "aws_secret_access_key": "minio123",
-            "region_name": "us-east-1",
-        }
-    return s3_cfg.client_kwargs()
 
 
 def _route_path(request: Request) -> str:
@@ -83,7 +72,7 @@ async def _upload_stream_to_s3(  # pragma: no cover - exercised via integration 
             yield chunk
 
     session = aioboto3.Session()
-    client_kwargs = _s3_client_kwargs()
+    client_kwargs = get_s3_client_kwargs()
     config = Config(
         max_pool_connections=settings.S3_MAX_CONNECTIONS,
         connect_timeout=float(settings.ETL_CONNECT_TIMEOUT_S),

@@ -4,14 +4,14 @@ import os
 import tempfile
 from typing import Any
 
-import boto3
 from imapclient import IMAPClient
 from sqlalchemy import create_engine, text
 
+from awa_common.minio import create_boto3_client, get_bucket_name
 from awa_common.settings import settings
 from services.etl import load_csv
 
-BUCKET = getattr(getattr(settings, "s3", None), "bucket", "awa-bucket")
+BUCKET = get_bucket_name()
 
 
 def main() -> dict[str, str]:
@@ -25,25 +25,7 @@ def main() -> dict[str, str]:
     password = os.getenv("IMAP_PASS") or (email_cfg.password if email_cfg else None)
     if not host or not user or not password:
         raise RuntimeError("IMAP configuration is missing")
-    s3_cfg = getattr(settings, "s3", None)
-    if s3_cfg:
-        endpoint = s3_cfg.endpoint
-        access = s3_cfg.access_key
-        secret = s3_cfg.secret_key
-        scheme = "https" if s3_cfg.secure else "http"
-    else:
-        endpoint = "minio:9000"
-        access = "minio"
-        secret = "minio123"
-        scheme = "http"
-
-    s3 = boto3.client(
-        "s3",
-        endpoint_url=f"{scheme}://{endpoint}",
-        aws_access_key_id=access,
-        aws_secret_access_key=secret,
-        region_name=getattr(s3_cfg, "region", "us-east-1") if s3_cfg else "us-east-1",
-    )
+    s3 = create_boto3_client()
 
     with IMAPClient(host) as client:
         client.login(user, password)

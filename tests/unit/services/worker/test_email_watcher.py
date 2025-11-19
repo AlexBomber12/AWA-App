@@ -63,9 +63,6 @@ def test_email_watcher_main(monkeypatch):
     monkeypatch.setenv("IMAP_HOST", "imap.local")
     monkeypatch.setenv("IMAP_USER", "user")
     monkeypatch.setenv("IMAP_PASS", "pass")
-    monkeypatch.setenv("MINIO_ENDPOINT", "minio:9000")
-    monkeypatch.setenv("MINIO_ACCESS_KEY", "ak")
-    monkeypatch.setenv("MINIO_SECRET_KEY", "sk")
 
     msg = EmailMessage()
     msg["From"] = "test@example.com"
@@ -75,7 +72,7 @@ def test_email_watcher_main(monkeypatch):
     raw = msg.as_bytes()
 
     dummy_s3 = DummyS3()
-    monkeypatch.setattr(email_watcher.boto3, "client", lambda *_args, **_kwargs: dummy_s3)
+    monkeypatch.setattr(email_watcher, "create_boto3_client", lambda **_kwargs: dummy_s3)
     dummy_engine = DummyEngine()
     monkeypatch.setattr(email_watcher, "create_engine", lambda *_: dummy_engine)
     monkeypatch.setattr(email_watcher.load_csv, "main", lambda args: ("load-1", 2))

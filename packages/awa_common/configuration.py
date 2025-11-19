@@ -130,15 +130,17 @@ class S3Settings(SettingsGroup):
             spool_max_bytes=int(cfg.SPOOL_MAX_BYTES),
         )
 
-    def endpoint_url(self) -> str:
-        scheme = "https" if self.secure else "http"
-        return f"{scheme}://{self.endpoint}"
+    def endpoint_url(self, *, secure_override: bool | None = None) -> str:
+        secure = self.secure if secure_override is None else bool(secure_override)
+        endpoint = (self.endpoint or "").strip()
+        if "://" in endpoint:
+            return endpoint
+        scheme = "https" if secure else "http"
+        return f"{scheme}://{endpoint}"
 
     def client_kwargs(self, *, secure_override: bool | None = None) -> dict[str, Any]:
-        secure = self.secure if secure_override is None else secure_override
-        scheme = "https" if secure else "http"
         return {
-            "endpoint_url": f"{scheme}://{self.endpoint}",
+            "endpoint_url": self.endpoint_url(secure_override=secure_override),
             "aws_access_key_id": self.access_key,
             "aws_secret_access_key": self.secret_key,
             "region_name": self.region,
