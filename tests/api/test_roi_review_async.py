@@ -107,7 +107,8 @@ async def _seed_roi_tables(pg_pool):
 
 
 def _set_roi_view(monkeypatch: pytest.MonkeyPatch, name: str) -> None:
-    monkeypatch.setenv("ROI_VIEW_NAME", name)
+    roi_views.clear_caches()
+    monkeypatch.setattr(roi_views.settings, "ROI_VIEW_NAME", name, raising=False)
     roi_views.current_roi_view(ttl_seconds=0)
 
 

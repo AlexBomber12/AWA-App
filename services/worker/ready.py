@@ -16,7 +16,12 @@ app = FastAPI(title="AWA Worker Probe")
 async def ready():
     # 1) broker connectivity
     try:
-        r = redis.from_url(settings.REDIS_URL)
+        timeout = float(getattr(settings, "HEALTHCHECK_REDIS_SOCKET_TIMEOUT_S", 2.0))
+        r = redis.from_url(
+            settings.REDIS_URL,
+            socket_connect_timeout=timeout,
+            socket_timeout=timeout,
+        )
         r.ping()
     except Exception:
         return {
@@ -26,7 +31,8 @@ async def ready():
     # 2) celery ping (best-effort)
     if celery_app:
         try:
-            i = celery_app.control.inspect(timeout=1)
+            inspect_timeout = float(getattr(settings, "HEALTHCHECK_INSPECT_TIMEOUT_S", 1.0))
+            i = celery_app.control.inspect(timeout=inspect_timeout)
             pong = i.ping() or {}
             if not pong:
                 return {

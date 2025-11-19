@@ -77,6 +77,13 @@ Call `settings.s3.client_kwargs()` when constructing boto3/aioboto3 clients.
 | `PROMETHEUS_MULTIPROC_DIR`, `ENABLE_METRICS` | Metrics exporters |
 | `WORKER_METRICS_HTTP`, `WORKER_METRICS_PORT` | Dedicated worker exporter |
 
+## ROI (`settings.roi`)
+
+| Variable | Description |
+| --- | --- |
+| `ROI_VIEW_NAME` | View backing ROI listings, stats, and score APIs |
+| `ROI_MATERIALIZED_VIEW_NAME` | Materialized ROI view refreshed by maintenance jobs |
+
 ## LLM (`settings.llm`)
 
 | Variable | Description |
@@ -84,6 +91,7 @@ Call `settings.s3.client_kwargs()` when constructing boto3/aioboto3 clients.
 | `LLM_PROVIDER`, `LLM_PROVIDER_FALLBACK` | Provider chain (`lan`, `local`, `openai`, `stub`) |
 | `LLM_URL`, `LLM_BASE_URL`, `LAN_BASE` | Local and LAN inference endpoints |
 | `LLM_API_KEY`, `OPENAI_API_KEY`, `OPENAI_MODEL` | Credential material |
+| `LLM_REQUEST_TIMEOUT_S`, `LLM_LAN_HEALTH_TIMEOUT_S` | Request + LAN readiness timeouts |
 
 `settings.llm` centralises the provider order and timeouts used by the API and price importer services.
 
@@ -96,6 +104,14 @@ Call `settings.s3.client_kwargs()` when constructing boto3/aioboto3 clients.
 | `KEEPA_KEY`, `HELIUM_API_KEY` | Third-party keys |
 | `REGION`, `SP_REFRESH_TOKEN`, `SP_CLIENT_ID`, `SP_CLIENT_SECRET`, `SP_FEES_DATE` | SP API credentials |
 | `ETL_*` (`ETL_CONNECT_TIMEOUT_S`, `ETL_HTTP_MAX_CONNECTIONS`, etc.) | HTTP client tuning |
+
+## Health checks
+
+| Variable | Description |
+| --- | --- |
+| `HEALTHCHECK_DB_TIMEOUT_S`, `HEALTHCHECK_REDIS_SOCKET_TIMEOUT_S`, `HEALTHCHECK_HTTP_TIMEOUT_S` | Probe timeouts for DB, Redis, and MinIO |
+| `HEALTHCHECK_CELERY_TIMEOUT_S`, `HEALTHCHECK_INSPECT_TIMEOUT_S` | Celery ping and inspect timeouts |
+| `HEALTHCHECK_RETRY_ATTEMPTS`, `HEALTHCHECK_RETRY_DELAY_S` | Retry budget for CLI health checks |
 
 ## Alerts (`settings.alerts`)
 

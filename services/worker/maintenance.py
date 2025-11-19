@@ -10,6 +10,7 @@ from celery.utils.log import get_task_logger
 from sqlalchemy import create_engine, text
 
 from awa_common.cache import normalize_namespace, purge_prefix, purge_returns_cache
+from awa_common.roi_views import quote_identifier
 from awa_common.settings import settings
 
 from .celery_app import celery_app
@@ -57,15 +58,28 @@ def task_maintenance_nightly() -> dict[str, Any]:
         engine.dispose()
 
 
+def _roi_materialized_view_names() -> tuple[str, str]:
+    raw_name = getattr(settings, "ROI_MATERIALIZED_VIEW_NAME", None)
+    if not isinstance(raw_name, str) or not raw_name.strip():
+        roi_cfg = getattr(settings, "roi", None)
+        raw_name = (roi_cfg.materialized_view_name if roi_cfg else "mat_v_roi_full").strip()
+    else:
+        raw_name = raw_name.strip()
+    if not raw_name:
+        raw_name = "mat_v_roi_full"
+    return raw_name, quote_identifier(raw_name)
+
+
 @celery_app.task(name="db.refresh_roi_mvs")  # type: ignore[misc]
 def task_refresh_roi_mvs(date_from: str | None = None, date_to: str | None = None) -> dict[str, Any]:
     engine = create_engine(settings.DATABASE_URL)
+    roi_view_name, roi_view_quoted = _roi_materialized_view_names()
     try:
         with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
-            conn.execute(text("REFRESH MATERIALIZED VIEW CONCURRENTLY mat_v_roi_full"))
+            conn.execute(text(f"REFRESH MATERIALIZED VIEW CONCURRENTLY {roi_view_quoted}"))
             conn.execute(text("REFRESH MATERIALIZED VIEW CONCURRENTLY mat_fees_expanded"))
         cache_result = _bust_stats_cache(date_from, date_to)
-        return {"status": "success", "views": ["mat_v_roi_full", "mat_fees_expanded"], "cache_bust": cache_result}
+        return {"status": "success", "views": [roi_view_name, "mat_fees_expanded"], "cache_bust": cache_result}
     finally:
         engine.dispose()
 

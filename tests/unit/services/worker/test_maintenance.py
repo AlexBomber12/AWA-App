@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 import pytest
 
 from services.worker import maintenance as maintenance_module
@@ -108,24 +110,36 @@ def test_task_refresh_roi_mvs_executes_both_views(monkeypatch):
         "_bust_stats_cache",
         lambda *_: {"status": "success", "deleted": {"kpi": 1, "roi_trend": 0, "returns": 0}},
     )
+    monkeypatch.setattr(maintenance_module.settings, "ROI_MATERIALIZED_VIEW_NAME", "custom_roi_mat", raising=False)
     result = maintenance_module.task_refresh_roi_mvs.run()
     assert result == {
         "status": "success",
-        "views": ["mat_v_roi_full", "mat_fees_expanded"],
+        "views": ["custom_roi_mat", "mat_fees_expanded"],
         "cache_bust": {"status": "success", "deleted": {"kpi": 1, "roi_trend": 0, "returns": 0}},
     }
     assert engine.disposed is True
     assert engine.log[0] == ("execution_options", {"isolation_level": "AUTOCOMMIT"})
-    assert engine.log[1] == "REFRESH MATERIALIZED VIEW CONCURRENTLY mat_v_roi_full"
+    assert engine.log[1] == 'REFRESH MATERIALIZED VIEW CONCURRENTLY "custom_roi_mat"'
     assert engine.log[2] == "REFRESH MATERIALIZED VIEW CONCURRENTLY mat_fees_expanded"
 
 
 def test_task_refresh_roi_mvs_raises_and_disposes(monkeypatch):
     engine = RefreshEngine(raise_on_first=True)
     monkeypatch.setattr(maintenance_module, "create_engine", lambda *_: engine)
+    monkeypatch.setattr(maintenance_module.settings, "ROI_MATERIALIZED_VIEW_NAME", "custom_roi_mat", raising=False)
     with pytest.raises(RuntimeError):
         maintenance_module.task_refresh_roi_mvs.run()
     assert engine.disposed is True
     assert engine.log[0] == ("execution_options", {"isolation_level": "AUTOCOMMIT"})
-    assert engine.log[1] == "REFRESH MATERIALIZED VIEW CONCURRENTLY mat_v_roi_full"
+    assert engine.log[1] == 'REFRESH MATERIALIZED VIEW CONCURRENTLY "custom_roi_mat"'
     assert len(engine.log) == 2
+
+
+def test_roi_materialized_view_name_prefers_roi_group(monkeypatch):
+    stub_settings = SimpleNamespace(
+        ROI_MATERIALIZED_VIEW_NAME="", roi=SimpleNamespace(materialized_view_name="roi_mat")
+    )
+    monkeypatch.setattr(maintenance_module, "settings", stub_settings)
+    name, quoted = maintenance_module._roi_materialized_view_names()
+    assert name == "roi_mat"
+    assert quoted == '"roi_mat"'

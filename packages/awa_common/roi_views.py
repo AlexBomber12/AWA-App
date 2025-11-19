@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import time
 from typing import Final
 
@@ -25,14 +24,21 @@ class InvalidROIViewError(ValueError):
 
 
 def _raw_roi_view_name(cfg) -> str:
-    raw_env = os.getenv("ROI_VIEW_NAME")
-    if raw_env:
-        return raw_env.strip()
     try:
-        value = getattr(cfg, "ROI_VIEW_NAME", DEFAULT_ROI_VIEW)
+        value = cfg.ROI_VIEW_NAME
     except Exception:
-        value = DEFAULT_ROI_VIEW
-    return (value or DEFAULT_ROI_VIEW).strip()
+        value = None
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    try:
+        roi_cfg = getattr(cfg, "roi", None)
+    except Exception:  # pragma: no cover - defensive
+        roi_cfg = None
+    if roi_cfg is not None:
+        raw = getattr(roi_cfg, "view_name", DEFAULT_ROI_VIEW)
+    else:
+        raw = getattr(cfg, "view_name", DEFAULT_ROI_VIEW)
+    return (raw or DEFAULT_ROI_VIEW).strip()
 
 
 def _resolve_roi_view(cfg) -> str:
@@ -53,6 +59,13 @@ def current_roi_view(cfg=settings, *, ttl_seconds: float = _CACHE_TTL_S) -> str:
     _cached_name = resolved
     _cached_at = now
     return resolved
+
+
+def clear_caches() -> None:
+    """Reset cached ROI view state (used in tests)."""
+    global _cached_name, _cached_at
+    _cached_name = None
+    _cached_at = 0.0
 
 
 def quote_identifier(identifier: str) -> str:
@@ -78,6 +91,7 @@ __all__ = [
     "ALLOWED_ROI_VIEWS",
     "DEFAULT_ROI_VIEW",
     "InvalidROIViewError",
+    "clear_caches",
     "current_roi_view",
     "get_quoted_roi_view",
     "quote_identifier",

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import tempfile
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
@@ -14,6 +13,7 @@ import pandas as pd
 from sqlalchemy import create_engine, text
 
 from awa_common.dsn import build_dsn
+from awa_common.settings import settings
 from services.etl.dialects import (
     amazon_ads_sp_cost,
     amazon_fee_preview,
@@ -42,9 +42,13 @@ class ImportValidationError(ImportFileError):
     status_code = 422
 
 
-USE_COPY = os.getenv("USE_COPY", "true").lower() in ("1", "true", "yes")
-BUCKET = "awa-bucket"
-STREAMING_CHUNK_ENV = int(os.getenv("INGEST_STREAMING_CHUNK_SIZE", "50000"))
+_ETL_CFG = getattr(settings, "etl", None)
+_S3_CFG = getattr(settings, "s3", None)
+USE_COPY = bool(_ETL_CFG.use_copy if _ETL_CFG else getattr(settings, "USE_COPY", True))
+STREAMING_CHUNK_ENV = int(
+    _ETL_CFG.ingest_streaming_chunk_size if _ETL_CFG else getattr(settings, "INGEST_STREAMING_CHUNK_SIZE", 50_000)
+)
+BUCKET = _S3_CFG.bucket if _S3_CFG else getattr(settings, "MINIO_BUCKET", "awa-bucket")
 CSV_EXTENSIONS = {".csv", ".txt", ".tsv"}
 XLSX_EXTENSIONS = {".xlsx", ".xlsm"}
 
@@ -82,15 +86,20 @@ def _sha256_file(path: str | Path) -> str:
 
 
 def _download_from_minio(path: str) -> Path:
-    endpoint = os.getenv("MINIO_ENDPOINT", "minio:9000")
-    access = os.getenv("MINIO_ACCESS_KEY", "minio")
-    secret = os.getenv("MINIO_SECRET_KEY", "minio123")
+    s3_cfg = getattr(settings, "s3", None)
+    endpoint = s3_cfg.endpoint if s3_cfg else getattr(settings, "MINIO_ENDPOINT", "minio:9000")
+    secure = bool(s3_cfg.secure if s3_cfg else getattr(settings, "MINIO_SECURE", False))
+    access = s3_cfg.access_key if s3_cfg else getattr(settings, "MINIO_ACCESS_KEY", "minio")
+    secret = s3_cfg.secret_key if s3_cfg else getattr(settings, "MINIO_SECRET_KEY", "minio123")
+    region = s3_cfg.region if s3_cfg else getattr(settings, "AWS_REGION", "us-east-1")
+    scheme = "https" if secure else "http"
+    endpoint_url = endpoint if "://" in endpoint else f"{scheme}://{endpoint}"
     s3 = boto3.client(
         "s3",
-        endpoint_url=f"http://{endpoint}",
+        endpoint_url=endpoint_url,
         aws_access_key_id=access,
         aws_secret_access_key=secret,
-        region_name="us-east-1",
+        region_name=region,
     )
     tmp = tempfile.NamedTemporaryFile(delete=False)
     s3.download_fileobj(BUCKET, path, tmp)
@@ -107,7 +116,7 @@ def _open_uri(uri: str) -> Path:
     TESTING-only hook: in tests we monkeypatch this to return a local file.
     In production, your existing S3/MinIO downloader remains in place.
     """
-    if os.getenv("TESTING") == "1":
+    if getattr(settings, "TESTING", False):
         return Path(uri)
     raise RuntimeError("S3/MinIO open is not available outside tests")
 
@@ -343,7 +352,7 @@ def import_file(  # noqa: C901
     _dialect_override = kwargs.pop("dialect", None)
     if kwargs:
         raise TypeError(f"Unexpected kwargs: {', '.join(kwargs)}")
-    TESTING = os.getenv("TESTING") == "1"
+    TESTING = bool(getattr(settings, "TESTING", False))
     file_path = Path(path)
     if file_path.exists() and file_path.stat().st_size == 0:
         raise ImportValidationError("empty file")
@@ -424,8 +433,8 @@ def import_file(  # noqa: C901
         "settlements_txn_report": amazon_settlements.TARGET_TABLE,
     }[dialect]
 
-    idempotent = os.getenv("INGEST_IDEMPOTENT", "true").lower() in ("1", "true", "yes")
-    analyze_min = int(os.getenv("ANALYZE_MIN_ROWS", "50000"))
+    idempotent = bool(_ETL_CFG.ingest_idempotent if _ETL_CFG else getattr(settings, "INGEST_IDEMPOTENT", True))
+    analyze_min = int(_ETL_CFG.analyze_min_rows if _ETL_CFG else getattr(settings, "ANALYZE_MIN_ROWS", 50_000))
     warnings: list[str] = []
 
     engine = create_engine(build_dsn(sync=True))

@@ -56,6 +56,7 @@ def test_llm_and_observability_settings(monkeypatch):
     monkeypatch.setenv("LLM_API_KEY", "lan-key")
     monkeypatch.setenv("OPENAI_MODEL", "gpt-4o")
     monkeypatch.setenv("OPENAI_API_KEY", "openai-key")
+    monkeypatch.setenv("LLM_LAN_HEALTH_TIMEOUT_S", "2")
     monkeypatch.setenv("SENTRY_TRACES_SAMPLE_RATE", "0.2")
     monkeypatch.setenv("SENTRY_PROFILES_SAMPLE_RATE", "0.1")
     cfg = Settings()
@@ -67,5 +68,14 @@ def test_llm_and_observability_settings(monkeypatch):
     assert llm_cfg.lan_api_key == "lan-key"
     assert llm_cfg.openai_model == "gpt-4o"
     assert llm_cfg.openai_api_key == "openai-key"
+    assert llm_cfg.lan_health_timeout_s == 2.0
     assert observability.sentry_traces_sample_rate == 0.2
     assert observability.sentry_profiles_sample_rate == 0.1
+
+
+def test_roi_settings(monkeypatch):
+    monkeypatch.setenv("ROI_VIEW_NAME", "custom_view")
+    monkeypatch.setenv("ROI_MATERIALIZED_VIEW_NAME", "custom_mat")
+    cfg = Settings()
+    assert cfg.roi.view_name == "custom_view"
+    assert cfg.roi.materialized_view_name == "custom_mat"

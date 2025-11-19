@@ -51,3 +51,21 @@ def test_postgres_dsn_falls_back_to_database_url(monkeypatch) -> None:
     monkeypatch.setenv("DATABASE_URL", "postgresql+psycopg://fallback@db/app")
     cfg = Settings(PG_ASYNC_DSN=None)
     assert cfg.POSTGRES_DSN.startswith("postgresql+asyncpg://fallback")
+
+
+def test_healthcheck_settings(monkeypatch) -> None:
+    monkeypatch.setenv("HEALTHCHECK_DB_TIMEOUT_S", "5")
+    monkeypatch.setenv("HEALTHCHECK_REDIS_SOCKET_TIMEOUT_S", "4")
+    monkeypatch.setenv("HEALTHCHECK_HTTP_TIMEOUT_S", "6")
+    monkeypatch.setenv("HEALTHCHECK_CELERY_TIMEOUT_S", "7")
+    monkeypatch.setenv("HEALTHCHECK_INSPECT_TIMEOUT_S", "8")
+    monkeypatch.setenv("HEALTHCHECK_RETRY_ATTEMPTS", "9")
+    monkeypatch.setenv("HEALTHCHECK_RETRY_DELAY_S", "0.5")
+    cfg = Settings()
+    assert cfg.HEALTHCHECK_DB_TIMEOUT_S == 5.0
+    assert cfg.HEALTHCHECK_REDIS_SOCKET_TIMEOUT_S == 4.0
+    assert cfg.HEALTHCHECK_HTTP_TIMEOUT_S == 6.0
+    assert cfg.HEALTHCHECK_CELERY_TIMEOUT_S == 7.0
+    assert cfg.HEALTHCHECK_INSPECT_TIMEOUT_S == 8.0
+    assert cfg.HEALTHCHECK_RETRY_ATTEMPTS == 9
+    assert cfg.HEALTHCHECK_RETRY_DELAY_S == 0.5
