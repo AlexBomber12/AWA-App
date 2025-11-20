@@ -24,24 +24,36 @@ class InvalidROIViewError(ValueError):
 
 
 def _raw_roi_view_name(cfg) -> str:
+    """Return the configured ROI view name (raw, without validation)."""
+
+    def _clean(value: object | None) -> str | None:
+        if isinstance(value, str):
+            stripped = value.strip()
+            if stripped:
+                return stripped
+        return None
+
     try:
-        value = cfg.ROI_VIEW_NAME
+        direct = _clean(getattr(cfg, "ROI_VIEW_NAME", None))
     except Exception:
-        value = None
-    if isinstance(value, str) and value.strip():
-        return value.strip()
+        direct = None
+    if direct:
+        return direct
+
     try:
-        roi_cfg = getattr(cfg, "roi", None)
+        roi_group = getattr(cfg, "roi", None)
     except Exception:  # pragma: no cover - defensive
-        roi_cfg = None
-    if roi_cfg is not None:
-        raw = getattr(roi_cfg, "view_name", DEFAULT_ROI_VIEW)
-    else:
-        raw = getattr(cfg, "view_name", DEFAULT_ROI_VIEW)
-    return (raw or DEFAULT_ROI_VIEW).strip()
+        roi_group = None
+    grouped = _clean(getattr(roi_group, "view_name", None) if roi_group is not None else None)
+    if grouped:
+        return grouped
+
+    fallback = _clean(getattr(cfg, "view_name", None))
+    return fallback or DEFAULT_ROI_VIEW
 
 
 def _resolve_roi_view(cfg) -> str:
+    """Validate and return a safe ROI view name."""
     name = _raw_roi_view_name(cfg) or DEFAULT_ROI_VIEW
     if name not in ALLOWED_ROI_VIEWS:
         allowed = ", ".join(sorted(ALLOWED_ROI_VIEWS))

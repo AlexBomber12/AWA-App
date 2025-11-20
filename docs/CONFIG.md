@@ -83,8 +83,10 @@ Call `settings.s3.client_kwargs()` when constructing boto3/aioboto3 clients.
 
 | Variable | Description |
 | --- | --- |
-| `ROI_VIEW_NAME` | View backing ROI listings, stats, and score APIs |
+| `ROI_VIEW_NAME` | View backing ROI listings, stats, and score APIs (allowed: `v_roi_full` default, `roi_view`, `mat_v_roi_full`, `test_roi_view`) |
 | `ROI_MATERIALIZED_VIEW_NAME` | Materialized ROI view refreshed by maintenance jobs |
+
+`ROI_VIEW_NAME` (or a nested `settings.roi.view_name` entry) is resolved via `awa_common.roi_views.current_roi_view`. Invalid values raise `InvalidROIViewError` instead of silently falling back so misconfigurations fail fast.
 
 ## LLM (`settings.llm`)
 

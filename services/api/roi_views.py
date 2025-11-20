@@ -2,25 +2,22 @@ from __future__ import annotations
 
 import os
 from collections.abc import Callable
-from typing import Final, cast
+from typing import Final
 
+import structlog
 from cachetools import TTLCache
 from sqlalchemy import Column, MetaData, String, Table, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from awa_common.roi_views import InvalidROIViewError, current_roi_view, quote_identifier
+from awa_common.roi_views import (
+    InvalidROIViewError,
+    clear_caches as clear_roi_cache,
+    current_roi_view,
+    quote_identifier,
+)
 from awa_common.settings import settings
 
-
-def _resolve_current_roi_view() -> str:
-    resolver: Callable[[], str] = current_roi_view
-    return resolver()
-
-
-def _quote_roi_view(identifier: str) -> str:
-    formatter: Callable[[str], str] = quote_identifier
-    return formatter(identifier)
-
+logger = structlog.get_logger(__name__)
 
 ROI_CACHE_TTL_ENV = "ROI_CACHE_TTL_SECONDS"
 DEFAULT_CACHE_TTL_SECONDS: Final[float] = 300.0
@@ -50,29 +47,23 @@ def _ttl_seconds() -> float:
     return value if value > 0 else DEFAULT_CACHE_TTL_SECONDS
 
 
-def _new_cache() -> TTLCache[str, object]:
+def _new_vendor_cache() -> TTLCache[str, bool]:
     return TTLCache(maxsize=_CACHE_SIZE, ttl=_ttl_seconds())
 
 
-_roi_cache = cast(TTLCache[str, str], _new_cache())
-_returns_vendor_cache = cast(TTLCache[str, bool], _new_cache())
-
-_ROI_VIEW_KEY = "roi_view"
+_returns_vendor_cache = _new_vendor_cache()
 
 
 def get_roi_view_name() -> str:
-    """Return the configured ROI view name, cached for a short TTL."""
-    cached = _roi_cache.get(_ROI_VIEW_KEY)
-    if isinstance(cached, str):
-        return cached
-    resolved = _resolve_current_roi_view()
-    _roi_cache[_ROI_VIEW_KEY] = resolved
-    return resolved
+    """Return the configured ROI view name."""
+    resolver: Callable[[], str] = current_roi_view
+    return resolver()
 
 
 def get_quoted_roi_view() -> str:
-    """Return the cached ROI view name quoted for SQL usage."""
-    return _quote_roi_view(get_roi_view_name())
+    """Return the configured ROI view name quoted for SQL usage."""
+    formatter: Callable[[str], str] = quote_identifier
+    return formatter(get_roi_view_name())
 
 
 async def returns_vendor_column_exists(
@@ -98,7 +89,14 @@ async def returns_vendor_column_exists(
     try:
         result = await session.execute(stmt)
         found = result.scalar() is not None
-    except Exception:
+    except Exception as exc:
+        logger.warning(
+            "returns.vendor_column_check_failed",
+            schema=schema,
+            table=table_name,
+            error=str(exc),
+            exc_info=exc,
+        )
         found = False
     _returns_vendor_cache[key] = found
     return found
@@ -106,9 +104,9 @@ async def returns_vendor_column_exists(
 
 def clear_caches() -> None:
     """Used in tests to reset ROI cache state."""
-    global _roi_cache, _returns_vendor_cache
-    _roi_cache = cast(TTLCache[str, str], _new_cache())
-    _returns_vendor_cache = cast(TTLCache[str, bool], _new_cache())
+    global _returns_vendor_cache
+    clear_roi_cache()
+    _returns_vendor_cache = _new_vendor_cache()
 
 
 __all__ = [
