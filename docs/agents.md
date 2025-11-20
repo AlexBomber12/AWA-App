@@ -49,7 +49,12 @@ Agents are first added to the local docker-compose environment for development. 
 4. Update CI and docker-compose files so the agent runs in each environment.
 
 ## Alert bot
-The alert bot now fans out rule evaluations and Telegram sends in parallel with two layers of throttling (evaluation via `ALERT_EVAL_CONCURRENCY`, delivery via `ALERT_SEND_CONCURRENCY` plus token buckets). A single Celery beat entry (`alertbot.run`) executes on the cadence defined by `ALERT_SCHEDULE_CRON` (defaults to every minute) and the in-process scheduler honours per-rule `schedule` values (cron expressions or `@every 5m` style intervals).
+The alert bot now fans out rule evaluations and Telegram sends in parallel with two layers of throttling (evaluation via `ALERT_EVAL_CONCURRENCY`, delivery via `ALERT_SEND_CONCURRENCY` plus token buckets). A single Celery beat entry (`alertbot.run`) executes on the cadence defined by the validated cron settings (`ALERTS_EVALUATION_INTERVAL_CRON` / `ALERT_SCHEDULE_CRON`), while each rule’s `schedule` string is validated through the shared cron helpers and simply filters rules that are not due on a given tick. All outbound Telegram calls run through the shared HTTP client so retries, timeouts, structured logs, and metrics match the rest of the platform.
+
+### Required settings
+- `TELEGRAM_TOKEN` and `TELEGRAM_DEFAULT_CHAT_ID` are loaded via `AlertBotSettings`. Tokens that are empty, placeholders, or malformed trigger `alertbot.validation.failed`, flip `alertbot_startup_validation_ok` back to `0`, and increment `alert_errors_total{type="config_error"}` so misconfiguration can’t hide silently.
+- `ALERTS_ENABLED`, `ALERT_EVAL_CONCURRENCY`, `ALERT_SEND_CONCURRENCY`, and `ALERT_RULE_TIMEOUT_S` also live in `AlertBotSettings`, making env files / Helm values the single source of truth for feature flags and concurrency knobs.
+- Per-rule schedules and the global cadence share the same cron validation logic from `awa_common.cron_config`, keeping CI/production parity.
 
 ### Rule configuration
 - Source file: `services/alert_bot/config.yaml` (override with `ALERT_RULES_PATH`). The document contains `version`, `defaults` (chat list, parse mode, enabled flag), and a `rules[]` list.
@@ -60,8 +65,8 @@ The alert bot now fans out rule evaluations and Telegram sends in parallel with 
 ### Metrics & observability
 - Rule execution: `alertbot_rules_evaluated_total{rule,outcome}`, `alertbot_rule_eval_duration_seconds{rule}`.
 - Event and send pipeline: `alertbot_events_emitted_total{rule}`, `alertbot_messages_sent_total{rule,status}`, `alertbot_send_latency_seconds`, `alertbot_batch_duration_seconds`, and `alertbot_inflight_sends`.
-- Telegram errors: `alertbot_telegram_errors_total{error_code}`.
-- Health: `alertbot_startup_validation_ok` gauges whether token/chat validation passed. When the gauge is `0`, sending is skipped but rule evaluations continue.
+- Transport: `alerts_sent_total{rule,severity,channel,status}` shows whether Telegram sends succeed, `alert_rule_skipped_total{rule,reason}` highlights disabled/filtered/invalid-config rules, and `alert_errors_total{rule,type}` captures HTTP/API/config errors emitted by the new transport layer.
+- Health: `alertbot_startup_validation_ok` gauges whether token/chat validation passed. When the gauge is `0`, sending is skipped but rule evaluations continue and the counters above will show skipped sends.
 
 ### Troubleshooting
 - Invalid tokens or chat IDs log `alertbot.validation.failed` entries with the problematic ID; update `TELEGRAM_TOKEN` / `TELEGRAM_DEFAULT_CHAT_ID` and rerun `alertbot.run`.

@@ -7,6 +7,7 @@ import pytest
 from services.alert_bot import worker
 from services.alert_bot.config import AlertRule
 from services.alert_bot.rules import AlertEvent
+from services.alert_bot.settings import AlertBotSettings
 
 
 class StubMetric:
@@ -25,6 +26,23 @@ class StubMetric:
         self.values.append(value)
 
 
+def _settings(**overrides: object) -> AlertBotSettings:
+    base = AlertBotSettings(
+        enabled=True,
+        telegram_token="12345:ABCDEabcde",
+        default_chat_id="@ops",
+        evaluation_cron="*/5 * * * *",
+        send_cron="*/1 * * * *",
+        eval_concurrency=1,
+        send_concurrency=1,
+        rule_timeout_s=0.01,
+        env="test",
+        service_name="alert_bot",
+        version="test",
+    )
+    return base.model_copy(update=overrides)
+
+
 def _rule(rule_id: str = "roi") -> AlertRule:
     return AlertRule(
         id=rule_id,
@@ -40,7 +58,7 @@ def _rule(rule_id: str = "roi") -> AlertRule:
 
 @pytest.mark.asyncio
 async def test_evaluate_single_rule_records_metrics(monkeypatch: pytest.MonkeyPatch) -> None:
-    runner = worker.AlertBotRunner()
+    runner = worker.AlertBotRunner(settings=_settings())
 
     async def fake_evaluate(_rule: AlertRule):
         return [AlertEvent(rule_id=_rule.id, chat_ids=["@ops"], text="ok", dedupe_key="roi:1")]
@@ -62,7 +80,7 @@ async def test_evaluate_single_rule_records_metrics(monkeypatch: pytest.MonkeyPa
 
 @pytest.mark.asyncio
 async def test_evaluate_single_rule_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
-    runner = worker.AlertBotRunner()
+    runner = worker.AlertBotRunner(settings=_settings(rule_timeout_s=0.01))
 
     async def slow_rule(_rule: AlertRule):
         await asyncio.Future()
@@ -70,7 +88,6 @@ async def test_evaluate_single_rule_timeout(monkeypatch: pytest.MonkeyPatch) -> 
     metric_counter = StubMetric()
     metric_histogram = StubMetric()
     monkeypatch.setattr(worker, "evaluate_rule", slow_rule)
-    monkeypatch.setattr(worker.settings, "ALERT_RULE_TIMEOUT_S", 0.01)
     monkeypatch.setattr(worker, "ALERTBOT_RULES_EVALUATED_TOTAL", metric_counter)
     monkeypatch.setattr(worker, "ALERTBOT_RULE_EVAL_DURATION_SECONDS", metric_histogram)
 

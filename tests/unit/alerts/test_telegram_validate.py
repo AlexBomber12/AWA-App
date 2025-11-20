@@ -14,6 +14,9 @@ class _StubResponse:
     def json(self) -> dict:
         return self.payload
 
+    def close(self) -> None:  # pragma: no cover - stub
+        return None
+
 
 class _StubClient:
     def __init__(self, response: _StubResponse) -> None:
@@ -23,6 +26,9 @@ class _StubClient:
     def get(self, url: str):
         self.requested_url = url
         return self._response
+
+    def close(self) -> None:  # pragma: no cover - stub
+        return None
 
 
 def test_validate_config_rejects_invalid_token_format() -> None:
@@ -36,7 +42,7 @@ def test_validate_config_accepts_negative_chat_id() -> None:
     ok, reason = telegram.validate_config("123456:ABCDEFGHIJKLMNO", "-987654", client=client)
     assert ok is True
     assert "connected" in reason
-    assert client.requested_url == "https://api.telegram.org/bot123456:ABCDEFGHIJKLMNO/getMe"
+    assert client.requested_url == "/bot123456:ABCDEFGHIJKLMNO/getMe"
 
 
 def test_validate_config_handles_http_error() -> None:
@@ -68,8 +74,8 @@ def test_validate_config_uses_default_client(monkeypatch) -> None:
     created = {"closed": False}
 
     class DummyClient:
-        def __init__(self, timeout):
-            self.timeout = timeout
+        def __init__(self, **_: object) -> None:
+            pass
 
         def get(self, url: str):
             return response
@@ -77,8 +83,7 @@ def test_validate_config_uses_default_client(monkeypatch) -> None:
         def close(self):
             created["closed"] = True
 
-    monkeypatch.setattr(telegram.httpx, "Client", DummyClient)
-    monkeypatch.setattr(telegram.httpx, "Timeout", lambda *args, **kwargs: ("timeout", args, kwargs))
+    monkeypatch.setattr(telegram, "HTTPClient", lambda **kwargs: DummyClient(**kwargs))
     ok, reason = telegram.validate_config("99999:ABCDEFGHIJKLMNO", "42", client=None)
     assert ok is True
     assert "configuration valid" in reason or "connected" in reason

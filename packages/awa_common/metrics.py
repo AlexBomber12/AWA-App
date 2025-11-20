@@ -418,6 +418,24 @@ ALERTS_RULE_DURATION_SECONDS = Histogram(
     buckets=HTTP_BUCKETS,
     registry=REGISTRY,
 )
+ALERTS_SENT_TOTAL = Counter(
+    "alerts_sent_total",
+    "Alert notifications attempted by channel and outcome",
+    ("rule", "severity", "channel", "status", *BASE_LABELS),
+    registry=REGISTRY,
+)
+ALERT_RULE_SKIPPED_TOTAL = Counter(
+    "alert_rule_skipped_total",
+    "Alert rules skipped before sending",
+    ("rule", "reason", *BASE_LABELS),
+    registry=REGISTRY,
+)
+ALERT_ERRORS_TOTAL = Counter(
+    "alert_errors_total",
+    "Alert pipeline errors grouped by type",
+    ("rule", "type", *BASE_LABELS),
+    registry=REGISTRY,
+)
 ALERTBOT_RULES_EVALUATED_TOTAL = Counter(
     "alertbot_rules_evaluated_total",
     "Alert bot rule evaluations by outcome",

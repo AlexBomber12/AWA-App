@@ -13,6 +13,7 @@
 - enable Dependabot updates and docs publishing
 - Docker healthchecks for services
 - disable logical replication for CI Postgres and add migration smoke test
+- Alert Bot: shared HTTP client + AlertBotSettings/cron integration, new metrics/logging, transport/decision layer tests, and updated docs
 
 ## v1.3.0
 - fixed Docker health-check (now probes /health), CI all green.

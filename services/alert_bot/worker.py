@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import time
-from collections import OrderedDict
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -13,6 +12,8 @@ from croniter import croniter as croniter_cls
 
 from awa_common.cron_config import CronConfigError, validate_cron_expr
 from awa_common.metrics import (
+    ALERT_ERRORS_TOTAL,
+    ALERT_RULE_SKIPPED_TOTAL,
     ALERTBOT_BATCH_DURATION_SECONDS,
     ALERTBOT_EVENTS_EMITTED_TOTAL,
     ALERTBOT_RULE_EVAL_DURATION_SECONDS,
@@ -20,24 +21,24 @@ from awa_common.metrics import (
     ALERTBOT_STARTUP_VALIDATION_OK,
 )
 from awa_common.settings import settings
-from awa_common.telegram import AsyncTelegramClient
 from services.alert_bot import config as config_module
 from services.alert_bot.config import AlertRule, AlertRulesRuntime
+from services.alert_bot.decider import NotificationIntent, RuleDecision, build_notification_intents
 from services.alert_bot.rules import AlertEvent, evaluate_rule
 from services.alert_bot.rules_store import SUPPORTED_RULE_KEYS, DbRulesStore, FileRulesStore, RuleConfig, RulesStore
+from services.alert_bot.settings import AlertBotSettings
+from services.alert_bot.transport import TelegramTransport
+
+_DEFAULT_ALERT_SETTINGS = AlertBotSettings.load()
 
 logger = structlog.get_logger(__name__).bind(
-    service=settings.SERVICE_NAME or "alert_bot",
-    env=settings.ENV,
-    version=settings.VERSION,
+    service=_DEFAULT_ALERT_SETTINGS.service_name,
+    env=_DEFAULT_ALERT_SETTINGS.env,
+    version=_DEFAULT_ALERT_SETTINGS.version,
     component="alert_bot",
 )
 
-_METRIC_LABELS = {
-    "service": (settings.SERVICE_NAME or "alert_bot") or "alert_bot",
-    "env": settings.ENV or "local",
-    "version": settings.VERSION,
-}
+_METRIC_LABELS = _DEFAULT_ALERT_SETTINGS.base_metric_labels()
 ALERTBOT_STARTUP_VALIDATION_OK.labels(**_METRIC_LABELS).set(0)
 
 
@@ -159,12 +160,14 @@ _INTERVAL_MULTIPLIERS = {
 
 
 class AlertBotRunner:
-    def __init__(self) -> None:
-        self._client = AsyncTelegramClient()
+    def __init__(self, *, settings: AlertBotSettings | None = None, transport: TelegramTransport | None = None) -> None:
+        self._settings = settings or AlertBotSettings.load()
+        self._metric_labels = self._settings.base_metric_labels()
+        self._transport = transport or TelegramTransport(metric_labels=self._metric_labels)
         self._config_manager = config_module.CONFIG_MANAGER
         self._legacy_store: RulesStore = _build_legacy_store()
         self._scheduler = RuleScheduler()
-        self._send_semaphore = asyncio.Semaphore(max(1, settings.ALERT_SEND_CONCURRENCY))
+        self._send_semaphore = asyncio.Semaphore(max(1, self._settings.send_concurrency))
         self._max_retries = 3
         self._sending_enabled = False
         self._last_validation_version: str | None = None
@@ -172,8 +175,13 @@ class AlertBotRunner:
         self._degraded_reason: str | None = "validation_not_run"
 
     async def run(self, now: datetime | None = None) -> dict[str, Any]:
-        if not settings.ALERTS_ENABLED:
+        settings_ok, config_reason = self._settings.validate_runtime()
+        if not settings_ok:
+            self._record_config_error("global")
+            self._set_degraded(config_reason or "invalid_config")
+        if not self._settings.enabled:
             logger.info("alertbot.disabled", reason="ALERTS_ENABLED=0")
+            self._record_rule_skip("global", "disabled")
             return {
                 "rules_total": 0,
                 "notifications_sent": 0,
@@ -192,20 +200,24 @@ class AlertBotRunner:
 
         now = now or datetime.now(UTC)
         due_rules = self._scheduler.due_rules(rules, now=now)
+        skipped_ids = {rule.id for rule in rules} - {rule.id for rule in due_rules}
+        for rule_id in skipped_ids:
+            self._record_rule_skip(rule_id, "filtered")
         if not due_rules:
             logger.debug("alertbot.no_due_rules", total=len(rules))
             return _format_summary(stats, duration=time.perf_counter() - batch_start)
 
-        events = await self._evaluate_rules(due_rules, stats)
-        deduped_events = _dedupe_events(events)
-        stats.events_total = len(deduped_events)
-        await self._ensure_validation(runtime_config, deduped_events)
+        evaluations = await self._evaluate_rules(due_rules, stats)
+        decisions = [RuleDecision(rule=result.rule, events=result.events) for result in evaluations if result.events]
+        intents = build_notification_intents(decisions)
+        stats.events_total = len(intents)
+        await self._ensure_validation(runtime_config, intents)
         stats.degraded = not self._sending_enabled
         stats.degraded_reason = self._degraded_reason
-        await self._dispatch_events(deduped_events, stats)
+        await self._dispatch_intents(intents, stats)
 
         batch_duration = time.perf_counter() - batch_start
-        ALERTBOT_BATCH_DURATION_SECONDS.labels(**_METRIC_LABELS).observe(batch_duration)
+        ALERTBOT_BATCH_DURATION_SECONDS.labels(**self._metric_labels).observe(batch_duration)
 
         p95_ms = _percentile(stats.send_latencies, 95.0) * 1000 if stats.send_latencies else 0.0
         logger.info(
@@ -233,17 +245,19 @@ class AlertBotRunner:
     async def validate_startup(self) -> None:
         runtime_config = self._load_config()
         rules, _ = self._resolve_rules(runtime_config)
-        placeholder_events = [
-            AlertEvent(
+        placeholder_intents = [
+            NotificationIntent(
                 rule_id=rule.id,
-                chat_ids=rule.chat_ids,
-                text="startup-validation",
-                dedupe_key=f"{rule.id}:startup",
+                severity=str(rule.params.get("severity", "info")) if isinstance(rule.params, dict) else "info",
+                message="startup-validation",
+                chat_ids=tuple(rule.chat_ids),
                 parse_mode=rule.parse_mode,
+                dedupe_key=f"{rule.id}:startup",
+                disable_web_page_preview=True,
             )
             for rule in rules
         ]
-        await self._ensure_validation(runtime_config, placeholder_events)
+        await self._ensure_validation(runtime_config, placeholder_intents)
 
     def _load_config(self) -> AlertRulesRuntime | None:
         runtime = self._config_manager.get()
@@ -264,19 +278,19 @@ class AlertBotRunner:
         fallback_rules = self._default_rules()
         return fallback_rules, "default"
 
-    async def _evaluate_rules(self, rules: list[AlertRule], stats: BatchStats) -> list[AlertEvent]:
-        concurrency = max(1, settings.ALERT_EVAL_CONCURRENCY)
+    async def _evaluate_rules(self, rules: list[AlertRule], stats: BatchStats) -> list[RuleEvaluationResult]:
+        concurrency = max(1, self._settings.eval_concurrency)
         semaphore = asyncio.Semaphore(concurrency)
         tasks = [self._evaluate_single_rule(rule, semaphore) for rule in rules]
         results = await asyncio.gather(*tasks, return_exceptions=True)
-        events: list[AlertEvent] = []
+        evaluations: list[RuleEvaluationResult] = []
         for result in results:
             if isinstance(result, RuleEvaluationResult):
                 stats.rules_evaluated += 1
-                events.extend(result.events)
+                evaluations.append(result)
             elif isinstance(result, Exception):
                 logger.exception("alertbot.rule.evaluate_error", error=str(result))
-        return events
+        return evaluations
 
     async def _evaluate_single_rule(self, rule: AlertRule, semaphore: asyncio.Semaphore) -> RuleEvaluationResult:
         start = time.perf_counter()
@@ -284,25 +298,25 @@ class AlertBotRunner:
         events: list[AlertEvent] = []
         async with semaphore:
             try:
-                events = await asyncio.wait_for(evaluate_rule(rule), timeout=settings.ALERT_RULE_TIMEOUT_S)
+                events = await asyncio.wait_for(evaluate_rule(rule), timeout=self._settings.rule_timeout_s)
             except TimeoutError:
                 outcome = "timeout"
-                logger.warning("alertbot.rule.timeout", rule_id=rule.id, timeout_s=settings.ALERT_RULE_TIMEOUT_S)
+                logger.warning("alertbot.rule.timeout", rule_id=rule.id, timeout_s=self._settings.rule_timeout_s)
             except Exception as exc:  # pragma: no cover - defensive logging
                 outcome = "error"
                 logger.exception("alertbot.rule.error", rule_id=rule.id, error=str(exc))
         duration = time.perf_counter() - start
-        ALERTBOT_RULE_EVAL_DURATION_SECONDS.labels(rule=rule.id, **_METRIC_LABELS).observe(duration)
-        ALERTBOT_RULES_EVALUATED_TOTAL.labels(rule=rule.id, outcome=outcome, **_METRIC_LABELS).inc()
+        ALERTBOT_RULE_EVAL_DURATION_SECONDS.labels(rule=rule.id, **self._metric_labels).observe(duration)
+        ALERTBOT_RULES_EVALUATED_TOTAL.labels(rule=rule.id, outcome=outcome, **self._metric_labels).inc()
         if events:
-            ALERTBOT_EVENTS_EMITTED_TOTAL.labels(rule=rule.id, **_METRIC_LABELS).inc(len(events))
+            ALERTBOT_EVENTS_EMITTED_TOTAL.labels(rule=rule.id, **self._metric_labels).inc(len(events))
         return RuleEvaluationResult(rule=rule, events=events, outcome=outcome, duration=duration)
 
-    async def _ensure_validation(self, runtime: AlertRulesRuntime | None, events: list[AlertEvent]) -> None:
-        if not events:
+    async def _ensure_validation(self, runtime: AlertRulesRuntime | None, intents: list[NotificationIntent]) -> None:
+        if not intents:
             return
         config_version = runtime.version if runtime else "legacy"
-        chat_ids = frozenset(_collect_chat_ids(runtime, events))
+        chat_ids = frozenset(_collect_chat_ids(runtime, intents, self._settings))
         needs_validation = (
             not self._sending_enabled
             or self._last_validation_version != config_version
@@ -316,53 +330,48 @@ class AlertBotRunner:
         if not chat_ids:
             self._set_degraded("no_chat_ids_configured")
             return
-        token_status = await self._client.get_me()
-        if not token_status.ok:
-            self._set_degraded(token_status.description or "invalid_token")
+        ok, reason = self._settings.validate_runtime()
+        if not ok:
+            self._record_config_error("global")
+            self._set_degraded(reason or "invalid_config")
             return
-        for chat_id in chat_ids:
-            chat_status = await self._client.get_chat(chat_id)
-            if not chat_status.ok:
-                description = chat_status.description or "unknown_error"
-                logger.error("alertbot.validation.chat_failed", chat_id=chat_id, error=description)
-                self._set_degraded(f"chat_invalid:{chat_id}")
-                return
+        ok, reason = await self._transport.validate(set(chat_ids))
+        if not ok:
+            self._record_config_error("global")
+            self._set_degraded(reason or "validation_failed")
+            return
         self._sending_enabled = True
         self._degraded_reason = None
         self._last_validation_version = config_version
         self._last_validated_chat_ids = chat_ids
-        ALERTBOT_STARTUP_VALIDATION_OK.labels(**_METRIC_LABELS).set(1)
+        ALERTBOT_STARTUP_VALIDATION_OK.labels(**self._metric_labels).set(1)
         logger.info("alertbot.validation.success", chats=len(chat_ids))
 
-    async def _dispatch_events(self, events: list[AlertEvent], stats: BatchStats) -> None:
-        if not events:
+    async def _dispatch_intents(self, intents: list[NotificationIntent], stats: BatchStats) -> None:
+        if not intents:
             return
         if not self._sending_enabled:
-            skipped = sum(len(event.chat_ids) for event in events)
+            skipped = sum(len(intent.chat_ids) for intent in intents)
             stats.messages_failed += skipped
+            for intent in intents:
+                self._record_rule_skip(intent.rule_id, "invalid_config")
             logger.warning("alertbot.sending_skipped", reason=self._degraded_reason, messages=skipped)
             return
         send_tasks: list[asyncio.Task[None]] = []
-        for event in events:
-            for chat_id in event.chat_ids:
+        for intent in intents:
+            for chat_id in intent.chat_ids:
                 stats.messages_planned += 1
-                send_tasks.append(asyncio.create_task(self._send_event(chat_id, event, stats)))
+                send_tasks.append(asyncio.create_task(self._send_intent(chat_id, intent, stats)))
         if send_tasks:
             await asyncio.gather(*send_tasks)
 
-    async def _send_event(self, chat_id: str, event: AlertEvent, stats: BatchStats) -> None:
+    async def _send_intent(self, chat_id: str, intent: NotificationIntent, stats: BatchStats) -> None:
         attempt = 0
         while attempt < self._max_retries:
             attempt += 1
             async with self._send_semaphore:
                 send_start = time.perf_counter()
-                result = await self._client.send_message(
-                    chat_id=chat_id,
-                    text=event.text,
-                    parse_mode=event.parse_mode,
-                    disable_web_page_preview=event.disable_web_page_preview,
-                    rule_id=event.rule_id,
-                )
+                result = await self._transport.send(chat_id, intent)
                 stats.send_latencies.append(time.perf_counter() - send_start)
             if result.ok:
                 stats.messages_sent += 1
@@ -378,8 +387,14 @@ class AlertBotRunner:
     def _set_degraded(self, reason: str) -> None:
         self._sending_enabled = False
         self._degraded_reason = reason
-        ALERTBOT_STARTUP_VALIDATION_OK.labels(**_METRIC_LABELS).set(0)
+        ALERTBOT_STARTUP_VALIDATION_OK.labels(**self._metric_labels).set(0)
         logger.error("alertbot.validation.failed", reason=reason)
+
+    def _record_config_error(self, rule_id: str) -> None:
+        ALERT_ERRORS_TOTAL.labels(rule=rule_id, type="config_error", **self._metric_labels).inc()
+
+    def _record_rule_skip(self, rule_id: str, reason: str) -> None:
+        ALERT_RULE_SKIPPED_TOTAL.labels(rule=rule_id, reason=reason, **self._metric_labels).inc()
 
     def _legacy_rules(self) -> list[AlertRule]:
         try:
@@ -397,16 +412,20 @@ class AlertBotRunner:
         return _convert_legacy_rules(configs)
 
 
-def _collect_chat_ids(runtime: AlertRulesRuntime | None, events: list[AlertEvent]) -> set[str]:
+def _collect_chat_ids(
+    runtime: AlertRulesRuntime | None,
+    intents: list[NotificationIntent],
+    bot_settings: AlertBotSettings,
+) -> set[str]:
     chats: set[str] = set()
     if runtime is not None:
         chats.update(runtime.chat_ids())
-    if events:
-        for event in events:
-            chats.update(event.chat_ids)
+    if intents:
+        for intent in intents:
+            chats.update(intent.chat_ids)
     if chats:
         return chats
-    default_chat = settings.TELEGRAM_DEFAULT_CHAT_ID
+    default_chat = bot_settings.default_chat_id
     if default_chat is None:
         return set()
     return {str(default_chat)}
@@ -483,15 +502,6 @@ def _legacy_params(rule_key: str, thresholds: dict[str, Any]) -> dict[str, Any]:
     if rule_key == "stale_price_days":
         params.setdefault("stale_days", settings.STALE_DAYS)
     return params
-
-
-def _dedupe_events(events: Iterable[AlertEvent]) -> list[AlertEvent]:
-    seen: OrderedDict[str, AlertEvent] = OrderedDict()
-    for event in events:
-        if event.dedupe_key in seen:
-            continue
-        seen[event.dedupe_key] = event
-    return list(seen.values())
 
 
 def _percentile(samples: list[float], percentile: float) -> float:

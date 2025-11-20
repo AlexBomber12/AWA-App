@@ -9,6 +9,7 @@ from typing import Any, Literal
 import httpx
 import structlog
 
+from awa_common.http_client import AsyncHTTPClient, HTTPClient, HTTPClientError
 from awa_common.metrics import (
     ALERTBOT_INFLIGHT_SENDS,
     ALERTBOT_MESSAGES_SENT_TOTAL,
@@ -20,7 +21,7 @@ from awa_common.metrics import (
 from awa_common.settings import settings
 
 _TOKEN_PATTERN = re.compile(r"^\d{5,}:[A-Za-z0-9_-]{10,}$")
-_ASYNC_CLIENT: httpx.AsyncClient | None = None
+_ASYNC_CLIENT: AsyncHTTPClient | None = None
 _ASYNC_CLIENT_LOCK = asyncio.Lock()
 _CHANNEL = "telegram"
 _LOGGER = structlog.get_logger(__name__).bind(
@@ -50,15 +51,29 @@ def _record_failure(rule: str | None, error_type: str) -> None:
     ALERTS_NOTIFICATIONS_FAILED_TOTAL.labels(**{**_base_labels(rule), "error_type": error_type}).inc()
 
 
-async def _ensure_async_client() -> httpx.AsyncClient:
+async def _ensure_async_client() -> AsyncHTTPClient:
     global _ASYNC_CLIENT
     client = _ASYNC_CLIENT
     if client is not None:
         return client
     async with _ASYNC_CLIENT_LOCK:
         if _ASYNC_CLIENT is None:
-            timeout = httpx.Timeout(settings.TELEGRAM_TOTAL_TIMEOUT_S, connect=settings.TELEGRAM_CONNECT_TIMEOUT_S)
-            _ASYNC_CLIENT = httpx.AsyncClient(timeout=timeout)
+            timeout = httpx.Timeout(
+                settings.TELEGRAM_TOTAL_TIMEOUT_S,
+                connect=settings.TELEGRAM_CONNECT_TIMEOUT_S,
+                read=settings.TELEGRAM_TOTAL_TIMEOUT_S,
+                write=settings.TELEGRAM_TOTAL_TIMEOUT_S,
+            )
+            limits = httpx.Limits(
+                max_connections=settings.HTTP_MAX_CONNECTIONS,
+                max_keepalive_connections=settings.HTTP_MAX_KEEPALIVE_CONNECTIONS,
+            )
+            _ASYNC_CLIENT = AsyncHTTPClient(
+                integration="telegram",
+                base_url=settings.TELEGRAM_API_BASE.rstrip("/"),
+                timeout=timeout,
+                limits=limits,
+            )
         return _ASYNC_CLIENT
 
 
@@ -79,7 +94,7 @@ def _normalize_chat_id(chat_id: int | str | None) -> tuple[int | None, str | Non
 def validate_config(
     token: str | None,
     chat_id: int | str | None,
-    client: httpx.Client | None = None,
+    client: HTTPClient | None = None,
 ) -> tuple[bool, str]:
     """Validate Telegram configuration by checking formats and performing a lightweight API call."""
 
@@ -96,24 +111,40 @@ def validate_config(
     http_client = client
     close_client = False
     if http_client is None:
-        timeout = httpx.Timeout(settings.TELEGRAM_TOTAL_TIMEOUT_S, connect=settings.TELEGRAM_CONNECT_TIMEOUT_S)
-        http_client = httpx.Client(timeout=timeout)
+        timeout = httpx.Timeout(
+            settings.TELEGRAM_TOTAL_TIMEOUT_S,
+            connect=settings.TELEGRAM_CONNECT_TIMEOUT_S,
+            read=settings.TELEGRAM_TOTAL_TIMEOUT_S,
+            write=settings.TELEGRAM_TOTAL_TIMEOUT_S,
+        )
+        limits = httpx.Limits(
+            max_connections=settings.HTTP_MAX_CONNECTIONS,
+            max_keepalive_connections=settings.HTTP_MAX_KEEPALIVE_CONNECTIONS,
+        )
+        http_client = HTTPClient(
+            integration="telegram",
+            base_url=settings.TELEGRAM_API_BASE.rstrip("/"),
+            timeout=timeout,
+            limits=limits,
+        )
         close_client = True
     try:
-        url = f"https://api.telegram.org/bot{trimmed_token}/getMe"
-        response = http_client.get(url)
-    except httpx.RequestError as exc:
+        response = http_client.get(f"/bot{trimmed_token}/getMe")
+    except httpx.HTTPStatusError as exc:
+        status_code = exc.response.status_code if exc.response else 500
+        return False, f"telegram API rejected token: HTTP {status_code}"
+    except HTTPClientError as exc:
         return False, f"telegram API error: {exc.__class__.__name__}: {exc}"
     finally:
         if close_client:
             http_client.close()
 
-    if response.status_code >= 400:
-        return False, f"telegram API rejected token: HTTP {response.status_code}"
     try:
         payload = response.json()
     except ValueError:
         return False, "telegram API returned invalid JSON"
+    finally:
+        response.close()
     if not payload.get("ok", False):
         description = payload.get("description") or "unknown error"
         return False, f"telegram API error: {description}"
@@ -127,7 +158,7 @@ async def send_message(
     chat_id: int | str | None = None,
     parse_mode: str = "HTML",
     disable_notification: bool | None = None,
-    client: httpx.AsyncClient | None = None,
+    client: AsyncHTTPClient | None = None,
     *,
     rule: str | None = None,
 ) -> bool:
@@ -152,7 +183,7 @@ async def send_photo(
     chat_id: int | str | None = None,
     parse_mode: str = "HTML",
     disable_notification: bool | None = None,
-    client: httpx.AsyncClient | None = None,
+    client: AsyncHTTPClient | None = None,
     *,
     rule: str | None = None,
 ) -> bool:
@@ -179,7 +210,7 @@ async def send_document(
     chat_id: int | str | None = None,
     parse_mode: str = "HTML",
     disable_notification: bool | None = None,
-    client: httpx.AsyncClient | None = None,
+    client: AsyncHTTPClient | None = None,
     *,
     rule: str | None = None,
 ) -> bool:
@@ -206,7 +237,7 @@ async def _send_payload(
     *,
     chat_id_override: int | str | None,
     disable_notification: bool | None,
-    client: httpx.AsyncClient | None,
+    client: AsyncHTTPClient | None,
     rule: str | None,
 ) -> bool:
     token = (settings.TELEGRAM_TOKEN or "").strip()
@@ -227,10 +258,21 @@ async def _send_payload(
         payload["disable_notification"] = disable_notification
 
     http_client = client or await _ensure_async_client()
-    url = f"https://api.telegram.org/bot{token}/{method}"
+    url = f"/bot{token}/{method}"
     try:
         response = await http_client.post(url, json=payload)
-    except httpx.RequestError as exc:
+    except httpx.HTTPStatusError as exc:
+        status_code = exc.response.status_code if exc.response else 0
+        body = exc.response.text[:512] if exc.response else str(exc)
+        _LOGGER.error(
+            "telegram.http_error",
+            method=method,
+            status_code=status_code,
+            body=body,
+        )
+        _record_failure(rule, "http_error")
+        return False
+    except HTTPClientError as exc:
         _LOGGER.error(
             "telegram.exception",
             method=method,
@@ -240,17 +282,6 @@ async def _send_payload(
         _record_failure(rule, "exception")
         return False
 
-    if response.status_code >= 400:
-        truncated_body = response.text[:512]
-        _LOGGER.error(
-            "telegram.http_error",
-            method=method,
-            status_code=response.status_code,
-            body=truncated_body,
-        )
-        _record_failure(rule, "http_error")
-        return False
-
     try:
         payload = response.json()
     except ValueError:
@@ -258,10 +289,12 @@ async def _send_payload(
             "telegram.invalid_json",
             method=method,
             status_code=response.status_code,
-            body=response.text[:512],
+            body=(response.text[:512] if hasattr(response, "text") else "<no-body>"),
         )
         _record_failure(rule, "invalid_response")
         return False
+    finally:
+        await response.aclose()
 
     if not payload.get("ok", False):
         description = payload.get("description") or payload.get("error_code") or "unknown error"
@@ -363,12 +396,26 @@ class AsyncTelegramClient:
         max_concurrency: int | None = None,
         max_rps: float | None = None,
         max_chat_rps: float | None = None,
-        client: httpx.AsyncClient | None = None,
+        client: AsyncHTTPClient | None = None,
     ) -> None:
         self._token = (token or settings.TELEGRAM_TOKEN or "").strip()
         self._base_url = (base_url or settings.TELEGRAM_API_BASE or "https://api.telegram.org").rstrip("/")
-        timeout = httpx.Timeout(settings.TELEGRAM_TOTAL_TIMEOUT_S, connect=settings.TELEGRAM_CONNECT_TIMEOUT_S)
-        self._client = client or httpx.AsyncClient(timeout=timeout)
+        timeout = httpx.Timeout(
+            settings.TELEGRAM_TOTAL_TIMEOUT_S,
+            connect=settings.TELEGRAM_CONNECT_TIMEOUT_S,
+            read=settings.TELEGRAM_TOTAL_TIMEOUT_S,
+            write=settings.TELEGRAM_TOTAL_TIMEOUT_S,
+        )
+        limits = httpx.Limits(
+            max_connections=settings.HTTP_MAX_CONNECTIONS,
+            max_keepalive_connections=settings.HTTP_MAX_KEEPALIVE_CONNECTIONS,
+        )
+        self._client = client or AsyncHTTPClient(
+            integration="telegram",
+            base_url=self._base_url,
+            timeout=timeout,
+            limits=limits,
+        )
         self._owns_client = client is None
         self._max_concurrency = max_concurrency if max_concurrency is not None else settings.ALERT_SEND_CONCURRENCY
         self._send_semaphore = None
@@ -502,9 +549,35 @@ class AsyncTelegramClient:
             return bucket
 
     async def _request(self, method: str, payload: dict[str, Any]) -> TelegramResponse:
-        url = f"{self._base_url}/bot{self._token}/{method}"
+        url = f"/bot{self._token}/{method}"
         try:
             response = await self._client.post(url, json=payload)
+        except httpx.HTTPStatusError as exc:
+            data: dict[str, Any] | None = None
+            body: httpx.Response | None = exc.response
+            if body is not None:
+                try:
+                    candidate = body.json()
+                    if isinstance(candidate, dict):
+                        data = candidate
+                except ValueError:
+                    data = None
+                finally:
+                    await body.aclose()
+            description = data.get("description") if data else (body.text[:256] if body else str(exc))
+            error_code = data.get("error_code") if data else (body.status_code if body else None)
+            retry_after = _retry_after_from_payload(data) if data else None
+            return TelegramResponse(
+                ok=False,
+                status_code=body.status_code if body else 0,
+                payload=data,
+                description=description,
+                error_code=error_code,
+                retry_after=retry_after,
+            )
+        except HTTPClientError as exc:
+            description = f"{exc.__class__.__name__}: {exc}"
+            return TelegramResponse(ok=False, status_code=0, payload=None, description=description)
         except httpx.RequestError as exc:
             description = f"{exc.__class__.__name__}: {exc}"
             return TelegramResponse(ok=False, status_code=0, payload=None, description=description)
@@ -515,18 +588,8 @@ class AsyncTelegramClient:
                 data = data_candidate
         except ValueError:
             data = None
-        if response.status_code >= 400:
-            description = data.get("description") if data else response.text[:256]
-            error_code = data.get("error_code") if data else response.status_code
-            retry_after = _retry_after_from_payload(data) if data else None
-            return TelegramResponse(
-                ok=False,
-                status_code=response.status_code,
-                payload=data,
-                description=description,
-                error_code=error_code,
-                retry_after=retry_after,
-            )
+        finally:
+            await response.aclose()
         if data is None:
             return TelegramResponse(ok=True, status_code=response.status_code, payload=None)
         retry_after = _retry_after_from_payload(data)
