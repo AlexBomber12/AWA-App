@@ -7,7 +7,7 @@ from pathlib import Path
 import httpx
 import pytest
 
-from awa_common import telegram
+from awa_common import http_client as http_client_module
 from services.alert_bot import config as alert_config, worker
 from services.alert_bot.config import AlertRule
 from services.alert_bot.rules import AlertEvent
@@ -64,7 +64,7 @@ def test_alertbot_run_with_mocked_telegram(monkeypatch: pytest.MonkeyPatch, tmp_
         clients.append(client)
         return client
 
-    monkeypatch.setattr(telegram.httpx, "AsyncClient", _async_client_factory, raising=False)
+    monkeypatch.setattr(http_client_module.httpx, "AsyncClient", _async_client_factory, raising=False)
 
     monkeypatch.setattr(worker.settings, "TELEGRAM_TOKEN", "12345:ABCDE")
     monkeypatch.setattr(worker.settings, "TELEGRAM_DEFAULT_CHAT_ID", 999)

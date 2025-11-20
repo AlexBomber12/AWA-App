@@ -6,7 +6,9 @@ from pathlib import Path
 
 from services.alert_bot import config as alert_config, worker
 from services.alert_bot.config import AlertRule
+from services.alert_bot.decider import NotificationIntent, dedupe_events
 from services.alert_bot.rules import AlertEvent
+from services.alert_bot.settings import AlertBotSettings
 
 
 def _sample_rule(rule_id: str, schedule: str | None = None) -> AlertRule:
@@ -69,7 +71,7 @@ def test_dedupe_events_keeps_first() -> None:
         AlertEvent(rule_id="roi", chat_ids=["@ops"], text="second", dedupe_key="a"),
         AlertEvent(rule_id="roi", chat_ids=["@ops"], text="unique", dedupe_key="b"),
     ]
-    deduped = worker._dedupe_events(events)
+    deduped = dedupe_events(events)
     assert [event.text for event in deduped] == ["first", "unique"]
 
 
@@ -88,5 +90,46 @@ def test_collect_chat_ids_prefers_runtime() -> None:
     runtime = alert_config.AlertRulesRuntime(
         version="1", defaults=defaults, rules=[rule], source_path=Path("x"), loaded_at=0.0
     )
-    ids = worker._collect_chat_ids(runtime, [])
+    settings = AlertBotSettings(
+        enabled=True,
+        telegram_token="12345:ABCDEabcde",
+        default_chat_id="@fallback",
+        evaluation_cron="*/5 * * * *",
+        send_cron="*/1 * * * *",
+        eval_concurrency=1,
+        send_concurrency=1,
+        rule_timeout_s=0.1,
+        env="test",
+        service_name="alert_bot",
+        version="test",
+    )
+    intent = NotificationIntent(
+        rule_id="roi",
+        severity="info",
+        message="hello",
+        chat_ids=("@ops",),
+        parse_mode="HTML",
+        dedupe_key="roi:1",
+        disable_web_page_preview=True,
+    )
+    ids = worker._collect_chat_ids(runtime, [intent], settings)
     assert ids == {"@ops"}
+
+
+def test_collect_chat_ids_falls_back_to_settings() -> None:
+    runtime = None
+    settings = AlertBotSettings(
+        enabled=True,
+        telegram_token="12345:ABCDEabcde",
+        default_chat_id="@fallback",
+        evaluation_cron="*/5 * * * *",
+        send_cron="*/1 * * * *",
+        eval_concurrency=1,
+        send_concurrency=1,
+        rule_timeout_s=0.1,
+        env="test",
+        service_name="alert_bot",
+        version="test",
+    )
+    ids = worker._collect_chat_ids(runtime, [], settings)
+    assert ids == {"@fallback"}

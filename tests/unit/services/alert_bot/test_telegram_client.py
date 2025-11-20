@@ -20,6 +20,9 @@ class StubResponse:
             raise ValueError("invalid json")
         return self._payload
 
+    async def aclose(self) -> None:  # pragma: no cover - simple stub
+        return None
+
 
 class StubAsyncClient:
     def __init__(self, responses: list[StubResponse | Exception]) -> None:
