@@ -1,3 +1,10 @@
+"""Canonical ORM models for vendor pricing shared across services.
+
+This module is the single source of truth for the `vendors` and `vendor_prices`
+tables used by the price importer and any other services that persist vendor
+pricing data.
+"""
+
 import datetime
 from decimal import Decimal
 
@@ -37,3 +44,6 @@ class VendorPrice(Base):
     vendor: Mapped[Vendor] = relationship("Vendor", back_populates="prices")
 
     __table_args__ = (UniqueConstraint("vendor_id", "sku", name="uq_vendor_sku"),)
+
+
+__all__ = ["Vendor", "VendorPrice"]
