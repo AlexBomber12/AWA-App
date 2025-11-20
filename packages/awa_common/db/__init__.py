@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import os
 from urllib.parse import urlparse, urlunparse
 
 from asyncpg import Pool, create_pool
@@ -10,7 +9,7 @@ from sqlalchemy.engine import Connection, Engine
 
 from ..dsn import build_dsn
 from ..settings import settings
-from ..utils import env_bool
+from ..utils import env_bool, env_str
 
 
 def build_sqlalchemy_url() -> str:
@@ -67,7 +66,7 @@ def _mv_refresh_live_flag() -> bool:
     """Return True when MV refresh should run with ``CONCURRENTLY``."""
 
     # Highest precedence: explicit environment variable toggles (used by CLI tools/tests).
-    raw = os.getenv("ENABLE_LIVE")
+    raw = env_str("ENABLE_LIVE")
     if raw is not None and raw.strip() != "":
         return env_bool("ENABLE_LIVE", default=True)
 

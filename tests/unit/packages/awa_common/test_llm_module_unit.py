@@ -6,8 +6,13 @@ import awa_common.llm as llm
 
 
 def test_timeout_seconds_handles_invalid(monkeypatch):
-    monkeypatch.setenv("LLM_TIMEOUT_SECS", "bad")
     assert llm._timeout_seconds(3.5) == 3.5
+
+
+def test_timeout_seconds_uses_settings(monkeypatch):
+    fallback_settings = types.SimpleNamespace(llm=types.SimpleNamespace(request_timeout_s=12.5))
+    monkeypatch.setattr(llm, "_settings", fallback_settings)
+    assert llm._timeout_seconds(None) == 12.5
 
 
 @pytest.mark.asyncio
@@ -115,7 +120,6 @@ async def test_generate_fallback_tries_multiple_providers(monkeypatch):
         return "[stub] done"
 
     monkeypatch.setattr(llm, "_generate_with_provider", fake_generate)
-    monkeypatch.setenv("LLM_PROVIDER", "lan")
     result = await llm.generate("hello world", provider="lan", timeout=1.0)
     assert result == "[stub] done"
     assert attempts[0] == "lan"

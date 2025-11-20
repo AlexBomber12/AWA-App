@@ -1,5 +1,4 @@
 import importlib
-import os
 from typing import Any, cast
 
 try:
@@ -20,12 +19,6 @@ def _config():
 
 
 def _default_timeout_setting() -> float:
-    env_override = os.getenv("LLM_TIMEOUT_SECS") or os.getenv("LLM_REQUEST_TIMEOUT_S")
-    if env_override:
-        try:
-            return float(env_override)
-        except ValueError:
-            pass
     cfg = _config()
     if cfg is None:
         return 60.0
@@ -52,12 +45,6 @@ def _fallback_provider() -> str:
 def _timeout_seconds(default: float | None = None) -> float:
     if default is not None:
         return default
-    env_override = os.getenv("LLM_TIMEOUT_SECS") or os.getenv("LLM_REQUEST_TIMEOUT_S")
-    if env_override:
-        try:
-            return float(env_override)
-        except ValueError:
-            pass
     cfg = _config()
     if cfg is None:
         return _DEFAULT_LLM_TIMEOUT_S

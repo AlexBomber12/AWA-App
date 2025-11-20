@@ -70,6 +70,15 @@ async def _redis_health_snapshot(request: Request | None) -> dict[str, Any]:
         limiter_client = getattr(state, "limiter_redis", None) or getattr(FastAPILimiter, "redis", None)
         if limiter_client is not None:
             clients.append(("rate_limit", limiter_client))
+    if not clients and not critical:
+        snapshot = {
+            "status": current.get("status", "ok") if isinstance(current, dict) else "ok",
+            "critical": critical,
+        }
+        if isinstance(current, dict) and current.get("error"):
+            snapshot["error"] = current["error"]
+        _update_state_snapshot(state, snapshot)
+        return snapshot
     probe: aioredis.Redis | None = None
     if not clients and state is not None:
         redis_url = getattr(state, "redis_url", None) or getattr(settings, "REDIS_URL", None)

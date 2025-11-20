@@ -16,6 +16,7 @@ from awa_common.etl.guard import process_once
 from awa_common.etl.idempotency import build_payload_meta, compute_idempotency_key
 from awa_common.metrics import record_etl_run, record_etl_skip
 from awa_common.settings import settings
+from awa_common.utils.env import env_bool
 from services.fees_h10 import repository as repo
 
 logger = structlog.get_logger(__name__)
@@ -219,9 +220,10 @@ if __name__ == "__main__":
 
 
 def _testing_enabled() -> bool:
-    override = os.getenv("TESTING")
-    if override is not None:
-        return override.strip().lower() in _TRUTHY
+    env_override = os.getenv("TESTING")
+    if env_override is not None:
+        return bool(env_bool("TESTING", default=False))
+
     app_cfg = getattr(settings, "app", None)
     if app_cfg:
         return bool(app_cfg.testing)

@@ -9,6 +9,7 @@ from sqlalchemy import create_engine, text
 
 from awa_common.minio import create_boto3_client, get_bucket_name
 from awa_common.settings import settings
+from awa_common.utils.env import env_str
 from services.etl import load_csv
 
 BUCKET = get_bucket_name()
@@ -20,9 +21,9 @@ def main() -> dict[str, str]:
     Returns {"status": "success"} when processing completes.
     """
     email_cfg = getattr(settings, "email", None)
-    host = os.getenv("IMAP_HOST") or (email_cfg.host if email_cfg else None)
-    user = os.getenv("IMAP_USER") or (email_cfg.username if email_cfg else None)
-    password = os.getenv("IMAP_PASS") or (email_cfg.password if email_cfg else None)
+    host = env_str("IMAP_HOST", default=email_cfg.host if email_cfg else getattr(settings, "IMAP_HOST", None))
+    user = env_str("IMAP_USER", default=email_cfg.username if email_cfg else getattr(settings, "IMAP_USER", None))
+    password = env_str("IMAP_PASS", default=email_cfg.password if email_cfg else getattr(settings, "IMAP_PASS", None))
     if not host or not user or not password:
         raise RuntimeError("IMAP configuration is missing")
     s3 = create_boto3_client()

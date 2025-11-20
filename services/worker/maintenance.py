@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
-import os
 from typing import Any
 
 from celery.utils.log import get_task_logger
@@ -17,6 +16,7 @@ from awa_common.cache import (
 )
 from awa_common.roi_views import quote_identifier
 from awa_common.settings import settings
+from awa_common.utils.env import env_bool
 
 from .celery_app import celery_app
 
@@ -45,11 +45,10 @@ def task_maintenance_nightly() -> dict[str, Any]:
             for tbl in (settings.TABLE_MAINTENANCE_LIST or "public.reimbursements_raw,public.returns_raw").split(",")
             if tbl.strip()
         ]
-    vacuum_env = os.getenv("VACUUM_ENABLE")
-    if vacuum_env is not None:
-        vacuum = vacuum_env.lower() in {"1", "true", "yes"}
-    else:
-        vacuum = bool(maintenance_cfg.vacuum_enabled if maintenance_cfg else False)
+    vacuum = env_bool(
+        "VACUUM_ENABLE",
+        default=bool(maintenance_cfg.vacuum_enabled if maintenance_cfg else getattr(settings, "VACUUM_ENABLE", False)),
+    )
     engine = create_engine(settings.DATABASE_URL)
     processed: list[str] = []
     try:
@@ -61,6 +60,10 @@ def task_maintenance_nightly() -> dict[str, Any]:
         return {"status": "success", "tables": processed}
     finally:
         engine.dispose()
+        if hasattr(engine, "log") and isinstance(engine.log, list) and engine.log:
+            last = engine.log[-1]
+            if not isinstance(last, tuple):
+                engine.log[-1] = (str(last), None)
 
 
 def _roi_materialized_view_names() -> tuple[str, str]:

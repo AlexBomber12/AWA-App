@@ -27,6 +27,17 @@ def test_env_int_raises_on_bounds(monkeypatch):
         env_utils.env_int("TMP_INT", min=2)
 
 
+def test_env_int_invalid_falls_back(monkeypatch):
+    monkeypatch.setenv("TMP_INT", "abc")
+    assert env_utils.env_int("TMP_INT", default=7) == 7
+
+
+def test_env_int_invalid_raises_when_required(monkeypatch):
+    monkeypatch.setenv("TMP_INT", "abc")
+    with pytest.raises(ValueError):
+        env_utils.env_int("TMP_INT")
+
+
 def test_env_float_reads_value(monkeypatch):
     monkeypatch.setenv("TMP_FLOAT", "3.14")
     assert env_utils.env_float("TMP_FLOAT", min=0, max=10) == pytest.approx(3.14)
@@ -35,6 +46,18 @@ def test_env_float_reads_value(monkeypatch):
 def test_env_float_uses_default(monkeypatch):
     monkeypatch.delenv("TMP_FLOAT", raising=False)
     assert env_utils.env_float("TMP_FLOAT", default=1.25) == pytest.approx(1.25)
+
+
+def test_env_float_missing_required(monkeypatch):
+    monkeypatch.delenv("TMP_FLOAT", raising=False)
+    with pytest.raises(ValueError):
+        env_utils.env_float("TMP_FLOAT")
+
+
+def test_env_float_raises_on_bounds(monkeypatch):
+    monkeypatch.setenv("TMP_FLOAT", "8.5")
+    with pytest.raises(ValueError):
+        env_utils.env_float("TMP_FLOAT", max=5.0)
 
 
 def test_env_bool_reads_truthy(monkeypatch):
@@ -54,6 +77,17 @@ def test_env_bool_default(monkeypatch):
 
 def test_env_bool_invalid(monkeypatch):
     monkeypatch.setenv("TMP_BOOL", "maybe")
+    with pytest.raises(ValueError):
+        env_utils.env_bool("TMP_BOOL")
+
+
+def test_env_bool_invalid_uses_override(monkeypatch):
+    monkeypatch.setenv("TMP_BOOL", "almost")
+    assert env_utils.env_bool("TMP_BOOL", default=True, invalid_default=False) is False
+
+
+def test_env_bool_blank_required(monkeypatch):
+    monkeypatch.setenv("TMP_BOOL", " ")
     with pytest.raises(ValueError):
         env_utils.env_bool("TMP_BOOL")
 

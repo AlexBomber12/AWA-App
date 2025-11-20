@@ -34,9 +34,10 @@ HTTP_BUCKETS = (0.01, 0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10)
 
 def _create_registry() -> CollectorRegistry:
     registry = CollectorRegistry()
-    multiproc_dir = os.getenv("PROMETHEUS_MULTIPROC_DIR") or getattr(
-        getattr(settings, "observability", None), "prometheus_multiproc_dir", None
-    )
+    observability = getattr(settings, "observability", None)
+    multiproc_dir = getattr(settings, "PROMETHEUS_MULTIPROC_DIR", None)
+    if observability and observability.prometheus_multiproc_dir:
+        multiproc_dir = observability.prometheus_multiproc_dir
     if multiproc_dir:
         collector = _load_multiprocess_collector()
         if collector is not None:
@@ -703,22 +704,13 @@ def _maybe_start_backlog_probe(  # noqa: C901
 
 def start_worker_metrics_http_if_enabled(port_env: str = "WORKER_METRICS_PORT") -> None:
     """Start HTTP exporter for worker metrics if enabled via configuration/env."""
-    raw_flag = os.getenv("WORKER_METRICS_HTTP")
     observability = getattr(settings, "observability", None)
-    if raw_flag is not None:
-        enabled = raw_flag in {"1", "true", "TRUE"}
-    else:
-        enabled = bool(observability and observability.worker_metrics_http)
+    enabled = bool(
+        observability.worker_metrics_http if observability else getattr(settings, "WORKER_METRICS_HTTP", False)
+    )
     if not enabled:
         return
-    raw_port = os.getenv(port_env)
-    if raw_port is not None:
-        try:
-            port = int(raw_port)
-        except ValueError:
-            port = 9108
-    else:
-        port = int(observability.worker_metrics_port if observability else 9108)
+    port = int(observability.worker_metrics_port if observability else getattr(settings, "WORKER_METRICS_PORT", 9108))
     start_http_server(port, registry=REGISTRY)
 
 
