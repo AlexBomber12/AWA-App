@@ -246,4 +246,20 @@ describe("RoiTableContainer integration", () => {
     await user.click(screen.getByText("Sort margin"));
     await waitFor(() => expect(getCalls.at(-1)).toContain("sort=margin_desc"));
   });
+
+  it("hydrates table state from URL search params", async () => {
+    const navigation = getNavigationMock();
+    navigation.__internalNavigationMock.setSearchParams(
+      "page=3&page_size=25&sort=asin_desc&filter%5Bvendor%5D=88"
+    );
+
+    renderWithClient(<RoiHarness />);
+
+    await waitFor(() => expect(getCalls[0]).toBeDefined());
+    expect(getCalls[0]).toContain("page=3");
+    expect(getCalls[0]).toContain("page_size=25");
+    expect(getCalls[0]).toContain("sort=asin_desc");
+    expect(getCalls[0]).toContain("filter%5Bvendor%5D=88");
+    await waitFor(() => expect(screen.getByText("ASIN-0051")).toBeInTheDocument());
+  });
 });

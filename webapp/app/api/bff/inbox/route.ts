@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import type { InboxListResponse, Task } from "@/lib/api/inboxClient";
+import { parsePositiveInt } from "@/lib/parsers";
 
 export const dynamic = "force-dynamic";
 
@@ -147,22 +148,11 @@ const MOCK_TASKS: Task[] = [
   },
 ];
 
-const parsePositiveInt = (value: string | null, fallback: number, max?: number) => {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    return fallback;
-  }
-  const normalized = Math.floor(parsed);
-  if (max && normalized > max) {
-    return max;
-  }
-  return normalized;
-};
-
 export async function GET(request: NextRequest) {
   const params = request.nextUrl.searchParams;
   const page = parsePositiveInt(params.get("page"), 1);
-  const limit = parsePositiveInt(params.get("limit"), MOCK_TASKS.length, MOCK_TASKS.length);
+  const requestedLimit = parsePositiveInt(params.get("limit"), MOCK_TASKS.length);
+  const limit = Math.min(requestedLimit, MOCK_TASKS.length);
   const start = (page - 1) * limit;
   const items = MOCK_TASKS.slice(start, start + limit);
 

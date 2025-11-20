@@ -1,3 +1,4 @@
+import { parseBoolean, parseNumber, parsePositiveInt, parseSort, parseString } from "@/lib/parsers";
 import type { TableState, TableStateDefaults } from "@/lib/tableState";
 
 export const ROI_SORT_OPTIONS = [
@@ -38,71 +39,58 @@ export const ROI_TABLE_DEFAULTS: TableStateDefaults<RoiSort, RoiTableFilters> = 
   filters: DEFAULT_FILTERS,
 };
 
-const parseNumber = (value: string | null): number | undefined => {
-  if (!value) {
-    return undefined;
-  }
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : undefined;
-};
-
-const parseBoolean = (value: string | null): boolean | undefined => {
-  if (!value) {
-    return undefined;
-  }
-  if (value === "true") {
-    return true;
-  }
-  if (value === "false") {
-    return false;
-  }
-  return undefined;
-};
-
-const parseSort = (value: string | null): RoiSort | undefined => {
-  if (value && ROI_SORT_OPTIONS.includes(value as RoiSort)) {
-    return value as RoiSort;
-  }
-  return undefined;
-};
-
 export const parseRoiSearchParams = (params: URLSearchParams): Partial<RoiTableState> => {
-  const page = parseNumber(params.get("page"));
-  const pageSize = parseNumber(params.get("page_size"));
-  const sort = parseSort(params.get("sort"));
+  const page = parsePositiveInt(params.get("page"), ROI_TABLE_DEFAULTS.page);
+  const pageSize = parsePositiveInt(params.get("page_size"), ROI_TABLE_DEFAULTS.pageSize);
+  const sort = parseSort(params.get("sort"), ROI_SORT_OPTIONS, ROI_TABLE_DEFAULTS.sort ?? "roi_pct_desc");
 
   const filters: Partial<RoiTableFilters> = {};
 
-  const roiMin = parseNumber(params.get("filter[roi_min]"));
-  if (roiMin !== undefined) {
-    filters.roiMin = roiMin;
+  const roiMinRaw = params.get("filter[roi_min]");
+  if (roiMinRaw !== null) {
+    const roiMin = parseNumber(roiMinRaw, Number.NaN);
+    if (!Number.isNaN(roiMin)) {
+      filters.roiMin = roiMin;
+    }
   }
 
-  const vendor = params.get("filter[vendor]");
-  if (vendor) {
+  const vendor = parseString(params.get("filter[vendor]"));
+  if (vendor !== undefined) {
     filters.vendor = vendor;
   }
 
-  const category = params.get("filter[category]");
-  if (category) {
+  const category = parseString(params.get("filter[category]"));
+  if (category !== undefined) {
     filters.category = category;
   }
 
-  const search = params.get("filter[search]");
-  if (search) {
+  const search = parseString(params.get("filter[search]"));
+  if (search !== undefined) {
     filters.search = search;
   }
 
-  const observeOnly = parseBoolean(params.get("filter[observe_only]"));
-  if (observeOnly !== undefined) {
-    filters.observeOnly = observeOnly;
+  const observeOnlyRaw = params.get("filter[observe_only]");
+  if (observeOnlyRaw !== null) {
+    const trueFallback = parseBoolean(observeOnlyRaw, true);
+    const falseFallback = parseBoolean(observeOnlyRaw, false);
+    if (trueFallback === falseFallback) {
+      filters.observeOnly = trueFallback;
+    }
+  }
+
+  if (Object.keys(filters).length === 0) {
+    return {
+      page,
+      pageSize,
+      sort,
+    };
   }
 
   return {
     page,
     pageSize,
     sort,
-    filters: Object.keys(filters).length ? (filters as RoiTableFilters) : undefined,
+    filters: filters as RoiTableFilters,
   };
 };
 

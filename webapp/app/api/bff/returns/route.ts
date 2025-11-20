@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { fetchFromApi, isApiError } from "@/lib/api/fetchFromApi";
+import { parsePositiveInt, parseSort, parseString } from "@/lib/parsers";
 import type { components } from "@/lib/api/types.generated";
 
 export const dynamic = "force-dynamic";
@@ -51,25 +52,6 @@ const parseResource = (value: string | null): ResourceType => {
   return "list";
 };
 
-const parsePositiveInt = (value: string | null, fallback: number, max?: number) => {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    return fallback;
-  }
-  const normalized = Math.floor(parsed);
-  if (max && normalized > max) {
-    return max;
-  }
-  return normalized;
-};
-
-const parseSort = (value: string | null): ReturnsSort => {
-  if (value && SORT_OPTIONS.includes(value as ReturnsSort)) {
-    return value as ReturnsSort;
-  }
-  return "refund_desc";
-};
-
 const applyFiltersToQuery = (source: URLSearchParams, target: URLSearchParams) => {
   const passthroughKeys: Record<string, string> = {
     "filter[date_from]": "date_from",
@@ -79,8 +61,8 @@ const applyFiltersToQuery = (source: URLSearchParams, target: URLSearchParams) =
   };
 
   Object.entries(passthroughKeys).forEach(([sourceKey, targetKey]) => {
-    const value = source.get(sourceKey);
-    if (value) {
+    const value = parseString(source.get(sourceKey));
+    if (value !== undefined) {
       target.set(targetKey, value);
     }
   });
@@ -180,8 +162,9 @@ export async function GET(request: NextRequest) {
     }
 
     const page = parsePositiveInt(params.get("page"), DEFAULT_PAGE);
-    const pageSize = parsePositiveInt(params.get("page_size"), DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
-    const sort = parseSort(params.get("sort"));
+    const requestedPageSize = parsePositiveInt(params.get("page_size"), DEFAULT_PAGE_SIZE);
+    const pageSize = Math.min(requestedPageSize, MAX_PAGE_SIZE);
+    const sort = parseSort<ReturnsSort>(params.get("sort"), SORT_OPTIONS, "refund_desc");
 
     const listParams = new URLSearchParams(filterParams);
     listParams.set("page", String(page));
