@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, cast
@@ -219,9 +218,6 @@ if __name__ == "__main__":
 
 
 def _testing_enabled() -> bool:
-    override = os.getenv("TESTING")
-    if override is not None:
-        return override.strip().lower() in _TRUTHY
     app_cfg = getattr(settings, "app", None)
     if app_cfg:
         return bool(app_cfg.testing)

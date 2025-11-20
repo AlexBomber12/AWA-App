@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import datetime as dt
-import os
 import time
 from collections.abc import Mapping
 from functools import lru_cache
@@ -34,6 +33,7 @@ from awa_common.metrics import (
     record_stats_query_duration,
 )
 from awa_common.settings import settings
+from awa_common.utils.env import env_bool, env_str
 from services.api.rate_limit import roi_by_vendor_rate_limiter
 from services.api.roi_repository import get_roi_view_table
 from services.api.roi_views import (
@@ -68,13 +68,16 @@ RETURNS_DEFAULT_SORT: ReturnsSort = "refund_desc"
 
 
 def _sql_mode_enabled() -> bool:
-    raw = os.getenv("STATS_USE_SQL")
-    if raw is not None:
-        return raw.strip() in {"1", "true", "TRUE"}
+    raw = env_str("STATS_USE_SQL")
+    if raw is not None and raw.strip() != "":
+        try:
+            return env_bool("STATS_USE_SQL", default=False)
+        except ValueError:
+            pass
     stats_cfg = getattr(settings, "stats", None)
-    if stats_cfg is None:
-        return False
-    return bool(stats_cfg.use_sql)
+    if stats_cfg is not None:
+        return bool(stats_cfg.use_sql)
+    return bool(getattr(settings, "STATS_USE_SQL", False))
 
 
 def _split_identifier(identifier: str) -> tuple[str | None, str]:

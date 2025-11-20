@@ -44,6 +44,7 @@ Use `settings.db.url` for SQLAlchemy engines and `settings.db.async_dsn` for asy
 | `CACHE_REDIS_URL` | Override for the shared cache backend (defaults to `REDIS_URL`) |
 | `CACHE_NAMESPACE`, `CACHE_DEFAULT_TTL_S` | Cache key prefix + default TTL for helpers |
 | `BROKER_URL` | Optional Celery broker override |
+| `RESULT_BACKEND` | Optional Celery result backend (defaults to `REDIS_URL`) |
 | `QUEUE_NAMES` | Comma-separated queue list for metrics |
 | `CELERY_*` (`CELERY_WORKER_PREFETCH_MULTIPLIER`, `CELERY_TASK_TIME_LIMIT`, `CELERY_TASK_ALWAYS_EAGER`, etc.) | Worker tunables |
 | `BACKLOG_PROBE_SECONDS`, `SCHEDULE_*` | Metrics probe interval and scheduler toggles |
@@ -78,6 +79,15 @@ Call `settings.s3.client_kwargs()` when constructing boto3/aioboto3 clients.
 | `SENTRY_TRACES_SAMPLE_RATE`, `SENTRY_PROFILES_SAMPLE_RATE` | Sentry sampling |
 | `PROMETHEUS_MULTIPROC_DIR`, `ENABLE_METRICS` | Metrics exporters |
 | `WORKER_METRICS_HTTP`, `WORKER_METRICS_PORT` | Dedicated worker exporter |
+
+## Stats & Cache (`settings.stats`)
+
+| Variable | Description |
+| --- | --- |
+| `STATS_ENABLE_CACHE`, `STATS_CACHE_TTL_S`, `STATS_CACHE_NAMESPACE` | Enable/disable and tune the stats cache backend |
+| `ROI_CACHE_TTL_SECONDS` | TTL for ROI/returns metadata caches (defaults to 300s, clamps to positive values) |
+| `STATS_MAX_DAYS`, `REQUIRE_CLAMP` | ROI window cap and clamping behavior |
+| `STATS_USE_SQL`, `RETURNS_STATS_VIEW_NAME` | Toggle SQL-backed stats and the source view/table |
 
 ## ROI (`settings.roi`)
 

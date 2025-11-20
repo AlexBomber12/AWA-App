@@ -119,6 +119,10 @@ class Settings(BaseSettings):
         default=None,
         validation_alias=AliasChoices("BROKER_URL", "CELERY_BROKER_URL"),
     )
+    RESULT_BACKEND: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("RESULT_BACKEND", "CELERY_RESULT_BACKEND"),
+    )
     QUEUE_NAMES: str | None = None
     SCHEDULE_MV_REFRESH: bool = Field(
         default=True,
@@ -135,6 +139,7 @@ class Settings(BaseSettings):
     STATS_USE_SQL: bool = False
     REQUIRE_CLAMP: bool = False
     REDIS_HEALTH_CRITICAL: bool = False
+    ROI_CACHE_TTL_SECONDS: float = 300.0
     RETURNS_STATS_VIEW_NAME: str = "returns_raw"
     ROI_VIEW_NAME: str = "v_roi_full"
     ROI_MATERIALIZED_VIEW_NAME: str = "mat_v_roi_full"
@@ -580,6 +585,7 @@ class Settings(BaseSettings):
             "PG_ASYNC_DSN": _mask(self.PG_ASYNC_DSN),
             "REDIS_URL": _mask(self.REDIS_URL),
             "BROKER_URL": _mask(self.BROKER_URL),
+            "RESULT_BACKEND": _mask(getattr(self, "RESULT_BACKEND", None)),
             "SENTRY_DSN": "set" if bool(self.SENTRY_DSN) else None,
             "NEXT_PUBLIC_API_URL": self.NEXT_PUBLIC_API_URL,
             "CORS_ORIGINS": bool(self.CORS_ORIGINS),

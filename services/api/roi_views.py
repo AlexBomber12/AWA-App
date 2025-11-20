@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from collections.abc import Callable
 from typing import Final
 
@@ -19,7 +18,6 @@ from awa_common.settings import settings
 
 logger = structlog.get_logger(__name__)
 
-ROI_CACHE_TTL_ENV = "ROI_CACHE_TTL_SECONDS"
 DEFAULT_CACHE_TTL_SECONDS: Final[float] = 300.0
 _CACHE_SIZE: Final[int] = 128
 
@@ -35,15 +33,11 @@ _returns_columns = Table(
 
 
 def _ttl_seconds() -> float:
-    env_override = os.getenv(ROI_CACHE_TTL_ENV)
-    if env_override:
-        try:
-            value = float(env_override)
-        except ValueError:
-            value = DEFAULT_CACHE_TTL_SECONDS
-    else:
-        stats_cfg = getattr(settings, "stats", None)
-        value = float(stats_cfg.cache_ttl_s if stats_cfg else DEFAULT_CACHE_TTL_SECONDS)
+    stats_cfg = getattr(settings, "stats", None)
+    configured = getattr(stats_cfg, "roi_cache_ttl_seconds", None)
+    if configured is None:
+        configured = getattr(settings, "ROI_CACHE_TTL_SECONDS", None)
+    value = float(configured) if configured is not None else DEFAULT_CACHE_TTL_SECONDS
     return value if value > 0 else DEFAULT_CACHE_TTL_SECONDS
 
 

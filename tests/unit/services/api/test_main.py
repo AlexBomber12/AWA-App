@@ -133,11 +133,12 @@ async def test_check_llm_sets_fallback(monkeypatch):
         async def __aexit__(self, exc_type, exc, tb):
             return False
 
-    monkeypatch.setenv("LLM_PROVIDER", "lan")
-    monkeypatch.setenv("LLM_PROVIDER_FALLBACK", "stub")
+    monkeypatch.setattr(main.settings, "LLM_PROVIDER", "lan")
+    monkeypatch.setattr(main.settings, "LLM_PROVIDER_FALLBACK", "stub")
+    main.settings.__dict__.pop("llm", None)
     monkeypatch.setattr(main.httpx, "AsyncClient", DummyClient)
     await main._check_llm()
-    assert main.os.getenv("LLM_PROVIDER") == "stub"
+    assert main.settings.LLM_PROVIDER == "stub"
 
 
 @pytest.mark.asyncio

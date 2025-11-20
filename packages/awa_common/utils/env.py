@@ -49,8 +49,14 @@ def env_float(name: str, default: float | None = None, *, min: float | None = No
     return float(_apply_bounds(name, value, min, max))
 
 
-def env_bool(name: str, default: bool | None = None) -> bool:
-    """Parse a boolean environment variable supporting several truthy/falsey forms."""
+def env_bool(name: str, default: bool | None = None, *, invalid_default: bool | None = None) -> bool:
+    """
+    Parse a boolean environment variable supporting several truthy/falsey forms.
+
+    ``invalid_default`` controls the value returned when the variable is set but
+    not recognised as truthy/falsey. When ``invalid_default`` is ``None`` we
+    fall back to ``default`` (or raise when ``default`` is also ``None``).
+    """
 
     raw = os.getenv(name)
     if raw is None or raw.strip() == "":
@@ -62,6 +68,8 @@ def env_bool(name: str, default: bool | None = None) -> bool:
         return True
     if value in _FALSE_VALUES:
         return False
+    if invalid_default is not None:
+        return bool(invalid_default)
     if default is not None:
         return default
     raise ValueError(f"Environment variable {name} must be one of {sorted(_TRUE_VALUES | _FALSE_VALUES)}")

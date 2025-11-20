@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import contextlib
-import os
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
@@ -11,6 +10,7 @@ from urllib.parse import urlparse, urlunparse
 
 import httpx
 import structlog
+from structlog import contextvars as structlog_contextvars
 from tenacity import (
     AsyncRetrying,
     RetryCallState,
@@ -249,7 +249,7 @@ class _BaseHTTPClient:
         self._retry_jitter = float(settings.HTTP_BACKOFF_JITTER_S)
         self._retry_status_codes = frozenset(settings.HTTP_RETRY_STATUS_CODES or [])
         self._task_id = getattr(getattr(settings, "etl", None), "task_id", None)
-        self._request_id = os.getenv("REQUEST_ID")
+        self._request_id = structlog_contextvars.get_contextvars().get("request_id")
 
     def _retry_after_for_response(self, response: httpx.Response) -> tuple[bool, float | None]:
         if response.status_code in self._retry_status_codes:

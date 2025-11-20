@@ -38,7 +38,9 @@ def test_create_registry_uses_multiprocess(monkeypatch):
         def __init__(self, registry):
             calls.append(registry)
 
-    monkeypatch.setenv("PROMETHEUS_MULTIPROC_DIR", "/tmp/prom")
+    from awa_common.settings import Settings
+
+    monkeypatch.setattr(metrics, "settings", Settings(PROMETHEUS_MULTIPROC_DIR="/tmp/prom"))
     monkeypatch.setattr(metrics, "_load_multiprocess_collector", lambda: FakeCollector)
     registry = metrics._create_registry()
     assert calls == [registry]
@@ -319,18 +321,24 @@ def test_backlog_probe_handles_connection_error(monkeypatch):
 
 
 def test_start_worker_metrics_http_variants(monkeypatch):
-    monkeypatch.delenv("WORKER_METRICS_HTTP", raising=False)
-    metrics.start_worker_metrics_http_if_enabled()
-
     called: dict[str, int] = {}
 
     def fake_start_http_server(port, registry):
         called["port"] = port
         called["registry"] = registry
 
+    disabled_settings = SimpleNamespace(
+        observability=SimpleNamespace(worker_metrics_http=False, worker_metrics_port=9108)
+    )
+    enabled_settings = SimpleNamespace(
+        observability=SimpleNamespace(worker_metrics_http=True, worker_metrics_port=9108)
+    )
+
+    monkeypatch.setattr(metrics, "settings", disabled_settings)
+    metrics.start_worker_metrics_http_if_enabled()
+
     monkeypatch.setattr(metrics, "start_http_server", fake_start_http_server)
-    monkeypatch.setenv("WORKER_METRICS_HTTP", "1")
-    monkeypatch.setenv("WORKER_METRICS_PORT", "not-a-number")
+    monkeypatch.setattr(metrics, "settings", enabled_settings)
     metrics.start_worker_metrics_http_if_enabled()
     assert called["port"] == 9108
     assert called["registry"] is metrics.REGISTRY
@@ -360,9 +368,6 @@ def test_enable_celery_metrics_idempotent(monkeypatch):
 
 
 def test_celery_queue_names_split(monkeypatch):
-    monkeypatch.setenv("ENABLE_METRICS", "1")
-    monkeypatch.setenv("BACKLOG_PROBE_SECONDS", "5")
-    monkeypatch.setenv("WORKER_METRICS_HTTP", "0")
     captured = {}
 
     def fake_enable(celery_app_instance, *, broker_url, queue_names, backlog_interval_s):
@@ -374,6 +379,9 @@ def test_celery_queue_names_split(monkeypatch):
 
     monkeypatch.setattr(celery_app.settings, "QUEUE_NAMES", "ingest, priority")
     monkeypatch.setattr(celery_app.settings, "BROKER_URL", "redis://localhost/0")
+    monkeypatch.setattr(celery_app.settings, "BACKLOG_PROBE_SECONDS", 5)
+    celery_app.settings.__dict__.pop("celery", None)
+    celery_app.settings.__dict__.pop("redis", None)
 
     importlib.reload(celery_app)
     assert captured["queue_names"] == ["ingest", "priority"]

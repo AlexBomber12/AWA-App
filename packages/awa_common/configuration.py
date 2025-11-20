@@ -174,7 +174,7 @@ class CelerySettings(SettingsGroup):
         redis = cfg.REDIS_URL
         return cls(
             broker_url=cfg.BROKER_URL or redis,
-            result_backend=redis,
+            result_backend=cfg.RESULT_BACKEND or redis,
             prefetch_multiplier=int(cfg.CELERY_WORKER_PREFETCH_MULTIPLIER),
             task_time_limit=int(cfg.CELERY_TASK_TIME_LIMIT),
             store_eager_result=bool(cfg.CELERY_TASK_STORE_EAGER_RESULT),
@@ -313,6 +313,7 @@ class LLMSettings(SettingsGroup):
 class StatsSettings(SettingsGroup):
     enable_cache: bool
     cache_ttl_s: int
+    roi_cache_ttl_seconds: float
     namespace: str
     max_days: int
     require_clamp: bool
@@ -324,6 +325,7 @@ class StatsSettings(SettingsGroup):
         return cls(
             enable_cache=bool(cfg.STATS_ENABLE_CACHE),
             cache_ttl_s=int(cfg.STATS_CACHE_TTL_S),
+            roi_cache_ttl_seconds=float(cfg.ROI_CACHE_TTL_SECONDS),
             namespace=cfg.STATS_CACHE_NAMESPACE,
             max_days=int(cfg.STATS_MAX_DAYS),
             require_clamp=bool(cfg.REQUIRE_CLAMP),

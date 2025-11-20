@@ -37,6 +37,7 @@ from awa_common.security import oidc as oidc_provider
 from awa_common.security.headers import install_security_headers
 from awa_common.security.request_limits import install_body_size_limit
 from awa_common.settings import settings
+from awa_common.utils.env import env_bool, env_str
 from services.api.errors import install_exception_handlers
 from services.api.middlewares.audit import AuditMiddleware
 from services.api.security import install_security
@@ -49,6 +50,8 @@ from .routes.score import router as score_router
 from .routes.sku import router as sku_router
 from .routes.stats import router as stats_router
 from .routes.upload import router as upload_router
+
+_BASE_LLM_PROVIDER = getattr(settings, "LLM_PROVIDER", "stub").lower()
 
 
 async def ready_db(session: AsyncSession = Depends(get_async_session)) -> dict[str, str]:
@@ -85,7 +88,7 @@ def _normalize_cors_origins(value: str | Iterable[str] | None) -> list[str]:
 def resolve_cors_origins(
     app_env: str | None = None, configured_origins: str | Iterable[str] | None = None
 ) -> list[str]:
-    env = app_env or os.getenv("APP_ENV") or getattr(settings, "APP_ENV", "dev")
+    env = app_env or getattr(settings, "APP_ENV", "dev")
     env = (env or "dev").strip().lower()
     raw_origins = configured_origins
     if raw_origins is None:
@@ -128,6 +131,7 @@ async def lifespan(_app: FastAPI):
     await _wait_for_db()
     await _check_llm()
     redis_url = settings.REDIS_URL
+    stats_enabled = env_bool("STATS_ENABLE_CACHE", default=getattr(settings, "STATS_ENABLE_CACHE", False))
     limiter_redis: aioredis.Redis | None = None
     _app.state.stats_cache = None
     _app.state.stats_cache_namespace = normalize_namespace(getattr(settings, "STATS_CACHE_NAMESPACE", "stats:"))
@@ -145,7 +149,10 @@ async def lifespan(_app: FastAPI):
         if settings.ENABLE_LOOP_LAG_MONITOR:
             lag_stop = start_loop_lag_monitor(asyncio.get_running_loop(), float(settings.LOOP_LAG_INTERVAL_S))
             _app.state.loop_lag_stop = lag_stop
-        limiter_redis = await _wait_for_redis(redis_url)
+        try:
+            limiter_redis = await _wait_for_redis(redis_url)
+        except TypeError:
+            limiter_redis = await _wait_for_redis()  # type: ignore[call-arg]
         await FastAPILimiter.init(limiter_redis)
         _app.state.limiter_redis = limiter_redis
         _update_redis_health(_app.state, status="ok")
@@ -159,7 +166,7 @@ async def lifespan(_app: FastAPI):
         if getattr(settings, "REDIS_HEALTH_CRITICAL", False):
             raise
     try:
-        if getattr(settings, "STATS_ENABLE_CACHE", False):
+        if stats_enabled:
             cache_url = getattr(settings, "CACHE_REDIS_URL", None) or redis_url
             await configure_cache_backend(cache_url, suppress=False)
             cache_ok = await ping_cache()
@@ -186,7 +193,7 @@ async def lifespan(_app: FastAPI):
             _app.state.loop_lag_stop = None
         if jwks_started:
             await oidc_provider.shutdown_async_jwks_provider()
-        if getattr(settings, "STATS_ENABLE_CACHE", False):
+        if stats_enabled:
             await close_cache()
             _app.state.stats_cache = None
         if limiter_redis is not None:
@@ -283,28 +290,49 @@ async def _check_llm() -> None:
     we fall back to the stub provider so the service can continue running.
     """
 
-    llm_cfg = getattr(settings, "llm", None)
-    provider = (
-        os.getenv("LLM_PROVIDER") or (llm_cfg.provider if llm_cfg else getattr(settings, "LLM_PROVIDER", "stub"))
-    ).lower()
-    lan_base = os.getenv("LAN_BASE") or (llm_cfg.lan_health_base_url if llm_cfg else None) or "http://lan-llm:8000"
-    lan_timeout = float(
-        os.getenv("LLM_LAN_HEALTH_TIMEOUT_S")
-        or (getattr(llm_cfg, "lan_health_timeout_s", None) or getattr(settings, "LLM_LAN_HEALTH_TIMEOUT_S", 1.0))
-    )
+    global _BASE_LLM_PROVIDER
+
+    cfg = settings
+    env_provider = env_str("LLM_PROVIDER")
+    env_lower = env_provider.lower() if env_provider else None
+    current_provider = getattr(cfg, "LLM_PROVIDER", None)
+    current_lower = (current_provider or "stub").lower()
+    use_env = env_lower is not None and (current_lower == _BASE_LLM_PROVIDER or current_provider is None)
+    if use_env and env_lower is not None and env_lower != current_lower:
+        object.__setattr__(cfg, "LLM_PROVIDER", env_provider)
+        cfg.__dict__["LLM_PROVIDER"] = env_provider
+        cfg.__dict__.pop("llm", None)
+        try:
+            cfg.model_fields_set.add("LLM_PROVIDER")
+        except Exception:
+            pass
+        globals()["settings"] = cfg
+        current_lower = env_lower
+        _BASE_LLM_PROVIDER = env_lower
+
+    llm_cfg = getattr(cfg, "llm", None)
+    provider = (llm_cfg.provider if llm_cfg else current_lower or "stub").lower()
+    lan_base = (llm_cfg.lan_health_base_url if llm_cfg else None) or getattr(cfg, "LAN_BASE_URL", "http://lan-llm:8000")
+    lan_timeout = float(getattr(llm_cfg, "lan_health_timeout_s", getattr(cfg, "LLM_LAN_HEALTH_TIMEOUT_S", 1.0)))
     if provider != "lan":
         return
     try:
         async with httpx.AsyncClient(timeout=lan_timeout) as client:
             await client.get(f"{lan_base}/ready")
     except Exception:
-        fallback = (os.getenv("LLM_PROVIDER_FALLBACK") or (llm_cfg.fallback_provider if llm_cfg else "stub")).lower()
+        fallback = (
+            llm_cfg.fallback_provider if llm_cfg else getattr(cfg, "LLM_PROVIDER_FALLBACK", "stub") or "stub"
+        ).lower()
         os.environ["LLM_PROVIDER"] = fallback
+        object.__setattr__(cfg, "LLM_PROVIDER", fallback)
+        cfg.__dict__["LLM_PROVIDER"] = fallback
         try:
-            settings.LLM_PROVIDER = fallback  # type: ignore[attr-defined]
-            settings.__dict__.pop("llm", None)
+            cfg.model_fields_set.add("LLM_PROVIDER")
         except Exception:
             pass
+        cfg.__dict__.pop("llm", None)
+        globals()["settings"] = cfg
+        _BASE_LLM_PROVIDER = fallback
 
 
 async def _close_redis_client(client: aioredis.Redis | None) -> None:

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import importlib
-import os
 from collections.abc import Callable
 from typing import Any
 
@@ -12,12 +11,14 @@ from celery.schedules import crontab
 from celery.signals import worker_process_init, worker_process_shutdown
 from pydantic import ValidationError
 
+from awa_common.configuration import CelerySettings
 from awa_common.cron_config import CronConfigError, CronSchedule
 from awa_common.logging import configure_logging
 from awa_common.loop_lag import start_loop_lag_monitor
 from awa_common.metrics import enable_celery_metrics, init as metrics_init, start_worker_metrics_http_if_enabled
 from awa_common.sentry import init_sentry
 from awa_common.settings import settings
+from awa_common.utils.env import env_bool
 
 app_cfg = getattr(settings, "app", None)
 _worker_version = getattr(settings, "APP_VERSION", getattr(app_cfg, "version", "0.0.0"))
@@ -38,27 +39,26 @@ logger = structlog.get_logger(__name__)
 logger.info("worker.settings", settings=settings.redacted())
 
 
-def _env_bool(name: str, default: bool) -> bool:
-    raw = os.getenv(name)
-    if raw is None:
-        return default
-    return raw.lower() in {"1", "true", "yes"}
+def _get_celery_cfg() -> CelerySettings | None:
+    """Return a fresh Celery settings snapshot."""
+    settings.__dict__.pop("celery", None)
+    cfg = getattr(settings, "celery", None)
+    return cfg if isinstance(cfg, CelerySettings) else None
 
 
 def make_celery() -> Celery:
-    celery_cfg = getattr(settings, "celery", None)
-    broker = os.getenv("BROKER_URL") or (celery_cfg.broker_url if celery_cfg else settings.REDIS_URL)
-    backend = os.getenv("RESULT_BACKEND") or (celery_cfg.result_backend if celery_cfg else settings.REDIS_URL)
+    celery_cfg = _get_celery_cfg()
+    broker = celery_cfg.broker_url if celery_cfg else (settings.BROKER_URL or settings.REDIS_URL)
+    backend = celery_cfg.result_backend if celery_cfg else (settings.RESULT_BACKEND or settings.REDIS_URL)
     app = Celery("awa_app", broker=broker, backend=backend)
-    worker_prefetch = int(
-        os.getenv("CELERY_WORKER_PREFETCH_MULTIPLIER") or (celery_cfg.prefetch_multiplier if celery_cfg else 1)
+    worker_prefetch = int(celery_cfg.prefetch_multiplier if celery_cfg else settings.CELERY_WORKER_PREFETCH_MULTIPLIER)
+    task_time_limit = int(celery_cfg.task_time_limit if celery_cfg else settings.CELERY_TASK_TIME_LIMIT)
+    store_eager = env_bool(
+        "CELERY_TASK_STORE_EAGER_RESULT",
+        default=bool(celery_cfg.store_eager_result if celery_cfg else settings.CELERY_TASK_STORE_EAGER_RESULT),
     )
-    task_time_limit = int(os.getenv("CELERY_TASK_TIME_LIMIT") or (celery_cfg.task_time_limit if celery_cfg else 3600))
-    store_eager = _env_bool(
-        "CELERY_TASK_STORE_EAGER_RESULT", bool(celery_cfg.store_eager_result if celery_cfg else False)
-    )
-    result_expires = int(os.getenv("CELERY_RESULT_EXPIRES") or (celery_cfg.result_expires if celery_cfg else 86_400))
-    timezone = os.getenv("TZ") or (celery_cfg.timezone if celery_cfg else "UTC")
+    result_expires = int(celery_cfg.result_expires if celery_cfg else settings.CELERY_RESULT_EXPIRES)
+    timezone = celery_cfg.timezone if celery_cfg else settings.TZ
     app.conf.update(
         task_acks_late=True,
         worker_prefetch_multiplier=worker_prefetch,
@@ -72,7 +72,10 @@ def make_celery() -> Celery:
         timezone=timezone,
         enable_utc=True,
     )
-    always_eager = _env_bool("CELERY_TASK_ALWAYS_EAGER", bool(celery_cfg.always_eager if celery_cfg else False))
+    always_eager = env_bool(
+        "CELERY_TASK_ALWAYS_EAGER",
+        default=bool(celery_cfg.always_eager if celery_cfg else settings.CELERY_TASK_ALWAYS_EAGER),
+    )
     if always_eager:
         app.conf.update(task_always_eager=True, task_eager_propagates=True)
     return app
@@ -121,11 +124,13 @@ def _resolve_alertbot_cron_expression() -> str:
 
 
 def _loop_lag_monitor_enabled() -> bool:
-    celery_cfg = getattr(settings, "celery", None)
+    celery_cfg = _get_celery_cfg()
     default = bool(
-        celery_cfg.loop_lag_monitor_enabled if celery_cfg else getattr(settings, "ENABLE_LOOP_LAG_MONITOR", True)
+        celery_cfg.loop_lag_monitor_enabled
+        if celery_cfg
+        else getattr(settings, "CELERY_LOOP_LAG_MONITOR", getattr(settings, "ENABLE_LOOP_LAG_MONITOR", True))
     )
-    return _env_bool("CELERY_LOOP_LAG_MONITOR", default)
+    return bool(env_bool("CELERY_LOOP_LAG_MONITOR", default=default))
 
 
 _loop_lag_stop: Callable[[], None] | None = None
@@ -196,23 +201,14 @@ def _run_alertbot_startup_validation(**_: Any) -> None:
 if getattr(getattr(settings, "observability", None), "enable_metrics", True):
     broker_url = getattr(getattr(settings, "redis", None), "broker_url", None) or settings.REDIS_URL
     redis_cfg = getattr(settings, "redis", None)
-    raw_queue_names = os.getenv("QUEUE_NAMES") or getattr(settings, "QUEUE_NAMES", None)
-    queue_names: list[str] | None
+    raw_queue_names = getattr(settings, "QUEUE_NAMES", None)
+    queue_names: list[str] | None = None
     if isinstance(raw_queue_names, str) and raw_queue_names.strip():
         queue_names = [item.strip() for item in raw_queue_names.split(",") if item.strip()]
     elif redis_cfg and redis_cfg.queue_names:
-        queue_names = redis_cfg.queue_names
-    else:
-        queue_names = None
-    celery_cfg = getattr(settings, "celery", None)
-    raw_interval = os.getenv("BACKLOG_PROBE_SECONDS")
-    if raw_interval:
-        try:
-            interval_s = int(raw_interval)
-        except ValueError:
-            interval_s = int(celery_cfg.backlog_probe_seconds if celery_cfg else 15)
-    else:
-        interval_s = int(celery_cfg.backlog_probe_seconds if celery_cfg else 15)
+        queue_names = list(redis_cfg.queue_names)
+    celery_cfg = _get_celery_cfg()
+    interval_s = int(celery_cfg.backlog_probe_seconds if celery_cfg else getattr(settings, "BACKLOG_PROBE_SECONDS", 15))
     enable_celery_metrics(
         celery_app,
         broker_url=broker_url,
@@ -221,12 +217,21 @@ if getattr(getattr(settings, "observability", None), "enable_metrics", True):
     )
     start_worker_metrics_http_if_enabled()
 
-nightly_enabled = _env_bool(
+nested_celery_cfg = _get_celery_cfg()
+
+nightly_enabled = env_bool(
     "SCHEDULE_NIGHTLY_MAINTENANCE",
-    bool(getattr(settings, "SCHEDULE_NIGHTLY_MAINTENANCE", True)),
+    default=bool(
+        getattr(nested_celery_cfg, "schedule_nightly_maintenance", None)
+        if nested_celery_cfg
+        else getattr(settings, "SCHEDULE_NIGHTLY_MAINTENANCE", True)
+    ),
 )
 if nightly_enabled:
-    cron_expr = getattr(settings, "NIGHTLY_MAINTENANCE_CRON", "30 2 * * *")
+    cron_expr = str(
+        getattr(nested_celery_cfg, "nightly_maintenance_cron", None)
+        or getattr(settings, "NIGHTLY_MAINTENANCE_CRON", "30 2 * * *")
+    )
     _register_cron_schedule(
         "nightly-maintenance",
         task="ingest.maintenance_nightly",
@@ -234,12 +239,18 @@ if nightly_enabled:
         setting_name="NIGHTLY_MAINTENANCE_CRON",
     )
 
-mv_refresh_enabled = _env_bool(
+mv_refresh_enabled = env_bool(
     "SCHEDULE_MV_REFRESH",
-    bool(getattr(settings, "SCHEDULE_MV_REFRESH", True)),
+    default=bool(
+        getattr(nested_celery_cfg, "schedule_mv_refresh", None)
+        if nested_celery_cfg
+        else getattr(settings, "SCHEDULE_MV_REFRESH", True)
+    ),
 )
 if mv_refresh_enabled:
-    cron_expr = getattr(settings, "MV_REFRESH_CRON", "30 2 * * *")
+    cron_expr = str(
+        getattr(nested_celery_cfg, "mv_refresh_cron", None) or getattr(settings, "MV_REFRESH_CRON", "30 2 * * *")
+    )
     _register_cron_schedule(
         "refresh-roi-fees-mvs",
         task="db.refresh_roi_mvs",
@@ -247,12 +258,18 @@ if mv_refresh_enabled:
         setting_name="MV_REFRESH_CRON",
     )
 
-logistics_enabled = _env_bool(
+logistics_enabled = env_bool(
     "SCHEDULE_LOGISTICS_ETL",
-    bool(getattr(settings, "SCHEDULE_LOGISTICS_ETL", False)),
+    default=bool(
+        getattr(nested_celery_cfg, "schedule_logistics_etl", None)
+        if nested_celery_cfg
+        else getattr(settings, "SCHEDULE_LOGISTICS_ETL", False)
+    ),
 )
 if logistics_enabled:
-    cron_expr = getattr(settings, "LOGISTICS_CRON", "0 3 * * *")
+    cron_expr = str(
+        getattr(nested_celery_cfg, "logistics_cron", None) or getattr(settings, "LOGISTICS_CRON", "0 3 * * *")
+    )
     _register_cron_schedule(
         "logistics-etl-full",
         task="logistics.etl.full",
