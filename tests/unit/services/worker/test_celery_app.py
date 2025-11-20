@@ -71,7 +71,7 @@ def reload_celery_module():
 def test_mv_refresh_schedule_enabled(monkeypatch, reload_celery_module):
     monkeypatch.setenv("SCHEDULE_NIGHTLY_MAINTENANCE", "false")
     monkeypatch.setenv("SCHEDULE_MV_REFRESH", "true")
-    monkeypatch.setenv("MV_REFRESH_CRON", "*/15 * * * *")
+    monkeypatch.setattr(celery_module.settings, "MV_REFRESH_CRON", "*/15 * * * *", raising=False)
 
     module = reload_celery_module(celery_module)
     schedule = module.celery_app.conf.beat_schedule
@@ -83,19 +83,14 @@ def test_mv_refresh_schedule_enabled(monkeypatch, reload_celery_module):
     assert cron._orig_day_of_week == "*"
 
 
-def test_mv_refresh_schedule_invalid_cron_falls_back(monkeypatch, reload_celery_module):
+def test_mv_refresh_schedule_invalid_cron_raises(monkeypatch, reload_celery_module):
     monkeypatch.setenv("SCHEDULE_NIGHTLY_MAINTENANCE", "false")
     monkeypatch.setenv("SCHEDULE_MV_REFRESH", "true")
-    monkeypatch.setenv("MV_REFRESH_CRON", "bad")
+    monkeypatch.setattr(celery_module.settings, "MV_REFRESH_CRON", "bad", raising=False)
 
-    module = reload_celery_module(celery_module)
-    schedule = module.celery_app.conf.beat_schedule
-    entry = schedule.get("refresh-roi-fees-mvs")
-    assert entry is not None
-    cron = entry["schedule"]
-    assert cron._orig_minute == "30"
-    assert cron._orig_hour == "2"
-    assert cron._orig_day_of_week == "*"
+    with pytest.raises(RuntimeError):
+        reload_celery_module(celery_module)
+    celery_module.settings.MV_REFRESH_CRON = "30 2 * * *"
 
 
 def test_mv_refresh_schedule_disabled(monkeypatch, reload_celery_module):
@@ -109,9 +104,9 @@ def test_mv_refresh_schedule_disabled(monkeypatch, reload_celery_module):
 
 def test_mv_refresh_and_nightly_merge_and_handle_import_error(monkeypatch, reload_celery_module):
     monkeypatch.setenv("SCHEDULE_NIGHTLY_MAINTENANCE", "true")
-    monkeypatch.setenv("NIGHTLY_MAINTENANCE_CRON", "bad")
     monkeypatch.setenv("SCHEDULE_MV_REFRESH", "true")
-    monkeypatch.setenv("MV_REFRESH_CRON", "*/10 * * * *")
+    monkeypatch.setattr(celery_module.settings, "NIGHTLY_MAINTENANCE_CRON", "15 3 * * *", raising=False)
+    monkeypatch.setattr(celery_module.settings, "MV_REFRESH_CRON", "*/10 * * * *", raising=False)
 
     calls = []
     original_import = celery_module.importlib.import_module
@@ -132,8 +127,8 @@ def test_mv_refresh_and_nightly_merge_and_handle_import_error(monkeypatch, reloa
     assert {"nightly-maintenance", "refresh-roi-fees-mvs"}.issubset(set(schedule.keys()))
 
     nightly = schedule["nightly-maintenance"]["schedule"]
-    assert nightly._orig_minute == "30"
-    assert nightly._orig_hour == "2"
+    assert nightly._orig_minute == "15"
+    assert nightly._orig_hour == "3"
 
     refresh = schedule["refresh-roi-fees-mvs"]["schedule"]
     assert refresh._orig_minute == "*/10"
@@ -141,8 +136,8 @@ def test_mv_refresh_and_nightly_merge_and_handle_import_error(monkeypatch, reloa
     assert calls == ["services.worker.tasks"]
 
 
-def test_alerts_schedule_uses_legacy_env(monkeypatch, reload_celery_module):
-    monkeypatch.setenv("CHECK_INTERVAL_MIN", "10")
+def test_alerts_schedule_respects_interval_override(monkeypatch, reload_celery_module):
+    monkeypatch.setattr(celery_module.settings, "CHECK_INTERVAL_MIN", 10, raising=False)
     module = reload_celery_module(celery_module)
     schedule = module.celery_app.conf.beat_schedule
     entry = schedule["alerts-evaluate-rules"]
@@ -152,11 +147,10 @@ def test_alerts_schedule_uses_legacy_env(monkeypatch, reload_celery_module):
 
 
 def test_alerts_schedule_invalid_cron(monkeypatch, reload_celery_module):
-    monkeypatch.delenv("CHECK_INTERVAL_MIN", raising=False)
     monkeypatch.setattr(celery_module.settings, "ALERTS_EVALUATION_INTERVAL_CRON", "invalid")
-    module = reload_celery_module(celery_module)
-    cron = module.celery_app.conf.beat_schedule["alerts-evaluate-rules"]["schedule"]
-    assert cron._orig_minute == "*/5"
+    with pytest.raises(RuntimeError):
+        reload_celery_module(celery_module)
+    celery_module.settings.ALERTS_EVALUATION_INTERVAL_CRON = "*/5 * * * *"
 
 
 def test_alertbot_schedule_entries(monkeypatch, reload_celery_module):

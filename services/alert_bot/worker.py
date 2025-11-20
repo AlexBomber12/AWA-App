@@ -9,7 +9,9 @@ from datetime import UTC, datetime
 from typing import Any, cast
 
 import structlog
+from croniter import croniter as croniter_cls
 
+from awa_common.cron_config import CronConfigError, validate_cron_expr
 from awa_common.metrics import (
     ALERTBOT_BATCH_DURATION_SECONDS,
     ALERTBOT_EVENTS_EMITTED_TOTAL,
@@ -67,6 +69,8 @@ class RuleScheduler:
     def __init__(self) -> None:
         self._last_every_run: dict[str, datetime] = {}
         self._every_intervals: dict[str, float] = {}
+        self._validated_cron: set[str] = set()
+        self._invalid_cron: set[str] = set()
 
     def due_rules(self, rules: Iterable[AlertRule], *, now: datetime) -> list[AlertRule]:
         due: list[AlertRule] = []
@@ -84,9 +88,32 @@ class RuleScheduler:
                     due.append(rule)
                     self._last_every_run[rule.id] = now
                 continue
-            if _cron_matches(schedule, now):
+            if self._cron_due(rule.id, schedule, now):
                 due.append(rule)
         return due
+
+    def _cron_due(self, rule_id: str, schedule: str, now: datetime) -> bool:
+        expression = schedule.strip()
+        if not expression:
+            return True
+        if expression not in self._validated_cron:
+            if expression in self._invalid_cron:
+                return False
+            try:
+                validate_cron_expr(expression, source=f"rule:{rule_id}")
+            except CronConfigError as exc:
+                if expression not in self._invalid_cron:
+                    logger.warning("alertbot.invalid_rule_cron", rule=rule_id, cron=expression, error=str(exc))
+                    self._invalid_cron.add(expression)
+                return False
+            self._validated_cron.add(expression)
+        try:
+            return bool(croniter_cls.match(expression, now))
+        except Exception as exc:
+            logger.warning("alertbot.cron_match_failed", rule=rule_id, cron=expression, error=str(exc))
+            self._validated_cron.discard(expression)
+            self._invalid_cron.add(expression)
+            return False
 
     def _parse_every(self, rule_id: str, schedule: str) -> float:
         cached = self._every_intervals.get(rule_id)
@@ -492,51 +519,6 @@ def _format_summary(stats: BatchStats, *, duration: float) -> dict[str, Any]:
         "degraded_reason": stats.degraded_reason,
     }
     return summary
-
-
-def _cron_matches(expr: str, when: datetime) -> bool:
-    fields = expr.strip().split()
-    if len(fields) != 5:
-        return False
-    minute, hour, day, month, weekday = fields
-    return (
-        _cron_field_matches(minute, when.minute, 0, 59)
-        and _cron_field_matches(hour, when.hour, 0, 23)
-        and _cron_field_matches(day, when.day, 1, 31)
-        and _cron_field_matches(month, when.month, 1, 12)
-        and _cron_field_matches(weekday, when.weekday(), 0, 6)
-    )
-
-
-def _cron_field_matches(field: str, value: int, minimum: int, maximum: int) -> bool:
-    field = field.strip()
-    if field == "*":
-        return True
-    for part in field.split(","):
-        part = part.strip()
-        if not part:
-            continue
-        if part.startswith("*/"):
-            step = _safe_int(part[2:], 1)
-            if step > 0 and (value - minimum) % step == 0:
-                return True
-        elif "-" in part:
-            start, _, end = part.partition("-")
-            start_int = _safe_int(start, minimum)
-            end_int = _safe_int(end, maximum)
-            if start_int <= value <= end_int:
-                return True
-        else:
-            if value == _safe_int(part, value + 1):
-                return True
-    return False
-
-
-def _safe_int(value: Any, default: int) -> int:
-    try:
-        return int(value)
-    except (TypeError, ValueError):
-        return default
 
 
 RUNNER = AlertBotRunner()

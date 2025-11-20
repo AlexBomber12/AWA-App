@@ -10,7 +10,9 @@ import structlog
 from celery import Celery
 from celery.schedules import crontab
 from celery.signals import worker_process_init, worker_process_shutdown
+from pydantic import ValidationError
 
+from awa_common.cron_config import CronConfigError, CronSchedule
 from awa_common.logging import configure_logging
 from awa_common.loop_lag import start_loop_lag_monitor
 from awa_common.metrics import enable_celery_metrics, init as metrics_init, start_worker_metrics_http_if_enabled
@@ -32,7 +34,8 @@ def _init_sentry() -> None:
 
 
 _init_sentry()
-structlog.get_logger(__name__).info("worker.settings", settings=settings.redacted())
+logger = structlog.get_logger(__name__)
+logger.info("worker.settings", settings=settings.redacted())
 
 
 def _env_bool(name: str, default: bool) -> bool:
@@ -78,6 +81,43 @@ def make_celery() -> Celery:
 celery_app = make_celery()
 
 _beat_schedule = dict(getattr(celery_app.conf, "beat_schedule", {}) or {})
+
+
+def _register_cron_schedule(
+    entry_name: str,
+    *,
+    task: str,
+    expression: str,
+    setting_name: str,
+) -> None:
+    try:
+        schedule = CronSchedule(name=setting_name, expression=expression).as_crontab()
+    except (CronConfigError, ValidationError) as exc:
+        logger.error(
+            "worker.invalid_cron_config",
+            job=entry_name,
+            task=task,
+            setting=setting_name,
+            cron=expression,
+            error=str(exc),
+        )
+        raise RuntimeError(f"{setting_name} value {expression!r} is not a valid cron expression.") from exc
+    _beat_schedule[entry_name] = {
+        "task": task,
+        "schedule": schedule,
+    }
+
+
+def _resolve_alertbot_cron_expression() -> str:
+    base_expr = getattr(settings, "ALERTS_EVALUATION_INTERVAL_CRON", "*/5 * * * *")
+    override_minutes = getattr(settings, "CHECK_INTERVAL_MIN", None)
+    if override_minutes is not None:
+        try:
+            minutes = max(1, int(override_minutes))
+            return f"*/{minutes} * * * *"
+        except (TypeError, ValueError):
+            logger.warning("worker.alerts.invalid_interval_override", value=override_minutes)
+    return base_expr
 
 
 def _loop_lag_monitor_enabled() -> bool:
@@ -181,105 +221,53 @@ if getattr(getattr(settings, "observability", None), "enable_metrics", True):
     )
     start_worker_metrics_http_if_enabled()
 
-celery_cfg = getattr(settings, "celery", None)
-
 nightly_enabled = _env_bool(
     "SCHEDULE_NIGHTLY_MAINTENANCE",
-    bool(celery_cfg.schedule_nightly_maintenance if celery_cfg else True),
+    bool(getattr(settings, "SCHEDULE_NIGHTLY_MAINTENANCE", True)),
 )
 if nightly_enabled:
-    cron_expr = os.getenv("NIGHTLY_MAINTENANCE_CRON") or (
-        celery_cfg.nightly_maintenance_cron if celery_cfg else "30 2 * * *"
+    cron_expr = getattr(settings, "NIGHTLY_MAINTENANCE_CRON", "30 2 * * *")
+    _register_cron_schedule(
+        "nightly-maintenance",
+        task="ingest.maintenance_nightly",
+        expression=cron_expr,
+        setting_name="NIGHTLY_MAINTENANCE_CRON",
     )
-    cron = cron_expr.split()
-    if len(cron) != 5:
-        cron = (celery_cfg.nightly_maintenance_cron if celery_cfg else "30 2 * * *").split()
-    _beat_schedule["nightly-maintenance"] = {
-        "task": "ingest.maintenance_nightly",
-        "schedule": crontab(
-            minute=cron[0],
-            hour=cron[1],
-            day_of_month=cron[2],
-            month_of_year=cron[3],
-            day_of_week=cron[4],
-        ),
-    }
 
 mv_refresh_enabled = _env_bool(
     "SCHEDULE_MV_REFRESH",
-    bool(celery_cfg.schedule_mv_refresh if celery_cfg else getattr(settings, "SCHEDULE_MV_REFRESH", True)),
+    bool(getattr(settings, "SCHEDULE_MV_REFRESH", True)),
 )
 if mv_refresh_enabled:
-    cron_expr = os.getenv("MV_REFRESH_CRON") or (
-        celery_cfg.mv_refresh_cron if celery_cfg else getattr(settings, "MV_REFRESH_CRON", "30 2 * * *")
+    cron_expr = getattr(settings, "MV_REFRESH_CRON", "30 2 * * *")
+    _register_cron_schedule(
+        "refresh-roi-fees-mvs",
+        task="db.refresh_roi_mvs",
+        expression=cron_expr,
+        setting_name="MV_REFRESH_CRON",
     )
-    mv_cron = cron_expr.split()
-    if len(mv_cron) != 5:
-        fallback_expr = celery_cfg.mv_refresh_cron if celery_cfg else getattr(settings, "MV_REFRESH_CRON", "30 2 * * *")
-        mv_cron = fallback_expr.split()
-    _beat_schedule["refresh-roi-fees-mvs"] = {
-        "task": "db.refresh_roi_mvs",
-        "schedule": crontab(
-            minute=mv_cron[0],
-            hour=mv_cron[1],
-            day_of_month=mv_cron[2],
-            month_of_year=mv_cron[3],
-            day_of_week=mv_cron[4],
-        ),
-    }
 
-if celery_cfg.schedule_logistics_etl if celery_cfg else False:
-    cron_expr = celery_cfg.logistics_cron if celery_cfg else "0 3 * * *"
-    logistics_cron = cron_expr.split()
-    if len(logistics_cron) != 5:
-        logistics_cron = "0 3 * * *".split()
-    _beat_schedule["logistics-etl-full"] = {
-        "task": "logistics.etl.full",
-        "schedule": crontab(
-            minute=logistics_cron[0],
-            hour=logistics_cron[1],
-            day_of_month=logistics_cron[2],
-            month_of_year=logistics_cron[3],
-            day_of_week=logistics_cron[4],
-        ),
-    }
+logistics_enabled = _env_bool(
+    "SCHEDULE_LOGISTICS_ETL",
+    bool(getattr(settings, "SCHEDULE_LOGISTICS_ETL", False)),
+)
+if logistics_enabled:
+    cron_expr = getattr(settings, "LOGISTICS_CRON", "0 3 * * *")
+    _register_cron_schedule(
+        "logistics-etl-full",
+        task="logistics.etl.full",
+        expression=cron_expr,
+        setting_name="LOGISTICS_CRON",
+    )
 
-base_alerts_cron = (
-    os.getenv("ALERTS_EVALUATION_INTERVAL_CRON")
-    or (celery_cfg.alerts_schedule_cron if celery_cfg and celery_cfg.alerts_schedule_cron else None)
-    or getattr(settings, "ALERTS_EVALUATION_INTERVAL_CRON", "*/5 * * * *")
-)
-alerts_cron = str(base_alerts_cron)
-override_minutes = os.getenv("CHECK_INTERVAL_MIN")
-if override_minutes:
-    try:
-        minutes = max(1, int(override_minutes))
-        alerts_cron = f"*/{minutes} * * * *"
-    except ValueError:
-        pass
-elif celery_cfg and celery_cfg.alerts_check_interval_min:
-    try:
-        minutes = max(1, int(celery_cfg.alerts_check_interval_min))
-        alerts_cron = f"*/{minutes} * * * *"
-    except (TypeError, ValueError):
-        pass
-alerts_cron_parts = alerts_cron.split()
-if len(alerts_cron_parts) != 5:
-    alerts_cron_parts = "*/5 * * * *".split()
-alertbot_schedule = crontab(
-    minute=alerts_cron_parts[0],
-    hour=alerts_cron_parts[1],
-    day_of_month=alerts_cron_parts[2],
-    month_of_year=alerts_cron_parts[3],
-    day_of_week=alerts_cron_parts[4],
-)
-alertbot_entry = _beat_schedule.setdefault(
+alerts_cron_expr = _resolve_alertbot_cron_expression()
+_register_cron_schedule(
     "alertbot-run",
-    {
-        "task": "alertbot.run",
-        "schedule": alertbot_schedule,
-    },
+    task="alertbot.run",
+    expression=alerts_cron_expr,
+    setting_name="ALERTS_EVALUATION_INTERVAL_CRON",
 )
+alertbot_entry = _beat_schedule["alertbot-run"]
 _beat_schedule.setdefault("alerts-evaluate-rules", alertbot_entry)
 _beat_schedule.setdefault(
     "alerts-telegram-health",

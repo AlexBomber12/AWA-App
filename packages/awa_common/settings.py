@@ -6,7 +6,7 @@ from decimal import Decimal
 from functools import cached_property
 from typing import Literal
 
-from pydantic import AliasChoices, Field
+from pydantic import AliasChoices, Field, FieldValidationInfo, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import make_url
 
@@ -27,6 +27,7 @@ from .configuration import (
     SecuritySettings,
     StatsSettings,
 )
+from .cron_config import validate_cron_expr
 from .dsn import build_dsn
 
 # Preserve legacy values while supporting new stage/dev env conventions.
@@ -119,8 +120,14 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("BROKER_URL", "CELERY_BROKER_URL"),
     )
     QUEUE_NAMES: str | None = None
-    SCHEDULE_MV_REFRESH: bool = True
-    MV_REFRESH_CRON: str = "30 2 * * *"
+    SCHEDULE_MV_REFRESH: bool = Field(
+        default=True,
+        description="Enable the ROI materialized view refresh job (`SCHEDULE_MV_REFRESH`).",
+    )
+    MV_REFRESH_CRON: str = Field(
+        default="30 2 * * *",
+        description="Cron expression for the `db.refresh_roi_mvs` Celery task (`MV_REFRESH_CRON`).",
+    )
     STATS_ENABLE_CACHE: bool = True
     STATS_CACHE_TTL_S: int = 600
     STATS_CACHE_NAMESPACE: str = "stats:"
@@ -209,12 +216,39 @@ class Settings(BaseSettings):
     CELERY_LOOP_LAG_MONITOR: bool = True
     CELERY_LOOP_LAG_INTERVAL_S: float | None = None
     BACKLOG_PROBE_SECONDS: int = 15
-    SCHEDULE_NIGHTLY_MAINTENANCE: bool = True
-    NIGHTLY_MAINTENANCE_CRON: str = "30 2 * * *"
-    SCHEDULE_LOGISTICS_ETL: bool = False
-    LOGISTICS_CRON: str = "0 3 * * *"
-    CHECK_INTERVAL_MIN: int | None = None
+    SCHEDULE_NIGHTLY_MAINTENANCE: bool = Field(
+        default=True,
+        description="Enable the nightly maintenance beat entry (`SCHEDULE_NIGHTLY_MAINTENANCE`).",
+    )
+    NIGHTLY_MAINTENANCE_CRON: str = Field(
+        default="30 2 * * *",
+        description="Cron expression for `ingest.maintenance_nightly` (`NIGHTLY_MAINTENANCE_CRON`).",
+    )
+    SCHEDULE_LOGISTICS_ETL: bool = Field(
+        default=False,
+        description="Enable the freight/logistics ETL sync job (`SCHEDULE_LOGISTICS_ETL`).",
+    )
+    LOGISTICS_CRON: str = Field(
+        default="0 3 * * *",
+        description="Cron expression for `logistics.etl.full` (`LOGISTICS_CRON`).",
+    )
+    CHECK_INTERVAL_MIN: int | None = Field(
+        default=None,
+        description="Legacy override that converts to `*/N * * * *` for alert scheduling.",
+    )
     TZ: str = "UTC"
+
+    @field_validator(
+        "MV_REFRESH_CRON",
+        "NIGHTLY_MAINTENANCE_CRON",
+        "LOGISTICS_CRON",
+        "ALERTS_EVALUATION_INTERVAL_CRON",
+        "ALERT_SCHEDULE_CRON",
+    )
+    @classmethod
+    def _validate_cron_fields(cls, value: str, info: FieldValidationInfo) -> str:
+        validate_cron_expr(value, source=info.field_name)
+        return value
 
     # Shared HTTP client defaults
     HTTP_CONNECT_TIMEOUT_S: float = Field(
@@ -327,8 +361,12 @@ class Settings(BaseSettings):
     ALERTS_EVALUATION_INTERVAL_CRON: str = Field(
         default="*/5 * * * *",
         validation_alias=AliasChoices("ALERTS_EVALUATION_INTERVAL_CRON", "ALERTS_CRON"),
+        description="Cron cadence for `alertbot.run` (default every 5 minutes).",
     )
-    ALERT_SCHEDULE_CRON: str = "*/1 * * * *"
+    ALERT_SCHEDULE_CRON: str = Field(
+        default="*/1 * * * *",
+        description="Optional alias for the alert bot beat schedule (`ALERT_SCHEDULE_CRON`).",
+    )
     ALERT_EVAL_CONCURRENCY: int = 8
     ALERT_SEND_CONCURRENCY: int = 8
     ALERT_TELEGRAM_MAX_RPS: float = 25.0

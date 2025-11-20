@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import types
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -32,6 +33,34 @@ def test_rule_scheduler_every_intervals() -> None:
     later = now + timedelta(minutes=5)
     due_again = scheduler.due_rules([rule], now=later)
     assert due_again == [rule]
+
+
+def test_rule_scheduler_cron_matches() -> None:
+    scheduler = worker.RuleScheduler()
+    rule = _sample_rule("roi_drop", schedule="*/5 * * * *")
+    now = datetime(2024, 1, 1, 12, 10, tzinfo=UTC)
+    due = scheduler.due_rules([rule], now=now)
+    assert due == [rule]
+    not_due = scheduler.due_rules([rule], now=now + timedelta(minutes=1))
+    assert not not_due
+
+
+def test_rule_scheduler_invalid_cron_logs_once(monkeypatch) -> None:
+    scheduler = worker.RuleScheduler()
+    rule = _sample_rule("roi_drop", schedule="bad cron")
+    now = datetime(2024, 1, 1, 12, 0, tzinfo=UTC)
+    calls: list[tuple[tuple, dict]] = []
+
+    def fake_warning(*args, **kwargs):
+        calls.append((args, kwargs))
+
+    monkeypatch.setattr(worker, "logger", types.SimpleNamespace(warning=fake_warning))
+
+    assert not scheduler.due_rules([rule], now=now)
+    assert calls and calls[0][1]["rule"] == "roi_drop"
+    calls.clear()
+    assert not scheduler.due_rules([rule], now=now + timedelta(minutes=5))
+    assert not calls  # cached invalid cron should not log again
 
 
 def test_dedupe_events_keeps_first() -> None:
