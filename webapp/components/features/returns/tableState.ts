@@ -1,4 +1,5 @@
 import { RETURNS_SORT_OPTIONS, type ReturnsFilters, type ReturnsSort } from "@/lib/api/returnsClient";
+import { parsePositiveInt, parseSort, parseString } from "@/lib/parsers";
 import type { TableState, TableStateDefaults } from "@/lib/tableState";
 
 export type ReturnsTableFilters = ReturnsFilters;
@@ -18,37 +19,22 @@ export const RETURNS_TABLE_DEFAULTS: TableStateDefaults<ReturnsSort, ReturnsTabl
   filters: DEFAULT_FILTERS,
 };
 
-const parseNumber = (value: string | null): number | undefined => {
-  if (!value) {
-    return undefined;
-  }
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : undefined;
-};
-
-const parseSort = (value: string | null): ReturnsSort | undefined => {
-  if (value && RETURNS_SORT_OPTIONS.includes(value as ReturnsSort)) {
-    return value as ReturnsSort;
-  }
-  return undefined;
-};
-
 const parseFilters = (params: URLSearchParams): ReturnsTableFilters | undefined => {
   const entries: ReturnsTableFilters = {};
-  const dateFrom = params.get("filter[date_from]");
-  if (dateFrom) {
+  const dateFrom = parseString(params.get("filter[date_from]"));
+  if (dateFrom !== undefined) {
     entries.dateFrom = dateFrom;
   }
-  const dateTo = params.get("filter[date_to]");
-  if (dateTo) {
+  const dateTo = parseString(params.get("filter[date_to]"));
+  if (dateTo !== undefined) {
     entries.dateTo = dateTo;
   }
-  const vendor = params.get("filter[vendor]");
-  if (vendor) {
+  const vendor = parseString(params.get("filter[vendor]"));
+  if (vendor !== undefined) {
     entries.vendor = vendor;
   }
-  const asin = params.get("filter[asin]");
-  if (asin) {
+  const asin = parseString(params.get("filter[asin]"));
+  if (asin !== undefined) {
     entries.asin = asin;
   }
   return Object.keys(entries).length ? entries : undefined;
@@ -57,9 +43,9 @@ const parseFilters = (params: URLSearchParams): ReturnsTableFilters | undefined 
 export const parseReturnsSearchParams = (
   params: URLSearchParams
 ): Partial<TableState<ReturnsSort, ReturnsTableFilters>> => {
-  const page = parseNumber(params.get("page"));
-  const pageSize = parseNumber(params.get("page_size"));
-  const sort = parseSort(params.get("sort"));
+  const page = parsePositiveInt(params.get("page"), RETURNS_TABLE_DEFAULTS.page);
+  const pageSize = parsePositiveInt(params.get("page_size"), RETURNS_TABLE_DEFAULTS.pageSize);
+  const sort = parseSort(params.get("sort"), RETURNS_SORT_OPTIONS, RETURNS_TABLE_DEFAULTS.sort ?? "refund_desc");
   const filters = parseFilters(params);
 
   return {

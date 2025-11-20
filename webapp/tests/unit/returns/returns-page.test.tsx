@@ -160,4 +160,18 @@ describe("ReturnsPage", () => {
     const roiLink = within(rowElement as HTMLElement).getByRole("link", { name: /View in ROI/i });
     expect(roiLink).toHaveAttribute("href", "/roi?filter%5Bsearch%5D=RET-0001");
   });
+
+  it("hydrates table state from existing query parameters", async () => {
+    const navigation = getNavigationMock();
+    navigation.__internalNavigationMock.setSearchParams("page=2&page_size=10&sort=qty_asc&filter%5Basin%5D=RET-0100");
+
+    renderWithClient(<ReturnsPage />);
+
+    await waitFor(() => expect(listCalls[0]).toBeDefined());
+    expect(listCalls[0]).toContain("page=2");
+    expect(listCalls[0]).toContain("page_size=10");
+    expect(listCalls[0]).toContain("sort=qty_asc");
+    expect(listCalls[0]).toContain("filter%5Basin%5D=RET-0100");
+    await waitFor(() => expect(screen.getByText("RET-0011")).toBeInTheDocument());
+  });
 });

@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react";
+import { expect, userEvent, waitFor, within } from "@storybook/test";
 import type { Session } from "next-auth";
 
 import { ReturnsPage } from "@/components/features/returns/ReturnsPage";
@@ -17,18 +18,35 @@ const mockSession = {
   accessToken: "storybook-token",
 } as Session & { accessToken: string };
 
-const listResponse: ReturnsListResponse = {
-  items: [
-    { asin: "B00-RET-001", qty: 42, refundAmount: 1299.5, avgRefundPerUnit: 30.94 },
-    { asin: "B00-RET-002", qty: 18, refundAmount: 420.0, avgRefundPerUnit: 23.33 },
-    { asin: "B00-RET-003", qty: 64, refundAmount: 1999.99, avgRefundPerUnit: 31.25 },
-  ],
-  pagination: {
-    page: 1,
-    pageSize: 25,
-    total: 3,
-    totalPages: 1,
-  },
+const formatAsin = (value: number) => `B00-RET-${value.toString().padStart(3, "0")}`;
+
+const buildDefaultListPayload = (pageParam: number, pageSizeParam: number): ReturnsListResponse => {
+  const total = 60;
+  const pageSize = Math.max(1, pageSizeParam);
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const page = Math.min(Math.max(pageParam, 1), totalPages);
+  const startIndex = (page - 1) * pageSize;
+  const endIndex = Math.min(startIndex + pageSize, total);
+
+  const items = Array.from({ length: endIndex - startIndex }, (_, index) => {
+    const id = startIndex + index + 1;
+    return {
+      asin: formatAsin(id),
+      qty: id * 2,
+      refundAmount: id * 25,
+      avgRefundPerUnit: 25,
+    };
+  });
+
+  return {
+    items,
+    pagination: {
+      page,
+      pageSize,
+      total,
+      totalPages,
+    },
+  };
 };
 
 const summaryResponse: ReturnsSummary = {
@@ -53,7 +71,7 @@ const delayedResponse = (response: Response, delayMs = 2000) =>
 const buildHandlers = (mode: ReturnsStoryMode): FetchMockHandler[] => [
   {
     predicate: ({ url, method }) => method === "GET" && url.includes("/api/bff/returns") && new URL(url).searchParams.get("resource") === "list",
-    response: () => {
+    response: ({ url }) => {
       if (mode.list === "error") {
         return new Response(JSON.stringify({ code: "BFF_ERROR", message: "Failed to load returns list." }), {
           status: 500,
@@ -69,7 +87,10 @@ const buildHandlers = (mode: ReturnsStoryMode): FetchMockHandler[] => [
           { status: 200, headers: { "Content-Type": "application/json" } }
         );
       }
-      const payload = JSON.stringify(listResponse);
+      const params = new URL(url).searchParams;
+      const page = Number(params.get("page") ?? "1");
+      const pageSize = Number(params.get("page_size") ?? "25");
+      const payload = JSON.stringify(buildDefaultListPayload(page, pageSize));
       const response = new Response(payload, { status: 200, headers: { "Content-Type": "application/json" } });
       return mode.list === "loading" ? delayedResponse(response) : response;
     },
@@ -134,4 +155,30 @@ export const ErrorState: Story = {
       </AppShell>
     </FetchMock>
   ),
+};
+
+export const InteractiveTable: Story = {
+  render: () => (
+    <FetchMock handlers={buildHandlers({ list: "default", stats: "default" })}>
+      <AppShell initialSession={mockSession} initialPath="/returns">
+        <ReturnsPage />
+      </AppShell>
+    </FetchMock>
+  ),
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const user = userEvent.setup();
+
+    await waitFor(() => expect(canvas.getByText("B00-RET-001")).toBeInTheDocument());
+
+    await user.click(canvas.getByRole("button", { name: /Next/i }));
+    await waitFor(() => expect(canvas.getByText("B00-RET-026")).toBeInTheDocument());
+
+    const vendorInput = canvas.getByPlaceholderText("Vendor ID");
+    await user.clear(vendorInput);
+    await user.type(vendorInput, "ACME");
+
+    await user.click(canvas.getByRole("button", { name: /Apply filters/i }));
+    await waitFor(() => expect(canvas.getByRole("button", { name: /Previous/i })).not.toBeDisabled());
+  },
 };
