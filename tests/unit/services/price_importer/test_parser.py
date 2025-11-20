@@ -6,8 +6,8 @@ from pathlib import Path
 import pandas as pd
 from sqlalchemy import create_engine, select
 
+from awa_common.models_vendor import VendorPrice
 from services.price_importer import reader
-from services.price_importer.common.models_vendor import VendorPrice
 from services.price_importer.normaliser import guess_columns, normalise
 from services.price_importer.repository import Repository
 

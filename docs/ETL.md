@@ -46,6 +46,8 @@ components in `packages/awa_common` to deliver repeatable pipelines that survive
   and use `@retry`/`@aretry` instead of hand rolling Tenacity loops; the helper logs every retry with
   the current request id and emits `awa_retry_attempts_total{operation}` plus
   `awa_retry_sleep_seconds{operation}` so queuing delays are visible.
+- Vendor pricing tables are defined once in `packages/awa_common/models_vendor.py`; price importer and
+  related ETL tasks re-use these ORM models directly to avoid drift.
 - Typed ETL rows live in `packages/awa_common/types`. `RateRowModel` and `PriceRowModel` validate
   Decimal/date fields at runtime while the corresponding `TypedDict` definitions feed mypy so that
   price importer and logistics ETL hand off consistent structures before writing to Postgres.

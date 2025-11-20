@@ -8,10 +8,9 @@ from sqlalchemy import create_engine, func, insert, literal_column, or_, select,
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.engine import Engine
 
+from awa_common.base import Base
 from awa_common.dsn import build_dsn
-
-from .common import Base
-from .common.models_vendor import Vendor, VendorPrice
+from awa_common.models_vendor import Vendor, VendorPrice
 
 _TABLE_NAME = VendorPrice.__tablename__ or "vendor_prices"
 _KEY_COLUMNS = ("vendor_id", "sku")
