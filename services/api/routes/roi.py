@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from math import ceil
+from pathlib import Path
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
@@ -15,7 +16,8 @@ from services.api.schemas import PaginationMeta, RoiApprovalResponse, RoiListRes
 from services.api.security import limit_ops, limit_viewer, require_ops, require_viewer
 
 router = APIRouter()
-templates = Jinja2Templates(directory="templates")
+template_dir = Path(__file__).resolve().parent.parent / "templates"
+templates = Jinja2Templates(directory=str(template_dir))
 
 RoiSort = Literal[
     "roi_pct_desc",

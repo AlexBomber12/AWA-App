@@ -11,9 +11,10 @@ RUN pip install -r services/etl/requirements.txt
 COPY services/common/ ./services/common
 COPY services/ingest/ ./services/ingest
 COPY pg_utils/ ./pg_utils
+COPY scripts/wait-for-it.sh ./scripts/wait-for-it.sh
 COPY services/etl/ ./services/etl
 COPY tests/fixtures/keepa_sample.json ./services/etl/tests/fixtures/keepa_sample.json
-RUN chmod +x services/etl/wait-for-it.sh services/etl/entrypoint.sh
+RUN chmod +x scripts/wait-for-it.sh services/etl/entrypoint.sh
 
 FROM python:3.12-slim
 ARG TZ_CACHE_BUST
