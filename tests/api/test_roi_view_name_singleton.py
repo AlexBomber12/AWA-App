@@ -11,7 +11,7 @@ def _patch_current_roi_view(
     monkeypatch: pytest.MonkeyPatch,
     target_module,
     *,
-    attr: str = "current_roi_view",
+    attr: str = "get_roi_view_name",
     name: str = "test_roi_view",
 ):
     counter = {"count": 0}

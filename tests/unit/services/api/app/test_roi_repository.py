@@ -59,7 +59,7 @@ class DummySession:
 
 @pytest.mark.asyncio
 async def test_fetch_pending_rows_includes_filters(monkeypatch):
-    monkeypatch.setattr(roi_repo, "current_roi_view", lambda: "v_roi_full")
+    monkeypatch.setattr(roi_repo, "get_roi_view_name", lambda: "v_roi_full")
     session = DummySession(rows=[{"asin": "A1"}])
     rows = await roi_repo.fetch_pending_rows(session, roi_min=10, vendor=42, category="Beauty")
     assert rows[0]["asin"] == "A1"

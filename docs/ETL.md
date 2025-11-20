@@ -148,9 +148,13 @@ all environments.
 - The optional monthly partitioning scaffold for `returns_raw` ships disabled; enable
   `RETURNS_PARTITION_SCAFFOLD=1` during a maintenance window and follow
   `docs/runbooks/returns_partitioning.md` for the copy/attach/rename workflow.
-- ROI view selection and the “does `returns_raw` have a `vendor` column?” check are cached in
-  `services.api.roi_views` using a TTL cache (default 300 s). Override `ROI_CACHE_TTL_SECONDS` if you
-  need shorter refresh intervals—for example during migrations that swap view names or add columns.
+- ROI view selection is resolved and cached centrally in `awa_common.roi_views.current_roi_view`
+  using `ROI_VIEW_NAME` (or `settings.roi.view_name`). Allowed values are
+  `v_roi_full` (default), `roi_view`, `mat_v_roi_full`, and `test_roi_view`; other names raise
+  `InvalidROIViewError` so misconfiguration is obvious during startup.
+- The “does `returns_raw` have a `vendor` column?” check lives in `services.api.roi_views` and is
+  cached per `schema.table` key. Override `ROI_CACHE_TTL_SECONDS` to refresh the discovery more
+  frequently—for example during migrations that add the column.
 - `/stats/returns` enforces a bounded date range via `STATS_MAX_DAYS` (default 365). When
   `REQUIRE_CLAMP=false` the API clamps `date_from` to stay within the window; when set to `true` it
   returns HTTP 422 so callers must adjust the request client-side.

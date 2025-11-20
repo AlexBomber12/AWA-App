@@ -9,7 +9,7 @@ from sqlalchemy.engine import RowMapping
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.sql.elements import TextClause
 
-from awa_common.roi_views import current_roi_view, quote_identifier
+from services.api.roi_views import get_roi_view_name, quote_identifier
 
 DEFAULT_PAGE_SIZE = 50
 MAX_PAGE_SIZE = 200
@@ -168,7 +168,7 @@ async def fetch_roi_rows(
     roi_max: float | None = None,
 ) -> tuple[list[RowMapping], int]:
     """Return paginated ROI rows for the public API listing."""
-    view_name = current_roi_view()
+    view_name = get_roi_view_name()
     safe_sort = _normalize_sort(sort)
     safe_page, safe_size = _page_bounds(page, page_size)
     offset = (safe_page - 1) * safe_size
@@ -244,7 +244,7 @@ async def fetch_pending_rows(
 ) -> list[RowMapping]:
     """Return pending ROI rows for the ROI review UI."""
     stmt = _pending_sql(
-        current_roi_view(),
+        get_roi_view_name(),
         include_vendor=vendor is not None,
         include_category=category is not None,
     )
