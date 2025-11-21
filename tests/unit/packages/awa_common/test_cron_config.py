@@ -1,5 +1,6 @@
 import pytest
 from celery.schedules import crontab
+from pydantic import ValidationError
 
 from awa_common.cron_config import CronConfigError, CronSchedule, get_crontab, validate_cron_expr
 
@@ -12,6 +13,12 @@ def test_validate_cron_expr_returns_fields() -> None:
 def test_validate_cron_expr_rejects_invalid() -> None:
     with pytest.raises(CronConfigError):
         validate_cron_expr("0 2 * *", source="BROKEN_CRON")
+
+
+def test_cron_schedule_reports_setting_name() -> None:
+    with pytest.raises(ValidationError) as exc_info:
+        CronSchedule(name="BAD_CRON_SETTING", expression="0 0 0")
+    assert "BAD_CRON_SETTING" in str(exc_info.value)
 
 
 def test_cron_schedule_builds_celery_crontab() -> None:

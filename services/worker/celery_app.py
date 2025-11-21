@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import importlib
 from collections.abc import Callable
+from dataclasses import dataclass
 from typing import Any
 
 import structlog
@@ -86,41 +87,38 @@ celery_app = make_celery()
 _beat_schedule = dict(getattr(celery_app.conf, "beat_schedule", {}) or {})
 
 
-def _register_cron_schedule(
-    entry_name: str,
-    *,
-    task: str,
-    expression: str,
-    setting_name: str,
-) -> None:
-    try:
-        schedule = CronSchedule(name=setting_name, expression=expression).as_crontab()
-    except (CronConfigError, ValidationError) as exc:
-        logger.error(
-            "worker.invalid_cron_config",
-            job=entry_name,
-            task=task,
-            setting=setting_name,
-            cron=expression,
-            error=str(exc),
-        )
-        raise RuntimeError(f"{setting_name} value {expression!r} is not a valid cron expression.") from exc
-    _beat_schedule[entry_name] = {
-        "task": task,
-        "schedule": schedule,
-    }
+@dataclass(slots=True, frozen=True)
+class BeatScheduleEntry:
+    name: str
+    task: str
+    setting_name: str
+    expression: str
 
 
-def _resolve_alertbot_cron_expression() -> str:
-    base_expr = getattr(settings, "ALERTS_EVALUATION_INTERVAL_CRON", "*/5 * * * *")
-    override_minutes = getattr(settings, "CHECK_INTERVAL_MIN", None)
-    if override_minutes is not None:
+def _validate_cron_entries(entries: list[BeatScheduleEntry]) -> list[tuple[str, str, Any]]:
+    """Validate cron expressions once and build Celery schedules."""
+
+    errors: list[str] = []
+    compiled: list[tuple[str, str, Any]] = []
+    for entry in entries:
         try:
-            minutes = max(1, int(override_minutes))
-            return f"*/{minutes} * * * *"
-        except (TypeError, ValueError):
-            logger.warning("worker.alerts.invalid_interval_override", value=override_minutes)
-    return base_expr
+            schedule = CronSchedule(name=entry.setting_name, expression=entry.expression).as_crontab()
+        except (CronConfigError, ValidationError) as exc:
+            logger.error(
+                "worker.invalid_cron_config",
+                job=entry.name,
+                task=entry.task,
+                setting=entry.setting_name,
+                cron=entry.expression,
+                error=str(exc),
+            )
+            errors.append(entry.setting_name)
+            continue
+        compiled.append((entry.name, entry.task, schedule))
+    if errors:
+        settings_list = ", ".join(sorted(set(errors)))
+        raise RuntimeError(f"Invalid cron configuration for: {settings_list}")
+    return compiled
 
 
 def _loop_lag_monitor_enabled() -> bool:
@@ -219,73 +217,60 @@ if getattr(getattr(settings, "observability", None), "enable_metrics", True):
 
 nested_celery_cfg = _get_celery_cfg()
 
-nightly_enabled = env_bool(
-    "SCHEDULE_NIGHTLY_MAINTENANCE",
-    default=bool(
-        getattr(nested_celery_cfg, "schedule_nightly_maintenance", None)
-        if nested_celery_cfg
-        else getattr(settings, "SCHEDULE_NIGHTLY_MAINTENANCE", True)
-    ),
-)
-if nightly_enabled:
-    cron_expr = str(
-        getattr(nested_celery_cfg, "nightly_maintenance_cron", None)
-        or getattr(settings, "NIGHTLY_MAINTENANCE_CRON", "30 2 * * *")
-    )
-    _register_cron_schedule(
-        "nightly-maintenance",
-        task="ingest.maintenance_nightly",
-        expression=cron_expr,
-        setting_name="NIGHTLY_MAINTENANCE_CRON",
+if nested_celery_cfg is None:
+    nested_celery_cfg = CelerySettings.from_settings(settings)
+
+beat_entries: list[BeatScheduleEntry] = []
+
+if nested_celery_cfg.schedule_nightly_maintenance:
+    beat_entries.append(
+        BeatScheduleEntry(
+            "nightly-maintenance",
+            task="ingest.maintenance_nightly",
+            setting_name="NIGHTLY_MAINTENANCE_CRON",
+            expression=str(nested_celery_cfg.nightly_maintenance_cron),
+        )
     )
 
-mv_refresh_enabled = env_bool(
-    "SCHEDULE_MV_REFRESH",
-    default=bool(
-        getattr(nested_celery_cfg, "schedule_mv_refresh", None)
-        if nested_celery_cfg
-        else getattr(settings, "SCHEDULE_MV_REFRESH", True)
-    ),
-)
-if mv_refresh_enabled:
-    cron_expr = str(
-        getattr(nested_celery_cfg, "mv_refresh_cron", None) or getattr(settings, "MV_REFRESH_CRON", "30 2 * * *")
-    )
-    _register_cron_schedule(
-        "refresh-roi-fees-mvs",
-        task="db.refresh_roi_mvs",
-        expression=cron_expr,
-        setting_name="MV_REFRESH_CRON",
+if nested_celery_cfg.schedule_mv_refresh:
+    beat_entries.append(
+        BeatScheduleEntry(
+            "refresh-roi-fees-mvs",
+            task="db.refresh_roi_mvs",
+            setting_name="MV_REFRESH_CRON",
+            expression=str(nested_celery_cfg.mv_refresh_cron),
+        )
     )
 
-logistics_enabled = env_bool(
-    "SCHEDULE_LOGISTICS_ETL",
-    default=bool(
-        getattr(nested_celery_cfg, "schedule_logistics_etl", None)
-        if nested_celery_cfg
-        else getattr(settings, "SCHEDULE_LOGISTICS_ETL", False)
-    ),
-)
-if logistics_enabled:
-    cron_expr = str(
-        getattr(nested_celery_cfg, "logistics_cron", None) or getattr(settings, "LOGISTICS_CRON", "0 3 * * *")
-    )
-    _register_cron_schedule(
-        "logistics-etl-full",
-        task="logistics.etl.full",
-        expression=cron_expr,
-        setting_name="LOGISTICS_CRON",
+if nested_celery_cfg.schedule_logistics_etl:
+    beat_entries.append(
+        BeatScheduleEntry(
+            "logistics-etl-full",
+            task="logistics.etl.full",
+            setting_name="LOGISTICS_CRON",
+            expression=str(nested_celery_cfg.logistics_cron),
+        )
     )
 
-alerts_cron_expr = _resolve_alertbot_cron_expression()
-_register_cron_schedule(
-    "alertbot-run",
-    task="alertbot.run",
-    expression=alerts_cron_expr,
-    setting_name="ALERTS_EVALUATION_INTERVAL_CRON",
+beat_entries.append(
+    BeatScheduleEntry(
+        "alertbot-run",
+        task="alertbot.run",
+        setting_name="ALERTS_EVALUATION_INTERVAL_CRON",
+        expression=str(nested_celery_cfg.alertbot_cron),
+    )
 )
-alertbot_entry = _beat_schedule["alertbot-run"]
-_beat_schedule.setdefault("alerts-evaluate-rules", alertbot_entry)
+
+validated_entries = _validate_cron_entries(beat_entries)
+for name, task, schedule in validated_entries:
+    _beat_schedule[name] = {
+        "task": task,
+        "schedule": schedule,
+    }
+
+alertbot_entry = _beat_schedule.get("alertbot-run")
+if alertbot_entry:
+    _beat_schedule.setdefault("alerts-evaluate-rules", alertbot_entry)
 _beat_schedule.setdefault(
     "alerts-telegram-health",
     {

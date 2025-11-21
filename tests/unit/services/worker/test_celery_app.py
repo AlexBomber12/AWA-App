@@ -69,8 +69,8 @@ def reload_celery_module():
 
 
 def test_mv_refresh_schedule_enabled(monkeypatch, reload_celery_module):
-    monkeypatch.setenv("SCHEDULE_NIGHTLY_MAINTENANCE", "false")
-    monkeypatch.setenv("SCHEDULE_MV_REFRESH", "true")
+    monkeypatch.setattr(celery_module.settings, "SCHEDULE_NIGHTLY_MAINTENANCE", False, raising=False)
+    monkeypatch.setattr(celery_module.settings, "SCHEDULE_MV_REFRESH", True, raising=False)
     monkeypatch.setattr(celery_module.settings, "MV_REFRESH_CRON", "*/15 * * * *", raising=False)
 
     module = reload_celery_module(celery_module)
@@ -84,8 +84,8 @@ def test_mv_refresh_schedule_enabled(monkeypatch, reload_celery_module):
 
 
 def test_mv_refresh_schedule_invalid_cron_raises(monkeypatch, reload_celery_module):
-    monkeypatch.setenv("SCHEDULE_NIGHTLY_MAINTENANCE", "false")
-    monkeypatch.setenv("SCHEDULE_MV_REFRESH", "true")
+    monkeypatch.setattr(celery_module.settings, "SCHEDULE_NIGHTLY_MAINTENANCE", False, raising=False)
+    monkeypatch.setattr(celery_module.settings, "SCHEDULE_MV_REFRESH", True, raising=False)
     monkeypatch.setattr(celery_module.settings, "MV_REFRESH_CRON", "bad", raising=False)
 
     with pytest.raises(RuntimeError):
@@ -94,8 +94,8 @@ def test_mv_refresh_schedule_invalid_cron_raises(monkeypatch, reload_celery_modu
 
 
 def test_mv_refresh_schedule_disabled(monkeypatch, reload_celery_module):
-    monkeypatch.setenv("SCHEDULE_NIGHTLY_MAINTENANCE", "false")
-    monkeypatch.setenv("SCHEDULE_MV_REFRESH", "false")
+    monkeypatch.setattr(celery_module.settings, "SCHEDULE_NIGHTLY_MAINTENANCE", False, raising=False)
+    monkeypatch.setattr(celery_module.settings, "SCHEDULE_MV_REFRESH", False, raising=False)
 
     module = reload_celery_module(celery_module)
     schedule = module.celery_app.conf.beat_schedule
@@ -103,8 +103,8 @@ def test_mv_refresh_schedule_disabled(monkeypatch, reload_celery_module):
 
 
 def test_mv_refresh_and_nightly_merge_and_handle_import_error(monkeypatch, reload_celery_module):
-    monkeypatch.setenv("SCHEDULE_NIGHTLY_MAINTENANCE", "true")
-    monkeypatch.setenv("SCHEDULE_MV_REFRESH", "true")
+    monkeypatch.setattr(celery_module.settings, "SCHEDULE_NIGHTLY_MAINTENANCE", True, raising=False)
+    monkeypatch.setattr(celery_module.settings, "SCHEDULE_MV_REFRESH", True, raising=False)
     monkeypatch.setattr(celery_module.settings, "NIGHTLY_MAINTENANCE_CRON", "15 3 * * *", raising=False)
     monkeypatch.setattr(celery_module.settings, "MV_REFRESH_CRON", "*/10 * * * *", raising=False)
 
@@ -153,8 +153,22 @@ def test_alerts_schedule_invalid_cron(monkeypatch, reload_celery_module):
     celery_module.settings.ALERTS_EVALUATION_INTERVAL_CRON = "*/5 * * * *"
 
 
+def test_invalid_cron_logs_error(monkeypatch, reload_celery_module, capsys):
+    monkeypatch.setattr(celery_module.settings, "SCHEDULE_NIGHTLY_MAINTENANCE", True, raising=False)
+    monkeypatch.setattr(celery_module.settings, "NIGHTLY_MAINTENANCE_CRON", "0 0 * *", raising=False)
+    monkeypatch.setattr(celery_module.settings, "SCHEDULE_MV_REFRESH", False, raising=False)
+    monkeypatch.setattr(celery_module.settings, "SCHEDULE_LOGISTICS_ETL", False, raising=False)
+
+    with pytest.raises(RuntimeError):
+        reload_celery_module(celery_module)
+    captured = capsys.readouterr()
+    assert "worker.invalid_cron_config" in captured.out or "worker.invalid_cron_config" in captured.err
+    celery_module.settings.NIGHTLY_MAINTENANCE_CRON = "30 2 * * *"
+    celery_module.settings.SCHEDULE_MV_REFRESH = True
+    celery_module.settings.MV_REFRESH_CRON = "30 2 * * *"
+
+
 def test_alertbot_schedule_entries(monkeypatch, reload_celery_module):
-    monkeypatch.delenv("CHECK_INTERVAL_MIN", raising=False)
     module = reload_celery_module(celery_module)
     schedule = module.celery_app.conf.beat_schedule
     assert "alertbot-run" in schedule
