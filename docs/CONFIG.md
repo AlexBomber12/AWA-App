@@ -155,6 +155,14 @@ Call `settings.s3.client_kwargs()` + `settings.s3.client_config()` (or
 | `ALERTS_ENABLED`, `ALERT_RULES_SOURCE`, `ALERTS_EVALUATION_INTERVAL_CRON`, `ALERT_SCHEDULE_CRON` | Rule loading and cadence |
 | `ALERT_EVAL_CONCURRENCY`, `ALERT_SEND_CONCURRENCY` | Worker throughput knobs |
 
+Alert Bot expects a real `TELEGRAM_TOKEN` and `TELEGRAM_DEFAULT_CHAT_ID` whenever `ALERTS_ENABLED=1`.
+Empty or placeholder values now trigger a hard startup failure with an error log that points to the
+missing variable; disable alerts (`ALERTS_ENABLED=0`) to skip validation in non-production runs. Rule
+definitions default to `config/alert_rules.yaml` (`ALERT_RULES_PATH`) and must declare a `rule id`,
+`enabled` flag, and at least one `chat_id`; overrides can be applied via `ALERT_RULES_OVERRIDE`.
+The service validates connectivity to Telegram on startup and exposes per-rule delivery/suppression
+metrics (see `docs/OBSERVABILITY.md`).
+
 ## Email (`settings.email`)
 
 | Variable | Description |

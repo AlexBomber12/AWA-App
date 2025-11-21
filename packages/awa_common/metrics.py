@@ -449,6 +449,12 @@ ALERTBOT_EVENTS_EMITTED_TOTAL = Counter(
     ("rule", *BASE_LABELS),
     registry=REGISTRY,
 )
+ALERTBOT_NOTIFICATIONS_SENT_TOTAL = Counter(
+    "alertbot_notifications_sent_total",
+    "Alert bot notifications attempted by rule and status",
+    ("rule", "status", *BASE_LABELS),
+    registry=REGISTRY,
+)
 ALERTBOT_MESSAGES_SENT_TOTAL = Counter(
     "alertbot_messages_sent_total",
     "Telegram messages attempted by rule and status",
@@ -457,8 +463,14 @@ ALERTBOT_MESSAGES_SENT_TOTAL = Counter(
 )
 ALERTBOT_TELEGRAM_ERRORS_TOTAL = Counter(
     "alertbot_telegram_errors_total",
-    "Telegram API errors grouped by error_code",
-    ("error_code", *BASE_LABELS),
+    "Telegram API errors grouped by error type",
+    ("error_type", *BASE_LABELS),
+    registry=REGISTRY,
+)
+ALERTBOT_RULES_SUPPRESSED_TOTAL = Counter(
+    "alertbot_rules_suppressed_total",
+    "Alert bot rules suppressed or filtered before sending",
+    ("rule", "reason", *BASE_LABELS),
     registry=REGISTRY,
 )
 ALERTBOT_RULE_EVAL_DURATION_SECONDS = Histogram(

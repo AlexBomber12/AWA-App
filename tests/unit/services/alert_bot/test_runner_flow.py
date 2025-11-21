@@ -6,8 +6,9 @@ from pathlib import Path
 import pytest
 
 from awa_common import telegram
+from awa_common.metrics import ALERTS_SENT_TOTAL
 from services.alert_bot import config as alert_config, worker
-from services.alert_bot.decider import NotificationIntent
+from services.alert_bot.decider import AlertRequest
 from services.alert_bot.rules import AlertEvent
 from services.alert_bot.settings import AlertBotSettings
 
@@ -48,13 +49,13 @@ def _settings(**overrides: object) -> AlertBotSettings:
 
 class _StubTransport:
     def __init__(self, results: list[telegram.TelegramSendResult] | None = None) -> None:
-        self.calls: list[tuple[str, NotificationIntent]] = []
+        self.calls: list[AlertRequest] = []
         self._results = results or []
         self.validations: list[set[str]] = []
         self.validation_result: tuple[bool, str | None] = (True, None)
 
-    async def send(self, chat_id: str, intent: NotificationIntent) -> telegram.TelegramSendResult:
-        self.calls.append((chat_id, intent))
+    async def send(self, request: AlertRequest) -> telegram.TelegramSendResult:
+        self.calls.append(request)
         if self._results:
             return self._results.pop(0)
         return telegram.TelegramSendResult(ok=True, status="ok", response=None)  # type: ignore[attr-defined]
@@ -104,7 +105,7 @@ async def test_runner_processes_events(monkeypatch: pytest.MonkeyPatch) -> None:
 
     result = await runner.run(now=datetime(2024, 1, 1, tzinfo=UTC))
     assert result["notifications_sent"] == 1
-    assert transport.calls[0][0] == "@ops"
+    assert transport.calls[0].chat_id == "@ops"
 
 
 @pytest.mark.asyncio
@@ -125,16 +126,16 @@ async def test_dispatch_events_retries(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(worker.asyncio, "sleep", fake_sleep)
 
     stats = worker.BatchStats()
-    intent = NotificationIntent(
+    request = AlertRequest(
         rule_id="roi_drop",
         severity="info",
         message="hello",
-        chat_ids=("@ops",),
+        chat_id="@ops",
         parse_mode="HTML",
         dedupe_key="d",
         disable_web_page_preview=True,
     )
-    await runner._dispatch_intents([intent], stats)
+    await runner._dispatch_requests([request], stats)
     assert stats.messages_sent == 1
     assert stats.retries >= 1
 
@@ -145,17 +146,17 @@ async def test_dispatch_events_skips_when_disabled() -> None:
     runner._sending_enabled = False
     runner._degraded_reason = "no-token"
     stats = worker.BatchStats()
-    intent = NotificationIntent(
+    request = AlertRequest(
         rule_id="roi_drop",
         severity="info",
         message="hello",
-        chat_ids=("@ops",),
+        chat_id="@ops",
         parse_mode="HTML",
         dedupe_key="d",
         disable_web_page_preview=True,
     )
-    await runner._dispatch_intents([intent], stats)
-    assert stats.messages_failed == len(intent.chat_ids)
+    await runner._dispatch_requests([request], stats)
+    assert stats.messages_failed == 1
 
 
 @pytest.mark.asyncio
@@ -197,16 +198,17 @@ async def test_ensure_validation_skips_when_cached(monkeypatch: pytest.MonkeyPat
         raise AssertionError("should not run")
 
     monkeypatch.setattr(runner, "_run_validation", boom)
-    intent = NotificationIntent(
+    request = AlertRequest(
         rule_id="roi_drop",
         severity="info",
         message="hello",
-        chat_ids=("@ops",),
+        chat_id="@ops",
         parse_mode="HTML",
         dedupe_key="k",
         disable_web_page_preview=True,
+        labels={},
     )
-    await runner._ensure_validation(runtime, [intent])
+    await runner._ensure_validation(runtime, [request])
 
 
 def test_resolve_rules_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -256,7 +258,7 @@ def test_load_config_branches(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_send_intent_failure() -> None:
+async def test_send_request_failure() -> None:
     fail_response = telegram.TelegramResponse(
         ok=False, status_code=500, payload={}, description="err", error_code=500, retry_after=None
     )  # type: ignore[attr-defined]
@@ -265,16 +267,17 @@ async def test_send_intent_failure() -> None:
     runner = _runner(transport=transport)
     runner._sending_enabled = True
     stats = worker.BatchStats()
-    intent = NotificationIntent(
+    request = AlertRequest(
         rule_id="roi_drop",
         severity="info",
         message="hello",
-        chat_ids=("@ops",),
+        chat_id="@ops",
         parse_mode="HTML",
         dedupe_key="d",
         disable_web_page_preview=True,
+        labels={},
     )
-    await runner._send_intent("@ops", intent, stats)
+    await runner._send_request(request, stats)
     assert stats.messages_failed == 1
 
 
@@ -286,3 +289,51 @@ async def test_run_no_rules(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(runner, "_default_rules", lambda: [])
     summary = await runner.run(now=datetime(2024, 1, 1, tzinfo=UTC))
     assert summary["rules_total"] == 0
+
+
+@pytest.mark.asyncio
+async def test_runner_integration_happy_path(monkeypatch: pytest.MonkeyPatch) -> None:
+    runtime = _make_runtime()
+
+    class DummyHTTPClient:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, dict[str, object]]] = []
+
+        async def post(self, url: str, json: dict[str, object]):
+            self.calls.append((url, json))
+
+            class _Resp:
+                def __init__(self) -> None:
+                    self.status_code = 200
+
+                def json(self) -> dict[str, object]:
+                    return {"ok": True}
+
+                async def aclose(self) -> None:
+                    return None
+
+            return _Resp()
+
+    async_client = telegram.AsyncTelegramClient(token="12345:ABCDEabcde", client=DummyHTTPClient())
+    labels = {"service": "test", "env": "test", "version": "test"}
+    transport = worker.TelegramTransport(client=async_client, metric_labels=labels)
+    runner = _runner(settings=_settings(), transport=transport)
+    monkeypatch.setattr(runner, "_load_config", lambda: runtime)
+
+    async def fake_validate(_runtime, _requests, fail_fast=False):
+        runner._sending_enabled = True
+        runner._degraded_reason = None
+
+    monkeypatch.setattr(runner, "_ensure_validation", fake_validate)
+
+    async def fake_evaluate(_rule):
+        return [AlertEvent(rule_id="roi_drop", chat_ids=["@ops"], text="hi", dedupe_key="k")]
+
+    monkeypatch.setattr(worker, "evaluate_rule", fake_evaluate)
+    sent_metric = ALERTS_SENT_TOTAL.labels(
+        rule="roi_drop", severity="info", channel="telegram", status="success", **labels
+    )
+    before = sent_metric._value.get()
+    result = await runner.run(now=datetime(2024, 1, 1, tzinfo=UTC))
+    assert result["notifications_sent"] == 1
+    assert sent_metric._value.get() == before + 1

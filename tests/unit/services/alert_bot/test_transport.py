@@ -4,7 +4,7 @@ import pytest
 
 from awa_common import telegram
 from awa_common.metrics import ALERT_ERRORS_TOTAL, ALERTS_SENT_TOTAL
-from services.alert_bot.decider import NotificationIntent
+from services.alert_bot.decider import AlertRequest
 from services.alert_bot.transport import TelegramTransport
 
 
@@ -27,12 +27,12 @@ class StubAsyncClient:
         return telegram.TelegramResponse(ok=False, status_code=403, payload={}, description="forbidden")  # type: ignore[attr-defined]
 
 
-def _intent() -> NotificationIntent:
-    return NotificationIntent(
+def _intent() -> AlertRequest:
+    return AlertRequest(
         rule_id="roi",
         severity="critical",
+        chat_id="123",
         message="alert",
-        chat_ids=("123",),
         parse_mode="HTML",
         dedupe_key="roi:1",
         disable_web_page_preview=True,
@@ -54,7 +54,7 @@ async def test_transport_records_success_metrics() -> None:
         **labels,
     )
     before = metric._value.get()
-    await transport.send("123", intent)
+    await transport.send(intent)
     assert metric._value.get() == before + 1
 
 
@@ -80,10 +80,10 @@ async def test_transport_records_failure_metrics() -> None:
         status="failed",
         **labels,
     )
-    error_metric = ALERT_ERRORS_TOTAL.labels(rule=intent.rule_id, type="http_error", **labels)
+    error_metric = ALERT_ERRORS_TOTAL.labels(rule=intent.rule_id, type="HTTP_5xx", **labels)
     before_sent = sent_metric._value.get()
     before_err = error_metric._value.get()
-    await transport.send("123", intent)
+    await transport.send(intent)
     assert sent_metric._value.get() == before_sent + 1
     assert error_metric._value.get() == before_err + 1
 
