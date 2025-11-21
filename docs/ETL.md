@@ -13,6 +13,10 @@ components in `packages/awa_common` to deliver repeatable pipelines that survive
     `packages/awa_common/db/load_log.py`.
   - `payload_meta` JSONB storing fingerprints, sizes, hashes, and optional extras.
   - `processed_by`, `task_id`, `duration_ms`, `error_message`, `created_at`, `updated_at`.
+- Populate `payload_meta` with enough breadcrumbs to debug a run without reprocessing: include
+  `source_uri` (or URI list), `target_table`, `dialect/report_type`, `rows`, a file hash, and any
+  run flags such as `streaming`/`force`. Using `on_duplicate="update_meta"` with `process_once`
+  will mark the row as `skipped` on duplicates while refreshing that metadata.
 - `compute_idempotency_key` and `build_payload_meta` prefer stable remote metadata (`etag`,
   `last_modified`, `content_length`, `content_md5`), fall back to local file stats, then the raw
   payload (`blake2b` hash). Persisting these values guarantees we can prove what was loaded.
@@ -83,12 +87,15 @@ components in `packages/awa_common` to deliver repeatable pipelines that survive
           record_etl_skip("keepa_ingestor")
           return
       with record_etl_run("keepa_ingestor"):
-          # use handle.session for transactional work
-          ingest_rows(handle.session, payload_meta)
+      # use handle.session for transactional work
+      ingest_rows(handle.session, payload_meta)
   ```
 - On entry the guard inserts a `pending` row, commits, and returns a `ProcessHandle`. Exiting with no
   exception marks the row `success` and records `duration_ms`; raising an exception rolls back and
   marks `failed` with the truncated message (max 1024 chars).
+- When a manual `--force` or replay run is necessary, generate a new idempotency key (append a
+  timestamp or hash of the override parameters) so the guard does not skip the attempt; otherwise
+  duplicates default to `status='skipped'`.
 - Celery schedules live in `services/worker/celery_app.py`. Environment switches such as
   `SCHEDULE_MV_REFRESH`, `MV_REFRESH_CRON`, and `SCHEDULE_LOGISTICS_ETL` control when pipelines run
   and are validated through `awa_common.cron_config.CronSchedule`. Invalid cron strings are logged
@@ -108,6 +115,26 @@ components in `packages/awa_common` to deliver repeatable pipelines that survive
      supports it (see `services/api/routes/ingest.submit_ingest`).
 - Because writes happen in a single transaction inside `process_once`, reruns are atomic—either the
   run completes and marks `success` or nothing is committed.
+
+## Supported pipelines
+
+- **CSV/XLSX ingest (`etl.load_csv`)** – entrypoints: `python -m etl.load_csv --source ... --table auto` and
+  the Celery task `ingest.import_file`. Idempotency key comes from the uploaded file hash/dialect (or the
+  API-provided key) and `payload_meta` records `source_uri`, `target_table`, `dialect`, `rows`,
+  `file_sha256`, and flags such as `streaming`/`force`. Returns are handled through the
+  `returns_report` dialect; the legacy `services/returns_etl` CLI was retired (see
+  `docs/legacy_samples/returns_loader.md`).
+- **Helium10 fees (`services.fees_h10.worker.refresh_fees`)** – keyed on the sorted ASIN list with metadata
+  for `asin_count` and source URL; duplicate keys set `status='skipped'` before any API calls.
+- **SP fees (`services.etl.sp_fees`)** – keyed on mode + SKU list + date; supports live SP API or fixture
+  input and upserts into `fees_raw` using the shared guard.
+- **Logistics ETL (`services.logistics_etl.flow.run_once_with_guard` via Celery `logistics.etl.full`)** –
+  fingerprints each snapshot by `seqno`/SHA256 and records `rows_in`/`rows_upserted` in `payload_meta`.
+  Repeat runs with the same fingerprint are skipped; the historical `logistics_loadlog` table remains for
+  analytics but idempotency is enforced via `load_log`.
+- **Price importer (`services.price_importer.import`)** – keyed on vendor and input file stats; run with
+  `python -m services.price_importer.import --file ... --vendor ...`. `payload_meta` is updated with vendor
+  and batch counters, and duplicate files are skipped unless a new idempotency key is supplied.
 
 ## Adding a Connector (Checklist)
 
@@ -148,6 +175,8 @@ all environments.
 
 ## ROI / Returns Materialized Views
 
+- Returns imports now rely on the shared ingest path (`etl.load_csv` with `returns_report`); the retired
+  `services/returns_etl` helper lives only as a reference in `docs/legacy_samples/returns_loader.md`.
 - The stats APIs (`/stats/*` and `/score`) query the ROI view configured via `ROI_VIEW_NAME`. Point it
   at `mat_v_roi_full` in production so requests hit the materialized view refreshed by the
   `db.refresh_roi_mvs` Celery task (defined in `services/worker/maintenance.py`). The task runs after

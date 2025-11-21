@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import time
 from collections.abc import Awaitable, Callable, Coroutine
 from decimal import ROUND_HALF_UP, Decimal
@@ -9,15 +10,21 @@ from typing import TYPE_CHECKING, Any, cast
 import httpx
 import structlog
 from celery import Celery, shared_task
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, text, update
+from sqlalchemy.orm import sessionmaker
 
+from awa_common.db.load_log import LOAD_LOG
 from awa_common.dsn import build_dsn
+from awa_common.etl.guard import process_once
+from awa_common.etl.idempotency import build_payload_meta, compute_idempotency_key
 from awa_common.logging import configure_logging
 from awa_common.metrics import (
     init as metrics_init,
     instrument_task as _instrument_task,
     record_etl_batch,
     record_etl_retry,
+    record_etl_run,
+    record_etl_skip,
 )
 from awa_common.sentry import init_sentry
 from awa_common.settings import settings as SETTINGS
@@ -72,6 +79,17 @@ else:
     instrument_task = _instrument_task
 
 logger = structlog.get_logger(__name__).bind(component="fees_h10")
+SOURCE_NAME = "fees_h10"
+HELIUM_ENDPOINT_PATH = "/v1/profits/fees"
+
+
+def _helium_base_url() -> str:
+    etl_cfg = getattr(SETTINGS, "etl", None)
+    base = getattr(etl_cfg, "helium10_base_url", None) or getattr(SETTINGS, "HELIUM10_BASE_URL", "")
+    return (base or "https://api.helium10.com").rstrip("/")
+
+
+HELIUM_ENDPOINT = f"{_helium_base_url()}{HELIUM_ENDPOINT_PATH}"
 
 app = Celery("fees_h10", broker=SETTINGS.BROKER_URL or "memory://")
 app.conf.beat_schedule = {"refresh-daily": {"task": "fees.refresh", "schedule": 86400.0}}
@@ -96,6 +114,19 @@ def list_active_asins() -> list[str]:
         return []
     finally:
         engine.dispose()
+
+
+def build_idempotency(asins: list[str]) -> tuple[str, dict[str, Any]]:
+    payload = json.dumps({"asins": sorted(asins)}, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    key = compute_idempotency_key(content=payload)
+    meta = build_payload_meta(
+        extra={
+            "asin_count": len(asins),
+            "mode": "live",
+            "source_url": HELIUM_ENDPOINT,
+        }
+    )
+    return key, meta
 
 
 def _quantize(value: Any) -> Decimal:
@@ -161,10 +192,10 @@ async def _fetch_single(asin: str, semaphore: asyncio.Semaphore) -> dict[str, An
         return row
 
 
-async def _bulk(asins: list[str]) -> None:
+async def _bulk(asins: list[str]) -> dict[str, int]:
     if not asins:
         logger.info("fees_h10.no_asins", component="fees_h10")
-        return
+        return {"requested": 0, "processed": 0, "failures": 0, "inserted": 0, "updated": 0}
 
     semaphore = asyncio.Semaphore(max(1, SETTINGS.H10_MAX_CONCURRENCY))
     start = time.perf_counter()
@@ -183,12 +214,12 @@ async def _bulk(asins: list[str]) -> None:
 
     if not rows:
         record_etl_batch("fees_h10", processed=0, errors=failures, duration_s=time.perf_counter() - start)
-        return
+        return {"requested": len(asins), "processed": 0, "failures": failures, "inserted": 0, "updated": 0}
 
     if not _database_configured():
         logger.warning("fees_h10.database_unconfigured", component="fees_h10", pending_rows=len(rows))
         record_etl_batch("fees_h10", processed=0, errors=failures, duration_s=time.perf_counter() - start)
-        return
+        return {"requested": len(asins), "processed": 0, "failures": failures, "inserted": 0, "updated": 0}
 
     summary = await db_async.upsert_fee_rows(rows)
     duration_ms = int((time.perf_counter() - start) * 1000)
@@ -208,12 +239,19 @@ async def _bulk(asins: list[str]) -> None:
         errors=failures,
         duration_s=duration_ms / 1000,
     )
+    return {
+        "requested": len(asins),
+        "processed": len(rows),
+        "failures": failures,
+        "inserted": summary.get("inserted", 0),
+        "updated": summary.get("updated", 0),
+    }
 
 
-async def _run_refresh(asins: list[str]) -> None:
+async def _run_refresh(asins: list[str]) -> dict[str, int]:
     await http_client.init_http()
     try:
-        await _bulk(asins)
+        return await _bulk(asins)
     finally:
         await http_client.close_http()
         await close_http_client()
@@ -224,4 +262,34 @@ async def _run_refresh(asins: list[str]) -> None:
 @instrument_task("fees_h10_update", emit_metrics=False)
 def refresh_fees() -> None:
     asins = list_active_asins()
-    async_to_sync(_run_refresh)(asins)
+    idempotency_key, payload_meta = build_idempotency(asins)
+    engine = create_engine(build_dsn(sync=True), future=True)
+    SessionLocal = sessionmaker(bind=engine, expire_on_commit=False, future=True)
+    summary: dict[str, int] | None = None
+    try:
+        with process_once(
+            SessionLocal,
+            source=SOURCE_NAME,
+            payload_meta=payload_meta,
+            idempotency_key=idempotency_key,
+            on_duplicate="update_meta",
+        ) as handle:
+            if handle is None:
+                record_etl_skip(SOURCE_NAME)
+                logger.info(
+                    "fees_h10.skipped",
+                    idempotency_key=idempotency_key,
+                    asin_count=len(asins),
+                )
+                return
+
+            with record_etl_run(SOURCE_NAME):
+                summary = async_to_sync(_run_refresh)(asins)
+            if handle:
+                meta = dict(payload_meta)
+                meta.update(summary or {})
+                handle.session.execute(
+                    update(LOAD_LOG).where(LOAD_LOG.c.id == handle.load_log_id).values(payload_meta=meta)
+                )
+    finally:
+        engine.dispose()

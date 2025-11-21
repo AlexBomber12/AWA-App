@@ -5,7 +5,7 @@ import pytest
 from sqlalchemy import create_engine, text
 
 from awa_common.dsn import build_dsn
-from etl.load_csv import _sha256_file, import_file
+from etl.load_csv import import_file
 
 pytestmark = [
     pytest.mark.integration,
@@ -15,7 +15,6 @@ pytestmark = [
 
 def test_idempotent_load(tmp_path):
     csv = Path("tests/fixtures/sample_returns.csv")
-    file_hash = _sha256_file(csv)
 
     res1 = import_file(str(csv))
     assert res1["status"] == "success"
@@ -29,13 +28,13 @@ def test_idempotent_load(tmp_path):
         statuses = (
             conn.execute(
                 text(
-                    "SELECT status FROM load_log WHERE target_table='returns_raw' AND file_hash=:h ORDER BY started_at"
+                    "SELECT status FROM load_log WHERE source='ingest.import_file' AND idempotency_key=:k ORDER BY id"
                 ),
-                {"h": file_hash},
+                {"k": res1["idempotency_key"]},
             )
             .scalars()
             .all()
         )
-    assert statuses.count("success") >= 2
+    assert statuses.count("success") >= 1
     assert statuses.count("skipped") >= 1
     engine.dispose()

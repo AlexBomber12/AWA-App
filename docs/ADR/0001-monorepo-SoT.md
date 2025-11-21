@@ -63,8 +63,9 @@ look.
 
 ## Status update
 
-The only active migration root is `services/api/migrations`, and `services/returns_etl/migrations/env.py`
-has been removed to enforce that single source of truth.
+The only active migration root is `services/api/migrations`; the legacy
+`services/returns_etl` package was retired and its migrations removed to enforce that
+single source of truth.
 
 ## Links
 

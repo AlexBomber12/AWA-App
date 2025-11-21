@@ -41,7 +41,12 @@ def test_upload(api_client, monkeypatch):
 
     engine = create_engine(build_dsn(sync=True))
     with engine.connect() as conn:
-        row = conn.execute(text("SELECT inserted_rows, status FROM load_log"))
-        result = row.fetchone()
+        status, rows = conn.execute(
+            text(
+                "SELECT status, payload_meta->>'rows' FROM load_log "
+                "WHERE source='ingest.import_file' ORDER BY id DESC LIMIT 1"
+            )
+        ).one()
 
-    assert result == (2, "success")
+    assert status == "success"
+    assert int(rows) == 2
