@@ -25,6 +25,32 @@ logger = structlog.get_logger(__name__)
 _JWT = JsonWebToken(["RS256", "PS256"])
 
 
+class _JSONHTTPClientWrapper:
+    def __init__(self, client: Any):
+        self._client = client
+
+    async def get(self, url: str, **kwargs: Any):
+        kwargs.pop("allowed_statuses", None)
+        return await self._client.get(url, **kwargs)
+
+    async def get_json(self, url: str, **kwargs: Any):
+        kwargs.pop("allowed_statuses", None)
+        response = await self._client.get(url, **kwargs)
+        try:
+            return response.json()
+        finally:
+            close = getattr(response, "aclose", None)
+            if callable(close):
+                await close()
+            elif hasattr(response, "close"):
+                response.close()
+
+    async def aclose(self) -> None:
+        close = getattr(self._client, "aclose", None)
+        if callable(close):
+            await close()
+
+
 def _suppress_cancelled(task: asyncio.Task[Any]) -> None:
     with contextlib.suppress(asyncio.CancelledError):
         task.result()
@@ -68,7 +94,17 @@ class AsyncJwksProvider:
         )
         pool = max(int(self._cfg_default.OIDC_JWKS_POOL_LIMIT or 1), 1)
         limits = httpx.Limits(max_connections=pool, max_keepalive_connections=pool)
-        self._client = client or httpx.AsyncClient(timeout=timeout, limits=limits)
+        max_retries = max(int(getattr(self._cfg_default, "OIDC_JWKS_MAX_RETRIES", 1) or 1), 1)
+        base_client = client or AsyncHTTPClient(
+            integration="oidc_jwks",
+            timeout=timeout,
+            limits=limits,
+            total_timeout_s=float(self._cfg_default.OIDC_JWKS_TIMEOUT_TOTAL_S or 5.0),
+            max_retries=max_retries,
+        )
+        if not hasattr(base_client, "get_json"):
+            base_client = _JSONHTTPClientWrapper(base_client)
+        self._client = base_client
         self._client_owned = client is None
         self._cache: dict[str, _JWKSCacheEntry] = {}
         self._locks: dict[str, asyncio.Lock] = {}
@@ -184,7 +220,7 @@ class AsyncJwksProvider:
         if cached and cached.etag:
             headers["If-None-Match"] = cached.etag
         try:
-            response = await self._client.get(jwks_uri, headers=headers)
+            response = await self._client.get(jwks_uri, headers=headers, allowed_statuses=frozenset({304}))
             if response.status_code == 304 and cached is not None:
                 return _JWKSCacheEntry(
                     issuer=issuer,
