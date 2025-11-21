@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
 import inspect
 import json
 import time
@@ -88,11 +89,18 @@ async def _run_import(args: argparse.Namespace) -> int:
         path=file_path,
         extra={"vendor": args.vendor, "batch_size": args.batch_size, "dry_run": args.dry_run},
     )
+    file_hash = None
+    if file_path.exists():
+        try:
+            file_hash = hashlib.sha256(file_path.read_bytes()).hexdigest()
+        except OSError:
+            file_hash = None
     key_seed = json.dumps(
         {
             "vendor_id": vendor_id,
             "file": file_path.name,
             "size": file_path.stat().st_size if file_path.exists() else None,
+            "sha256": file_hash,
         },
         sort_keys=True,
         separators=(",", ":"),
