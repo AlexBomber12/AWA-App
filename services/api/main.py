@@ -44,6 +44,8 @@ from services.api.security import install_security
 from services.api.sentry_config import init_sentry_if_configured
 
 from .routes import health as health_router
+from .routes.decision_engine import router as decision_router
+from .routes.inbox import router as inbox_router
 from .routes.ingest import router as ingest_router
 from .routes.roi import router as roi_router
 from .routes.score import router as score_router
@@ -229,6 +231,8 @@ def create_app() -> FastAPI:
 
     app.include_router(upload_router, prefix="/upload")
     app.include_router(ingest_router)
+    app.include_router(inbox_router)
+    app.include_router(decision_router)
     app.include_router(roi_router)
     app.include_router(stats_router)
     app.include_router(score_router)

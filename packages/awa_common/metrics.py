@@ -373,6 +373,32 @@ STATS_QUERY_DURATION_SECONDS = Histogram(
     registry=REGISTRY,
 )
 
+DECISION_TASKS_CREATED_TOTAL = Counter(
+    "decision_tasks_created_total",
+    "Decision tasks created by the decision engine",
+    ("decision", *BASE_LABELS),
+    registry=REGISTRY,
+)
+DECISION_TASKS_RESOLVED_TOTAL = Counter(
+    "decision_tasks_resolved_total",
+    "Decision tasks resolved grouped by decision and state",
+    ("decision", "state", *BASE_LABELS),
+    registry=REGISTRY,
+)
+DECISION_ENGINE_LATENCY_SECONDS = Histogram(
+    "decision_engine_latency_seconds",
+    "Decision engine runtime in seconds",
+    (*BASE_LABELS,),
+    buckets=HTTP_BUCKETS,
+    registry=REGISTRY,
+)
+DECISION_INBOX_SIZE = Gauge(
+    "decision_inbox_size",
+    "Decision inbox size by state",
+    ("state", *BASE_LABELS),
+    registry=REGISTRY,
+)
+
 HTTP_CLIENT_REQUESTS_TOTAL = Counter(
     "http_client_requests_total",
     "Outbound HTTP requests",

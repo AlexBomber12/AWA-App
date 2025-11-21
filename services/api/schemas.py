@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Literal
+import datetime as dt
+from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import Field
 
@@ -153,6 +154,73 @@ class SkuApprovalResponse(BaseStrictModel):
     changed: int = Field(..., description="Number of rows changed by the approval operation")
 
 
+class DecisionReasonItem(BaseStrictModel):
+    title: str
+    detail: str | None = None
+    code: str | None = None
+    metric: str | None = None
+
+
+DecisionReason = DecisionReasonItem | str
+
+
+class DecisionAlternative(BaseStrictModel):
+    decision: str
+    label: str | None = None
+    default_action: str | None = None
+    why: list[DecisionReason] | None = None
+    impact: str | None = None
+
+
+class DecisionTask(BaseStrictModel):
+    id: str
+    source: str
+    entity: dict[str, Any]
+    decision: str
+    priority: int
+    deadline_at: dt.datetime | None = None
+    default_action: str | None = None
+    why: list[DecisionReason] = Field(default_factory=list)
+    alternatives: list[DecisionAlternative] = Field(default_factory=list)
+    next_request_at: dt.datetime | None = None
+    state: str
+    assignee: str | None = None
+    summary: str | None = None
+    metrics: dict[str, Any] | None = None
+    created_at: dt.datetime | None = None
+    updated_at: dt.datetime | None = None
+
+
+class DecisionTaskSummary(BaseStrictModel):
+    pending: int = 0
+    applied: int = 0
+    dismissed: int = 0
+    expired: int = 0
+    snoozed: int = 0
+    open: int = 0
+    in_progress: int = 0
+    blocked: int = 0
+
+
+class DecisionTaskListResponse(BaseStrictModel):
+    items: list[DecisionTask]
+    pagination: PaginationMeta
+    summary: DecisionTaskSummary | None = None
+
+
+class TaskUpdateRequest(BaseStrictModel):
+    state: str | None = None
+    assignee: str | None = None
+    note: str | None = None
+    next_request_at: dt.datetime | None = None
+
+
+class DecisionPreviewResponse(BaseStrictModel):
+    planned: list[DecisionTask]
+    generated: int
+    candidates: int
+
+
 __all__ = [
     "ErrorCode",
     "ErrorResponse",
@@ -172,4 +240,12 @@ __all__ = [
     "SkuChartPoint",
     "SkuResponse",
     "SkuApprovalResponse",
+    "DecisionAlternative",
+    "DecisionPreviewResponse",
+    "DecisionReason",
+    "DecisionReasonItem",
+    "DecisionTask",
+    "DecisionTaskListResponse",
+    "DecisionTaskSummary",
+    "TaskUpdateRequest",
 ]
