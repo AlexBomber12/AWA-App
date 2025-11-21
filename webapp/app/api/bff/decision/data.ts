@@ -1,130 +1,209 @@
-import type { Rule, SimulationScenario } from "@/lib/api/decisionClient";
+import type { DecisionPayload, Rule, SimulationInput, SimulationScenario } from "@/lib/api/decisionTypes";
 
-const now = Date.now();
+const BASE_DATE = Date.parse("2024-04-15T12:00:00.000Z");
+
+const buildDecision = (decision: DecisionPayload): DecisionPayload => ({
+  ...decision,
+  why: [...decision.why],
+  alternatives: [...decision.alternatives],
+});
 
 export const DECISION_RULES: Rule[] = [
   {
-    id: "rule-1",
+    id: "rule-guardrail",
     name: "ROI Guardrail Enforcement",
-    description: "Flags SKUs with ROI below 18% for operator review.",
-    active: true,
-    scope: "sku",
-    params: {
-      roiMin: 18,
-      rollingWindowDays: 7,
-    },
-    createdAt: new Date(now - 10 * 24 * 60 * 60 * 1000).toISOString(),
-    updatedAt: new Date(now - 2 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: "rule-2",
-    name: "Vendor Lead Time Drift",
-    description: "Detect vendor shipments that exceed planned lead times by > 2 days.",
-    active: false,
-    scope: "vendor",
-    params: {
-      leadTimeToleranceDays: 2,
-      alertThreshold: 0.2,
-    },
-    createdAt: new Date(now - 30 * 24 * 60 * 60 * 1000).toISOString(),
-    updatedAt: new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-  {
-    id: "rule-3",
-    name: "Category Promo Simulation",
-    description: "Projects ROI impact when promotional pricing is applied to top SKUs.",
-    active: true,
+    description: "Flags SKU and vendor pairs when ROI drops below 15% and proposes a discount request.",
     scope: "category",
-    params: {
-      categories: ["Home", "Outdoors"],
-      cadenceDays: 14,
-    },
-    createdAt: new Date(now - 45 * 24 * 60 * 60 * 1000).toISOString(),
-    updatedAt: new Date(now - 5 * 24 * 60 * 60 * 1000).toISOString(),
+    conditions: [
+      { category: "Home", field: "roi", operator: "<", value: 15, cadenceDays: 7 },
+      {
+        expression: "volatility_pct > 5",
+        value: "rolling_volatility",
+        operator: ">",
+        cadenceDays: 3,
+      },
+    ],
+    actions: [
+      { action: "request_discount", defaultAction: "Email vendor for 5% discount", undoWindowHours: 6 },
+      { action: "wait_until", cadenceDays: 1, defaultAction: "Observe for 24h" },
+    ],
+    cadence: { type: "rolling", days: 7 },
+    isActive: true,
+    createdAt: new Date(BASE_DATE - 30 * 24 * 60 * 60 * 1000).toISOString(),
+    updatedAt: new Date(BASE_DATE - 5 * 24 * 60 * 60 * 1000).toISOString(),
   },
   {
-    id: "rule-4",
+    id: "rule-vendor-late",
+    name: "Vendor Lead Time Drift",
+    description: "Detects vendor shipments exceeding planned lead time by > 2 days and blocks repricing.",
+    scope: "vendor",
+    conditions: [
+      { field: "lead_time_slip", operator: ">", value: 2, vendorId: "2042" },
+      { field: "on_time_rate", operator: "<", value: 0.8, vendorId: "2042" },
+    ],
+    actions: [{ action: "blocked_observe", defaultAction: "Pause repricing until inbound clears" }],
+    cadence: { type: "calendar", days: 14 },
+    isActive: false,
+    createdAt: new Date(BASE_DATE - 24 * 24 * 60 * 60 * 1000).toISOString(),
+    updatedAt: new Date(BASE_DATE - 12 * 24 * 60 * 60 * 1000).toISOString(),
+  },
+  {
+    id: "rule-category-promo",
+    name: "Category Promo Simulation",
+    description: "Projects ROI impact for promo campaigns in Home and Outdoors categories.",
+    scope: "campaign",
+    conditions: [
+      { category: "Home", operator: "in", value: ["Home", "Outdoors"] },
+      { field: "promo_flag", operator: "==", value: true, cadenceDays: 14 },
+    ],
+    actions: [
+      { action: "update_price", defaultAction: "Apply +1.5% guardrail adjustment" },
+      { action: "wait_until", defaultAction: "Observe promo performance for 24h" },
+    ],
+    cadence: { type: "calendar", days: 14 },
+    isActive: true,
+    createdAt: new Date(BASE_DATE - 40 * 24 * 60 * 60 * 1000).toISOString(),
+    updatedAt: new Date(BASE_DATE - 8 * 24 * 60 * 60 * 1000).toISOString(),
+  },
+  {
+    id: "rule-global-harm",
     name: "Global Price Harmonization",
-    description: "Ensures price deltas stay within tolerance across geographies.",
-    active: true,
+    description: "Ensures price deltas stay within tolerance across NA/EU regions.",
     scope: "global",
-    params: {
-      maxDeltaPercent: 7.5,
-      includeVendors: ["Northwind Foods", "Evergreen Brands"],
-    },
-    createdAt: new Date(now - 60 * 24 * 60 * 60 * 1000).toISOString(),
-    updatedAt: new Date(now - 3 * 24 * 60 * 60 * 1000).toISOString(),
+    conditions: [{ field: "geo_price_delta", operator: ">", value: 7.5, expression: "delta_pct" }],
+    actions: [
+      { action: "update_price", defaultAction: "Raise NA price by 1%" },
+      { action: "continue", defaultAction: "Leave EU prices unchanged" },
+    ],
+    cadence: { type: "rolling", days: 10 },
+    isActive: true,
+    createdAt: new Date(BASE_DATE - 60 * 24 * 60 * 60 * 1000).toISOString(),
+    updatedAt: new Date(BASE_DATE - 6 * 24 * 60 * 60 * 1000).toISOString(),
   },
 ];
 
 export const SIMULATION_SCENARIOS: SimulationScenario[] = [
   {
-    id: "scenario-1",
+    id: "scenario-guardrail-1",
     name: "Home ROI boost",
-    description: "Applies ROI guardrail rule to the Home category promotion batch.",
-    ruleId: "rule-3",
+    description: "Applies ROI guardrail rule to the Home category promo batch.",
+    ruleId: "rule-guardrail",
     input: {
-      roiDelta: 4.5,
-      priceChangePct: 2,
+      price: 24.5,
+      cost: 13.2,
+      volatility: 5.5,
+      category: "Home",
+      observeOnly: false,
     },
-    result: {
-      summary: "Projected +3.1% blended ROI for 146 SKUs with minimal vendor risk.",
-      stats: {
-        affectedSkus: 146,
-        avgRoiDelta: 3.1,
-        blockedVendors: 2,
-      },
-      sampleDecisions: [
-        {
-          decision: "update_price",
-          priority: "high",
-          deadlineAt: new Date(now + 24 * 60 * 60 * 1000).toISOString(),
-          defaultAction: "Apply +1.5% price increase",
-          why: ["ROI under guardrail in last 48h", "Promo discount expiring"],
-          alternatives: ["Request discount", "Wait until next promo window"],
-        },
-        {
-          decision: "request_price",
-          priority: "medium",
-          defaultAction: "Send updated quote request to vendor",
-          why: ["Last quote expired", "Freight cost increased 5%"],
-          alternatives: ["Switch vendor", "Snooze until inbound shipment"],
-          nextRequestAt: new Date(now + 72 * 60 * 60 * 1000).toISOString(),
-        },
-      ],
+    metrics: {
+      roi: 18.6,
+      riskAdjustedRoi: 16.2,
+      maxCogs: 14.8,
+      revenueImpact: 4200,
     },
+    decisions: [
+      buildDecision({
+        decision: "update_price",
+        priority: "high",
+        deadlineAt: new Date(BASE_DATE + 24 * 60 * 60 * 1000).toISOString(),
+        defaultAction: "Apply +1.5% price increase",
+        why: ["ROI under guardrail in last 48h", "Promo discount expiring"],
+        alternatives: [
+          { decision: "request_discount", label: "Request vendor support" },
+          { decision: "wait_until", label: "Re-run simulation tomorrow" },
+        ],
+      }),
+      buildDecision({
+        decision: "request_price",
+        priority: "medium",
+        defaultAction: "Send updated quote request to vendor",
+        why: ["Last quote expired", "Freight cost increased 5%"],
+        alternatives: [
+          { decision: "switch_vendor", label: "Switch vendor for promo duration" },
+          { decision: "continue", label: "Keep current price" },
+        ],
+        nextRequestAt: new Date(BASE_DATE + 72 * 60 * 60 * 1000).toISOString(),
+      }),
+    ],
+    createdAt: new Date(BASE_DATE - 2 * 24 * 60 * 60 * 1000).toISOString(),
   },
   {
-    id: "scenario-2",
+    id: "scenario-vendor-2",
     name: "Vendor backlog follow-up",
     description: "Tests vendor backlog rule with increased lead-time tolerance.",
-    ruleId: "rule-2",
+    ruleId: "rule-vendor-late",
     input: {
-      leadTimeToleranceDays: 4,
+      volatility: 3.2,
+      observeOnly: true,
     },
+    metrics: {
+      roi: 16.4,
+      riskAdjustedRoi: 12.2,
+      maxCogs: 11.1,
+    },
+    decisions: [
+      buildDecision({
+        decision: "blocked_observe",
+        priority: "medium",
+        defaultAction: "Pause repricing until inbound clears",
+        why: ["Lead time variance exceeds tolerance", "On-time rate below 80%"],
+        alternatives: [{ decision: "wait_until", label: "Re-evaluate after receiving inbound" }],
+      }),
+    ],
+    createdAt: new Date(BASE_DATE - 7 * 24 * 60 * 60 * 1000).toISOString(),
   },
   {
-    id: "scenario-3",
+    id: "scenario-harmonize-3",
     name: "Global harmonization dry run",
-    description: "Ensures the global price harmonization rule can be simulated.",
-    ruleId: "rule-4",
+    description: "Ensures global price harmonization rule can be simulated.",
+    ruleId: "rule-global-harm",
     input: {
-      region: "NA/EU",
-      tolerance: 5.5,
+      category: "Electronics",
+      price: 32.4,
+      cost: 14.8,
     },
+    metrics: {
+      roi: 21.5,
+      riskAdjustedRoi: 18.5,
+      maxCogs: 18.4,
+      revenueImpact: 1800,
+    },
+    decisions: [
+      buildDecision({
+        decision: "update_price",
+        priority: "medium",
+        defaultAction: "Raise NA price by 1%",
+        why: ["Price delta between NA/EU exceeds 7.5%"],
+        alternatives: [{ decision: "continue", label: "Leave pricing as-is" }],
+      }),
+    ],
+    createdAt: new Date(BASE_DATE - 14 * 24 * 60 * 60 * 1000).toISOString(),
   },
 ];
 
 export const findRuleById = (ruleId: string) => DECISION_RULES.find((rule) => rule.id === ruleId);
 
-const serializeInput = (input: Record<string, unknown>) => JSON.stringify(input, Object.keys(input).sort());
+const serializeInput = (input: SimulationInput) => JSON.stringify(input ?? {}, Object.keys(input ?? {}).sort());
 
-export const buildSimulationScenario = (ruleId: string, input: Record<string, unknown>): SimulationScenario => {
+export const buildSimulationScenario = (ruleId: string, input: SimulationInput): SimulationScenario => {
   const rule = findRuleById(ruleId);
   const reference = serializeInput(input ?? {});
   const score = reference.length + ruleId.length;
-  const affectedSkus = 40 + score * 2;
-  const roiDelta = Number((Math.min(5 + score * 0.1, 15)).toFixed(2));
+  const roi = Math.min(24, 12 + score * 0.2);
+  const riskAdjustedRoi = roi - 3;
+  const maxCogs = Number((15 + score * 0.05).toFixed(2));
+
+  const decisionBase: DecisionPayload = {
+    decision: "update_price",
+    priority: "high",
+    defaultAction: "Apply immediate 1% price increase",
+    why: ["Simulated uplift requires price change"],
+    alternatives: [
+      { decision: "request_discount", label: "Request 3% vendor concession" },
+      { decision: "wait_until", label: "Wait until ROI stabilizes" },
+    ],
+    metrics: { roi, riskAdjustedRoi, maxCogs },
+  };
 
   return {
     id: `scenario-${ruleId}-${score}`,
@@ -132,30 +211,19 @@ export const buildSimulationScenario = (ruleId: string, input: Record<string, un
     description: `Mock result for ${rule?.name ?? "selection"} using ${Object.keys(input ?? {}).length} inputs.`,
     ruleId,
     input,
-    result: {
-      summary: `Projected ROI delta of ${roiDelta}% across ${affectedSkus} SKUs.`,
-      stats: {
-        affectedSkus,
-        avgRoiDelta: roiDelta,
-        projectedRevenue: affectedSkus * 420,
-      },
-      sampleDecisions: [
-        {
-          decision: "update_price",
-          priority: "high",
-          defaultAction: "Apply immediate 1% price increase",
-          why: ["Simulated uplift requires price change"],
-          alternatives: ["Request discount", "Wait until ROI stabilizes"],
-        },
-        {
-          decision: "wait_until",
-          priority: "medium",
-          defaultAction: "Hold until next ingest cycle",
-          why: ["Need follow-up simulation with vendor data"],
-          alternatives: ["Continue", "Switch vendor"],
-          nextRequestAt: new Date(now + 24 * 60 * 60 * 1000).toISOString(),
-        },
-      ],
-    },
+    metrics: { roi, riskAdjustedRoi, maxCogs, revenueImpact: 420 + score },
+    decisions: [
+      buildDecision(decisionBase),
+      buildDecision({
+        decision: "wait_until",
+        priority: "medium",
+        defaultAction: "Hold until next ingest cycle",
+        why: ["Need follow-up simulation with vendor data"],
+        alternatives: [{ decision: "continue", label: "Keep current pricing" }],
+        nextRequestAt: new Date(BASE_DATE + 24 * 60 * 60 * 1000).toISOString(),
+        metrics: { roi: roi - 1, riskAdjustedRoi: riskAdjustedRoi - 1, maxCogs },
+      }),
+    ],
+    createdAt: new Date().toISOString(),
   };
 };

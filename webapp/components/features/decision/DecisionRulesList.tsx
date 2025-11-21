@@ -1,10 +1,9 @@
 "use client";
 
-import type { Rule } from "@/lib/api/decisionClient";
+import type { Rule } from "@/lib/api/decisionTypes";
 
-import { type KeyboardEvent } from "react";
+import { type KeyboardEvent, useMemo } from "react";
 
-import { Button } from "@/components/ui";
 import { cn } from "@/lib/utils";
 
 type DecisionRulesListProps = {
@@ -12,36 +11,55 @@ type DecisionRulesListProps = {
   isLoading?: boolean;
   selectedRuleId?: string | null;
   onSelectRule: (ruleId: string) => void;
-  onToggleRule: (rule: Rule, nextActive: boolean) => void;
-  canConfigure?: boolean;
-  togglingRuleId?: string | null;
-  isMutatingRule?: boolean;
 };
 
 const formatDate = (value: string) =>
   new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(new Date(value));
 
-export function DecisionRulesList({
-  rules,
-  isLoading,
-  selectedRuleId,
-  onSelectRule,
-  onToggleRule,
-  canConfigure = false,
-  togglingRuleId,
-  isMutatingRule,
-}: DecisionRulesListProps) {
+const describeConditions = (rule: Rule) => {
+  if (!rule.conditions.length) {
+    return "No conditions";
+  }
+  return rule.conditions
+    .map((condition) => {
+      if (condition.expression) {
+        return condition.expression;
+      }
+      if (condition.category) {
+        return `Category: ${condition.category}`;
+      }
+      if (condition.vendorId) {
+        return `Vendor ${condition.vendorId}`;
+      }
+      if (condition.field && condition.operator) {
+        return `${condition.field} ${condition.operator} ${condition.value}`;
+      }
+      return "Condition";
+    })
+    .join(" · ");
+};
+
+const describeActions = (rule: Rule) => {
+  if (!rule.actions.length) {
+    return "No actions";
+  }
+  return rule.actions.map((action) => action.action.replaceAll("_", " ")).join(", ");
+};
+
+export function DecisionRulesList({ rules, isLoading, selectedRuleId, onSelectRule }: DecisionRulesListProps) {
+  const safeRules = useMemo(() => rules ?? [], [rules]);
+
   if (isLoading) {
     return (
       <div className="space-y-3">
         {Array.from({ length: 3 }).map((_, index) => (
-          <div key={`rule-skeleton-${index}`} className="h-24 animate-pulse rounded-xl border border-border bg-muted/40" />
+          <div key={`rule-skeleton-${index}`} className="h-28 animate-pulse rounded-xl border border-border bg-muted/40" />
         ))}
       </div>
     );
   }
 
-  if (!rules.length) {
+  if (!safeRules.length) {
     return (
       <div className="rounded-xl border border-dashed border-border bg-muted/20 p-6 text-sm text-muted-foreground">
         No rules configured yet.
@@ -51,9 +69,8 @@ export function DecisionRulesList({
 
   return (
     <div className="space-y-3">
-      {rules.map((rule) => {
+      {safeRules.map((rule) => {
         const isSelected = rule.id === selectedRuleId;
-        const isToggling = togglingRuleId === rule.id;
         const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
           if (event.key === "Enter" || event.key === " ") {
             event.preventDefault();
@@ -78,26 +95,28 @@ export function DecisionRulesList({
                 <p className="text-base font-semibold">{rule.name}</p>
                 <p className="text-sm text-muted-foreground">{rule.description ?? "No description provided."}</p>
               </div>
-              <span className="rounded-full bg-muted px-3 py-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                {rule.scope}
-              </span>
+              <div className="flex flex-col items-end gap-2 text-xs font-semibold uppercase">
+                <span className="rounded-full bg-muted px-3 py-1 tracking-wide text-muted-foreground">{rule.scope}</span>
+                <span
+                  className={cn(
+                    "rounded-full px-3 py-1 tracking-wide",
+                    rule.isActive ? "bg-emerald-100 text-emerald-900" : "bg-zinc-200 text-zinc-900"
+                  )}
+                >
+                  {rule.isActive ? "Active" : "Disabled"}
+                </span>
+              </div>
             </div>
-            <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground">
+            <div className="mt-3 space-y-1 text-xs text-muted-foreground">
+              <p>
+                <span className="font-semibold text-foreground">Conditions:</span> {describeConditions(rule)}
+              </p>
+              <p>
+                <span className="font-semibold text-foreground">Actions:</span> {describeActions(rule)}
+              </p>
               <p>
                 Created {formatDate(rule.createdAt)} · Updated {formatDate(rule.updatedAt)}
               </p>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onToggleRule(rule, !rule.active);
-                }}
-                disabled={!canConfigure || (isMutatingRule && !isToggling)}
-                isLoading={isToggling}
-              >
-                {rule.active ? "Pause" : "Activate"}
-              </Button>
             </div>
           </div>
         );

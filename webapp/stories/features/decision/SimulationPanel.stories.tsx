@@ -3,15 +3,16 @@ import { SessionProvider } from "next-auth/react";
 import type { Session } from "next-auth";
 
 import { SimulationPanel } from "@/components/features/decision/SimulationPanel";
-import type { Rule, SimulationScenario } from "@/lib/api/decisionClient";
+import type { Rule, SimulationScenario } from "@/lib/api/decisionTypes";
 
 const mockRule: Rule = {
   id: "rule-story",
   name: "Story Simulation Rule",
   description: "Demonstrates the simulation panel.",
-  active: true,
+  isActive: true,
   scope: "global",
-  params: {},
+  conditions: [{ field: "roi", operator: "<", value: 18 }],
+  actions: [{ action: "update_price" }],
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
 };
@@ -22,30 +23,31 @@ const mockScenarios: SimulationScenario[] = [
     name: "Scenario A",
     description: "First mock scenario",
     ruleId: "rule-story",
-    input: { roiDelta: 4 },
-    result: {
-      summary: "Projected +4% ROI uplift across 80 SKUs.",
-      stats: {
-        affectedSkus: 80,
-        avgRoiDelta: 4,
-      },
-      sampleDecisions: [
-        {
-          decision: "update_price",
-          priority: "high",
-          defaultAction: "Increase price by 1%",
-          why: ["ROI under guardrail"],
-          alternatives: ["Request discount"],
-        },
-      ],
+    input: { price: 23, cost: 12.4 },
+    metrics: {
+      roi: 18.2,
+      riskAdjustedRoi: 15.4,
+      maxCogs: 14.2,
     },
+    decisions: [
+      {
+        decision: "update_price",
+        priority: "high",
+        defaultAction: "Increase price by 1%",
+        why: ["ROI under guardrail"],
+        alternatives: [{ decision: "request_discount", label: "Request discount" }],
+      },
+    ],
+    createdAt: new Date().toISOString(),
   },
   {
     id: "scenario-b",
     name: "Scenario B",
     description: "Pending scenario",
     ruleId: "rule-story",
-    input: { roiDelta: 2 },
+    input: { price: 21, cost: 11.5 },
+    decisions: [],
+    createdAt: new Date().toISOString(),
   },
 ];
 

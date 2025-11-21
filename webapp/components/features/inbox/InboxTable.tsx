@@ -4,17 +4,18 @@ import { type ColumnDef } from "@tanstack/react-table";
 import { useMemo } from "react";
 
 import { DataTable, EmptyState } from "@/components/data";
-import type { Task } from "@/lib/api/inboxClient";
+import type { Task } from "@/lib/api/inboxTypes";
 import { cn } from "@/lib/utils";
 
 import {
-  TASK_PRIORITY_STYLES,
   TASK_STATE_STYLES,
+  formatDecisionLabel,
   formatTaskDate,
   formatTaskEntity,
   formatTaskPriority,
-  formatTaskSource,
   formatTaskState,
+  reasonToText,
+  taskPriorityStyle,
 } from "./taskFormatters";
 
 type InboxTableProps = {
@@ -28,38 +29,36 @@ export function InboxTable({ tasks, isLoading, onSelectTask, selectedTaskId }: I
   const columns = useMemo<ColumnDef<Task>[]>(
     () => [
       {
-        header: "State",
-        accessorKey: "state",
-        cell: ({ row }) => {
-          const state = row.original.state;
-          return (
-            <span className={cn("rounded-full px-2 py-1 text-xs font-semibold uppercase", TASK_STATE_STYLES[state])}>
-              {formatTaskState(state)}
-            </span>
-          );
-        },
-      },
-      {
-        header: "Priority",
-        accessorKey: "decision.priority",
-        cell: ({ row }) => {
-          const priority = row.original.decision.priority;
-          return (
-            <span className={cn("rounded-full px-2 py-1 text-xs font-semibold uppercase", TASK_PRIORITY_STYLES[priority])}>
-              {formatTaskPriority(priority)}
-            </span>
-          );
-        },
-      },
-      {
-        header: "Summary",
+        header: "Task",
         accessorKey: "summary",
         cell: ({ row }) => (
           <div className="flex flex-col">
             <span className="font-medium">{row.original.summary}</span>
-            <span className="text-xs text-muted-foreground">{formatTaskState(row.original.state)}</span>
+            <span className="text-xs text-muted-foreground">ID: {row.original.id}</span>
           </div>
         ),
+      },
+      {
+        header: "Decision",
+        accessorKey: "decision.decision",
+        cell: ({ row }) => (
+          <div className="flex flex-col">
+            <span className="font-semibold capitalize">{formatDecisionLabel(row.original.decision.decision)}</span>
+            <span className="text-xs text-muted-foreground">{row.original.decision.defaultAction ?? "Suggested action"}</span>
+          </div>
+        ),
+      },
+      {
+        header: "Priority",
+        accessorKey: "priority",
+        cell: ({ row }) => {
+          const priority = row.original.priority ?? row.original.decision.priority;
+          return (
+            <span className={cn("rounded-full px-2 py-1 text-xs font-semibold uppercase", taskPriorityStyle(priority))}>
+              {formatTaskPriority(priority)}
+            </span>
+          );
+        },
       },
       {
         header: "Entity",
@@ -72,9 +71,21 @@ export function InboxTable({ tasks, isLoading, onSelectTask, selectedTaskId }: I
         ),
       },
       {
-        header: "Source",
-        accessorKey: "source",
-        cell: ({ row }) => <span className="text-sm">{formatTaskSource(row.original.source)}</span>,
+        header: "Deadline",
+        accessorKey: "deadlineAt",
+        cell: ({ row }) => formatTaskDate(row.original.deadlineAt ?? row.original.decision.deadlineAt, false),
+      },
+      {
+        header: "State",
+        accessorKey: "state",
+        cell: ({ row }) => {
+          const state = row.original.state;
+          return (
+            <span className={cn("rounded-full px-2 py-1 text-xs font-semibold uppercase", TASK_STATE_STYLES[state])}>
+              {formatTaskState(state)}
+            </span>
+          );
+        },
       },
       {
         header: "Assignee",
@@ -82,14 +93,13 @@ export function InboxTable({ tasks, isLoading, onSelectTask, selectedTaskId }: I
         cell: ({ row }) => row.original.assignee ?? "Unassigned",
       },
       {
-        header: "Due",
-        accessorKey: "due",
-        cell: ({ row }) => formatTaskDate(row.original.due),
-      },
-      {
-        header: "Updated",
-        accessorKey: "updatedAt",
-        cell: ({ row }) => formatTaskDate(row.original.updatedAt),
+        header: "Why",
+        accessorKey: "why",
+        cell: ({ row }) => {
+          const reasons = row.original.why?.length ? row.original.why : row.original.decision.why;
+          const preview = reasons?.length ? reasonToText(reasons[0]) : "—";
+          return <span className="text-sm text-muted-foreground line-clamp-2">{preview}</span>;
+        },
       },
     ],
     []
@@ -98,7 +108,7 @@ export function InboxTable({ tasks, isLoading, onSelectTask, selectedTaskId }: I
   const emptyState = (
     <EmptyState
       title="No tasks in the inbox"
-      description="As soon as Decision Engine or inbox workflows emit tasks, they will appear here."
+      description="As soon as Decision Engine or virtual buyer workflows emit tasks, they will appear here."
     />
   );
 

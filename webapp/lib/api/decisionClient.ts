@@ -5,33 +5,12 @@ import type { ApiError } from "@/lib/api/apiError";
 import { useApiMutation } from "@/lib/api/useApiMutation";
 import { useApiQuery, type UseApiQueryOptions } from "@/lib/api/useApiQuery";
 
-import type { TaskDecision } from "./inboxClient";
-
-export type Rule = {
-  id: string;
-  name: string;
-  description?: string;
-  active: boolean;
-  scope: "sku" | "vendor" | "category" | "global";
-  params: Record<string, unknown>;
-  createdAt: string;
-  updatedAt: string;
-};
-
-export type SimulationScenarioResult = {
-  summary: string;
-  stats: Record<string, number>;
-  sampleDecisions: TaskDecision[];
-};
-
-export type SimulationScenario = {
-  id: string;
-  name: string;
-  description?: string;
-  ruleId: string;
-  input: Record<string, unknown>;
-  result?: SimulationScenarioResult;
-};
+import type {
+  DecisionPayload,
+  Rule,
+  SimulationInput,
+  SimulationScenario,
+} from "./decisionTypes";
 
 export type DecisionRulesResponse = {
   rules: Rule[];
@@ -43,11 +22,10 @@ export type SimulationScenariosResponse = {
 
 export type RunSimulationPayload = {
   ruleId: string;
-  input: Record<string, unknown>;
+  input: SimulationInput;
 };
 
 const DECISION_ENDPOINT = "/api/bff/decision";
-const SIMULATION_ENDPOINT = "/api/bff/decision/simulate";
 
 export const decisionRulesQueryKey = ["decision", "rules"] as const;
 export const simulationScenariosQueryKey = ["decision", "scenarios"] as const;
@@ -69,7 +47,7 @@ export async function fetchSimulationScenarios(signal?: AbortSignal): Promise<Si
 }
 
 export async function runSimulation(payload: RunSimulationPayload): Promise<SimulationScenario> {
-  return fetchFromBff<SimulationScenario>(SIMULATION_ENDPOINT, {
+  return fetchFromBff<SimulationScenario>(DECISION_ENDPOINT, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -120,3 +98,5 @@ export function useRunSimulationMutation(options?: UseRunSimulationMutationOptio
     ...options,
   });
 }
+
+export type { DecisionPayload, Rule, SimulationInput, SimulationScenario };

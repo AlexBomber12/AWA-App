@@ -1,16 +1,17 @@
 import type { Meta, StoryObj } from "@storybook/react";
 
 import { DecisionRulesList } from "@/components/features/decision/DecisionRulesList";
-import type { Rule } from "@/lib/api/decisionClient";
+import type { Rule } from "@/lib/api/decisionTypes";
 
 const MOCK_RULES: Rule[] = [
   {
     id: "rule-story-1",
     name: "Story ROI Guardrail",
     description: "Keeps ROI above 20%.",
-    active: true,
+    isActive: true,
     scope: "sku",
-    params: { roiMin: 20 },
+    conditions: [{ field: "roi", operator: "<", value: 20 }],
+    actions: [{ action: "request_discount", defaultAction: "Request 3% discount" }],
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   },
@@ -18,9 +19,10 @@ const MOCK_RULES: Rule[] = [
     id: "rule-story-2",
     name: "Story Vendor Drift",
     description: "Flags vendors exceeding target lead time.",
-    active: false,
+    isActive: false,
     scope: "vendor",
-    params: { toleranceDays: 2 },
+    conditions: [{ field: "lead_time_slip", operator: ">", value: 2 }],
+    actions: [{ action: "blocked_observe", defaultAction: "Pause repricing" }],
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   },
@@ -32,9 +34,7 @@ const meta: Meta<typeof DecisionRulesList> = {
   args: {
     rules: MOCK_RULES,
     isLoading: false,
-    canConfigure: true,
     onSelectRule: () => undefined,
-    onToggleRule: () => undefined,
   },
 };
 

@@ -1,4 +1,5 @@
-import type { Task, TaskEntity } from "@/lib/api/inboxClient";
+import type { DecisionPriority, DecisionReason } from "@/lib/api/decisionTypes";
+import type { Task, TaskEntity } from "@/lib/api/inboxTypes";
 
 export const TASK_STATE_STYLES: Record<Task["state"], string> = {
   open: "bg-emerald-100 text-emerald-900",
@@ -6,12 +7,34 @@ export const TASK_STATE_STYLES: Record<Task["state"], string> = {
   done: "bg-zinc-200 text-zinc-900",
   snoozed: "bg-amber-100 text-amber-900",
   cancelled: "bg-rose-100 text-rose-900",
+  blocked: "bg-orange-100 text-orange-900",
 };
 
-export const TASK_PRIORITY_STYLES: Record<Task["decision"]["priority"], string> = {
-  high: "bg-rose-100 text-rose-900",
-  medium: "bg-amber-100 text-amber-900",
+const PRIORITY_CLASS_MAP: Record<string, string> = {
+  critical: "bg-rose-100 text-rose-900",
+  high: "bg-amber-100 text-amber-900",
+  medium: "bg-sky-100 text-sky-900",
   low: "bg-emerald-100 text-emerald-900",
+};
+
+const priorityThresholdClass = (priority: number) => {
+  if (priority >= 90) {
+    return PRIORITY_CLASS_MAP.critical;
+  }
+  if (priority >= 70) {
+    return PRIORITY_CLASS_MAP.high;
+  }
+  if (priority >= 40) {
+    return PRIORITY_CLASS_MAP.medium;
+  }
+  return PRIORITY_CLASS_MAP.low;
+};
+
+export const taskPriorityStyle = (priority: DecisionPriority) => {
+  if (typeof priority === "number") {
+    return priorityThresholdClass(priority);
+  }
+  return PRIORITY_CLASS_MAP[priority] ?? PRIORITY_CLASS_MAP.medium;
 };
 
 export const formatTaskState = (state: Task["state"]) =>
@@ -21,24 +44,36 @@ export const formatTaskState = (state: Task["state"]) =>
     done: "Done",
     snoozed: "Snoozed",
     cancelled: "Cancelled",
+    blocked: "Blocked",
   })[state];
 
-export const formatTaskPriority = (priority: Task["decision"]["priority"]) =>
-  ({
-    high: "High",
-    medium: "Medium",
-    low: "Low",
-  })[priority];
+export const formatTaskPriority = (priority: DecisionPriority) => {
+  if (typeof priority === "number") {
+    if (priority >= 90) {
+      return "Critical";
+    }
+    if (priority >= 70) {
+      return "High";
+    }
+    if (priority >= 40) {
+      return "Medium";
+    }
+    return "Low";
+  }
+  return priority.replace("_", " ");
+};
+
+export const formatDecisionLabel = (decision: string) => decision.replaceAll("_", " ");
 
 export const formatTaskSource = (source: Task["source"]) =>
   ({
     decision_engine: "Decision Engine",
-    inbox_email: "Inbox email",
+    email: "Inbox email",
     manual: "Manual",
     system: "System",
   })[source] ?? source;
 
-export const formatTaskDate = (value?: string, includeTime = true) => {
+export const formatTaskDate = (value?: string | null, includeTime = true) => {
   if (!value) {
     return "—";
   }
@@ -53,12 +88,28 @@ export const formatTaskDate = (value?: string, includeTime = true) => {
 };
 
 export const formatTaskEntity = (entity: TaskEntity) => {
-  const label = entity.label ?? entity.id;
-  if (entity.type === "sku" && entity.asin) {
-    return `${label} (${entity.asin})`;
+  switch (entity.type) {
+    case "sku":
+      return `${entity.label ?? entity.asin} (${entity.asin})`;
+    case "sku_vendor":
+      return entity.label ?? `${entity.asin} · Vendor ${entity.vendorId}`;
+    case "vendor":
+      return entity.label ?? `Vendor ${entity.vendorId}`;
+    case "thread":
+      return entity.label ?? entity.subject ?? entity.threadId;
+    case "price_list":
+      return entity.label ?? entity.id;
+    default:
+      return "Unknown entity";
   }
-  if (entity.type === "vendor" && entity.vendorId) {
-    return `${label} (Vendor ${entity.vendorId})`;
+};
+
+export const reasonToText = (reason: DecisionReason): string => {
+  if (typeof reason === "string") {
+    return reason;
   }
-  return label;
+  if (reason.detail) {
+    return `${reason.title}: ${reason.detail}`;
+  }
+  return reason.title;
 };

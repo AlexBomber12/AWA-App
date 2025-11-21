@@ -1,35 +1,43 @@
 import type { Meta, StoryObj } from "@storybook/react";
 
 import { InboxTable } from "@/components/features/inbox/InboxTable";
-import type { Task } from "@/lib/api/inboxClient";
+import type { Task } from "@/lib/api/inboxTypes";
 
 const MOCK_TASKS: Task[] = [
   {
     id: "task-story-1",
     source: "decision_engine",
-    entity: { type: "sku", id: "SKU-001", asin: "B00STORY1", label: "Story Yoga Mat" },
+    entity: { type: "sku_vendor", asin: "B00STORY1", vendorId: "2042", label: "Story Yoga Mat" },
     summary: "Apply updated ROI guardrail",
     assignee: "Story Admin",
-    due: new Date().toISOString(),
     state: "open",
     decision: {
       decision: "update_price",
-      priority: "high",
+      priority: 95,
       deadlineAt: new Date().toISOString(),
       defaultAction: "Increase price by 1%",
-      why: ["ROI under 15% threshold", "Competitor price raised"],
-      alternatives: ["Request discount", "Wait until next cycle"],
+      why: ["ROI under 15% threshold", { title: "Competitor move", detail: "Competitor price raised" }],
+      alternatives: [
+        { decision: "request_discount", label: "Request vendor support" },
+        { decision: "wait_until", label: "Wait until next cycle" },
+      ],
     },
+    priority: 95,
+    deadlineAt: new Date().toISOString(),
+    why: ["ROI under 15% threshold", { title: "Competitor move", detail: "Competitor price raised" }],
+    alternatives: [
+      { decision: "request_discount", label: "Request vendor support" },
+      { decision: "wait_until", label: "Wait until next cycle" },
+    ],
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   },
   {
     id: "task-story-2",
     source: "manual",
-    entity: { type: "vendor", id: "VEND-22", vendorId: "22", label: "Northwind Foods" },
+    entity: { type: "vendor", vendorId: "22", label: "Northwind Foods" },
     summary: "Follow up on onboarding checklist",
     assignee: "Jordan",
-    due: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
     state: "in_progress",
     decision: {
       decision: "continue",
@@ -37,8 +45,12 @@ const MOCK_TASKS: Task[] = [
       deadlineAt: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(),
       defaultAction: "Complete onboarding tasks",
       why: ["Missing W-9", "Need ACH form"],
-      alternatives: ["Escalate to legal"],
+      alternatives: [{ decision: "wait_until", label: "Escalate to legal" }],
     },
+    priority: "medium",
+    deadlineAt: new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString(),
+    why: ["Missing W-9", "Need ACH form"],
+    alternatives: [{ decision: "wait_until", label: "Escalate to legal" }],
     createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString(),
     updatedAt: new Date().toISOString(),
   },

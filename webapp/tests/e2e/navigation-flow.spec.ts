@@ -110,7 +110,7 @@ const registerApiStubs = async (page: Page) => {
     });
   });
 
-  await page.route("**/api/bff/inbox", async (route) => {
+  await page.route("**/api/bff/inbox**", async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -119,24 +119,35 @@ const registerApiStubs = async (page: Page) => {
           {
             id: "task-nav-1",
             source: "decision_engine",
-            entity: { type: "sku", id: "B00-NAV-001", asin: "B00-NAV-001", label: "Navigation SKU" },
+            entity: { type: "sku_vendor", asin: "B00-NAV-001", vendorId: "12", label: "Navigation SKU" },
             summary: "Review ROI thresholds",
             assignee: "Jordan Ops",
-            due: new Date().toISOString(),
             state: "open",
             decision: {
               decision: "update_price",
-              priority: "high",
+              priority: 90,
               deadlineAt: new Date(Date.now() + 86400000).toISOString(),
               defaultAction: "Increase price by 2%",
               why: ["Competitive pressure rising"],
-              alternatives: ["Delay decision"],
+              alternatives: [{ decision: "wait_until", label: "Delay decision" }],
             },
+            priority: 90,
+            deadlineAt: new Date(Date.now() + 86400000).toISOString(),
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString(),
           },
         ],
-        total: 1,
+        pagination: {
+          page: 1,
+          pageSize: 25,
+          total: 1,
+          totalPages: 1,
+        },
+        summary: {
+          open: 1,
+          inProgress: 0,
+          blocked: 0,
+        },
       }),
     });
   });

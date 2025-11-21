@@ -18,10 +18,9 @@ const inboxResponse: InboxListResponse = {
     {
       id: "test-task-1",
       source: "decision_engine",
-      entity: { type: "sku", id: "SKU-1", asin: "B00TEST1", label: "Test SKU 1" },
+      entity: { type: "sku_vendor", asin: "B00TEST1", vendorId: "22", label: "Test SKU 1" },
       summary: "Review mock decision",
       assignee: "Ops User",
-      due: new Date().toISOString(),
       state: "open",
       decision: {
         decision: "update_price",
@@ -29,13 +28,19 @@ const inboxResponse: InboxListResponse = {
         deadlineAt: new Date().toISOString(),
         defaultAction: "Increase price by 1%",
         why: ["ROI dipped below guardrail"],
-        alternatives: ["Request discount"],
+        alternatives: [{ decision: "request_discount", label: "Request discount" }],
+        metrics: { roi: 12.1, riskAdjustedRoi: 10.2, maxCogs: 14.5 },
       },
+      priority: "high",
+      deadlineAt: new Date().toISOString(),
+      why: ["ROI dipped below guardrail"],
+      alternatives: [{ decision: "request_discount", label: "Request discount" }],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     },
   ],
-  total: 1,
+  pagination: { page: 1, pageSize: 25, total: 1, totalPages: 1 },
+  summary: { open: 1, inProgress: 0, blocked: 0 },
 };
 
 const server = setupServer(
@@ -75,12 +80,13 @@ describe("InboxPage", () => {
     renderWithProviders(<InboxPage />);
 
     const table = await screen.findByRole("table");
-    const summaryCell = within(table).getAllByText("Review mock decision")[0];
+    const summaryCell = within(table).getByText("Review mock decision");
     await user.click(summaryCell);
 
-    expect(screen.getByRole("heading", { name: /Review mock decision/i })).toBeInTheDocument();
-    const actionRow = screen.getByText("Action:").parentElement;
-    expect(actionRow).toHaveTextContent("update price");
+    const drawer = await screen.findByRole("dialog");
+    expect(within(drawer).getByRole("heading", { name: /Review mock decision/i })).toBeInTheDocument();
+    expect(within(drawer).getAllByText(/update price/i).length).toBeGreaterThan(0);
+    expect(within(drawer).getByText(/ROI dipped below guardrail/i)).toBeInTheDocument();
   });
 
   it("snoozes a task optimistically and undo restores the previous state", async () => {
@@ -94,12 +100,23 @@ describe("InboxPage", () => {
     await user.click(screen.getByRole("button", { name: "Snooze" }));
 
     await waitFor(() => {
-      expect(within(table).getAllByText(/Snoozed/).length).toBeGreaterThan(0);
+      expect(within(table).getAllByText(/Snoozed/i).length).toBeGreaterThan(0);
     });
 
     await user.click(undoButton);
     await waitFor(() => {
       expect(within(table).getAllByText(/Open/).length).toBeGreaterThan(0);
     });
+  });
+
+  it("renders error state when the inbox endpoint fails", async () => {
+    server.use(
+      rest.get("http://localhost:3000/api/bff/inbox", (_req, res, ctx) =>
+        res(ctx.status(500), ctx.json({ code: "ERROR", message: "Boom" }))
+      )
+    );
+
+    renderWithProviders(<InboxPage />);
+    await waitFor(() => expect(screen.getByText(/Unable to load inbox/i)).toBeInTheDocument());
   });
 });
