@@ -8,7 +8,13 @@ from collections.abc import Sequence
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from awa_common import metrics
+from awa_common.metrics import (
+    DECISION_ENGINE_LATENCY_SECONDS,
+    DECISION_INBOX_SIZE,
+    DECISION_TASKS_CREATED_TOTAL,
+    DECISION_TASKS_RESOLVED_TOTAL,
+    _with_base_labels,
+)
 from services.api.app.decision import repository
 from services.api.app.decision.models import DecisionCandidate, DecisionTaskRecord, PlannedDecisionTask
 
@@ -26,9 +32,8 @@ def _now() -> dt.datetime:
 
 
 def _metric_labels(**labels: str) -> dict[str, str]:
-    merged = dict(metrics._BASE_LABEL_VALUES)  # noqa: SLF001
-    merged.update(labels)
-    return merged
+    resolved = _with_base_labels(**labels)
+    return dict(resolved)
 
 
 def _build_entity(candidate: DecisionCandidate) -> dict[str, object]:
@@ -165,7 +170,7 @@ async def generate_tasks(
         _record_created_metrics(saved)
         await _update_inbox_gauge(session)
     duration = time.perf_counter() - started
-    metrics.DECISION_ENGINE_LATENCY_SECONDS.labels(**_metric_labels()).observe(duration)
+    DECISION_ENGINE_LATENCY_SECONDS.labels(**_metric_labels()).observe(duration)
     logger.info(
         "decision_engine.run",
         dry_run=dry_run,
@@ -180,13 +185,13 @@ async def generate_tasks(
 def _record_created_metrics(saved: Sequence[DecisionTaskRecord]) -> None:
     counter = Counter(task.decision for task in saved)
     for decision, count in counter.items():
-        metrics.DECISION_TASKS_CREATED_TOTAL.labels(**_metric_labels(decision=decision)).inc(count)
+        DECISION_TASKS_CREATED_TOTAL.labels(**_metric_labels(decision=decision)).inc(count)
 
 
 async def _update_inbox_gauge(session: AsyncSession) -> None:
     summary = await repository.summarize_states(session, [])
     pending = summary.get("pending", 0)
-    metrics.DECISION_INBOX_SIZE.labels(**_metric_labels(state="pending")).set(pending)
+    DECISION_INBOX_SIZE.labels(**_metric_labels(state="pending")).set(pending)
 
 
 async def apply_task(
@@ -205,7 +210,7 @@ async def apply_task(
         event_type="decision_applied",
     )
     if updated:
-        metrics.DECISION_TASKS_RESOLVED_TOTAL.labels(**_metric_labels(decision=updated.decision, state="applied")).inc()
+        DECISION_TASKS_RESOLVED_TOTAL.labels(**_metric_labels(decision=updated.decision, state="applied")).inc()
         await _update_inbox_gauge(session)
     return updated
 
@@ -228,9 +233,7 @@ async def dismiss_task(
         event_type="decision_dismissed",
     )
     if updated:
-        metrics.DECISION_TASKS_RESOLVED_TOTAL.labels(
-            **_metric_labels(decision=updated.decision, state="dismissed")
-        ).inc()
+        DECISION_TASKS_RESOLVED_TOTAL.labels(**_metric_labels(decision=updated.decision, state="dismissed")).inc()
         await _update_inbox_gauge(session)
     return updated
 
