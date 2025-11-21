@@ -7,6 +7,7 @@ import httpx
 import pytest
 
 from awa_common import telegram
+from awa_common.metrics import ALERTBOT_NOTIFICATIONS_SENT_TOTAL, ALERTBOT_TELEGRAM_ERRORS_TOTAL
 
 
 class StubResponse:
@@ -135,6 +136,7 @@ async def test_send_message_missing_token() -> None:
     result = await client.send_message(chat_id=1, text="hi")
     assert result.ok is False
     assert result.status == "error"
+    assert result.error_type == "CONFIG"
 
 
 @pytest.mark.asyncio
@@ -144,6 +146,7 @@ async def test_send_message_invalid_chat(monkeypatch: pytest.MonkeyPatch) -> Non
     result = await client.send_message(chat_id="   ", text="hi")
     assert result.ok is False
     assert result.status == "error"
+    assert result.error_type == "CONFIG"
 
 
 @pytest.mark.asyncio
@@ -196,6 +199,52 @@ async def test_request_handles_http_error(monkeypatch: pytest.MonkeyPatch) -> No
     response = await client._request("sendMessage", payload={})  # type: ignore[attr-defined]
     assert response.ok is False
     assert "RequestError" in (response.description or "")
+    assert response.error_type == "CONNECTION"
+
+
+@pytest.mark.asyncio
+async def test_request_handles_http_status_error() -> None:
+    response = httpx.Response(500, request=httpx.Request("POST", "http://example.com"))
+
+    class RaisingClient:
+        async def post(self, url, json):
+            raise httpx.HTTPStatusError("boom", request=response.request, response=response)
+
+    client = telegram.AsyncTelegramClient(token="12345:ABCDE", client=RaisingClient())
+    result = await client.send_message(chat_id=1, text="fail")
+    assert result.ok is False
+    assert result.error_type == "HTTP_5xx"
+
+
+def test_error_type_from_status_variants() -> None:
+    assert telegram._error_type_from_status(None) == "CONNECTION"  # type: ignore[attr-defined]
+    assert telegram._error_type_from_status(400) == "HTTP_4xx"  # type: ignore[attr-defined]
+    assert telegram._error_type_from_status(429) == "HTTP_429"  # type: ignore[attr-defined]
+    assert telegram._error_type_from_status(503) == "HTTP_5xx"  # type: ignore[attr-defined]
+
+
+@pytest.mark.asyncio
+async def test_request_handles_timeout() -> None:
+    class RaisingClient:
+        async def post(self, url, json):
+            raise httpx.TimeoutException("timeout", request=httpx.Request("POST", url))
+
+    client = telegram.AsyncTelegramClient(token="12345:ABCDE", client=RaisingClient())
+    result = await client.send_message(chat_id=1, text="fail")
+    assert result.ok is False
+    assert result.error_type == "TIMEOUT"
+
+
+@pytest.mark.asyncio
+async def test_request_handles_http_client_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    class RaisingClient:
+        async def post(self, url, json):
+            raise telegram.HTTPClientError("bad")  # type: ignore[attr-defined]
+
+    client = telegram.AsyncTelegramClient(token="12345:ABCDE", client=RaisingClient())
+    response = await client._request("sendMessage", payload={})  # type: ignore[attr-defined]
+    assert response.ok is False
+    assert response.error_type == "CONNECTION"
 
 
 @pytest.mark.asyncio
@@ -207,8 +256,22 @@ async def test_request_handles_invalid_json() -> None:
     stub_client = StubAsyncClient([InvalidJsonResponse(200, payload=None, text="raw")])
     client = telegram.AsyncTelegramClient(token="12345:ABCDE", client=stub_client)
     response = await client._request("sendMessage", payload={})  # type: ignore[attr-defined]
-    assert response.ok is True
-    assert response.payload is None
+    assert response.ok is False
+    assert response.error_type == "PARSE"
+
+
+@pytest.mark.asyncio
+async def test_metrics_recorded_for_error() -> None:
+    stub_client = StubAsyncClient([StubResponse(500, payload={"ok": False, "description": "boom"})])
+    client = telegram.AsyncTelegramClient(token="12345:ABCDE", client=stub_client)
+    labels = dict(client._metric_labels)
+    notif_metric = ALERTBOT_NOTIFICATIONS_SENT_TOTAL.labels(rule="global", status="error", **labels)
+    error_metric = ALERTBOT_TELEGRAM_ERRORS_TOTAL.labels(error_type="HTTP_5xx", **labels)
+    before_notif = notif_metric._value.get()
+    before_error = error_metric._value.get()
+    await client.send_message(chat_id=1, text="oops")
+    assert notif_metric._value.get() == before_notif + 1
+    assert error_metric._value.get() == before_error + 1
 
 
 def test_coerce_chat_id_returns_string() -> None:

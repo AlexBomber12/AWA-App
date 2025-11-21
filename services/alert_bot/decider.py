@@ -26,6 +26,18 @@ class NotificationIntent:
     labels: dict[str, str] = field(default_factory=dict)
 
 
+@dataclass(slots=True)
+class AlertRequest:
+    rule_id: str
+    severity: str
+    chat_id: str
+    message: str
+    parse_mode: str | None
+    dedupe_key: str
+    disable_web_page_preview: bool
+    labels: dict[str, str] = field(default_factory=dict)
+
+
 def dedupe_events(events: Iterable[AlertEvent]) -> list[AlertEvent]:
     seen: OrderedDict[str, AlertEvent] = OrderedDict()
     for event in events:
@@ -69,6 +81,36 @@ def build_notification_intents(decisions: Sequence[RuleDecision]) -> list[Notifi
     return intents
 
 
+def build_alert_requests(decisions: Sequence[RuleDecision]) -> list[AlertRequest]:
+    """Flatten notification intents into per-recipient alert requests."""
+
+    intents = build_notification_intents(decisions)
+    if not intents:
+        return []
+    requests: list[AlertRequest] = []
+    for intent in intents:
+        unique_chats = []
+        for chat in intent.chat_ids:
+            chat_id = str(chat).strip()
+            if not chat_id or chat_id in unique_chats:
+                continue
+            unique_chats.append(chat_id)
+        for chat_id in unique_chats:
+            requests.append(
+                AlertRequest(
+                    rule_id=intent.rule_id,
+                    severity=intent.severity,
+                    chat_id=chat_id,
+                    message=intent.message,
+                    parse_mode=intent.parse_mode,
+                    dedupe_key=intent.dedupe_key,
+                    disable_web_page_preview=intent.disable_web_page_preview,
+                    labels=dict(intent.labels),
+                )
+            )
+    return requests
+
+
 def _resolve_severity(rule: AlertRule | None) -> str:
     if rule is None:
         return "info"
@@ -87,4 +129,11 @@ def _intent_labels(rule: AlertRule | None) -> dict[str, str]:
     return labels
 
 
-__all__ = ["NotificationIntent", "RuleDecision", "build_notification_intents", "dedupe_events"]
+__all__ = [
+    "AlertRequest",
+    "NotificationIntent",
+    "RuleDecision",
+    "build_alert_requests",
+    "build_notification_intents",
+    "dedupe_events",
+]

@@ -1,3 +1,8 @@
+import types
+
+import pytest
+
+from services.alert_bot import worker
 from services.alert_bot.settings import AlertBotSettings
 
 
@@ -37,3 +42,41 @@ def test_validate_runtime_success() -> None:
     ok, reason = settings.validate_runtime()
     assert ok
     assert reason is None
+
+
+@pytest.mark.asyncio
+async def test_validate_startup_missing_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    settings = _base_settings(telegram_token="")
+    runner = worker.AlertBotRunner(settings=settings)
+    calls: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        worker,
+        "logger",
+        types.SimpleNamespace(
+            error=lambda *args, **kwargs: calls.append(kwargs),
+            info=lambda *args, **kwargs: None,
+            warning=lambda *args, **kwargs: None,
+        ),
+    )
+    with pytest.raises(worker.AlertConfigurationError):
+        await runner.validate_startup()
+    assert any("TELEGRAM_TOKEN" in str(call.get("reason", "")) for call in calls)
+
+
+@pytest.mark.asyncio
+async def test_validate_startup_missing_chat(monkeypatch: pytest.MonkeyPatch) -> None:
+    settings = _base_settings(default_chat_id=None)
+    runner = worker.AlertBotRunner(settings=settings)
+    calls: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        worker,
+        "logger",
+        types.SimpleNamespace(
+            error=lambda *args, **kwargs: calls.append(kwargs),
+            info=lambda *args, **kwargs: None,
+            warning=lambda *args, **kwargs: None,
+        ),
+    )
+    with pytest.raises(worker.AlertConfigurationError):
+        await runner.validate_startup()
+    assert any("TELEGRAM_DEFAULT_CHAT_ID" in str(call.get("reason", "")) for call in calls)

@@ -188,12 +188,27 @@ def _stop_worker_loop_lag_monitor(**_: Any) -> None:
 
 
 def _run_alertbot_startup_validation(**_: Any) -> None:
+    logger = structlog.get_logger(__name__)
     try:
-        from services.alert_bot.worker import run_startup_validation
-
-        run_startup_validation()
+        module = importlib.import_module("services.alert_bot.worker")
     except Exception:
-        structlog.get_logger(__name__).warning("alertbot.startup_validation_failed", exc_info=True)
+        logger.warning("alertbot.startup_validation_failed", exc_info=True)
+        return
+    run_startup_validation = getattr(module, "run_startup_validation", None)
+    alert_error = getattr(module, "AlertConfigurationError", None)
+    if not callable(run_startup_validation):
+        logger.warning("alertbot.startup_validation_missing")
+        return
+    try:
+        run_startup_validation()
+    except SystemExit as exc:
+        logger.error("alertbot.startup_validation_failed", fatal=True, error=str(exc))
+        raise
+    except Exception as exc:
+        if alert_error is not None and isinstance(exc, alert_error):
+            logger.error("alertbot.startup_validation_failed", fatal=True, error=str(exc))
+            raise
+        logger.warning("alertbot.startup_validation_failed", exc_info=True)
 
 
 if getattr(getattr(settings, "observability", None), "enable_metrics", True):

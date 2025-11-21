@@ -4,7 +4,7 @@ import structlog
 
 from awa_common.metrics import ALERT_ERRORS_TOTAL, ALERTS_SENT_TOTAL
 from awa_common.telegram import AsyncTelegramClient, TelegramResponse, TelegramSendResult
-from services.alert_bot.decider import NotificationIntent
+from services.alert_bot.decider import AlertRequest
 
 
 class TelegramTransport:
@@ -35,35 +35,35 @@ class TelegramTransport:
         self._logger.info("telegram.validation.success", chats=len(chat_ids))
         return True, None
 
-    async def send(self, chat_id: str, intent: NotificationIntent) -> TelegramSendResult:
+    async def send(self, request: AlertRequest) -> TelegramSendResult:
         result = await self._client.send_message(
-            chat_id=chat_id,
-            text=intent.message,
-            parse_mode=intent.parse_mode,
-            disable_web_page_preview=intent.disable_web_page_preview,
-            rule_id=intent.rule_id,
+            chat_id=request.chat_id,
+            text=request.message,
+            parse_mode=request.parse_mode,
+            disable_web_page_preview=request.disable_web_page_preview,
+            rule_id=request.rule_id,
         )
-        self._record_metrics(intent, result, chat_id)
+        self._record_metrics(request, result)
         return result
 
-    def _record_metrics(self, intent: NotificationIntent, result: TelegramSendResult, chat_id: str) -> None:
+    def _record_metrics(self, request: AlertRequest, result: TelegramSendResult) -> None:
         status_label = "success" if result.ok else "failed"
         ALERTS_SENT_TOTAL.labels(
-            rule=intent.rule_id,
-            severity=intent.severity,
+            rule=request.rule_id,
+            severity=request.severity,
             channel="telegram",
             status=status_label,
             **self._metric_labels,
         ).inc()
         if result.ok:
-            self._logger.debug("telegram.send_ok", rule=intent.rule_id, chat_id=chat_id)
+            self._logger.debug("telegram.send_ok", rule=request.rule_id, chat_id=request.chat_id)
             return
         error_type = _classify_error(result)
-        ALERT_ERRORS_TOTAL.labels(rule=intent.rule_id, type=error_type, **self._metric_labels).inc()
-        self._logger.warning(
+        ALERT_ERRORS_TOTAL.labels(rule=request.rule_id, type=error_type, **self._metric_labels).inc()
+        self._logger.error(
             "telegram.send_failed",
-            rule=intent.rule_id,
-            chat_id=chat_id,
+            rule=request.rule_id,
+            chat_id=request.chat_id,
             status=result.status,
             error_type=error_type,
             description=result.description,
@@ -72,14 +72,18 @@ class TelegramTransport:
 
 
 def _classify_error(result: TelegramSendResult) -> str:
+    if result.error_type:
+        return str(result.error_type)
     response: TelegramResponse | None = result.response
-    if result.status == "retry":
-        return "telegram_api_error"
-    if response is not None and response.status_code >= 500:
-        return "http_error"
-    if response is not None and response.status_code in {401, 403}:
-        return "config_error"
-    return "telegram_api_error"
+    if response is None:
+        return "unknown"
+    if response.status_code >= 500:
+        return "HTTP_5xx"
+    if response.status_code == 429:
+        return "HTTP_429"
+    if response.status_code >= 400:
+        return "HTTP_4xx"
+    return "TELEGRAM_API"
 
 
 __all__ = ["TelegramTransport"]

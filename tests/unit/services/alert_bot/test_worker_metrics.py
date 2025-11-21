@@ -94,3 +94,14 @@ async def test_evaluate_single_rule_timeout(monkeypatch: pytest.MonkeyPatch) -> 
     result = await runner._evaluate_single_rule(_rule("slow"), asyncio.Semaphore(1))
     assert result.outcome == "timeout"
     assert metric_counter.records[-1]["outcome"] == "timeout"
+
+
+def test_record_rule_skip_records_suppressed(monkeypatch: pytest.MonkeyPatch) -> None:
+    runner = worker.AlertBotRunner(settings=_settings())
+    metric_skip = StubMetric()
+    metric_suppressed = StubMetric()
+    monkeypatch.setattr(worker, "ALERT_RULE_SKIPPED_TOTAL", metric_skip)
+    monkeypatch.setattr(worker, "ALERTBOT_RULES_SUPPRESSED_TOTAL", metric_suppressed)
+    runner._record_rule_skip("roi", "disabled")
+    assert metric_skip.records and metric_skip.records[0]["rule"] == "roi"
+    assert metric_suppressed.records and metric_suppressed.records[0]["reason"] == "disabled"

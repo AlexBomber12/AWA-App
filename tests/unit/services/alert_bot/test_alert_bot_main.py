@@ -6,6 +6,8 @@ from types import SimpleNamespace
 
 import pytest
 
+from services.alert_bot.worker import AlertConfigurationError
+
 
 def _load_module(monkeypatch: pytest.MonkeyPatch):
     fake_sync = SimpleNamespace(async_to_sync=lambda fn: fn)
@@ -29,3 +31,14 @@ def test_alert_bot_main(monkeypatch: pytest.MonkeyPatch) -> None:
 
     assert module.main() == 0
     assert called == {"evaluated": True}
+
+
+def test_alert_bot_main_invalid_config(monkeypatch: pytest.MonkeyPatch) -> None:
+    module = _load_module(monkeypatch)
+
+    def boom():
+        raise AlertConfigurationError("bad config")
+
+    monkeypatch.setattr(module, "_evaluate_sync", boom)
+
+    assert module.main() == 1

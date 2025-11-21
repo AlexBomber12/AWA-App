@@ -6,7 +6,7 @@ from pathlib import Path
 
 from services.alert_bot import config as alert_config, worker
 from services.alert_bot.config import AlertRule
-from services.alert_bot.decider import NotificationIntent, dedupe_events
+from services.alert_bot.decider import AlertRequest, dedupe_events
 from services.alert_bot.rules import AlertEvent
 from services.alert_bot.settings import AlertBotSettings
 
@@ -103,16 +103,17 @@ def test_collect_chat_ids_prefers_runtime() -> None:
         service_name="alert_bot",
         version="test",
     )
-    intent = NotificationIntent(
+    request = AlertRequest(
         rule_id="roi",
         severity="info",
         message="hello",
-        chat_ids=("@ops",),
+        chat_id="@ops",
         parse_mode="HTML",
         dedupe_key="roi:1",
         disable_web_page_preview=True,
+        labels={},
     )
-    ids = worker._collect_chat_ids(runtime, [intent], settings)
+    ids = worker._collect_chat_ids(runtime, [request], settings)
     assert ids == {"@ops"}
 
 

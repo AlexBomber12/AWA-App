@@ -13,6 +13,7 @@ from awa_common.http_client import AsyncHTTPClient, HTTPClient, HTTPClientError
 from awa_common.metrics import (
     ALERTBOT_INFLIGHT_SENDS,
     ALERTBOT_MESSAGES_SENT_TOTAL,
+    ALERTBOT_NOTIFICATIONS_SENT_TOTAL,
     ALERTBOT_SEND_LATENCY_SECONDS,
     ALERTBOT_TELEGRAM_ERRORS_TOTAL,
     ALERTS_NOTIFICATIONS_FAILED_TOTAL,
@@ -319,6 +320,7 @@ class TelegramResponse:
     description: str | None = None
     error_code: int | None = None
     retry_after: float | None = None
+    error_type: str | None = None
 
 
 @dataclass(slots=True)
@@ -338,6 +340,10 @@ class TelegramSendResult:
     @property
     def retry_after(self) -> float | None:
         return self.response.retry_after if self.response else None
+
+    @property
+    def error_type(self) -> str | None:
+        return self.response.error_type if self.response else None
 
 
 class _TokenBucket:
@@ -383,6 +389,24 @@ def _retry_after_from_payload(payload: dict[str, Any]) -> float | None:
         if isinstance(retry_after, (int, float)) and retry_after >= 0:
             return float(retry_after)
     return None
+
+
+def _error_type_from_status(status_code: int | None) -> str:
+    if status_code is None or status_code == 0:
+        return "CONNECTION"
+    if status_code >= 500:
+        return "HTTP_5xx"
+    if status_code == 429:
+        return "HTTP_429"
+    if status_code >= 400:
+        return "HTTP_4xx"
+    return "TELEGRAM_API"
+
+
+def _error_type_from_exception(exc: BaseException) -> str:
+    if isinstance(exc, httpx.TimeoutException):
+        return "TIMEOUT"
+    return "CONNECTION"
 
 
 class AsyncTelegramClient:
@@ -458,6 +482,7 @@ class AsyncTelegramClient:
                 status_code=0,
                 payload=None,
                 description=problem or "chat_id missing",
+                error_type="CONFIG",
                 error_code=None,
             )
             result = TelegramSendResult(ok=False, status="error", response=response)
@@ -501,6 +526,7 @@ class AsyncTelegramClient:
                 status_code=0,
                 payload=None,
                 description="TELEGRAM_TOKEN missing",
+                error_type="CONFIG",
             )
             result = TelegramSendResult(ok=False, status="error", response=response)
             self._record_result(result, rule_id=rule_id, chat_id=chat_display, method=method)
@@ -555,6 +581,7 @@ class AsyncTelegramClient:
         except httpx.HTTPStatusError as exc:
             data: dict[str, Any] | None = None
             body: httpx.Response | None = exc.response
+            error_type = _error_type_from_status(body.status_code if body else None)
             if body is not None:
                 try:
                     candidate = body.json()
@@ -574,13 +601,26 @@ class AsyncTelegramClient:
                 description=description,
                 error_code=error_code,
                 retry_after=retry_after,
+                error_type=error_type,
             )
         except HTTPClientError as exc:
             description = f"{exc.__class__.__name__}: {exc}"
-            return TelegramResponse(ok=False, status_code=0, payload=None, description=description)
+            return TelegramResponse(
+                ok=False,
+                status_code=0,
+                payload=None,
+                description=description,
+                error_type=_error_type_from_exception(exc),
+            )
         except httpx.RequestError as exc:
             description = f"{exc.__class__.__name__}: {exc}"
-            return TelegramResponse(ok=False, status_code=0, payload=None, description=description)
+            return TelegramResponse(
+                ok=False,
+                status_code=0,
+                payload=None,
+                description=description,
+                error_type=_error_type_from_exception(exc),
+            )
         data: dict[str, Any] | None = None
         try:
             data_candidate = response.json()
@@ -588,6 +628,13 @@ class AsyncTelegramClient:
                 data = data_candidate
         except ValueError:
             data = None
+            return TelegramResponse(
+                ok=False,
+                status_code=response.status_code,
+                payload=None,
+                description="telegram API returned invalid JSON",
+                error_type="PARSE",
+            )
         finally:
             await response.aclose()
         if data is None:
@@ -596,6 +643,7 @@ class AsyncTelegramClient:
         description = data.get("description")
         error_code = data.get("error_code")
         ok = bool(data.get("ok", True))
+        error_type = None if ok else _error_type_from_status(response.status_code)
         return TelegramResponse(
             ok=ok,
             status_code=response.status_code,
@@ -603,22 +651,28 @@ class AsyncTelegramClient:
             description=description,
             error_code=error_code,
             retry_after=retry_after,
+            error_type=error_type,
         )
 
     def _record_result(self, result: TelegramSendResult, *, rule_id: str | None, chat_id: str, method: str) -> None:
         labels = dict(self._metric_labels)
         rule_label = (rule_id or "global").strip() or "global"
+        status_label = "ok" if result.ok else "error"
+        ALERTBOT_NOTIFICATIONS_SENT_TOTAL.labels(rule=rule_label, status=status_label, **labels).inc()
         ALERTBOT_MESSAGES_SENT_TOTAL.labels(rule=rule_label, status=result.status, **labels).inc()
         if not result.ok:
-            error_code = result.error_code or (result.response.status_code if result.response else "unknown")
-            ALERTBOT_TELEGRAM_ERRORS_TOTAL.labels(error_code=str(error_code), **labels).inc()
-            self._logger.warning(
+            error_type = result.error_type or _error_type_from_status(
+                result.response.status_code if result.response else None
+            )
+            ALERTBOT_TELEGRAM_ERRORS_TOTAL.labels(error_type=str(error_type), **labels).inc()
+            self._logger.error(
                 "telegram.send_failed",
                 rule_id=rule_id,
                 chat_id=chat_id,
                 method=method,
                 status=result.status,
-                error_code=error_code,
+                error_type=error_type,
+                error_code=result.error_code,
                 description=result.description,
                 retry_after=result.retry_after,
             )

@@ -134,6 +134,20 @@ debug incidents.
 - When running locally, `docker compose up -d --build --wait db redis api worker` makes the API
   endpoint available on `http://localhost:8000/metrics` and worker metrics on `http://localhost:9108`.
 
+### Alert Bot Metrics
+
+- `alertbot_notifications_sent_total{rule,status,service,env,version}` counts every Telegram notification
+  attempt with `status="ok"` or `status="error"` (retries are counted as errors until they succeed).
+- `alertbot_telegram_errors_total{error_type,service,env,version}` captures delivery failures categorized
+  as `HTTP_4xx`, `HTTP_5xx`, `HTTP_429`, `TIMEOUT`, `CONNECTION`, `PARSE`, or `CONFIG`.
+- `alertbot_rules_suppressed_total{rule,reason,service,env,version}` increases when rules are filtered
+  out (reason=`filtered`) or alerts are disabled (`disabled`), making skipped work visible.
+- Existing gauges and histograms (`alertbot_startup_validation_ok`, send/eval latency histograms) remain
+  available for dashboards and SLOs; combine them with the counters above to spot silent drops.
+- Example: `sum by (rule,status) (rate(alertbot_notifications_sent_total[5m]))` shows delivery success
+  rates per rule, and `sum by (error_type) (rate(alertbot_telegram_errors_total[5m]))` highlights
+  transport issues to alert on API errors versus timeouts.
+
 ## Sentry
 
 - `packages/awa_common/sentry.init_sentry(service)` centralises DSN handling, scrubbers, and default

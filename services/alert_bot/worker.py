@@ -18,12 +18,13 @@ from awa_common.metrics import (
     ALERTBOT_EVENTS_EMITTED_TOTAL,
     ALERTBOT_RULE_EVAL_DURATION_SECONDS,
     ALERTBOT_RULES_EVALUATED_TOTAL,
+    ALERTBOT_RULES_SUPPRESSED_TOTAL,
     ALERTBOT_STARTUP_VALIDATION_OK,
 )
 from awa_common.settings import settings
 from services.alert_bot import config as config_module
 from services.alert_bot.config import AlertRule, AlertRulesRuntime
-from services.alert_bot.decider import NotificationIntent, RuleDecision, build_notification_intents
+from services.alert_bot.decider import AlertRequest, RuleDecision, build_alert_requests
 from services.alert_bot.rules import AlertEvent, evaluate_rule
 from services.alert_bot.rules_store import SUPPORTED_RULE_KEYS, DbRulesStore, FileRulesStore, RuleConfig, RulesStore
 from services.alert_bot.settings import AlertBotSettings
@@ -40,6 +41,10 @@ logger = structlog.get_logger(__name__).bind(
 
 _METRIC_LABELS = _DEFAULT_ALERT_SETTINGS.base_metric_labels()
 ALERTBOT_STARTUP_VALIDATION_OK.labels(**_METRIC_LABELS).set(0)
+
+
+class AlertConfigurationError(Exception):
+    """Raised when alert bot configuration is invalid."""
 
 
 @dataclass(slots=True)
@@ -175,10 +180,6 @@ class AlertBotRunner:
         self._degraded_reason: str | None = "validation_not_run"
 
     async def run(self, now: datetime | None = None) -> dict[str, Any]:
-        settings_ok, config_reason = self._settings.validate_runtime()
-        if not settings_ok:
-            self._record_config_error("global")
-            self._set_degraded(config_reason or "invalid_config")
         if not self._settings.enabled:
             logger.info("alertbot.disabled", reason="ALERTS_ENABLED=0")
             self._record_rule_skip("global", "disabled")
@@ -189,6 +190,10 @@ class AlertBotRunner:
                 "events_emitted": 0,
                 "degraded": False,
             }
+        settings_ok, config_reason = self._settings.validate_runtime()
+        if not settings_ok:
+            self._record_config_error("global")
+            self._raise_config_error(config_reason or "invalid_config")
         batch_start = time.perf_counter()
         stats = BatchStats()
         runtime_config = self._load_config()
@@ -209,12 +214,12 @@ class AlertBotRunner:
 
         evaluations = await self._evaluate_rules(due_rules, stats)
         decisions = [RuleDecision(rule=result.rule, events=result.events) for result in evaluations if result.events]
-        intents = build_notification_intents(decisions)
-        stats.events_total = len(intents)
-        await self._ensure_validation(runtime_config, intents)
+        requests = build_alert_requests(decisions)
+        stats.events_total = len(requests)
+        await self._ensure_validation(runtime_config, requests)
         stats.degraded = not self._sending_enabled
         stats.degraded_reason = self._degraded_reason
-        await self._dispatch_intents(intents, stats)
+        await self._dispatch_requests(requests, stats)
 
         batch_duration = time.perf_counter() - batch_start
         ALERTBOT_BATCH_DURATION_SECONDS.labels(**self._metric_labels).observe(batch_duration)
@@ -243,21 +248,32 @@ class AlertBotRunner:
         }
 
     async def validate_startup(self) -> None:
+        if not self._settings.enabled:
+            logger.info("alertbot.disabled", reason="ALERTS_ENABLED=0")
+            return
+        ok, reason = self._settings.validate_runtime()
+        if not ok:
+            self._record_config_error("global")
+            self._raise_config_error(reason or "invalid_config")
         runtime_config = self._load_config()
         rules, _ = self._resolve_rules(runtime_config)
-        placeholder_intents = [
-            NotificationIntent(
-                rule_id=rule.id,
-                severity=str(rule.params.get("severity", "info")) if isinstance(rule.params, dict) else "info",
-                message="startup-validation",
-                chat_ids=tuple(rule.chat_ids),
-                parse_mode=rule.parse_mode,
-                dedupe_key=f"{rule.id}:startup",
-                disable_web_page_preview=True,
-            )
-            for rule in rules
-        ]
-        await self._ensure_validation(runtime_config, placeholder_intents)
+        placeholder_requests: list[AlertRequest] = []
+        for rule in rules:
+            severity = str(rule.params.get("severity", "info")) if isinstance(rule.params, dict) else "info"
+            for chat_id in rule.chat_ids:
+                placeholder_requests.append(
+                    AlertRequest(
+                        rule_id=rule.id,
+                        severity=severity,
+                        chat_id=str(chat_id),
+                        message="startup-validation",
+                        parse_mode=rule.parse_mode,
+                        dedupe_key=f"{rule.id}:startup:{chat_id}",
+                        disable_web_page_preview=True,
+                        labels={},
+                    )
+                )
+        await self._ensure_validation(runtime_config, placeholder_requests, fail_fast=True)
 
     def _load_config(self) -> AlertRulesRuntime | None:
         runtime = self._config_manager.get()
@@ -312,11 +328,13 @@ class AlertBotRunner:
             ALERTBOT_EVENTS_EMITTED_TOTAL.labels(rule=rule.id, **self._metric_labels).inc(len(events))
         return RuleEvaluationResult(rule=rule, events=events, outcome=outcome, duration=duration)
 
-    async def _ensure_validation(self, runtime: AlertRulesRuntime | None, intents: list[NotificationIntent]) -> None:
-        if not intents:
+    async def _ensure_validation(
+        self, runtime: AlertRulesRuntime | None, requests: list[AlertRequest], *, fail_fast: bool = False
+    ) -> None:
+        if not requests:
             return
         config_version = runtime.version if runtime else "legacy"
-        chat_ids = frozenset(_collect_chat_ids(runtime, intents, self._settings))
+        chat_ids = frozenset(_collect_chat_ids(runtime, requests, self._settings))
         needs_validation = (
             not self._sending_enabled
             or self._last_validation_version != config_version
@@ -324,21 +342,31 @@ class AlertBotRunner:
         )
         if not needs_validation:
             return
-        await self._run_validation(chat_ids, config_version)
+        await self._run_validation(chat_ids, config_version, fail_fast=fail_fast)
 
-    async def _run_validation(self, chat_ids: frozenset[str], config_version: str) -> None:
+    async def _run_validation(self, chat_ids: frozenset[str], config_version: str, *, fail_fast: bool = False) -> None:
         if not chat_ids:
-            self._set_degraded("no_chat_ids_configured")
-            return
-        ok, reason = self._settings.validate_runtime()
-        if not ok:
+            reason = "no_chat_ids_configured"
             self._record_config_error("global")
-            self._set_degraded(reason or "invalid_config")
+            if fail_fast:
+                self._raise_config_error(reason)
+            self._set_degraded(reason)
             return
-        ok, reason = await self._transport.validate(set(chat_ids))
-        if not ok:
+        ok_config, reason_config = self._settings.validate_runtime()
+        reason_text = reason_config or "invalid_config"
+        if not ok_config:
             self._record_config_error("global")
-            self._set_degraded(reason or "validation_failed")
+            if fail_fast:
+                self._raise_config_error(reason_text)
+            self._set_degraded(reason_text)
+            return
+        ok_transport, reason_transport = await self._transport.validate(set(chat_ids))
+        validation_reason = reason_transport or "validation_failed"
+        if not ok_transport:
+            self._record_config_error("global")
+            if fail_fast:
+                self._raise_config_error(validation_reason)
+            self._set_degraded(validation_reason)
             return
         self._sending_enabled = True
         self._degraded_reason = None
@@ -347,31 +375,30 @@ class AlertBotRunner:
         ALERTBOT_STARTUP_VALIDATION_OK.labels(**self._metric_labels).set(1)
         logger.info("alertbot.validation.success", chats=len(chat_ids))
 
-    async def _dispatch_intents(self, intents: list[NotificationIntent], stats: BatchStats) -> None:
-        if not intents:
+    async def _dispatch_requests(self, requests: list[AlertRequest], stats: BatchStats) -> None:
+        if not requests:
             return
         if not self._sending_enabled:
-            skipped = sum(len(intent.chat_ids) for intent in intents)
+            skipped = len(requests)
             stats.messages_failed += skipped
-            for intent in intents:
-                self._record_rule_skip(intent.rule_id, "invalid_config")
+            for request in requests:
+                self._record_rule_skip(request.rule_id, "disabled")
             logger.warning("alertbot.sending_skipped", reason=self._degraded_reason, messages=skipped)
             return
         send_tasks: list[asyncio.Task[None]] = []
-        for intent in intents:
-            for chat_id in intent.chat_ids:
-                stats.messages_planned += 1
-                send_tasks.append(asyncio.create_task(self._send_intent(chat_id, intent, stats)))
+        for request in requests:
+            stats.messages_planned += 1
+            send_tasks.append(asyncio.create_task(self._send_request(request, stats)))
         if send_tasks:
             await asyncio.gather(*send_tasks)
 
-    async def _send_intent(self, chat_id: str, intent: NotificationIntent, stats: BatchStats) -> None:
+    async def _send_request(self, request: AlertRequest, stats: BatchStats) -> None:
         attempt = 0
         while attempt < self._max_retries:
             attempt += 1
             async with self._send_semaphore:
                 send_start = time.perf_counter()
-                result = await self._transport.send(chat_id, intent)
+                result = await self._transport.send(request)
                 stats.send_latencies.append(time.perf_counter() - send_start)
             if result.ok:
                 stats.messages_sent += 1
@@ -381,20 +408,35 @@ class AlertBotRunner:
                 await asyncio.sleep(max(result.retry_after or 1.0, 0.1))
                 continue
             stats.messages_failed += 1
+            logger.error(
+                "alertbot.send.failed",
+                rule_id=request.rule_id,
+                chat_id=request.chat_id,
+                status=result.status,
+                error_type=result.error_type,
+                description=result.description,
+            )
             return
         stats.messages_failed += 1
 
-    def _set_degraded(self, reason: str) -> None:
+    def _raise_config_error(self, reason: str) -> None:
+        message = (reason or "invalid_config").strip() or "invalid_config"
+        fix_hint = "Set TELEGRAM_TOKEN and TELEGRAM_DEFAULT_CHAT_ID to valid values"
+        self._set_degraded(message, fix=fix_hint, exit_code=1)
+        raise AlertConfigurationError(message)
+
+    def _set_degraded(self, reason: str, *, fix: str | None = None, exit_code: int | None = None) -> None:
         self._sending_enabled = False
         self._degraded_reason = reason
         ALERTBOT_STARTUP_VALIDATION_OK.labels(**self._metric_labels).set(0)
-        logger.error("alertbot.validation.failed", reason=reason)
+        logger.error("alertbot.validation.failed", reason=reason, fix=fix, exit_code=exit_code)
 
     def _record_config_error(self, rule_id: str) -> None:
         ALERT_ERRORS_TOTAL.labels(rule=rule_id, type="config_error", **self._metric_labels).inc()
 
     def _record_rule_skip(self, rule_id: str, reason: str) -> None:
         ALERT_RULE_SKIPPED_TOTAL.labels(rule=rule_id, reason=reason, **self._metric_labels).inc()
+        ALERTBOT_RULES_SUPPRESSED_TOTAL.labels(rule=rule_id, reason=reason, **self._metric_labels).inc()
 
     def _legacy_rules(self) -> list[AlertRule]:
         try:
@@ -414,15 +456,15 @@ class AlertBotRunner:
 
 def _collect_chat_ids(
     runtime: AlertRulesRuntime | None,
-    intents: list[NotificationIntent],
+    requests: list[AlertRequest],
     bot_settings: AlertBotSettings,
 ) -> set[str]:
     chats: set[str] = set()
     if runtime is not None:
         chats.update(runtime.chat_ids())
-    if intents:
-        for intent in intents:
-            chats.update(intent.chat_ids)
+    if requests:
+        for request in requests:
+            chats.add(request.chat_id)
     if chats:
         return chats
     default_chat = bot_settings.default_chat_id
@@ -546,13 +588,16 @@ def run_startup_validation() -> None:
     """Synchronously trigger startup validation for Celery worker processes."""
 
     try:
-        asyncio.run(RUNNER.validate_startup())
-    except RuntimeError:
-        loop = asyncio.new_event_loop()
         try:
-            loop.run_until_complete(RUNNER.validate_startup())
-        finally:
-            loop.close()
+            asyncio.run(RUNNER.validate_startup())
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            try:
+                loop.run_until_complete(RUNNER.validate_startup())
+            finally:
+                loop.close()
+    except AlertConfigurationError as exc:
+        raise SystemExit(f"Alert bot configuration invalid: {exc}") from exc
 
 
-__all__ = ["evaluate_alert_rules", "alert_rules_health", "run_startup_validation"]
+__all__ = ["AlertConfigurationError", "evaluate_alert_rules", "alert_rules_health", "run_startup_validation"]
