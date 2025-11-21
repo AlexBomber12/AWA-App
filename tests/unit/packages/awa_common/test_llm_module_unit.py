@@ -99,3 +99,42 @@ async def test_generate_fallback_tries_multiple_providers(monkeypatch):
     assert result == "[stub] done"
     assert attempts[0] == "lan"
     assert "stub" in attempts
+
+
+def test_build_http_client_uses_timeout(monkeypatch):
+    captured: dict[str, object] = {}
+
+    class DummyClient:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+    monkeypatch.setattr(llm, "AsyncHTTPClient", DummyClient)
+    client = llm._build_http_client(2.5, "demo")
+    assert isinstance(client, DummyClient)
+    assert captured["integration"] == "demo"
+    assert captured["total_timeout_s"] == 2.5
+    assert captured["max_retries"] == 1
+
+
+@pytest.mark.asyncio
+async def test_local_llm_uses_http_client(monkeypatch):
+    calls: dict[str, object] = {}
+
+    class DummyClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            calls["closed"] = True
+
+        async def post_json(self, url, json, headers=None, timeout=None):
+            calls["url"] = url
+            calls["json"] = json
+            calls["timeout"] = timeout
+            return {"text": "result"}
+
+    monkeypatch.setattr(llm, "_build_http_client", lambda timeout, integration: DummyClient())
+    out = await llm._local_llm("prompt", 0.5, 8, timeout=1.2)
+    assert out == "result"
+    assert calls["url"].startswith("http://llm")
+    assert calls.get("closed") is True
