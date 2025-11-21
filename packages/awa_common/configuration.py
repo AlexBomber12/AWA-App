@@ -7,7 +7,11 @@ from typing import TYPE_CHECKING, Any, Literal
 from pydantic import BaseModel, ConfigDict
 
 if TYPE_CHECKING:  # pragma: no cover
+    from botocore.config import Config
+
     from .settings import Settings
+else:  # pragma: no cover - runtime fallback when botocore is absent
+    Config = Any
 
 
 def _split_csv(value: str | None) -> list[str]:
@@ -114,6 +118,9 @@ class S3Settings(SettingsGroup):
     multipart_threshold_mb: int
     max_connections: int
     spool_max_bytes: int
+    connect_timeout_s: float
+    read_timeout_s: float
+    addressing_style: str | None
 
     @classmethod
     def from_settings(cls, cfg: Settings) -> S3Settings:
@@ -128,6 +135,9 @@ class S3Settings(SettingsGroup):
             multipart_threshold_mb=int(cfg.S3_MULTIPART_THRESHOLD_MB),
             max_connections=int(cfg.S3_MAX_CONNECTIONS),
             spool_max_bytes=int(cfg.SPOOL_MAX_BYTES),
+            connect_timeout_s=float(getattr(cfg, "S3_CONNECT_TIMEOUT_S", cfg.HTTP_CONNECT_TIMEOUT_S)),
+            read_timeout_s=float(getattr(cfg, "S3_READ_TIMEOUT_S", cfg.HTTP_READ_TIMEOUT_S)),
+            addressing_style=getattr(cfg, "S3_ADDRESSING_STYLE", None),
         )
 
     def endpoint_url(self, *, secure_override: bool | None = None) -> str:
@@ -145,6 +155,31 @@ class S3Settings(SettingsGroup):
             "aws_secret_access_key": self.secret_key,
             "region_name": self.region,
         }
+
+    def client_config(
+        self,
+        *,
+        connect_timeout: float | None = None,
+        read_timeout: float | None = None,
+        max_pool_connections: int | None = None,
+        addressing_style: str | None = None,
+    ) -> Config:
+        try:
+            from botocore.config import Config
+        except Exception as exc:  # pragma: no cover - import failure handled by caller
+            raise RuntimeError("botocore is required to build an S3 client config") from exc
+
+        s3_params: dict[str, str] | None = None
+        resolved_addressing = addressing_style if addressing_style is not None else self.addressing_style
+        if resolved_addressing:
+            s3_params = {"addressing_style": resolved_addressing}
+
+        return Config(
+            max_pool_connections=int(max_pool_connections or self.max_connections),
+            connect_timeout=float(connect_timeout if connect_timeout is not None else self.connect_timeout_s),
+            read_timeout=float(read_timeout if read_timeout is not None else self.read_timeout_s),
+            s3=s3_params,
+        )
 
 
 class CelerySettings(SettingsGroup):
@@ -423,6 +458,9 @@ class EtlSettings(SettingsGroup):
     task_id: str | None
     helium_api_key: str | None
     helium10_key: str | None
+    helium10_base_url: str
+    helium10_timeout_s: float
+    helium10_max_retries: int
     keepa_key: str | None
     region: str
     sp_fees_date: str | None
@@ -455,6 +493,9 @@ class EtlSettings(SettingsGroup):
             task_id=cfg.TASK_ID,
             helium_api_key=cfg.HELIUM_API_KEY,
             helium10_key=cfg.HELIUM10_KEY,
+            helium10_base_url=cfg.HELIUM10_BASE_URL,
+            helium10_timeout_s=float(cfg.HELIUM10_TIMEOUT_S),
+            helium10_max_retries=int(cfg.HELIUM10_MAX_RETRIES),
             keepa_key=cfg.KEEPA_KEY,
             region=cfg.REGION,
             sp_fees_date=cfg.SP_FEES_DATE,

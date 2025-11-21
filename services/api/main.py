@@ -4,7 +4,6 @@ import os
 from collections.abc import Callable, Iterable
 from contextlib import asynccontextmanager
 
-import httpx
 import redis.asyncio as aioredis
 import sentry_sdk
 import structlog
@@ -30,6 +29,7 @@ from awa_common.db.async_session import (
     get_sessionmaker,
     init_async_engine,
 )
+from awa_common.http_client import AsyncHTTPClient
 from awa_common.logging import RequestIdMiddleware, configure_logging
 from awa_common.loop_lag import start_loop_lag_monitor
 from awa_common.metrics import MetricsMiddleware, init as metrics_init, record_redis_error, register_metrics_endpoint
@@ -317,8 +317,12 @@ async def _check_llm() -> None:
     if provider != "lan":
         return
     try:
-        async with httpx.AsyncClient(timeout=lan_timeout) as client:
-            await client.get(f"{lan_base}/ready")
+        async with AsyncHTTPClient(
+            integration="llm_health",
+            total_timeout_s=lan_timeout,
+            max_retries=1,
+        ) as client:
+            await client.get(f"{lan_base}/ready", timeout=lan_timeout)
     except Exception:
         fallback = (
             llm_cfg.fallback_provider if llm_cfg else getattr(cfg, "LLM_PROVIDER_FALLBACK", "stub") or "stub"

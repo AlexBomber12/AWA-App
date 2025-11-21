@@ -15,7 +15,7 @@ async def test_download_with_retries_success(monkeypatch) -> None:
     meta = {"content_type": "text/csv"}
     calls = {"count": 0}
 
-    async def _fake_http(url: str, timeout_s: int):
+    async def _fake_http(url: str, timeout_s: int, retries=None):
         calls["count"] += 1
         return payload, meta
 
@@ -48,7 +48,7 @@ async def test_download_http_parses_metadata(monkeypatch) -> None:
             self.url = url
             return _DummyResponse()
 
-    async def _fake_client():
+    async def _fake_client(*args, **kwargs):
         return _DummyClient()
 
     monkeypatch.setattr(client, "_ensure_http_client", _fake_client, raising=False)

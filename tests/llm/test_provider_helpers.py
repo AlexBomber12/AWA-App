@@ -27,8 +27,8 @@ async def test_timeout_env_changes_timeout_used(monkeypatch):
     captured: dict[str, float | None] = {}
 
     class FakeClient:
-        def __init__(self, *a, timeout=None, **kw):
-            captured["timeout"] = timeout
+        def __init__(self, *a, integration=None, total_timeout_s=None, max_retries=None, **kw):
+            captured["client_timeout"] = total_timeout_s
 
         async def __aenter__(self):
             return self
@@ -36,29 +36,12 @@ async def test_timeout_env_changes_timeout_used(monkeypatch):
         async def __aexit__(self, *a):
             return False
 
-        async def post(self, *a, **kw):
-            class R:
-                headers = {"content-type": "application/json"}
+        async def post_json(self, *a, **kw):
+            captured["request_timeout"] = kw.get("timeout")
+            return {"text": "ok"}
 
-                def json(self):
-                    return {"text": "ok"}
-
-                @property
-                def text(self):
-                    return "ok"
-
-                status_code = 200
-
-                def raise_for_status(self):
-                    pass
-
-            return R()
-
-    monkeypatch.setattr(
-        llm,
-        "httpx",
-        types.SimpleNamespace(AsyncClient=FakeClient, TimeoutException=TimeoutError),
-    )
+    monkeypatch.setattr(llm, "AsyncHTTPClient", FakeClient)
     out = await llm.generate("hi")
     assert out == "ok"
-    assert captured.get("timeout") == 0.1
+    assert captured.get("client_timeout") == 0.1
+    assert captured.get("request_timeout") == 0.1

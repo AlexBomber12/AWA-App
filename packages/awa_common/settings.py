@@ -189,6 +189,9 @@ class Settings(BaseSettings):
     S3_MULTIPART_THRESHOLD_MB: int = 16
     S3_MAX_CONNECTIONS: int = 50
     SPOOL_MAX_BYTES: int = 67_108_864  # 64 MB safety cap for SpooledTemporaryFile
+    S3_CONNECT_TIMEOUT_S: float = 5.0
+    S3_READ_TIMEOUT_S: float = 30.0
+    S3_ADDRESSING_STYLE: str | None = None
     MINIO_ENDPOINT: str = "minio:9000"
     MINIO_SECURE: bool = False
     MINIO_ACCESS_KEY: str = "minio"
@@ -412,6 +415,9 @@ class Settings(BaseSettings):
 
     # Fees ingestion / external APIs
     HELIUM10_KEY: str | None = None
+    HELIUM10_BASE_URL: str = "https://api.helium10.com"
+    HELIUM10_TIMEOUT_S: float = 60.0
+    HELIUM10_MAX_RETRIES: int = 5
     FEES_RAW_TABLE: str = "fees_raw"
     H10_MAX_CONCURRENCY: int = 5
     H10_DB_POOL_MAX_SIZE: int = 10

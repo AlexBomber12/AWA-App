@@ -4,6 +4,7 @@ import asyncio
 import base64
 import contextlib
 import json
+import os
 import time
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
@@ -12,8 +13,8 @@ from typing import Any
 import httpx
 import structlog
 from authlib.jose import JsonWebKey, JsonWebToken
-from tenacity import AsyncRetrying, RetryError, stop_after_attempt, wait_random_exponential
 
+from awa_common.http_client import AsyncHTTPClient
 from awa_common.metrics import record_oidc_jwks_refresh, record_oidc_validation_failure
 from awa_common.settings import Settings, settings
 
@@ -54,7 +55,9 @@ class _JWKSCacheEntry:
 class AsyncJwksProvider:
     """Async JWKS provider with TTL cache and stale-while-revalidate semantics."""
 
-    def __init__(self, cfg: Settings | None = None, *, client: httpx.AsyncClient | None = None) -> None:
+    def __init__(
+        self, cfg: Settings | None = None, *, client: AsyncHTTPClient | httpx.AsyncClient | None = None
+    ) -> None:
         self._cfg_default = cfg or settings
         self._ttl = max(int(self._cfg_default.OIDC_JWKS_TTL_SECONDS or 0), 60)
         self._stale_grace = max(int(self._cfg_default.OIDC_JWKS_STALE_GRACE_SECONDS or 0), 0)
@@ -75,6 +78,8 @@ class AsyncJwksProvider:
         self._closed = False
         self._refresh_interval = max(30.0, min(float(self._ttl), 120.0))
         self._background_enabled = bool(getattr(self._cfg_default, "OIDC_JWKS_BACKGROUND_REFRESH", True))
+        if getattr(self._cfg_default, "TESTING", False) or "PYTEST_CURRENT_TEST" in os.environ:
+            self._background_enabled = False
 
     def start(self) -> None:
         if self._background_task is not None or self._closed or not self._background_enabled:
@@ -107,7 +112,10 @@ class AsyncJwksProvider:
             record_oidc_jwks_refresh(issuer, success=True, age_seconds=entry.age, count=False)
             return entry
         if entry and self._is_within_grace(entry, now):
-            self._schedule_refresh(issuer, resolved_cfg)
+            refresh_task = asyncio.create_task(self._refresh(issuer, resolved_cfg, force=True, background=True))
+            self._pending_refresh[issuer] = refresh_task
+            with contextlib.suppress(Exception):
+                await asyncio.wait_for(refresh_task, timeout=5.0)
             record_oidc_jwks_refresh(issuer, success=True, age_seconds=entry.age, count=False)
             return entry
         refreshed = await self._refresh(issuer, resolved_cfg, force=True, background=False)
@@ -175,53 +183,41 @@ class AsyncJwksProvider:
         headers = {"Accept": "application/json"}
         if cached and cached.etag:
             headers["If-None-Match"] = cached.etag
-        retrying = AsyncRetrying(
-            wait=wait_random_exponential(multiplier=0.25, max=3.0),
-            stop=stop_after_attempt(3),
-            reraise=True,
-        )
         try:
-            async for attempt in retrying:
-                with attempt:
-                    response = await self._client.get(jwks_uri, headers=headers)
-                    if response.status_code == 304 and cached is not None:
-                        return _JWKSCacheEntry(
-                            issuer=issuer,
-                            jwks_uri=jwks_uri,
-                            fetched_at=time.time(),
-                            key_set=cached.key_set,
-                            keys_by_kid=cached.keys_by_kid,
-                            etag=cached.etag,
-                        )
-                    response.raise_for_status()
-                    payload = response.json()
-                    if not isinstance(payload, Mapping):
-                        raise OIDCValidationError(f"Response from {jwks_uri} is not a JSON object")
-                    try:
-                        key_set = JsonWebKey.import_key_set(payload)
-                    except Exception as exc:  # pragma: no cover - defensive against malformed JWKS
-                        raise OIDCValidationError("Unable to parse JWKS payload") from exc
-                    keys_by_kid: dict[str | None, Any] = {}
-                    for key in key_set.keys:
-                        kid = getattr(key, "kid", None)
-                        keys_by_kid[str(kid) if kid is not None else None] = key
-                    etag = response.headers.get("ETag") or response.headers.get("etag")
-                    return _JWKSCacheEntry(
-                        issuer=issuer,
-                        jwks_uri=jwks_uri,
-                        fetched_at=time.time(),
-                        key_set=key_set,
-                        keys_by_kid=keys_by_kid,
-                        etag=etag,
-                    )
-        except RetryError as exc:
-            record_oidc_jwks_refresh(issuer, success=False)
-            raise OIDCJwksUnavailableError(f"Failed to refresh JWKS for {issuer}") from exc
+            response = await self._client.get(jwks_uri, headers=headers)
+            if response.status_code == 304 and cached is not None:
+                return _JWKSCacheEntry(
+                    issuer=issuer,
+                    jwks_uri=jwks_uri,
+                    fetched_at=time.time(),
+                    key_set=cached.key_set,
+                    keys_by_kid=cached.keys_by_kid,
+                    etag=cached.etag,
+                )
+            response.raise_for_status()
+            payload = response.json()
+            if not isinstance(payload, Mapping):
+                raise OIDCValidationError(f"Response from {jwks_uri} is not a JSON object")
+            try:
+                key_set = JsonWebKey.import_key_set(payload)
+            except Exception as exc:  # pragma: no cover - defensive against malformed JWKS
+                raise OIDCValidationError("Unable to parse JWKS payload") from exc
+            keys_by_kid: dict[str | None, Any] = {}
+            for key in key_set.keys:
+                kid = getattr(key, "kid", None)
+                keys_by_kid[str(kid) if kid is not None else None] = key
+            etag = response.headers.get("ETag") or response.headers.get("etag")
+            return _JWKSCacheEntry(
+                issuer=issuer,
+                jwks_uri=jwks_uri,
+                fetched_at=time.time(),
+                key_set=key_set,
+                keys_by_kid=keys_by_kid,
+                etag=etag,
+            )
         except Exception as exc:  # pragma: no cover - unexpected network failure
             record_oidc_jwks_refresh(issuer, success=False)
             raise OIDCJwksUnavailableError(f"Failed to refresh JWKS for {issuer}") from exc
-        record_oidc_jwks_refresh(issuer, success=False)
-        raise OIDCJwksUnavailableError(f"Failed to refresh JWKS for {issuer}")
 
     async def _resolve_jwks_uri(self, issuer: str, cfg: Settings) -> str:
         override = (cfg.OIDC_JWKS_URL or "").strip()
@@ -240,9 +236,7 @@ class AsyncJwksProvider:
         return jwks_uri
 
     async def _http_get_json(self, url: str) -> Mapping[str, Any]:
-        response = await self._client.get(url, headers={"Accept": "application/json"})
-        response.raise_for_status()
-        payload = response.json()
+        payload = await self._client.get_json(url, headers={"Accept": "application/json"})
         if not isinstance(payload, Mapping):
             raise OIDCValidationError(f"Response from {url} is not a JSON object")
         return payload

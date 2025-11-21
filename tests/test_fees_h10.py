@@ -16,7 +16,7 @@ from services.fees_h10 import client, repository, worker  # noqa: E402
 
 @respx.mock
 async def test_fetch_fees():
-    route = respx.get(client.BASE.format("A1")).mock(
+    route = respx.get(client.build_fee_url("A1")).mock(
         return_value=Response(200, json={"fulfillmentFee": 1, "referralFee": 2, "storageFee": 0.5})
     )
     os.environ["HELIUM10_KEY"] = "k"
@@ -89,7 +89,7 @@ def test_refresh_fees(tmp_path, monkeypatch, pg_pool):
         )
     monkeypatch.setattr(worker, "list_active_asins", lambda: ["A1", "A2", "A3"])
     for asin in ["A1", "A2", "A3"]:
-        respx.get(client.BASE.format(asin)).mock(
+        respx.get(client.build_fee_url(asin)).mock(
             return_value=Response(200, json={"fulfillmentFee": 1, "referralFee": 1, "storageFee": 1})
         )
     worker.refresh_fees()

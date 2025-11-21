@@ -1,10 +1,8 @@
 import importlib
 from typing import Any, cast
 
-try:
-    import httpx
-except Exception:  # pragma: no cover - httpx is available in production
-    httpx = None
+from awa_common.http_client import AsyncHTTPClient
+
 try:  # pragma: no cover - safeguards import order during bootstrapping
     from awa_common.settings import settings as _settings
 except Exception:  # pragma: no cover - during bootstrap
@@ -51,17 +49,28 @@ def _timeout_seconds(default: float | None = None) -> float:
     return float(cfg.request_timeout_s)
 
 
+def _build_http_client(timeout: float | None, integration: str) -> AsyncHTTPClient:
+    resolved_timeout = _timeout_seconds(timeout)
+    return AsyncHTTPClient(
+        integration=integration,
+        total_timeout_s=resolved_timeout,
+        max_retries=1,
+    )
+
+
 async def _local_llm(prompt: str, temp: float, max_toks: int, timeout: float) -> str:
     cfg = _config()
     url = (cfg.remote_url if cfg else None) or (cfg.local_url if cfg else None) or "http://llm:8000/llm"
-    async with httpx.AsyncClient(timeout=timeout) as cli:
-        r = await cli.post(url, json={"prompt": prompt, "temperature": temp, "max_tokens": max_toks})
-        r.raise_for_status()
-        data = r.json() if "application/json" in r.headers.get("content-type", "") else {}
-        return cast(
-            str,
-            data.get("completion") or data.get("text") or data.get("content") or r.text,
-        ).strip()
+    async with _build_http_client(timeout, "llm_local") as cli:
+        data = await cli.post_json(
+            url,
+            json={"prompt": prompt, "temperature": temp, "max_tokens": max_toks},
+            timeout=timeout,
+        )
+    return cast(
+        str,
+        data.get("completion") or data.get("text") or data.get("content") or data,
+    ).strip()
 
 
 async def _openai_llm(prompt: str, temp: float, max_toks: int, timeout: float) -> str:
@@ -90,21 +99,15 @@ async def _remote_generate(base: str, key: str | None, prompt: str, max_tokens: 
     }
     cfg = _config()
     url = (cfg.remote_url if cfg else None) or f"{base}/v1/chat/completions"
-    async with httpx.AsyncClient(timeout=timeout) as cli:
-        resp = await cli.post(url, json=payload, headers=headers)
-        resp.raise_for_status()  # pragma: no cover - network error path
-        try:
-            data = resp.json()
-        except Exception:  # pragma: no cover - non-json response
-            data = {}
-        text = getattr(resp, "text", "")
-        return cast(
-            str,
-            data.get("choices", [{}])[0].get("message", {}).get("content")
-            or data.get("text")
-            or data.get("content")
-            or text,
-        ).strip()
+    async with _build_http_client(timeout, "llm_remote") as cli:
+        data = await cli.post_json(url, json=payload, headers=headers, timeout=timeout)
+    return cast(
+        str,
+        data.get("choices", [{}])[0].get("message", {}).get("content")
+        or data.get("text")
+        or data.get("content")
+        or data,
+    ).strip()
 
 
 async def _stub_llm(prompt: str, _temp: float, _max_toks: int) -> str:
@@ -121,16 +124,12 @@ async def _generate_with_provider(
 ) -> str:
     to = timeout or _timeout_seconds()
     if provider == "lan":
-        if httpx is None:  # pragma: no cover - dependency guard
-            raise RuntimeError("httpx not available for lan provider")
         cfg = _config()
         base = (cfg.lan_api_base_url if cfg else None) or "http://localhost:8000"
         key = (cfg.lan_api_key if cfg else None) or ""
         model = (cfg.openai_model if cfg else None) or "gpt-4o-mini"
         return await _remote_generate(base, key or None, prompt, max_tokens, model, timeout=to)
     if provider == "local":
-        if httpx is None:  # pragma: no cover - dependency guard
-            raise RuntimeError("httpx not available for local provider")
         return await _local_llm(prompt, temperature, max_tokens, timeout=to)
     if provider == "openai":
         try:

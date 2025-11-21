@@ -6,15 +6,15 @@ import io
 from dataclasses import asdict, dataclass
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Any, cast
+from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 import anyio
-import httpx
 import structlog
 
 from awa_common.http_client import AsyncHTTPClient
 from awa_common.metrics import record_etl_normalize_error, record_etl_rows_normalized
+from awa_common.minio import create_boto3_client, get_s3_client_config
 from awa_common.retries import RetryConfig, aretry
 from awa_common.settings import Settings
 from awa_common.types import RateRowModel
@@ -32,6 +32,7 @@ __all__ = [
 
 logger = structlog.get_logger(__name__).bind(component="logistics_etl.client")
 _HTTP_CLIENT: AsyncHTTPClient | None = None
+_HTTP_CLIENT_CONFIG: tuple[float, int] | None = None
 _HTTP_LOCK = asyncio.Lock()
 
 
@@ -126,14 +127,33 @@ async def fetch_rates() -> list[dict[str, object]]:
     return rows
 
 
-async def _ensure_http_client() -> AsyncHTTPClient:
-    global _HTTP_CLIENT
+async def _ensure_http_client(timeout_s: float | None = None, retries: int | None = None) -> AsyncHTTPClient:
+    global _HTTP_CLIENT, _HTTP_CLIENT_CONFIG
+    cfg = Settings()
+    fallback_timeout = getattr(cfg, "LOGISTICS_TIMEOUT_S", getattr(cfg, "HTTP_TOTAL_TIMEOUT_S", 60.0))
+    desired_timeout = float(timeout_s if timeout_s is not None else fallback_timeout)
+    desired_retries = max(
+        1,
+        int(retries if retries is not None else getattr(cfg, "LOGISTICS_RETRIES", 0)),
+        int(getattr(cfg, "ETL_RETRY_ATTEMPTS", 1)),
+        int(getattr(cfg, "HTTP_MAX_RETRIES", 1)),
+    )
+    desired = (desired_timeout, desired_retries)
     client = _HTTP_CLIENT
-    if client is not None:
+    if client is not None and _HTTP_CLIENT_CONFIG == desired:
         return client
     async with _HTTP_LOCK:
-        if _HTTP_CLIENT is None:
-            _HTTP_CLIENT = AsyncHTTPClient(integration="logistics_etl")
+        client = _HTTP_CLIENT
+        if client is not None and _HTTP_CLIENT_CONFIG == desired:
+            return client
+        if client is not None:
+            await client.aclose()
+        _HTTP_CLIENT = AsyncHTTPClient(
+            integration="logistics_etl",
+            total_timeout_s=desired_timeout,
+            max_retries=desired_retries,
+        )
+        _HTTP_CLIENT_CONFIG = desired
         return _HTTP_CLIENT
 
 
@@ -141,7 +161,7 @@ async def _download_with_retries(url_or_uri: str, *, timeout_s: int, retries: in
     parsed = urlparse(url_or_uri)
     scheme = (parsed.scheme or "").lower()
     cfg = Settings()
-    attempts = max(1, int(cfg.ETL_RETRY_ATTEMPTS), int(retries))
+    attempts = max(1, int(getattr(cfg, "ETL_RETRY_ATTEMPTS", retries)), int(retries))
     raw_jitter = getattr(cfg, "ETL_RETRY_JITTER_S", 0.0)
     try:
         jitter_seconds = float(raw_jitter)
@@ -157,10 +177,9 @@ async def _download_with_retries(url_or_uri: str, *, timeout_s: int, retries: in
     )
 
     if scheme in ("http", "https"):
+        return await _download_http(url_or_uri, timeout_s=timeout_s, retries=attempts)
 
-        async def target() -> tuple[bytes, dict[str, Any]]:
-            return await _download_http(url_or_uri, timeout_s=timeout_s)
-    elif scheme == "s3":
+    if scheme == "s3":
 
         async def target() -> tuple[bytes, dict[str, Any]]:
             return await _download_s3(parsed, timeout_s)
@@ -179,70 +198,41 @@ async def _download_with_retries(url_or_uri: str, *, timeout_s: int, retries: in
 
 
 class _LegacyHTTPWrapper:
-    async def get_client(self) -> httpx.AsyncClient:
-        client = await _ensure_http_client()
-        raw = getattr(client, "httpx_client", None)
-        return cast(httpx.AsyncClient, raw or client)
+    async def get_client(self) -> AsyncHTTPClient:
+        return await _ensure_http_client()
 
 
 http_client = _LegacyHTTPWrapper()
 
 
-async def _download_http(url: str, timeout_s: int | None = None) -> tuple[bytes, dict[str, Any]]:
-    get_client_fn = getattr(http_client, "get_client", None)
-    raw_client: Any | None = None
-    if callable(get_client_fn):
-        raw_client = await get_client_fn()
-    if raw_client is None:
-        raw_client = await _ensure_http_client()
-
-    stream = getattr(raw_client, "stream", None)
-    request = getattr(raw_client, "request", None)
-
-    if callable(stream):
-        async with stream("GET", url, follow_redirects=True, timeout=timeout_s) as response:
-            if hasattr(response, "raise_for_status"):
-                response.raise_for_status()
-            if hasattr(response, "aread"):
-                body = await response.aread()
-            else:
-                body = getattr(response, "content", b"")
-            etag = response.headers.get("etag")
-            meta = {
-                "content_type": response.headers.get("content-type"),
-                "etag": etag.strip('"') if etag else None,
-                "last_modified": response.headers.get("last-modified"),
-            }
-            seqno = response.headers.get("x-amz-version-id") or meta.get("etag")
-            if seqno:
-                meta["seqno"] = seqno.strip('"')
-            return body, meta
-
-    if callable(request):
-        response = await request("GET", url, follow_redirects=True, timeout=timeout_s)
-        try:
-            if hasattr(response, "raise_for_status"):
-                response.raise_for_status()
-            if hasattr(response, "aread"):
-                body = await response.aread()
-            else:
-                body = getattr(response, "content", b"")
-        finally:
-            close = getattr(response, "aclose", None)
-            if callable(close):
-                await close()
-            elif hasattr(response, "close"):
-                response.close()
-    etag = response.headers.get("etag")
-    meta = {
-        "content_type": response.headers.get("content-type"),
-        "etag": etag.strip('"') if etag else None,
-        "last_modified": response.headers.get("last-modified"),
-    }
-    seqno = response.headers.get("x-amz-version-id") or meta.get("etag")
-    if seqno:
-        meta["seqno"] = seqno.strip('"')
-    return body, meta
+async def _download_http(
+    url: str, timeout_s: int | None = None, retries: int | None = None
+) -> tuple[bytes, dict[str, Any]]:
+    client = await _ensure_http_client(timeout_s=timeout_s, retries=retries)
+    response = await client.request("GET", url, follow_redirects=True, timeout=timeout_s)
+    try:
+        if hasattr(response, "raise_for_status"):
+            response.raise_for_status()
+        if hasattr(response, "aread"):
+            body = await response.aread()
+        else:
+            body = getattr(response, "content", b"")
+        etag = response.headers.get("etag")
+        meta = {
+            "content_type": response.headers.get("content-type"),
+            "etag": etag.strip('"') if etag else None,
+            "last_modified": response.headers.get("last-modified"),
+        }
+        seqno = response.headers.get("x-amz-version-id") or meta.get("etag")
+        if seqno:
+            meta["seqno"] = seqno.strip('"')
+        return body or b"", meta
+    finally:
+        close = getattr(response, "aclose", None)
+        if callable(close):
+            await close()
+        elif hasattr(response, "close"):
+            response.close()
 
 
 async def _download_s3(parsed, timeout_s: int) -> tuple[bytes, dict[str, Any]]:
@@ -256,19 +246,12 @@ async def _download_s3(parsed, timeout_s: int) -> tuple[bytes, dict[str, Any]]:
             extra["VersionId"] = version_id[0]
 
     def _get() -> tuple[bytes, dict[str, Any]]:
-        try:
-            import boto3
-            from botocore.exceptions import BotoCoreError, ClientError
-        except Exception as exc:  # pragma: no cover - boto3 optional in tests
-            raise RuntimeError("boto3 is required for S3 logistics sources") from exc
-
-        client = boto3.client("s3")
+        client = create_boto3_client(
+            config=get_s3_client_config(connect_timeout=timeout_s, read_timeout=timeout_s, max_pool_connections=None)
+        )
         try:
             response = client.get_object(Bucket=bucket, Key=key, **extra)
-        except (
-            BotoCoreError,
-            ClientError,
-        ) as exc:  # pragma: no cover - bubbled to retry
+        except Exception as exc:  # pragma: no cover - bubbled to retry
             raise RuntimeError(str(exc)) from exc
         body = response["Body"].read()
         meta = {

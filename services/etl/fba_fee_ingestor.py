@@ -24,7 +24,26 @@ logger = structlog.get_logger(__name__)
 DEFAULT_ASINS = ("DUMMY1", "DUMMY2")
 DEFAULT_FIXTURE_PATH = Path("tests/fixtures/helium_fees_sample.json")
 SOURCE_NAME = "fba_fee_ingestor"
-HELIUM_ENDPOINT = "https://api.helium10.com/v1/profits/fees"
+
+
+def _helium_base_url() -> str:
+    etl_cfg = getattr(settings, "etl", None)
+    base = getattr(etl_cfg, "helium10_base_url", None) or getattr(settings, "HELIUM10_BASE_URL", "")
+    return (base or "https://api.helium10.com").rstrip("/")
+
+
+def _helium_timeout_s() -> float:
+    etl_cfg = getattr(settings, "etl", None)
+    return float(getattr(etl_cfg, "helium10_timeout_s", getattr(settings, "HELIUM10_TIMEOUT_S", 60.0)))
+
+
+def _helium_max_retries() -> int:
+    etl_cfg = getattr(settings, "etl", None)
+    return max(1, int(getattr(etl_cfg, "helium10_max_retries", getattr(settings, "HELIUM10_MAX_RETRIES", 5))))
+
+
+HELIUM_ENDPOINT_PATH = "/v1/profits/fees"
+HELIUM_ENDPOINT = f"{_helium_base_url()}{HELIUM_ENDPOINT_PATH}"
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -66,12 +85,23 @@ def resolve_live(cli_live: bool | None) -> bool:
     return bool(etl_cfg.enable_live if etl_cfg else False)
 
 
-_HTTP_CLIENT = HTTPClient(integration=SOURCE_NAME)
+_HTTP_CLIENT = HTTPClient(
+    integration=SOURCE_NAME,
+    base_url=_helium_base_url(),
+    total_timeout_s=_helium_timeout_s(),
+    max_retries=_helium_max_retries(),
+)
 atexit.register(_HTTP_CLIENT.close)
 
 
-def _request_helium_fee(url: str, headers: dict[str, str]) -> dict[str, Any]:
-    return cast(dict[str, Any], _HTTP_CLIENT.get_json(url, headers=headers))
+def _request_helium_fee(headers: dict[str, str], asin: str) -> dict[str, Any]:
+    return cast(
+        dict[str, Any],
+        _HTTP_CLIENT.get_json(
+            f"{HELIUM_ENDPOINT_PATH}?asin={asin}",
+            headers=headers,
+        ),
+    )
 
 
 def fetch_live_fees(asins: Iterable[str], api_key: str, *, task_id: str | None) -> list[tuple[str, float]]:
@@ -80,8 +110,7 @@ def fetch_live_fees(asins: Iterable[str], api_key: str, *, task_id: str | None) 
     results: list[tuple[str, float]] = []
     headers = {"Authorization": f"Bearer {api_key}"}
     for asin in asins:
-        url = f"{HELIUM_ENDPOINT}?asin={asin}"
-        data = _request_helium_fee(url, headers)
+        data = _request_helium_fee(headers, asin)
         results.append((asin, float(data["totalFbaFee"])))
     return results
 

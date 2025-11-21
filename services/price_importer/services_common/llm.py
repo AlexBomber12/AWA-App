@@ -3,8 +3,7 @@ from __future__ import annotations
 import importlib
 from typing import Any, cast
 
-import httpx
-
+from awa_common.http_client import AsyncHTTPClient
 from awa_common.settings import settings
 
 _LLM_CFG = getattr(settings, "llm", None)
@@ -17,14 +16,22 @@ OPENAI_API_KEY = (_LLM_CFG.openai_api_key if _LLM_CFG else None) or ""
 LLM_TIMEOUT_S = float(getattr(_LLM_CFG, "request_timeout_s", getattr(settings, "LLM_REQUEST_TIMEOUT_S", 60.0)))
 
 
+def _llm_client(integration: str) -> AsyncHTTPClient:
+    return AsyncHTTPClient(
+        integration=integration,
+        total_timeout_s=LLM_TIMEOUT_S,
+        max_retries=1,
+    )
+
+
 async def _local_llm(prompt: str, temp: float, max_toks: int) -> str:
-    async with httpx.AsyncClient(timeout=LLM_TIMEOUT_S) as cli:
-        r = await cli.post(
+    async with _llm_client("llm_local") as cli:
+        data = await cli.post_json(
             LOCAL_URL,
             json={"prompt": prompt, "temperature": temp, "max_tokens": max_toks},
+            timeout=LLM_TIMEOUT_S,
         )
-        r.raise_for_status()
-        return cast(str, r.json()["completion"])
+    return cast(str, data["completion"])
 
 
 async def _openai_llm(prompt: str, temp: float, max_toks: int) -> str:
@@ -46,11 +53,14 @@ async def _remote_generate(base: str, key: str | None, prompt: str, max_tokens: 
         "messages": [{"role": "user", "content": prompt}],
         "max_tokens": max_tokens,
     }
-    async with httpx.AsyncClient(timeout=LLM_TIMEOUT_S) as cli:
-        resp = await cli.post(f"{base}/v1/chat/completions", json=payload, headers=headers)
-        resp.raise_for_status()
-        data = resp.json()
-        return cast(str, data["choices"][0]["message"]["content"]).strip()
+    async with _llm_client("llm_remote") as cli:
+        data = await cli.post_json(
+            f"{base}/v1/chat/completions",
+            json=payload,
+            headers=headers,
+            timeout=LLM_TIMEOUT_S,
+        )
+    return cast(str, data["choices"][0]["message"]["content"]).strip()
 
 
 async def generate(

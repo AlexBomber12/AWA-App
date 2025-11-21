@@ -11,13 +11,12 @@ from typing import Any
 import aioboto3
 import sentry_sdk
 import structlog
-from botocore.config import Config
 from fastapi import APIRouter, Depends, Request, UploadFile
 from fastapi.responses import JSONResponse
 
 from awa_common.files import sanitize_upload_name
 from awa_common.metrics import ingest_upload_inflight, record_ingest_upload, record_ingest_upload_failure
-from awa_common.minio import get_bucket_name, get_s3_client_kwargs
+from awa_common.minio import get_bucket_name, get_s3_client_config, get_s3_client_kwargs
 from awa_common.settings import settings
 from services.api.routes.ingest_errors import IngestRequestError, ingest_error_response, respond_with_ingest_error
 from services.api.security import get_request_id, limit_ops, require_ops
@@ -73,11 +72,7 @@ async def _upload_stream_to_s3(  # pragma: no cover - exercised via integration 
 
     session = aioboto3.Session()
     client_kwargs = get_s3_client_kwargs()
-    config = Config(
-        max_pool_connections=settings.S3_MAX_CONNECTIONS,
-        connect_timeout=float(settings.ETL_CONNECT_TIMEOUT_S),
-        read_timeout=float(settings.ETL_READ_TIMEOUT_S),
-    )
+    config = get_s3_client_config()
     async with session.client("s3", config=config, **client_kwargs) as client:
         upload_id: str | None = None
         parts: list[dict[str, Any]] = []

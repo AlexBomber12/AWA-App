@@ -1,6 +1,5 @@
 import importlib
 import os
-import types
 
 import pytest
 
@@ -25,28 +24,17 @@ async def test_timeout_on_lan_falls_back_to_stub(monkeypatch):
     os.environ["LLM_PROVIDER"] = "lan"
     llm = _reload_llm()
 
-    async def fake_post(*a, **kw):
-        raise (
-            llm.httpx.TimeoutException("timeout") if hasattr(llm.httpx, "TimeoutException") else TimeoutError("timeout")
-        )
-
     class FakeClient:
-        def __init__(self, *a, **kw):
-            pass
-
         async def __aenter__(self):
             return self
 
         async def __aexit__(self, *a):
             return False
 
-        post = fake_post
+        async def post_json(self, *_args, **_kwargs):
+            raise TimeoutError("timeout")
 
-    monkeypatch.setattr(
-        llm,
-        "httpx",
-        types.SimpleNamespace(AsyncClient=FakeClient, TimeoutException=TimeoutError),
-    )
+    monkeypatch.setattr(llm, "_build_http_client", lambda timeout, integration: FakeClient())
     out = await llm.generate("hello")
     assert out.startswith("[stub]")
 
@@ -72,26 +60,17 @@ async def test_local_http_ok_no_fallback(monkeypatch):
         def raise_for_status(self):
             pass
 
-    async def fake_post(*a, **kw):
-        return FakeResp()
-
     class FakeClient:
-        def __init__(self, *a, **kw):
-            pass
-
         async def __aenter__(self):
             return self
 
         async def __aexit__(self, *a):
             return False
 
-        post = fake_post
+        async def post_json(self, *_args, **_kwargs):
+            return FakeResp().json()
 
-    monkeypatch.setattr(
-        llm,
-        "httpx",
-        types.SimpleNamespace(AsyncClient=FakeClient, TimeoutException=TimeoutError),
-    )
+    monkeypatch.setattr(llm, "_build_http_client", lambda timeout, integration: FakeClient())
     out = await llm.generate("ping")
     assert out == "LOCAL_OK"
 
@@ -102,6 +81,18 @@ async def test_openai_missing_module_falls_back(monkeypatch):
     os.environ["TESTING"] = "1"
     os.environ["LLM_PROVIDER"] = "openai"
     llm = _reload_llm()
+
+    class FailingClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def post_json(self, *_args, **_kwargs):
+            raise TimeoutError("offline")
+
+    monkeypatch.setattr(llm, "_build_http_client", lambda timeout, integration: FailingClient())
 
     import sys
 
@@ -118,6 +109,18 @@ async def test_unknown_provider_uses_stub(monkeypatch):
     os.environ["TESTING"] = "1"
     os.environ["LLM_PROVIDER"] = "totally-unknown"
     llm = _reload_llm()
+
+    class FailingClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return False
+
+        async def post_json(self, *_args, **_kwargs):
+            raise TimeoutError("offline")
+
+    monkeypatch.setattr(llm, "_build_http_client", lambda timeout, integration: FailingClient())
     out = await llm.generate("zzz")
     assert out.startswith("[stub]")
 
@@ -143,39 +146,24 @@ async def test_env_switch_effective_without_restart(monkeypatch):
         def raise_for_status(self):
             pass
 
-    async def fake_post(*a, **kw):
-        return FakeResp()
-
     class FakeClient:
-        def __init__(self, *a, **kw):
-            pass
-
         async def __aenter__(self):
             return self
 
         async def __aexit__(self, *a):
             return False
 
-        post = fake_post
+        async def post_json(self, *_args, **_kwargs):
+            return FakeResp().json()
 
-    monkeypatch.setattr(
-        llm,
-        "httpx",
-        types.SimpleNamespace(AsyncClient=FakeClient, TimeoutException=TimeoutError),
-    )
+    monkeypatch.setattr(llm, "_build_http_client", lambda timeout, integration: FakeClient())
     assert (await llm.generate("1")) == "LOCAL_OK"
 
     os.environ["LLM_PROVIDER"] = "lan"
 
-    async def boom(*a, **kw):
-        raise TimeoutError("timeout")
-
     class TClient(FakeClient):
-        post = boom
+        async def post_json(self, *_args, **_kwargs):
+            raise TimeoutError("timeout")
 
-    monkeypatch.setattr(
-        llm,
-        "httpx",
-        types.SimpleNamespace(AsyncClient=TClient, TimeoutException=TimeoutError),
-    )
+    monkeypatch.setattr(llm, "_build_http_client", lambda timeout, integration: TClient())
     assert (await llm.generate("2")).startswith("[stub]")

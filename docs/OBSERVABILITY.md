@@ -55,6 +55,8 @@ debug incidents.
 - `external_http_requests_total{integration,method,outcome,service,env,version}` tracks outbound outcomes.
 - `external_http_request_duration_seconds_bucket{integration,method,service,env,version}` records latency.
 - `external_http_retries_total{integration,method,reason,service,env,version}` counts retries grouped by reason.
+  These metrics come from `awa_common.http_client` (sync/async) and expect `integration` names such as
+  `helium10`, `logistics_etl`, `llm_remote`, or `telegram`.
 
 ### Authentication
 
@@ -89,11 +91,9 @@ debug incidents.
   - `with record_etl_run("job"):` wraps an entire pipeline invocation.
   - `record_etl_batch(job="logistics", processed=rows, errors=failures, duration_s=seconds)` records
     per-file progress.
-  - `record_etl_retry(job, reason)` is used by the HTTP clients and ETL modules to tag retries.
-- HTTP clients (`packages/awa_common/etl/http.py` and `services/etl/http_client.py`) now report
-  their own metrics:
-  - `http_client_requests_total{target,method,status_class,service,env,version}`
-- `http_client_request_duration_seconds_bucket{target,method,service,env,version}`
+- `record_etl_retry(job, reason)` is used by the HTTP clients and ETL modules to tag retries.
+- Outbound connectors should use `awa_common.http_client` so the `external_http_*` series stays
+  consistent across agents and dashboards.
 
 ### Stats Aggregates
 
