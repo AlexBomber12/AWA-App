@@ -4,16 +4,16 @@ import { PageBody, PageHeader } from "@/components/layout";
 import { ErrorState } from "@/components/data";
 import { useReturnsListQuery, useReturnsStatsQuery, type ReturnsSort } from "@/lib/api/returnsClient";
 import { useTableState } from "@/lib/tableState";
-
-import { ReturnsFilters } from "./ReturnsFilters";
-import { ReturnsSummaryTable } from "./ReturnsSummaryTable";
-import { ReturnsTable } from "./ReturnsTable";
 import {
   RETURNS_TABLE_DEFAULTS,
   parseReturnsSearchParams,
   serializeReturnsSearchParams,
   type ReturnsTableFilters,
-} from "./tableState";
+} from "@/lib/tableState/returns";
+
+import { ReturnsFilters } from "./ReturnsFilters";
+import { ReturnsSummaryTable } from "./ReturnsSummaryTable";
+import { ReturnsTable } from "./ReturnsTable";
 
 export function ReturnsPage() {
   const { state, setPage, setPageSize, setSort, setFilters, resetFilters } = useTableState<

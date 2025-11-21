@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { isApiError } from "@/lib/api/fetchFromApi";
-import { roiClient } from "@/lib/api/roiClient";
+import { roiApiClient } from "@/lib/api/roiApiClient";
 
 const normalizeAsins = (value: unknown): string[] => {
   if (!Array.isArray(value)) {
@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const response = await roiClient.bulkApproveRoi({ asins });
+    const response = await roiApiClient.bulkApproveRoi({ asins });
 
     return NextResponse.json(response);
   } catch (error) {

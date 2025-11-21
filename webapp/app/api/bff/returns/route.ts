@@ -1,20 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { fetchFromApi, isApiError } from "@/lib/api/fetchFromApi";
-import { parsePositiveInt, parseSort, parseString } from "@/lib/parsers";
-import type { components } from "@/lib/api/types.generated";
+import { isApiError } from "@/lib/api/fetchFromApi";
+import { returnsApiClient } from "@/lib/api/returnsApiClient";
+import {
+  RETURNS_TABLE_DEFAULTS,
+  mergeReturnsTableStateWithDefaults,
+  parseReturnsSearchParams,
+  type ReturnsTableFilters,
+  type ReturnsTableState,
+} from "@/lib/tableState/returns";
+
+import type { components, paths } from "@/lib/api/types.generated";
 
 export const dynamic = "force-dynamic";
 
-const RETURNS_API_PATH = "/stats/returns";
-const DEFAULT_PAGE = 1;
-const DEFAULT_PAGE_SIZE = 25;
-const MAX_PAGE_SIZE = 100;
+type ResourceType = "stats" | "list";
 
-const SORT_OPTIONS = ["refund_desc", "refund_asc", "qty_desc", "qty_asc", "asin_asc", "asin_desc"] as const;
-type ReturnsSort = (typeof SORT_OPTIONS)[number];
-
-type ReturnsStatsResponse = components["schemas"]["ReturnsStatsResponse"];
+type ReturnsStatsResponse = paths["/stats/returns"]["get"]["responses"]["200"]["content"]["application/json"];
 type ReturnsStatsItem = components["schemas"]["ReturnsStatsItem"];
 
 type ReturnsListItem = {
@@ -43,30 +45,14 @@ type ReturnsSummaryResponse = {
   topAsinRefundAmount?: number | null;
 };
 
-type ResourceType = "stats" | "list";
+const parseResource = (value: string | null): ResourceType => (value === "stats" ? "stats" : "list");
 
-const parseResource = (value: string | null): ResourceType => {
-  if (value === "stats") {
-    return "stats";
-  }
-  return "list";
-};
-
-const applyFiltersToQuery = (source: URLSearchParams, target: URLSearchParams) => {
-  const passthroughKeys: Record<string, string> = {
-    "filter[date_from]": "date_from",
-    "filter[date_to]": "date_to",
-    "filter[vendor]": "vendor",
-    "filter[asin]": "asin",
-  };
-
-  Object.entries(passthroughKeys).forEach(([sourceKey, targetKey]) => {
-    const value = parseString(source.get(sourceKey));
-    if (value !== undefined) {
-      target.set(targetKey, value);
-    }
-  });
-};
+const normalizeFilters = (filters: ReturnsTableFilters | undefined): ReturnsTableFilters => ({
+  dateFrom: filters?.dateFrom?.trim() ?? "",
+  dateTo: filters?.dateTo?.trim() ?? "",
+  vendor: filters?.vendor?.trim() ?? "",
+  asin: filters?.asin?.trim() ?? "",
+});
 
 const toListItem = (item: ReturnsStatsItem): ReturnsListItem => {
   const qty = typeof item.qty === "number" && Number.isFinite(item.qty) ? item.qty : 0;
@@ -79,7 +65,7 @@ const toListItem = (item: ReturnsStatsItem): ReturnsListItem => {
   };
 };
 
-const buildSummary = (items: ReturnsStatsItem[], totalReturns: number): ReturnsSummaryResponse => {
+const buildSummaryFallback = (items: ReturnsStatsItem[], totalReturns: number): ReturnsSummaryResponse => {
   const totals = items.reduce(
     (acc, item) => {
       const qty = typeof item.qty === "number" && Number.isFinite(item.qty) ? item.qty : 0;
@@ -106,17 +92,19 @@ const buildSummary = (items: ReturnsStatsItem[], totalReturns: number): ReturnsS
 
 const buildListResponse = (
   apiResponse: ReturnsStatsResponse,
-  page: number,
-  pageSize: number
+  fallback: Pick<ReturnsTableState, "page" | "pageSize">
 ): ReturnsListResponse => {
   const pagination = apiResponse.pagination;
+  const page = pagination?.page ?? fallback.page;
+  const pageSize = pagination?.page_size ?? fallback.pageSize;
   const total = pagination?.total ?? apiResponse.total_returns ?? apiResponse.items?.length ?? 0;
   const totalPages = pagination?.total_pages ?? (total > 0 ? Math.ceil(total / pageSize) : 1);
+
   return {
     items: (apiResponse.items ?? []).map(toListItem),
     pagination: {
-      page: pagination?.page ?? page,
-      pageSize: pagination?.page_size ?? pageSize,
+      page,
+      pageSize,
       total,
       totalPages,
     },
@@ -136,44 +124,35 @@ const buildSummaryResponse = (apiResponse: ReturnsStatsResponse): ReturnsSummary
       topAsinRefundAmount: summary.top_refund_amount ?? null,
     };
   }
-  return buildSummary(apiResponse.items ?? [], apiResponse.total_returns ?? apiResponse.items?.length ?? 0);
+  return buildSummaryFallback(apiResponse.items ?? [], apiResponse.total_returns ?? apiResponse.items?.length ?? 0);
 };
-
-async function fetchReturnsStats(params: URLSearchParams): Promise<ReturnsStatsResponse> {
-  const query = params.toString();
-  const path = query ? `${RETURNS_API_PATH}?${query}` : RETURNS_API_PATH;
-  return fetchFromApi<ReturnsStatsResponse>(path);
-}
 
 export async function GET(request: NextRequest) {
   const params = request.nextUrl.searchParams;
   const resource = parseResource(params.get("resource"));
-  const filterParams = new URLSearchParams();
-  applyFiltersToQuery(params, filterParams);
+  const parsedState = parseReturnsSearchParams(params);
+  const state = mergeReturnsTableStateWithDefaults(parsedState);
+  const filters = normalizeFilters(state.filters);
 
   try {
     if (resource === "stats") {
-      const statsParams = new URLSearchParams(filterParams);
-      statsParams.set("page", "1");
-      statsParams.set("page_size", "1");
-      statsParams.set("sort", "refund_desc");
-      const statsResponse = await fetchReturnsStats(statsParams);
+      const statsResponse = await returnsApiClient.fetchStats({
+        page: 1,
+        pageSize: 1,
+        sort: RETURNS_TABLE_DEFAULTS.sort ?? "refund_desc",
+        filters,
+      });
       return NextResponse.json(buildSummaryResponse(statsResponse));
     }
 
-    const page = parsePositiveInt(params.get("page"), DEFAULT_PAGE);
-    const requestedPageSize = parsePositiveInt(params.get("page_size"), DEFAULT_PAGE_SIZE);
-    const pageSize = Math.min(requestedPageSize, MAX_PAGE_SIZE);
-    const sort = parseSort<ReturnsSort>(params.get("sort"), SORT_OPTIONS, "refund_desc");
+    const apiResponse = await returnsApiClient.fetchStats({
+      page: state.page,
+      pageSize: state.pageSize,
+      sort: state.sort ?? RETURNS_TABLE_DEFAULTS.sort ?? "refund_desc",
+      filters,
+    });
 
-    const listParams = new URLSearchParams(filterParams);
-    listParams.set("page", String(page));
-    listParams.set("page_size", String(pageSize));
-    listParams.set("sort", sort);
-    const apiResponse = await fetchReturnsStats(listParams);
-    const response = buildListResponse(apiResponse, page, pageSize);
-
-    return NextResponse.json(response);
+    return NextResponse.json(buildListResponse(apiResponse, { page: state.page, pageSize: state.pageSize }));
   } catch (error) {
     if (isApiError(error)) {
       return NextResponse.json(

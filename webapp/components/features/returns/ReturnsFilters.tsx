@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { FilterBar } from "@/components/data";
 import { Input } from "@/components/ui";
 
-import { RETURNS_TABLE_DEFAULTS, type ReturnsTableFilters } from "./tableState";
+import { RETURNS_TABLE_DEFAULTS, type ReturnsTableFilters } from "@/lib/tableState/returns";
 
 type ReturnsFiltersProps = {
   filters: ReturnsTableFilters;

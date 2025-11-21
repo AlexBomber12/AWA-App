@@ -1,9 +1,28 @@
-import { RETURNS_SORT_OPTIONS, type ReturnsFilters, type ReturnsSort } from "@/lib/api/returnsClient";
 import { parsePositiveInt, parseSort, parseString } from "@/lib/parsers";
-import type { TableState, TableStateDefaults } from "@/lib/tableState";
 
-export type ReturnsTableFilters = ReturnsFilters;
+import type { TableState, TableStateDefaults } from "./useTableState";
+
+export const RETURNS_SORT_OPTIONS = [
+  "refund_desc",
+  "refund_asc",
+  "qty_desc",
+  "qty_asc",
+  "asin_asc",
+  "asin_desc",
+] as const;
+
+export type ReturnsSort = (typeof RETURNS_SORT_OPTIONS)[number];
+
+export type ReturnsTableFilters = {
+  dateFrom?: string | null;
+  dateTo?: string | null;
+  vendor?: string | null;
+  asin?: string | null;
+};
+
 export type ReturnsTableState = TableState<ReturnsSort, ReturnsTableFilters>;
+
+export const RETURNS_MAX_PAGE_SIZE = 100;
 
 const DEFAULT_FILTERS: ReturnsTableFilters = {
   dateFrom: "",
@@ -18,6 +37,8 @@ export const RETURNS_TABLE_DEFAULTS: TableStateDefaults<ReturnsSort, ReturnsTabl
   sort: "refund_desc",
   filters: DEFAULT_FILTERS,
 };
+
+const clampPageSize = (pageSize: number): number => Math.min(pageSize, RETURNS_MAX_PAGE_SIZE);
 
 const parseFilters = (params: URLSearchParams): ReturnsTableFilters | undefined => {
   const entries: ReturnsTableFilters = {};
@@ -42,9 +63,9 @@ const parseFilters = (params: URLSearchParams): ReturnsTableFilters | undefined 
 
 export const parseReturnsSearchParams = (
   params: URLSearchParams
-): Partial<TableState<ReturnsSort, ReturnsTableFilters>> => {
+): Partial<ReturnsTableState> => {
   const page = parsePositiveInt(params.get("page"), RETURNS_TABLE_DEFAULTS.page);
-  const pageSize = parsePositiveInt(params.get("page_size"), RETURNS_TABLE_DEFAULTS.pageSize);
+  const pageSize = clampPageSize(parsePositiveInt(params.get("page_size"), RETURNS_TABLE_DEFAULTS.pageSize));
   const sort = parseSort(params.get("sort"), RETURNS_SORT_OPTIONS, RETURNS_TABLE_DEFAULTS.sort ?? "refund_desc");
   const filters = parseFilters(params);
 
@@ -66,8 +87,8 @@ const normalizeFilterValue = (value?: string | null) => {
 
 export const serializeReturnsSearchParams = (state: ReturnsTableState): URLSearchParams => {
   const params = new URLSearchParams();
-  params.set("page", String(state.page));
-  params.set("page_size", String(state.pageSize));
+  params.set("page", String(Math.max(1, state.page)));
+  params.set("page_size", String(clampPageSize(state.pageSize)));
   if (state.sort) {
     params.set("sort", state.sort);
   }
@@ -93,3 +114,27 @@ export const serializeReturnsSearchParams = (state: ReturnsTableState): URLSearc
 
   return params;
 };
+
+export const mergeReturnsTableStateWithDefaults = (
+  partial?: Partial<ReturnsTableState>
+): ReturnsTableState => {
+  const normalizePositive = (value: number | undefined, fallback: number) => {
+    if (!value || !Number.isFinite(value)) {
+      return fallback;
+    }
+    const rounded = Math.floor(value);
+    return rounded > 0 ? rounded : fallback;
+  };
+
+  return {
+    page: normalizePositive(partial?.page, RETURNS_TABLE_DEFAULTS.page),
+    pageSize: clampPageSize(normalizePositive(partial?.pageSize, RETURNS_TABLE_DEFAULTS.pageSize)),
+    sort: partial?.sort ?? RETURNS_TABLE_DEFAULTS.sort,
+    filters: {
+      ...DEFAULT_FILTERS,
+      ...(partial?.filters ?? {}),
+    },
+  };
+};
+
+export const getDefaultReturnsFilters = (): ReturnsTableFilters => ({ ...DEFAULT_FILTERS });

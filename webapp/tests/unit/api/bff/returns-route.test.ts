@@ -1,13 +1,18 @@
 import { NextRequest } from "next/server";
 
 import { GET } from "@/app/api/bff/returns/route";
-import { fetchFromApi } from "@/lib/api/fetchFromApi";
+import { returnsApiClient } from "@/lib/api/returnsApiClient";
 
 jest.mock("@/lib/api/fetchFromApi", () => ({
-  fetchFromApi: jest.fn(),
+  isApiError: () => false,
+}));
+jest.mock("@/lib/api/returnsApiClient", () => ({
+  returnsApiClient: {
+    fetchStats: jest.fn(),
+  },
 }));
 
-const mockedFetch = fetchFromApi as jest.MockedFunction<typeof fetchFromApi>;
+const mockedFetch = returnsApiClient.fetchStats as jest.MockedFunction<typeof returnsApiClient.fetchStats>;
 
 const buildRequest = (query: string) => {
   const url = new URL(`http://localhost/api/bff/returns${query ? `?${query}` : ""}`);
@@ -39,9 +44,12 @@ describe("Returns BFF route", () => {
 
     const request = buildRequest("resource=list&page=3&page_size=50&sort=qty_desc&filter[asin]=A1");
     const response = await GET(request);
-    expect(mockedFetch).toHaveBeenCalledWith(
-      expect.stringContaining("/stats/returns?asin=A1&page=3&page_size=50&sort=qty_desc")
-    );
+    expect(mockedFetch).toHaveBeenCalledWith({
+      page: 3,
+      pageSize: 50,
+      sort: "qty_desc",
+      filters: expect.objectContaining({ asin: "A1" }),
+    });
     const payload = await response.json();
     expect(payload.pagination).toEqual({ page: 3, pageSize: 50, total: 50, totalPages: 1 });
     expect(payload.items[0]).toMatchObject({ asin: "A1", avgRefundPerUnit: 2 });
@@ -64,9 +72,12 @@ describe("Returns BFF route", () => {
 
     const request = buildRequest("resource=stats&filter[vendor]=ACME");
     const response = await GET(request);
-    expect(mockedFetch).toHaveBeenCalledWith(
-      expect.stringContaining("/stats/returns?vendor=ACME&page=1&page_size=1&sort=refund_desc")
-    );
+    expect(mockedFetch).toHaveBeenCalledWith({
+      page: 1,
+      pageSize: 1,
+      sort: "refund_desc",
+      filters: expect.objectContaining({ vendor: "ACME" }),
+    });
     const payload = await response.json();
     expect(payload).toEqual({
       totalAsins: 10,
