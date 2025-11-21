@@ -48,6 +48,17 @@ def test_s3_and_celery_settings(monkeypatch):
     assert celery_cfg.logistics_cron == "0 5 * * *"
 
 
+def test_celery_settings_alertbot_cron(monkeypatch):
+    monkeypatch.setenv("CHECK_INTERVAL_MIN", "7")
+    monkeypatch.setenv("ALERTS_EVALUATION_INTERVAL_CRON", "*/3 * * * *")
+    cfg = Settings()
+    assert cfg.celery.alertbot_cron == "*/7 * * * *"
+
+    monkeypatch.delenv("CHECK_INTERVAL_MIN", raising=False)
+    cfg_no_override = Settings()
+    assert cfg_no_override.celery.alertbot_cron == cfg_no_override.ALERTS_EVALUATION_INTERVAL_CRON
+
+
 def test_llm_and_observability_settings(monkeypatch):
     monkeypatch.setenv("LLM_PROVIDER", "openai")
     monkeypatch.setenv("LLM_PROVIDER_FALLBACK", "stub")

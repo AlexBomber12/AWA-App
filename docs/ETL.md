@@ -80,8 +80,9 @@ components in `packages/awa_common` to deliver repeatable pipelines that survive
   exception marks the row `success` and records `duration_ms`; raising an exception rolls back and
   marks `failed` with the truncated message (max 1024 chars).
 - Celery schedules live in `services/worker/celery_app.py`. Environment switches such as
-  `SCHEDULE_MV_REFRESH`, `MV_REFRESH_CRON`, and `SCHEDULE_LOGISTICS_ETL` control when pipelines run.
-  Use those toggles rather than bespoke crontabs.
+  `SCHEDULE_MV_REFRESH`, `MV_REFRESH_CRON`, and `SCHEDULE_LOGISTICS_ETL` control when pipelines run
+  and are validated through `awa_common.cron_config.CronSchedule`. Invalid cron strings are logged
+  and block the worker from starting, so rely on those toggles rather than bespoke crontabs.
 
 ## Backfill & Replay
 

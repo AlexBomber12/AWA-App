@@ -51,6 +51,15 @@ Use `settings.db.url` for SQLAlchemy engines and `settings.db.async_dsn` for asy
 
 `settings.celery` exposes typed helpers (`prefetch_multiplier`, `logistics_cron`, `alerts_schedule_cron`, etc.).
 
+## Celery schedules & cron
+
+- `SCHEDULE_NIGHTLY_MAINTENANCE` / `NIGHTLY_MAINTENANCE_CRON` — runs `ingest.maintenance_nightly` (default `30 2 * * *`).
+- `SCHEDULE_MV_REFRESH` / `MV_REFRESH_CRON` — refreshes ROI materialized views (default `30 2 * * *`).
+- `SCHEDULE_LOGISTICS_ETL` / `LOGISTICS_CRON` — triggers `logistics.etl.full` (default `0 3 * * *`).
+- `ALERTS_EVALUATION_INTERVAL_CRON` (`ALERTS_CRON` alias) — cadence for `alertbot.run`; `CHECK_INTERVAL_MIN` becomes `*/N * * * *`.
+- Cron strings use the standard 5-field format and are validated via `CronSchedule`/`croniter` on worker startup; invalid values are logged and stop the worker from booting.
+- Use the typed settings above instead of ad-hoc environment parsing so configuration stays consistent across workers and beat.
+
 ## S3 / MinIO (`settings.s3`)
 
 | Variable | Description |

@@ -195,6 +195,15 @@ class CelerySettings(SettingsGroup):
             alerts_check_interval_min=int(cfg.CHECK_INTERVAL_MIN) if cfg.CHECK_INTERVAL_MIN else None,
         )
 
+    @property
+    def alertbot_cron(self) -> str:
+        """Return the effective alert bot cadence derived from validated settings."""
+
+        if self.alerts_check_interval_min is not None:
+            minutes = max(1, int(self.alerts_check_interval_min))
+            return f"*/{minutes} * * * *"
+        return self.alerts_schedule_cron
+
 
 class SecuritySettings(SettingsGroup):
     max_request_bytes: int
