@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 
-jest.mock("@/lib/api/roiClient", () => ({
-  roiClient: {
+jest.mock("@/lib/api/roiApiClient", () => ({
+  roiApiClient: {
     listRoiRows: jest.fn(),
   },
 }));
@@ -9,8 +9,8 @@ jest.mock("@/lib/api/fetchFromApi", () => ({
   isApiError: () => false,
 }));
 
-const mockedModule = jest.requireMock("@/lib/api/roiClient") as {
-  roiClient: {
+const mockedModule = jest.requireMock("@/lib/api/roiApiClient") as {
+  roiApiClient: {
     listRoiRows: jest.Mock;
   };
 };
@@ -21,18 +21,18 @@ beforeAll(async () => {
   handler = await import("@/app/api/bff/roi/route");
 });
 
-const buildRequest = (query: string) => {
-  const url = new URL(`http://localhost/api/bff/roi${query ? `?${query}` : ""}`);
-  return new NextRequest(url);
-};
-
 describe("ROI BFF route", () => {
+  const buildRequest = (query: string) => {
+    const url = new URL(`http://localhost/api/bff/roi${query ? `?${query}` : ""}`);
+    return new NextRequest(url);
+  };
+
   beforeEach(() => {
-    mockedModule.roiClient.listRoiRows.mockReset();
+    mockedModule.roiApiClient.listRoiRows.mockReset();
   });
 
   it("forwards pagination, sorting, and filters to the backend", async () => {
-    mockedModule.roiClient.listRoiRows.mockResolvedValue({
+    mockedModule.roiApiClient.listRoiRows.mockResolvedValue({
       items: [
         {
           asin: "A1",
@@ -53,17 +53,17 @@ describe("ROI BFF route", () => {
     );
 
     const response = await handler.GET(request);
-    expect(mockedModule.roiClient.listRoiRows).toHaveBeenCalledWith(
-      expect.objectContaining({
-        page: 2,
-        pageSize: 25,
-        sort: "asin_asc",
+    expect(mockedModule.roiApiClient.listRoiRows).toHaveBeenCalledWith({
+      page: 2,
+      pageSize: 25,
+      sort: "asin_asc",
+      roiMax: 20,
+      filters: expect.objectContaining({
         roiMin: 5,
-        roiMax: 20,
-        vendor: 42,
+        vendor: "42",
         search: "headphones",
-      })
-    );
+      }),
+    });
 
     const payload = await response.json();
     expect(payload.pagination).toEqual({

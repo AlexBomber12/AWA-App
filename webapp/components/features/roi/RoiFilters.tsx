@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState, useId } from "react";
 import { FilterBar } from "@/components/data";
 import { Checkbox, Input } from "@/components/ui";
 
-import { ROI_TABLE_DEFAULTS, type RoiTableFilters } from "./tableState";
+import { ROI_TABLE_DEFAULTS, type RoiTableFilters } from "@/lib/tableState/roi";
 
 type RoiFiltersProps = {
   filters: RoiTableFilters;

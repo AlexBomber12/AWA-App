@@ -2,7 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { RoiFilters } from "@/components/features/roi/RoiFilters";
-import type { RoiTableFilters } from "@/components/features/roi/tableState";
+import type { RoiTableFilters } from "@/lib/tableState/roi";
 
 const renderFilters = (filters: RoiTableFilters = {}) => {
   const onApply = jest.fn();

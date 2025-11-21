@@ -7,6 +7,11 @@ import { type ReactNode, useState } from "react";
 
 import { RoiTableContainer } from "@/components/features/roi/RoiTableContainer";
 
+jest.mock("@/lib/api/fetchFromApi", () => ({
+  fetchFromApi: jest.fn(),
+  isApiError: () => false,
+}));
+
 const user = userEvent.setup();
 
 jest.mock("@/components/features/roi/RoiTable", () => ({

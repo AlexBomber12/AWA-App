@@ -1,5 +1,6 @@
 import { parseBoolean, parseNumber, parsePositiveInt, parseSort, parseString } from "@/lib/parsers";
-import type { TableState, TableStateDefaults } from "@/lib/tableState";
+
+import type { TableState, TableStateDefaults } from "./useTableState";
 
 export const ROI_SORT_OPTIONS = [
   "roi_pct_desc",
@@ -24,6 +25,8 @@ export type RoiTableFilters = {
 
 export type RoiTableState = TableState<RoiSort, RoiTableFilters>;
 
+export const ROI_MAX_PAGE_SIZE = 200;
+
 const DEFAULT_FILTERS: RoiTableFilters = {
   roiMin: 0,
   vendor: "",
@@ -39,9 +42,11 @@ export const ROI_TABLE_DEFAULTS: TableStateDefaults<RoiSort, RoiTableFilters> = 
   filters: DEFAULT_FILTERS,
 };
 
+const clampPageSize = (value: number): number => Math.min(value, ROI_MAX_PAGE_SIZE);
+
 export const parseRoiSearchParams = (params: URLSearchParams): Partial<RoiTableState> => {
   const page = parsePositiveInt(params.get("page"), ROI_TABLE_DEFAULTS.page);
-  const pageSize = parsePositiveInt(params.get("page_size"), ROI_TABLE_DEFAULTS.pageSize);
+  const pageSize = clampPageSize(parsePositiveInt(params.get("page_size"), ROI_TABLE_DEFAULTS.pageSize));
   const sort = parseSort(params.get("sort"), ROI_SORT_OPTIONS, ROI_TABLE_DEFAULTS.sort ?? "roi_pct_desc");
 
   const filters: Partial<RoiTableFilters> = {};
@@ -79,11 +84,7 @@ export const parseRoiSearchParams = (params: URLSearchParams): Partial<RoiTableS
   }
 
   if (Object.keys(filters).length === 0) {
-    return {
-      page,
-      pageSize,
-      sort,
-    };
+    return { page, pageSize, sort };
   }
 
   return {
@@ -96,8 +97,8 @@ export const parseRoiSearchParams = (params: URLSearchParams): Partial<RoiTableS
 
 export const serializeRoiSearchParams = (state: RoiTableState): URLSearchParams => {
   const params = new URLSearchParams();
-  params.set("page", String(state.page));
-  params.set("page_size", String(state.pageSize));
+  params.set("page", String(Math.max(1, state.page)));
+  params.set("page_size", String(clampPageSize(state.pageSize)));
 
   if (state.sort) {
     params.set("sort", state.sort);
@@ -141,7 +142,7 @@ export const mergeRoiTableStateWithDefaults = (
 
   return {
     page: normalizePositive(partial?.page, ROI_TABLE_DEFAULTS.page),
-    pageSize: normalizePositive(partial?.pageSize, ROI_TABLE_DEFAULTS.pageSize),
+    pageSize: clampPageSize(normalizePositive(partial?.pageSize, ROI_TABLE_DEFAULTS.pageSize)),
     sort: partial?.sort ?? ROI_TABLE_DEFAULTS.sort,
     filters: {
       ...DEFAULT_FILTERS,
@@ -149,3 +150,5 @@ export const mergeRoiTableStateWithDefaults = (
     },
   };
 };
+
+export const getDefaultRoiFilters = (): RoiTableFilters => ({ ...DEFAULT_FILTERS });

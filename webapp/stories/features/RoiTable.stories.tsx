@@ -2,8 +2,10 @@ import type { Meta, StoryObj } from "@storybook/react";
 import { useMemo, useState } from "react";
 
 import { RoiTable } from "@/components/features/roi/RoiTable";
+import { ErrorState } from "@/components/data";
 import type { RoiRow } from "@/components/features/roi/types";
-import type { RoiSort } from "@/components/features/roi/tableState";
+import type { ApiError } from "@/lib/api/apiError";
+import type { RoiSort } from "@/lib/tableState/roi";
 
 const makeRow = (index: number): RoiRow => ({
   asin: `ASIN-${(index + 1).toString().padStart(4, "0")}`,
@@ -17,6 +19,7 @@ const makeRow = (index: number): RoiRow => ({
 });
 
 const MOCK_ROWS: RoiRow[] = Array.from({ length: 50 }, (_, index) => makeRow(index));
+const MOCK_ERROR: ApiError = { code: "BFF_ERROR", message: "Backend unavailable", status: 500 };
 
 const meta: Meta<typeof RoiTable> = {
   title: "Features/ROI/RoiTable",
@@ -171,4 +174,79 @@ export const ReadOnlySelection: Story = {
       </div>
     );
   },
+};
+
+export const SortedByVendor: Story = {
+  render: (args) => {
+    const [page, setPage] = useState(1);
+    const [pageSize, setPageSize] = useState(15);
+    const [sort, setSort] = useState<RoiSort>("vendor_desc");
+    const sortedRows = useMemo(
+      () => [...MOCK_ROWS].sort((a, b) => (b.vendor_id ?? 0) - (a.vendor_id ?? 0)),
+      []
+    );
+    const rows = useMemo(() => {
+      const start = (page - 1) * pageSize;
+      return sortedRows.slice(start, start + pageSize);
+    }, [page, pageSize, sortedRows]);
+
+    const pagination = useMemo(
+      () => ({
+        page,
+        pageSize,
+        total: sortedRows.length,
+        totalPages: Math.max(1, Math.ceil(sortedRows.length / pageSize)),
+      }),
+      [page, pageSize, sortedRows.length]
+    );
+
+    return (
+      <div className="p-6">
+        <RoiTable
+          {...args}
+          canApprove={false}
+          rows={rows}
+          pagination={pagination}
+          page={page}
+          pageSize={pageSize}
+          sort={sort}
+          onPageChange={setPage}
+          onPageSizeChange={(next) => {
+            setPageSize(next);
+            setPage(1);
+          }}
+          onSortChange={setSort}
+          selectedAsins={new Set()}
+          onSelectRow={() => undefined}
+          onSelectVisibleRows={() => undefined}
+        />
+      </div>
+    );
+  },
+};
+
+export const ErrorExample: Story = {
+  render: () => (
+    <div className="space-y-4 p-6">
+      <ErrorState
+        title="Unable to load ROI rows"
+        error={MOCK_ERROR}
+        onRetry={() => undefined}
+      />
+      <RoiTable
+        rows={[]}
+        pagination={{ page: 1, pageSize: 50, total: 0, totalPages: 1 }}
+        page={1}
+        pageSize={50}
+        sort="roi_pct_desc"
+        onPageChange={() => undefined}
+        onPageSizeChange={() => undefined}
+        onSortChange={() => undefined}
+        selectedAsins={new Set()}
+        onSelectRow={() => undefined}
+        onSelectVisibleRows={() => undefined}
+        canApprove={false}
+      />
+    </div>
+  ),
 };

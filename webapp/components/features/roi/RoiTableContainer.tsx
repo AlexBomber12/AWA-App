@@ -5,28 +5,24 @@ import { useQueryClient } from "@tanstack/react-query";
 
 import { ErrorState } from "@/components/data";
 import { Button } from "@/components/ui";
-import { fetchFromBff } from "@/lib/api/fetchFromBff";
-import { useApiQuery } from "@/lib/api/useApiQuery";
+import { roiClient } from "@/lib/api/roiClient";
 import { useTableState } from "@/lib/tableState";
-
-import { RoiBulkApproveDialog } from "./RoiBulkApproveDialog";
-import { RoiFilters } from "./RoiFilters";
-import { RoiTable } from "./RoiTable";
 import {
   ROI_TABLE_DEFAULTS,
   parseRoiSearchParams,
   serializeRoiSearchParams,
   type RoiSort,
   type RoiTableFilters,
-} from "./tableState";
-import type { RoiListResponse } from "./types";
+} from "@/lib/tableState/roi";
+
+import { RoiBulkApproveDialog } from "./RoiBulkApproveDialog";
+import { RoiFilters } from "./RoiFilters";
+import { RoiTable } from "./RoiTable";
 
 type RoiTableContainerProps = {
   canApprove: boolean;
   onActionsChange?: (node: ReactNode | null) => void;
 };
-
-const ROI_BFF_ENDPOINT = "/api/bff/roi";
 
 // Canonical large-table pattern (filters + URL + virtualization)
 export function RoiTableContainer({ canApprove, onActionsChange }: RoiTableContainerProps) {
@@ -43,7 +39,7 @@ export function RoiTableContainer({ canApprove, onActionsChange }: RoiTableConta
     serializeToSearchParams: serializeRoiSearchParams,
   });
 
-  const serializedState = useMemo(() => serializeRoiSearchParams(state).toString(), [state]);
+  const appliedFilters = state.filters ?? ROI_TABLE_DEFAULTS.filters ?? {};
 
   const {
     data,
@@ -51,14 +47,15 @@ export function RoiTableContainer({ canApprove, onActionsChange }: RoiTableConta
     isRefetching,
     error,
     refetch,
-  } = useApiQuery<RoiListResponse>({
-    queryKey: ["roi", serializedState],
-    queryFn: async () => {
-      const query = serializedState ? `?${serializedState}` : "";
-      return fetchFromBff<RoiListResponse>(`${ROI_BFF_ENDPOINT}${query}`);
+  } = roiClient.useRoiListQuery(
+    {
+      page: state.page,
+      pageSize: state.pageSize,
+      sort: state.sort ?? ROI_TABLE_DEFAULTS.sort ?? "roi_pct_desc",
+      filters: appliedFilters,
     },
-    placeholderData: (previousData) => previousData,
-  });
+    { placeholderData: (previousData) => previousData }
+  );
 
   const handleSelectRow = (asin: string, checked: boolean) => {
     setSelectedAsins((current) => {
@@ -111,8 +108,6 @@ export function RoiTableContainer({ canApprove, onActionsChange }: RoiTableConta
     onActionsChange(bulkApproveAction);
     return () => onActionsChange(null);
   }, [bulkApproveAction, onActionsChange]);
-
-  const appliedFilters = state.filters ?? ROI_TABLE_DEFAULTS.filters ?? {};
 
   const handleFiltersApply = (filters: RoiTableFilters) => {
     setFilters(filters);

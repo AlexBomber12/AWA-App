@@ -1,71 +1,71 @@
-import { fetchFromApi } from "@/lib/api/fetchFromApi";
+import { fetchFromBff } from "@/lib/api/fetchFromBff";
+import type { ApiError } from "@/lib/api/apiError";
+import { useApiQuery, type UseApiQueryOptions } from "@/lib/api/useApiQuery";
+import {
+  ROI_TABLE_DEFAULTS,
+  serializeRoiSearchParams,
+  type RoiSort,
+  type RoiTableFilters,
+  type RoiTableState,
+} from "@/lib/tableState/roi";
 
 import type { components } from "./types.generated";
 
-type RoiListResponse = components["schemas"]["RoiListResponse"];
-type RoiApprovalResponse = components["schemas"]["RoiApprovalResponse"];
+export type RoiRow = components["schemas"]["RoiRow"];
+
+export type RoiTableResponse = {
+  items: RoiRow[];
+  pagination: {
+    page: number;
+    pageSize: number;
+    total: number;
+    totalPages: number;
+  };
+};
 
 export type RoiListParams = {
-  page?: number;
-  pageSize?: number;
-  sort?: string | null;
-  roiMin?: number | null;
-  roiMax?: number | null;
-  vendor?: number | string | null;
-  category?: string | null;
-  search?: string | null;
+  page: number;
+  pageSize: number;
+  sort?: RoiSort;
+  filters?: RoiTableFilters;
 };
 
-export type RoiBulkApprovePayload = {
-  asins: string[];
+const ROI_BFF_ENDPOINT = "/api/bff/roi";
+
+const buildBffListQuery = (params: RoiListParams): string => {
+  const state: RoiTableState = {
+    page: params.page,
+    pageSize: params.pageSize,
+    sort: params.sort ?? ROI_TABLE_DEFAULTS.sort ?? "roi_pct_desc",
+    filters: params.filters ?? ROI_TABLE_DEFAULTS.filters ?? {},
+  };
+  return serializeRoiSearchParams(state).toString();
 };
 
-const buildQueryString = (params: RoiListParams): string => {
-  const query = new URLSearchParams();
-  if (typeof params.page === "number" && Number.isFinite(params.page) && params.page > 0) {
-    query.set("page", String(Math.floor(params.page)));
-  }
-  if (typeof params.pageSize === "number" && Number.isFinite(params.pageSize) && params.pageSize > 0) {
-    query.set("page_size", String(Math.floor(params.pageSize)));
-  }
-  if (params.sort) {
-    query.set("sort", params.sort);
-  }
-  if (typeof params.roiMin === "number" && Number.isFinite(params.roiMin)) {
-    query.set("roi_min", String(params.roiMin));
-  }
-  if (typeof params.roiMax === "number" && Number.isFinite(params.roiMax)) {
-    query.set("roi_max", String(params.roiMax));
-  }
-  if (params.vendor !== undefined && params.vendor !== null && params.vendor !== "") {
-    query.set("vendor", String(params.vendor));
-  }
-  if (params.category) {
-    query.set("category", params.category);
-  }
-  if (params.search) {
-    query.set("search", params.search);
-  }
-  const queryString = query.toString();
-  return queryString ? `?${queryString}` : "";
-};
-
-async function listRoiRows(params: RoiListParams = {}): Promise<RoiListResponse> {
-  const query = buildQueryString(params);
-  return fetchFromApi<RoiListResponse>(`/roi${query}`);
+async function getRoiList(params: RoiListParams): Promise<RoiTableResponse> {
+  const query = buildBffListQuery(params);
+  const path = query ? `${ROI_BFF_ENDPOINT}?${query}` : ROI_BFF_ENDPOINT;
+  return fetchFromBff<RoiTableResponse>(path);
 }
 
-async function bulkApproveRoi(payload: RoiBulkApprovePayload): Promise<RoiApprovalResponse> {
-  return fetchFromApi<RoiApprovalResponse>("/roi-review/approve", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(payload),
+export const getRoiListQueryKey = (params: RoiListParams) =>
+  ["roi", buildBffListQuery(params)] as const;
+
+type UseRoiListQueryOptions = Omit<
+  UseApiQueryOptions<RoiTableResponse, ApiError, RoiTableResponse, ReturnType<typeof getRoiListQueryKey>>,
+  "queryKey" | "queryFn"
+>;
+
+function useRoiListQuery(params: RoiListParams, options?: UseRoiListQueryOptions) {
+  return useApiQuery<RoiTableResponse, ApiError, RoiTableResponse, ReturnType<typeof getRoiListQueryKey>>({
+    queryKey: getRoiListQueryKey(params),
+    queryFn: () => getRoiList(params),
+    ...options,
   });
 }
 
 export const roiClient = {
-  listRoiRows,
-  bulkApproveRoi,
+  getRoiList,
+  getRoiListQueryKey,
+  useRoiListQuery,
 };

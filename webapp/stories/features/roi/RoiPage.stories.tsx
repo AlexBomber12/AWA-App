@@ -9,7 +9,7 @@ import {
   parseRoiSearchParams,
   type RoiSort,
   type RoiTableFilters,
-} from "@/components/features/roi/tableState";
+} from "@/lib/tableState/roi";
 import type { RoiListResponse, RoiRow } from "@/components/features/roi/types";
 import { AppShell } from "@/components/layout";
 

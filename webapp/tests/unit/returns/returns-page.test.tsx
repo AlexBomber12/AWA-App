@@ -174,4 +174,19 @@ describe("ReturnsPage", () => {
     expect(listCalls[0]).toContain("filter%5Basin%5D=RET-0100");
     await waitFor(() => expect(screen.getByText("RET-0011")).toBeInTheDocument());
   });
+
+  it("updates sort when clicking on sortable headers", async () => {
+    renderWithClient(<ReturnsPage />);
+
+    await waitFor(() => expect(listCalls.at(-1)).toContain("sort=refund_desc"));
+
+    await user.click(screen.getByRole("button", { name: /Units returned/i }));
+    await waitFor(() => expect(listCalls.at(-1)).toContain("sort=qty_desc"));
+
+    await user.click(screen.getByRole("button", { name: /Refund amount/i }));
+    const navigation = getNavigationMock();
+    await waitFor(() =>
+      expect(navigation.__internalNavigationMock.getReplaceCalls().at(-1)).toContain("sort=refund_desc")
+    );
+  });
 });

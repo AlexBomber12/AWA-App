@@ -1,25 +1,18 @@
 import { fetchFromBff } from "@/lib/api/fetchFromBff";
 import type { ApiError } from "@/lib/api/apiError";
 import { useApiQuery, type UseApiQueryOptions } from "@/lib/api/useApiQuery";
+import {
+  RETURNS_SORT_OPTIONS,
+  RETURNS_TABLE_DEFAULTS,
+  serializeReturnsSearchParams,
+  type ReturnsSort,
+  type ReturnsTableFilters,
+  type ReturnsTableState,
+} from "@/lib/tableState/returns";
 
 const RETURNS_BFF_ENDPOINT = "/api/bff/returns";
 
-export const RETURNS_SORT_OPTIONS = [
-  "refund_desc",
-  "refund_asc",
-  "qty_desc",
-  "qty_asc",
-  "asin_asc",
-  "asin_desc",
-] as const;
-export type ReturnsSort = (typeof RETURNS_SORT_OPTIONS)[number];
-
-export type ReturnsFilters = {
-  dateFrom?: string | null;
-  dateTo?: string | null;
-  vendor?: string | null;
-  asin?: string | null;
-};
+export type ReturnsFilters = ReturnsTableFilters;
 
 export type ReturnsRow = {
   asin: string;
@@ -54,46 +47,34 @@ export type ReturnsListParams = {
   filters?: ReturnsFilters;
 };
 
-const appendFilters = (filters: ReturnsFilters | undefined, query: URLSearchParams) => {
-  if (!filters) {
-    return;
-  }
-  const safeTrim = (value: string | null | undefined) => value?.trim();
-  const dateFrom = safeTrim(filters.dateFrom ?? undefined);
-  const dateTo = safeTrim(filters.dateTo ?? undefined);
-  const vendor = safeTrim(filters.vendor ?? undefined);
-  const asin = safeTrim(filters.asin ?? undefined);
-
-  if (dateFrom) {
-    query.set("filter[date_from]", dateFrom);
-  }
-  if (dateTo) {
-    query.set("filter[date_to]", dateTo);
-  }
-  if (vendor) {
-    query.set("filter[vendor]", vendor);
-  }
-  if (asin) {
-    query.set("filter[asin]", asin);
-  }
-};
+export type { ReturnsSort };
 
 const buildListQuery = (params: ReturnsListParams): string => {
-  const query = new URLSearchParams();
+  const sort = params.sort && RETURNS_SORT_OPTIONS.includes(params.sort)
+    ? params.sort
+    : RETURNS_TABLE_DEFAULTS.sort ?? "refund_desc";
+
+  const state: ReturnsTableState = {
+    page: params.page,
+    pageSize: params.pageSize,
+    sort,
+    filters: params.filters ?? RETURNS_TABLE_DEFAULTS.filters ?? {},
+  };
+
+  const query = serializeReturnsSearchParams(state);
   query.set("resource", "list");
-  query.set("page", String(params.page));
-  query.set("page_size", String(params.pageSize));
-  if (params.sort && RETURNS_SORT_OPTIONS.includes(params.sort)) {
-    query.set("sort", params.sort);
-  }
-  appendFilters(params.filters, query);
   return query.toString();
 };
 
 const buildStatsQuery = (filters?: ReturnsFilters): string => {
-  const query = new URLSearchParams();
+  const state: ReturnsTableState = {
+    page: 1,
+    pageSize: 1,
+    sort: RETURNS_TABLE_DEFAULTS.sort ?? "refund_desc",
+    filters: filters ?? RETURNS_TABLE_DEFAULTS.filters ?? {},
+  };
+  const query = serializeReturnsSearchParams(state);
   query.set("resource", "stats");
-  appendFilters(filters, query);
   return query.toString();
 };
 

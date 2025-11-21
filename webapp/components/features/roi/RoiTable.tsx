@@ -8,7 +8,7 @@ import { PaginationControls, VirtualizedTable } from "@/components/data";
 import { Checkbox } from "@/components/ui";
 
 import type { RoiListResponse, RoiRow } from "./types";
-import type { RoiSort } from "./tableState";
+import type { RoiSort } from "@/lib/tableState/roi";
 
 type RoiTableProps = {
   rows: RoiRow[];
