@@ -5,7 +5,7 @@ import tempfile
 from typing import Any
 
 from imapclient import IMAPClient
-from sqlalchemy import create_engine, text
+from sqlalchemy import create_engine, text  # noqa: F401
 
 from awa_common.minio import create_boto3_client, get_bucket_name
 from awa_common.settings import settings
@@ -49,14 +49,22 @@ def main() -> dict[str, str]:
                 today = datetime.date.today().strftime("%Y-%m")
                 dst = f"raw/amazon/{today}/{name}"
                 s3.upload_file(tmp_path, BUCKET, dst)
-                load_id, inserted = load_csv.main(["--source", f"minio://{dst}", "--table", "auto"])
-                engine = create_engine(settings.DATABASE_URL)
-                with engine.begin() as db:
-                    db.execute(
-                        text("UPDATE load_log SET status='success', inserted_rows=:n WHERE id=:id"),
-                        {"n": inserted, "id": load_id},
-                    )
-                engine.dispose()
+                result = load_csv.main(["--source", f"minio://{dst}", "--table", "auto"])
+                load_id = None
+                inserted = None
+                if isinstance(result, tuple) and len(result) == 2:
+                    load_id, inserted = result
+                elif isinstance(result, dict):
+                    load_id = result.get("load_log_id")
+                    inserted = result.get("rows")
+                if load_id is not None and inserted is not None:
+                    engine = create_engine(settings.DATABASE_URL)
+                    with engine.begin() as db:
+                        db.execute(
+                            text("UPDATE load_log SET status='success', inserted_rows=:n WHERE id=:id"),
+                            {"n": inserted, "id": load_id},
+                        )
+                    engine.dispose()
                 os.remove(tmp_path)
             client.add_flags(uid, ["\\Seen"])
     return {"status": "success"}

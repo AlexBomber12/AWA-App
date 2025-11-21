@@ -74,6 +74,7 @@ def test_email_watcher(monkeypatch, pg_pool, tmp_path):
 
     engine = create_engine(build_dsn(sync=True))
     with engine.connect() as conn:
-        row = conn.execute(text("SELECT status FROM load_log"))
-        result = row.fetchone()
-    assert result[0] == "success"
+        status = conn.execute(
+            text("SELECT status FROM load_log WHERE source='ingest.import_file' ORDER BY id DESC LIMIT 1")
+        ).scalar_one()
+    assert status == "success"

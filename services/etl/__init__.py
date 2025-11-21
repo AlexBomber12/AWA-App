@@ -3,12 +3,12 @@ from typing import Protocol
 
 class LoadCsvRunner(Protocol):
     @staticmethod
-    def main(args: list[str]) -> tuple[int, int]: ...
+    def main(args: list[str]) -> int: ...
 
 
 class _LazyLoadCsv:
     @staticmethod
-    def main(args: list[str]) -> tuple[int, int]:
+    def main(args: list[str]) -> int:
         # Import on first use to avoid import-time side effects in container startup
         from etl import load_csv as _mod
 

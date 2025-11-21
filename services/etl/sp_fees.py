@@ -178,6 +178,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             source=SOURCE_NAME,
             payload_meta=payload_meta,
             idempotency_key=idempotency_key,
+            on_duplicate="update_meta",
             task_id=task_id,
         ) as handle:
             if handle is None:

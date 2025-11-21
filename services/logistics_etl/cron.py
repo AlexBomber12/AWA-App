@@ -26,11 +26,9 @@ else:
 
 
 def _run_full_sync(dry_run: bool = False) -> list[dict[str, Any]]:
-    import asyncio
-
     from . import flow
 
-    return asyncio.run(flow.full(dry_run=dry_run))
+    return flow.run_once_with_guard(dry_run=dry_run)
 
 
 @celery_app.task(name="logistics.etl.full")  # type: ignore[misc]

@@ -14,12 +14,19 @@ def test_returns_ingest(tmp_path, refresh_mvs):
         "A1,O1,Damaged,2024-06-01,1,5.00,EUR\n"
         "A2,O2,Customer,2024-06-02,1,3.00,EUR\n"
     )
-    load_csv.main(["--source", str(csv_path), "--table", "auto"])
+    exit_code = load_csv.main(["--source", str(csv_path), "--table", "auto"])
+    assert exit_code == 0
 
     engine = create_engine(build_dsn(sync=True))
     with engine.connect() as conn:
         cnt = conn.execute(text("SELECT count(*) FROM returns_raw")).scalar()
-        status = conn.execute(text("SELECT status FROM load_log ORDER BY id DESC LIMIT 1")).scalar()
+        row = conn.execute(
+            text(
+                "SELECT status, payload_meta->>'rows' FROM load_log "
+                "WHERE source='ingest.import_file' ORDER BY id DESC LIMIT 1"
+            )
+        ).one()
 
     assert cnt == 2
-    assert status == "success"
+    assert row[0] == "success"
+    assert int(row[1]) == 2

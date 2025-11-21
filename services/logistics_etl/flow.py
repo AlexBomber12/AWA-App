@@ -3,18 +3,26 @@ from __future__ import annotations
 import argparse
 import asyncio
 import hashlib
+import json
 import time
 from typing import TYPE_CHECKING, Any
 
 import anyio
 import structlog
+from sqlalchemy import create_engine, update
+from sqlalchemy.orm import sessionmaker
 
+from awa_common.db.load_log import LOAD_LOG
+from awa_common.dsn import build_dsn
+from awa_common.etl.guard import process_once
+from awa_common.etl.idempotency import build_payload_meta, compute_idempotency_key
 from awa_common.metrics import (
     instrument_task as _instrument_task,
     logistics_task_inflight_change,
     record_etl_batch,
     record_etl_retry,
     record_etl_run,
+    record_etl_skip,
     record_logistics_error,
     record_logistics_rows,
     record_logistics_task_duration,
@@ -40,36 +48,143 @@ if TYPE_CHECKING:
 else:
     instrument_task = _instrument_task
 
+SOURCE_NAME = "logistics_etl"
+
+
+def _summarize_results(results: list[dict[str, Any]]) -> dict[str, Any]:
+    rows_upserted = sum(int(res.get("rows_upserted") or 0) for res in results)
+    rows_in = sum(int(res.get("rows_in") or 0) for res in results)
+    skipped = sum(1 for res in results if res.get("skipped"))
+    return {
+        "rows_upserted": rows_upserted,
+        "rows_in": rows_in,
+        "snapshots_processed": len(results),
+        "skipped_snapshots": skipped,
+    }
+
+
+def _build_idempotency(
+    snapshots: list[dict[str, Any]],
+    legacy_rows: list[dict[str, Any]],
+    *,
+    dry_run: bool,
+) -> tuple[str, dict[str, Any]]:
+    fingerprint: list[dict[str, Any]] = []
+    for snap in snapshots:
+        raw = snap.get("raw") or b""
+        meta = snap.get("meta") or {}
+        fingerprint.append(
+            {
+                "source": str(snap.get("source") or "unknown"),
+                "seqno": meta.get("seqno"),
+                "sha256": hashlib.sha256(raw).hexdigest() if raw else None,
+                "rows": len(snap.get("rows") or []),
+            }
+        )
+    if not fingerprint:
+        fingerprint.append({"legacy_rows": len(legacy_rows)})
+
+    fingerprint.append({"dry_run": bool(dry_run)})
+    key = compute_idempotency_key(
+        content=json.dumps(fingerprint, sort_keys=True, default=str).encode("utf-8"),
+    )
+    meta = build_payload_meta(
+        extra={
+            "snapshot_count": len(snapshots),
+            "legacy_rows": len(legacy_rows),
+            "dry_run": dry_run,
+            "sources": [snap.get("source") for snap in snapshots],
+        }
+    )
+    return key, meta
+
 
 @instrument_task("logistics_etl")
-async def full(dry_run: bool = False) -> list[dict[str, Any]]:
+async def full(
+    dry_run: bool = False,
+    snapshots: list[dict[str, Any]] | None = None,
+    legacy_rows: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
     cfg = Settings()
     sources_config = (cfg.LOGISTICS_SOURCES or "").strip()
+    snapshot_list: list[dict[str, Any]] | None = snapshots
     with record_etl_run("logistics_etl"):
-        snapshots = await client.fetch_sources()
-        if snapshots:
+        if snapshot_list is None:
+            snapshot_list = await client.fetch_sources()
+        if snapshot_list:
             return await _process_snapshots(
-                snapshots,
+                snapshot_list,
                 dry_run=dry_run,
                 per_source_timeout=max(1, int(cfg.LOGISTICS_PER_SOURCE_TIMEOUT_SECONDS)),
                 gather_timeout=max(1, int(cfg.LOGISTICS_GATHER_TIMEOUT_SECONDS)),
                 max_concurrency=max(1, int(cfg.LOGISTICS_MAX_CONCURRENCY)),
             )
 
-    if sources_config:
+    if sources_config and not snapshot_list:
         return []
 
-    legacy_rows: list[dict[str, Any]] = await client.fetch_rates()
-    if dry_run or not legacy_rows:
-        return legacy_rows
+    legacy_payload = legacy_rows
+    if legacy_payload is None:
+        legacy_payload = await client.fetch_rates()
+    if dry_run or not legacy_payload:
+        return legacy_payload
 
     await repository.upsert_many(
         table="logistics_rates",
         key_cols=["carrier", "origin", "dest", "service", "effective_from"],
-        rows=legacy_rows,
+        rows=legacy_payload,
         update_columns=["eur_per_kg", "effective_to", "updated_at"],
     )
-    return legacy_rows
+    return legacy_payload
+
+
+async def _collect_inputs() -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    cfg = Settings()
+    sources_config = (cfg.LOGISTICS_SOURCES or "").strip()
+    snapshots = await client.fetch_sources()
+    if snapshots:
+        return snapshots, []
+    if sources_config:
+        return [], []
+    legacy_rows: list[dict[str, Any]] = await client.fetch_rates()
+    return [], legacy_rows
+
+
+def run_once_with_guard(dry_run: bool = False) -> list[dict[str, Any]]:
+    snapshots, legacy_rows = asyncio.run(_collect_inputs())
+    idempotency_key, payload_meta = _build_idempotency(
+        snapshots,
+        legacy_rows,
+        dry_run=dry_run,
+    )
+    engine = create_engine(build_dsn(sync=True), future=True)
+    SessionLocal = sessionmaker(bind=engine, expire_on_commit=False, future=True)
+    try:
+        with process_once(
+            SessionLocal,
+            source=SOURCE_NAME,
+            payload_meta=payload_meta,
+            idempotency_key=idempotency_key,
+            on_duplicate="update_meta",
+        ) as handle:
+            if handle is None:
+                record_etl_skip(SOURCE_NAME)
+                logger.info(
+                    "logistics_etl.skipped",
+                    idempotency_key=idempotency_key,
+                    snapshot_count=len(snapshots),
+                    legacy_rows=len(legacy_rows),
+                )
+                return []
+            results = asyncio.run(full(dry_run=dry_run, snapshots=snapshots, legacy_rows=legacy_rows))
+            meta = dict(payload_meta)
+            meta.update(_summarize_results(results))
+            handle.session.execute(
+                update(LOAD_LOG).where(LOAD_LOG.c.id == handle.load_log_id).values(payload_meta=meta)
+            )
+            return results
+    finally:
+        engine.dispose()
 
 
 async def _process_snapshots(
@@ -260,11 +375,11 @@ def _record_snapshot_metrics(summary: dict[str, Any], *, dry_run: bool, duration
 
 
 def _sync_full(dry_run: bool = False) -> list[dict[str, Any]]:
-    return asyncio.run(full(dry_run=dry_run))
+    return run_once_with_guard(dry_run=dry_run)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
-    asyncio.run(full(dry_run=args.dry_run))
+    run_once_with_guard(dry_run=args.dry_run)

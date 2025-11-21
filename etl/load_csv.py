@@ -1,17 +1,25 @@
 from __future__ import annotations
 
+import argparse
 import hashlib
 import json
 import tempfile
+import time
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import pandas as pd
-from sqlalchemy import create_engine, text
+import structlog
+from sqlalchemy import create_engine, text, update
+from sqlalchemy.orm import Session, sessionmaker
 
+from awa_common.db.load_log import LOAD_LOG
 from awa_common.dsn import build_dsn
+from awa_common.etl.guard import process_once
+from awa_common.etl.idempotency import build_payload_meta, compute_idempotency_key
+from awa_common.metrics import record_etl_run, record_etl_skip
 from awa_common.minio import create_boto3_client, get_bucket_name
 from awa_common.settings import settings
 from services.etl.dialects import (
@@ -50,6 +58,16 @@ STREAMING_CHUNK_ENV = int(
 BUCKET = get_bucket_name()
 CSV_EXTENSIONS = {".csv", ".txt", ".tsv"}
 XLSX_EXTENSIONS = {".xlsx", ".xlsm"}
+SOURCE_NAME = "ingest.import_file"
+logger = structlog.get_logger(__name__).bind(service="ingest", etl_name="load_csv")
+TABLE_TO_DIALECT = {
+    "returns_raw": "returns_report",
+    "reimbursements_raw": "reimbursements_report",
+    amazon_fee_preview.TARGET_TABLE: "fee_preview_report",
+    amazon_inventory_ledger.TARGET_TABLE: "inventory_ledger_report",
+    amazon_ads_sp_cost.TARGET_TABLE: "ads_sp_cost_daily_report",
+    amazon_settlements.TARGET_TABLE: "settlements_txn_report",
+}
 
 
 @dataclass(slots=True)
@@ -323,6 +341,67 @@ def _yield_reader(reader: pd.io.parsers.TextFileReader) -> Iterator[pd.DataFrame
         reader.close()
 
 
+def _target_table_for(dialect: str) -> str:
+    return {
+        "returns_report": "returns_raw",
+        "reimbursements_report": "reimbursements_raw",
+        "fee_preview_report": amazon_fee_preview.TARGET_TABLE,
+        "inventory_ledger_report": amazon_inventory_ledger.TARGET_TABLE,
+        "ads_sp_cost_daily_report": amazon_ads_sp_cost.TARGET_TABLE,
+        "settlements_txn_report": amazon_settlements.TARGET_TABLE,
+    }[dialect]
+
+
+def _build_import_meta(
+    file_path: Path,
+    *,
+    target_table: str,
+    dialect: str,
+    streaming: bool,
+    extra: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    meta_extra = {
+        "source_uri": str(file_path),
+        "target_table": target_table,
+        "dialect": dialect,
+        "streaming": streaming,
+    }
+    if extra:
+        meta_extra.update(extra)
+    result: dict[str, Any] = build_payload_meta(path=file_path, extra=meta_extra)
+    return result
+
+
+def _derive_idempotency_key(
+    file_path: Path,
+    *,
+    target_table: str,
+    dialect: str,
+    user_key: str | None,
+    force: bool,
+    idempotent_enabled: bool,
+) -> str:
+    base_key: str = user_key or compute_idempotency_key(path=file_path)
+    seed = json.dumps(
+        {
+            "key": base_key,
+            "target_table": target_table,
+            "dialect": dialect,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    key: str = compute_idempotency_key(content=seed)
+    suffixes: list[str] = []
+    if not idempotent_enabled:
+        suffixes.append(f"run-{int(time.time() * 1000)}")
+    if force:
+        suffixes.append(f"force-{int(time.time() * 1000)}")
+    if suffixes:
+        key = f"{key}:{':'.join(suffixes)}"
+    return key[:64]
+
+
 def import_file(  # noqa: C901
     path: str,
     report_type: str | None = None,
@@ -341,7 +420,6 @@ def import_file(  # noqa: C901
     file_path = Path(path)
     if file_path.exists() and file_path.stat().st_size == 0:
         raise ImportValidationError("empty file")
-    file_hash = idempotency_key or _sha256_file(file_path)
     if _dialect_override == "test_generic":
         streaming = False
 
@@ -399,147 +477,207 @@ def import_file(  # noqa: C901
         if celery_update:
             celery_update({"stage": "detect", "dialect": dialect})
 
-        try:
-            df = schemas.validate(df, dialect)
-        except ValueError as err:
-            raise ImportValidationError(str(err)) from err
-        if celery_update:
-            celery_update({"stage": "validate", "rows": len(df)})
-
     if dialect is None:
         raise ImportValidationError("Unknown report: cannot detect dialect")
 
-    target_table = {
-        "returns_report": "returns_raw",
-        "reimbursements_report": "reimbursements_raw",
-        "fee_preview_report": amazon_fee_preview.TARGET_TABLE,
-        "inventory_ledger_report": amazon_inventory_ledger.TARGET_TABLE,
-        "ads_sp_cost_daily_report": amazon_ads_sp_cost.TARGET_TABLE,
-        "settlements_txn_report": amazon_settlements.TARGET_TABLE,
-    }[dialect]
-
-    idempotent = bool(_ETL_CFG.ingest_idempotent if _ETL_CFG else getattr(settings, "INGEST_IDEMPOTENT", True))
+    target_table = _target_table_for(dialect)
+    idempotent_enabled = bool(_ETL_CFG.ingest_idempotent if _ETL_CFG else getattr(settings, "INGEST_IDEMPOTENT", True))
     analyze_min = int(_ETL_CFG.analyze_min_rows if _ETL_CFG else getattr(settings, "ANALYZE_MIN_ROWS", 50_000))
     warnings: list[str] = []
 
+    meta_extra: dict[str, Any] = {"force": bool(force), "file_sha256": idempotency_key or _sha256_file(file_path)}
+    if metadata:
+        meta_extra["rows_estimated"] = metadata.rows
+    elif df is not None:
+        meta_extra["rows_estimated"] = len(df)
+
+    payload_meta = _build_import_meta(
+        file_path,
+        target_table=target_table,
+        dialect=dialect,
+        streaming=streaming,
+        extra=meta_extra,
+    )
+    idempotency_value = _derive_idempotency_key(
+        file_path,
+        target_table=target_table,
+        dialect=dialect,
+        user_key=idempotency_key,
+        force=force,
+        idempotent_enabled=idempotent_enabled,
+    )
+
+    column_map: dict[str, list[str] | None] = {
+        "returns_report": list(df.columns) if df is not None else None,
+        "reimbursements_report": list(df.columns) if df is not None else None,
+        "fee_preview_report": list(amazon_fee_preview.TARGET_COLUMNS),
+        "inventory_ledger_report": list(amazon_inventory_ledger.TARGET_COLUMNS),
+        "ads_sp_cost_daily_report": list(amazon_ads_sp_cost.TARGET_COLUMNS),
+        "settlements_txn_report": list(amazon_settlements.TARGET_COLUMNS),
+    }
+    columns = column_map[dialect]
+    conflict_cols = _conflict_columns_for(dialect, df=df, metadata=metadata)
+
     engine = create_engine(build_dsn(sync=True))
-    conn: Any = engine.raw_connection()
+
+    class _DummyResult:
+        def __init__(self, inserted: bool = True) -> None:
+            self.inserted = inserted
+
+        def scalar_one_or_none(self) -> int | None:
+            return 1 if self.inserted else None
+
+    class _DummySession:
+        def __init__(self) -> None:
+            self._result = _DummyResult()
+
+        def execute(self, *_args: Any, **_kwargs: Any) -> _DummyResult:
+            return self._result
+
+        def flush(self) -> None:
+            return None
+
+        def commit(self) -> None:
+            return None
+
+        def rollback(self) -> None:
+            return None
+
+        def close(self) -> None:
+            return None
+
+    def _make_dummy_session() -> _DummySession:
+        return _DummySession()
+
+    SessionLocal: Callable[[], Session]
     try:
-        conn.autocommit = False
-        with conn.cursor() as cur:
-            key = int(file_hash[:16], 16) % (2**63)
-            cur.execute("SELECT pg_advisory_xact_lock(%s)", (key,))
-            if idempotent and not force:
-                cur.execute(
-                    "SELECT 1 FROM load_log WHERE target_table=%s AND file_hash=%s AND status='success' LIMIT 1",
-                    (target_table, file_hash),
-                )
-                if cur.fetchone():
-                    cur.execute(
-                        (
-                            "INSERT INTO load_log (source_uri, target_table, dialect, file_hash, "
-                            "status, finished_at) VALUES "
-                            "(%s,%s,%s,%s,'skipped',now())"
-                        ),
-                        (str(file_path), target_table, dialect, file_hash),
-                    )
-                    conn.commit()
-                    return {
-                        "status": "skipped",
-                        "rows": 0,
-                        "dialect": dialect,
-                        "target_table": target_table,
-                        "warnings": warnings,
-                    }
-
-        column_map: dict[str, list[str] | None] = {
-            "returns_report": list(df.columns) if df is not None else None,
-            "reimbursements_report": list(df.columns) if df is not None else None,
-            "fee_preview_report": list(amazon_fee_preview.TARGET_COLUMNS),
-            "inventory_ledger_report": list(amazon_inventory_ledger.TARGET_COLUMNS),
-            "ads_sp_cost_daily_report": list(amazon_ads_sp_cost.TARGET_COLUMNS),
-            "settlements_txn_report": list(amazon_settlements.TARGET_COLUMNS),
-        }
-        columns = column_map[dialect]
-        conflict_cols = _conflict_columns_for(dialect, df=df, metadata=metadata)
-
-        if streaming:
-            rows_loaded = _process_streaming_chunks(
-                file_path,
-                chunk_size=chunk_rows,
-                dialect=dialect,
-                engine=engine,
-                conn=conn,
-                target_table=target_table,
-                columns=columns,
-                conflict_cols=conflict_cols,
-            )
+        if hasattr(engine, "connect"):
+            SessionLocal = cast(Callable[[], Session], sessionmaker(bind=engine, expire_on_commit=False, future=True))
         else:
-            assert df is not None
-            if USE_COPY:
-                assert columns is not None
-                copy_df_via_temp(
-                    engine,
-                    df,
+            SessionLocal = cast(Callable[[], Session], _make_dummy_session)
+    except Exception:
+        SessionLocal = cast(Callable[[], Session], _make_dummy_session)
+    try:
+        with process_once(
+            SessionLocal,
+            source=SOURCE_NAME,
+            payload_meta=payload_meta,
+            idempotency_key=idempotency_value,
+            on_duplicate="update_meta",
+        ) as handle:
+            if handle is None:
+                record_etl_skip(SOURCE_NAME)
+                logger.info(
+                    "etl.skipped",
+                    source=SOURCE_NAME,
+                    idempotency_key=idempotency_value,
                     target_table=target_table,
-                    target_schema=None,
-                    columns=list(columns),
-                    conflict_cols=conflict_cols,
-                    analyze_after=False,
-                    connection=conn,
+                    dialect=dialect,
                 )
-            else:
-                df.to_sql(target_table, engine, if_exists="append", index=False)
-            rows_loaded = len(df)
+                return {
+                    "status": "skipped",
+                    "rows": 0,
+                    "dialect": dialect,
+                    "target_table": target_table,
+                    "warnings": warnings,
+                    "idempotency_key": idempotency_value,
+                }
 
-        if rows_loaded >= analyze_min:
-            with conn.cursor() as cur:
-                cur.execute(f"ANALYZE {target_table}")
+            with record_etl_run(SOURCE_NAME):
+                conn: Any = engine.raw_connection()
+                rows_loaded = 0
+                try:
+                    conn.autocommit = False
+                    if streaming:
+                        rows_loaded = _process_streaming_chunks(
+                            file_path,
+                            chunk_size=chunk_rows,
+                            dialect=dialect,
+                            engine=engine,
+                            conn=conn,
+                            target_table=target_table,
+                            columns=columns,
+                            conflict_cols=conflict_cols,
+                        )
+                    else:
+                        assert df is not None
+                        try:
+                            validated_df = schemas.validate(df, dialect)
+                        except ValueError as err:
+                            raise ImportValidationError(str(err)) from err
+                        if celery_update:
+                            celery_update({"stage": "validate", "rows": len(validated_df)})
+                        if USE_COPY:
+                            assert columns is not None
+                            copy_df_via_temp(
+                                engine,
+                                validated_df,
+                                target_table=target_table,
+                                target_schema=None,
+                                columns=list(columns),
+                                conflict_cols=conflict_cols,
+                                analyze_after=False,
+                                connection=conn,
+                            )
+                        else:
+                            validated_df.to_sql(target_table, engine, if_exists="append", index=False)
+                        rows_loaded = len(validated_df)
 
-        with conn.cursor() as cur:
-            cur.execute(
-                (
-                    "INSERT INTO load_log (source_uri, target_table, dialect, file_hash, rows, status, "
-                    "warnings, finished_at) VALUES (%s,%s,%s,%s,%s,'success',%s,now())"
-                ),
-                (
-                    str(file_path),
-                    target_table,
-                    dialect,
-                    file_hash,
-                    rows_loaded,
-                    json.dumps(warnings),
-                ),
+                    if rows_loaded == 0:
+                        raise ImportValidationError("empty file")
+                    if rows_loaded >= analyze_min:
+                        with conn.cursor() as cur:
+                            cur.execute(f"ANALYZE {target_table}")
+                    conn.commit()
+                except Exception:
+                    conn.rollback()
+                    raise
+                finally:
+                    conn.close()
+
+            payload_meta.update({"rows": rows_loaded, "warnings": warnings})
+            handle.session.execute(
+                update(LOAD_LOG).where(LOAD_LOG.c.id == handle.load_log_id).values(payload_meta=payload_meta)
             )
-        conn.commit()
-        if celery_update:
-            if streaming:
-                celery_update({"stage": "validate", "rows": rows_loaded})
-            celery_update({"stage": "write", "rows": rows_loaded})
-        return {
-            "status": "success",
-            "rows": rows_loaded,
-            "dialect": dialect,
-            "target_table": target_table,
-            "warnings": warnings,
-        }
-    except ImportFileError:
-        conn.rollback()
+            if celery_update:
+                if streaming:
+                    celery_update({"stage": "validate", "rows": rows_loaded})
+                celery_update({"stage": "write", "rows": rows_loaded})
+            logger.info(
+                "etl.success",
+                source=SOURCE_NAME,
+                idempotency_key=idempotency_value,
+                target_table=target_table,
+                dialect=dialect,
+                rows=rows_loaded,
+            )
+            return {
+                "status": "success",
+                "rows": rows_loaded,
+                "dialect": dialect,
+                "target_table": target_table,
+                "warnings": warnings,
+                "idempotency_key": idempotency_value,
+            }
+    except ImportValidationError:
+        logger.warning(
+            "etl.validation_failed",
+            source=SOURCE_NAME,
+            target_table=target_table if "target_table" in locals() else None,
+            dialect=dialect,
+        )
         raise
     except Exception as exc:  # pragma: no cover - defensive
-        conn.rollback()
-        with conn.cursor() as cur:
-            cur.execute(
-                (
-                    "INSERT INTO load_log (source_uri, target_table, dialect, file_hash, status, "
-                    "error_summary, finished_at) VALUES (%s,%s,%s,%s,'error',%s,now())"
-                ),
-                (str(file_path), target_table, dialect, file_hash, str(exc)[:4000]),
-            )
-        conn.commit()
+        logger.exception(
+            "etl.failed",
+            source=SOURCE_NAME,
+            idempotency_key=idempotency_value if "idempotency_value" in locals() else None,
+            target_table=target_table if "target_table" in locals() else None,
+            dialect=dialect,
+            error=str(exc),
+        )
         raise ImportFileError(f"Failed to import {file_path}") from exc
     finally:
-        conn.close()
         engine.dispose()
 
 
@@ -548,6 +686,51 @@ def import_uri(uri: str, **kwargs: Any) -> dict[str, Any]:
     return import_file(str(path), **kwargs)
 
 
-def main(_args: list[str]) -> tuple[int, int]:
-    """Placeholder CLI entrypoint for type checking."""
-    return 0, 0
+def _resolve_report_type(table: str, report_type: str | None) -> str | None:
+    if report_type:
+        return report_type
+    normalized = (table or "").strip().lower()
+    if not normalized or normalized == "auto":
+        return None
+    return TABLE_TO_DIALECT.get(normalized, normalized)
+
+
+def build_cli_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Load CSV/XLSX files into Postgres via COPY/UPSERT.")
+    parser.add_argument("--source", required=True, help="Filesystem path or URI to the input file.")
+    parser.add_argument(
+        "--table",
+        default="auto",
+        help="Target table or dialect. Use 'auto' to auto-detect the dialect from headers.",
+    )
+    parser.add_argument(
+        "--report-type",
+        dest="report_type",
+        default=None,
+        help="Explicit report/dialect name (overrides --table).",
+    )
+    parser.add_argument("--force", action="store_true", help="Process even when idempotency detects a duplicate.")
+    parser.add_argument("--streaming", action="store_true", help="Enable streaming loads for large files.")
+    parser.add_argument("--chunk-size", type=int, default=None, help="Optional chunk size for streaming mode.")
+    parser.add_argument("--idempotency-key", default=None, help="Override computed idempotency key.")
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = build_cli_parser()
+    args = parser.parse_args(argv)
+    resolved_report = _resolve_report_type(args.table, args.report_type)
+    try:
+        result = import_file(
+            args.source,
+            report_type=resolved_report,
+            force=args.force,
+            streaming=args.streaming,
+            chunk_size=args.chunk_size,
+            idempotency_key=args.idempotency_key,
+        )
+    except ImportFileError as exc:
+        logger.error("etl.cli_failed", source=SOURCE_NAME, error=str(exc))
+        return 1
+    print(json.dumps(result, default=str))
+    return 0

@@ -1,17 +1,33 @@
 from __future__ import annotations
 
-from collections import deque
-from dataclasses import dataclass
-
 import pandas as pd
+import pytest
 
 from etl import load_csv
 from services.etl import healthcheck
 
 
+class _StubSession:
+    def __init__(self) -> None:
+        self.closed = False
+
+    def commit(self) -> None:  # pragma: no cover - no-op
+        return None
+
+    def rollback(self) -> None:  # pragma: no cover - no-op
+        return None
+
+    def close(self) -> None:
+        self.closed = True
+
+    def execute(self, *_args, **_kwargs):  # pragma: no cover - updated via stub_load_log
+        return None
+
+
 class _StubCursor:
     def __init__(self, connection: _StubConnection):
-        self._connection = connection
+        self.connection = connection
+        self.statements: list[tuple[str, object | None]] = []
 
     def __enter__(self) -> _StubCursor:
         return self
@@ -20,21 +36,17 @@ class _StubCursor:
         return None
 
     def execute(self, sql: str, params=None) -> None:
-        self._connection.statements.append((sql, params))
-
-    def fetchone(self):
-        if self._connection.fetch_plan:
-            return self._connection.fetch_plan.popleft()
-        return None
+        self.statements.append((sql, params))
+        self.connection.statements.append((sql, params))
 
 
 class _StubConnection:
-    def __init__(self, fetch_plan: list | None = None) -> None:
-        self.fetch_plan: deque = deque(fetch_plan or [])
-        self.statements: list[tuple[str, object]] = []
+    def __init__(self) -> None:
         self.autocommit = False
         self.committed = False
+        self.rolled_back = False
         self.closed = False
+        self.statements: list[tuple[str, object | None]] = []
 
     def cursor(self) -> _StubCursor:
         return _StubCursor(self)
@@ -49,10 +61,10 @@ class _StubConnection:
         self.closed = True
 
 
-@dataclass
 class _StubEngine:
-    connection: _StubConnection
-    disposed: bool = False
+    def __init__(self, conn: _StubConnection):
+        self.connection = conn
+        self.disposed = False
 
     def raw_connection(self) -> _StubConnection:
         return self.connection
@@ -74,82 +86,71 @@ def _fake_df() -> pd.DataFrame:
     )
 
 
-def test_import_file_skips_when_already_logged(monkeypatch, tmp_path) -> None:
-    file_path = tmp_path / "returns.csv"
-    file_path.write_text("asin,qty,refund_amount\nA1,1,2.5\n")
-
+def _install_stubs(
+    monkeypatch: pytest.MonkeyPatch,
+    stub_load_log,
+    conn: _StubConnection,
+    *,
+    validation_error: bool = False,
+):
+    copy_calls: list[tuple] = []
     monkeypatch.setenv("TESTING", "1")
     monkeypatch.setenv("INGEST_IDEMPOTENT", "true")
-    monkeypatch.setenv("ANALYZE_MIN_ROWS", "9999")
     monkeypatch.setattr(load_csv, "USE_COPY", True)
     monkeypatch.setattr(load_csv, "_read_csv_flex", lambda path: _fake_df())
-    monkeypatch.setattr(load_csv.amazon_returns, "normalise", lambda df: df)
-    monkeypatch.setattr(load_csv.schemas, "validate", lambda df, dialect: df)
+    monkeypatch.setattr(load_csv, "_resolve_dialect", lambda df, explicit: ("returns_report", df))
     monkeypatch.setattr(load_csv, "build_dsn", lambda sync=True: "postgresql://test")
-
-    copy_calls: list[tuple] = []
-    monkeypatch.setattr(
-        load_csv,
-        "copy_df_via_temp",
-        lambda *args, **kwargs: copy_calls.append((args, kwargs)),
-    )
-
-    conn = _StubConnection(fetch_plan=[(1,)])
-
-    def _create_engine(*args, **kwargs):
-        return _StubEngine(conn)
-
-    monkeypatch.setattr(load_csv, "create_engine", _create_engine)
-
-    result = load_csv.import_file(str(file_path), report_type="returns_report")
-    assert result["status"] == "skipped"
-    assert result["rows"] == 0
-    assert conn.committed is True
-    assert copy_calls == []
+    monkeypatch.setattr(load_csv, "copy_df_via_temp", lambda *a, **k: copy_calls.append((a, k)))
+    monkeypatch.setattr(load_csv, "create_engine", lambda *a, **k: _StubEngine(conn))
+    monkeypatch.setattr(load_csv, "sessionmaker", lambda *a, **k: (lambda: _StubSession()))
+    if validation_error:
+        monkeypatch.setattr(load_csv.schemas, "validate", lambda df, dialect: (_ for _ in ()).throw(ValueError("bad")))
+    else:
+        monkeypatch.setattr(load_csv.schemas, "validate", lambda df, dialect: df)
+    return copy_calls
 
 
-def test_import_file_success_then_skip(monkeypatch, tmp_path) -> None:
+def test_import_file_skips_when_already_logged(monkeypatch, tmp_path, stub_load_log) -> None:
     file_path = tmp_path / "returns.csv"
     file_path.write_text("asin,qty,refund_amount\nA1,1,2.5\n")
+    conn = _StubConnection()
+    copy_calls = _install_stubs(monkeypatch, stub_load_log, conn)
 
-    monkeypatch.setenv("TESTING", "1")
-    monkeypatch.setenv("INGEST_IDEMPOTENT", "true")
-    monkeypatch.setenv("ANALYZE_MIN_ROWS", "9999")
-    monkeypatch.setattr(load_csv, "USE_COPY", True)
-    monkeypatch.setattr(load_csv, "_read_csv_flex", lambda path: _fake_df())
-    monkeypatch.setattr(load_csv.amazon_returns, "normalise", lambda df: df)
-    monkeypatch.setattr(load_csv.schemas, "validate", lambda df, dialect: df)
-    monkeypatch.setattr(load_csv, "build_dsn", lambda sync=True: "postgresql://test")
+    first = load_csv.import_file(str(file_path), report_type="returns_report")
+    second = load_csv.import_file(str(file_path), report_type="returns_report")
 
-    copy_calls: list[tuple] = []
+    assert first["status"] == "success"
+    assert second["status"] == "skipped"
+    assert len(copy_calls) == 1
+    statuses = {record["status"] for record in stub_load_log.values()}
+    assert "skipped" in statuses
 
-    def _copy_hook(*args, **kwargs):
-        copy_calls.append((args, kwargs))
-        return None
 
-    monkeypatch.setattr(load_csv, "copy_df_via_temp", _copy_hook)
-
-    first_conn = _StubConnection()
-    second_conn = _StubConnection(fetch_plan=[(1,)])
-    engines = deque([_StubEngine(first_conn), _StubEngine(second_conn)])
-
-    def _create_engine(*args, **kwargs):
-        engine = engines.popleft()
-        return engine
-
-    monkeypatch.setattr(load_csv, "create_engine", _create_engine)
+def test_import_file_force_bypasses_idempotent_skip(monkeypatch, tmp_path, stub_load_log) -> None:
+    file_path = tmp_path / "returns.csv"
+    file_path.write_text("asin,qty,refund_amount\nA1,1,2.5\n")
+    conn = _StubConnection()
+    copy_calls = _install_stubs(monkeypatch, stub_load_log, conn)
 
     first = load_csv.import_file(str(file_path), report_type="returns_report")
     assert first["status"] == "success"
-    assert copy_calls
-    assert first_conn.committed is True
-    assert first_conn.closed is True
+    second = load_csv.import_file(str(file_path), report_type="returns_report", force=True)
+    assert second["status"] == "success"
+    assert len(copy_calls) == 2
+    assert len(stub_load_log) == 2
 
-    second = load_csv.import_file(str(file_path), report_type="returns_report")
-    assert second["status"] == "skipped"
-    assert len(copy_calls) == 1  # no additional copy
-    assert second_conn.committed is True
-    assert second_conn.closed is True
+
+def test_import_file_validation_failure(monkeypatch, tmp_path, stub_load_log) -> None:
+    file_path = tmp_path / "returns.csv"
+    file_path.write_text("asin,qty,refund_amount\nA1,1,2.5\n")
+    conn = _StubConnection()
+    _install_stubs(monkeypatch, stub_load_log, conn, validation_error=True)
+
+    with pytest.raises(load_csv.ImportValidationError):
+        load_csv.import_file(str(file_path), report_type="returns_report")
+    statuses = {record["status"] for record in stub_load_log.values()}
+    assert "failed" in statuses
+    assert conn.rolled_back is True
 
 
 def test_sha256_file_changes_with_content(tmp_path) -> None:
@@ -185,35 +186,3 @@ def test_retry_failure(monkeypatch) -> None:
         raise RuntimeError("nope")
 
     assert healthcheck._retry(_always_fail, attempts=2, delay=0.01, name="fail") is False
-
-
-def test_import_file_force_bypasses_idempotent_skip(monkeypatch, tmp_path) -> None:
-    file_path = tmp_path / "returns.csv"
-    file_path.write_text("asin,qty,refund_amount\nA1,1,2.5\n")
-
-    monkeypatch.setenv("TESTING", "1")
-    monkeypatch.setenv("INGEST_IDEMPOTENT", "true")
-    monkeypatch.setattr(load_csv, "USE_COPY", True)
-    monkeypatch.setattr(load_csv, "_read_csv_flex", lambda path: _fake_df())
-    monkeypatch.setattr(load_csv.amazon_returns, "normalise", lambda df: df)
-    monkeypatch.setattr(load_csv.schemas, "validate", lambda df, dialect: df)
-    monkeypatch.setattr(load_csv, "build_dsn", lambda sync=True: "postgresql://test")
-
-    copy_calls: list[tuple] = []
-
-    def _copy_hook(*args, **kwargs):
-        copy_calls.append((args, kwargs))
-        return None
-
-    monkeypatch.setattr(load_csv, "copy_df_via_temp", _copy_hook)
-
-    conn = _StubConnection(fetch_plan=[(1,)])
-
-    def _create_engine(*args, **kwargs):
-        return _StubEngine(conn)
-
-    monkeypatch.setattr(load_csv, "create_engine", _create_engine)
-
-    result = load_csv.import_file(str(file_path), report_type="returns_report", force=True)
-    assert result["status"] == "success"
-    assert copy_calls, "copy should execute when force=True"
