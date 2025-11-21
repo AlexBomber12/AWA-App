@@ -57,6 +57,25 @@ async def test_fetch_fees_handles_missing_key(monkeypatch: pytest.MonkeyPatch) -
     assert row["storage_fee"] == 0.0
 
 
+@pytest.mark.asyncio
+async def test_http_client_recreated_and_closed(monkeypatch: pytest.MonkeyPatch) -> None:
+    from services.fees_h10 import client
+
+    closed: dict[str, bool] = {}
+
+    class DummyClient:
+        async def aclose(self):
+            closed["closed"] = True
+
+    monkeypatch.setattr(client, "_HTTP_CLIENT", DummyClient(), raising=False)
+    monkeypatch.setattr(client, "_HTTP_CLIENT_CONFIG", ("old", 1.0, 1), raising=False)
+    new_client = await client._get_http_client()
+    await client.close_http_client()
+
+    assert closed.get("closed") is True
+    assert hasattr(new_client, "get_json")
+
+
 def test_upsert_fees_raw_processes_fixture() -> None:
     from services.fees_h10 import repository as repo
 
@@ -147,3 +166,20 @@ def test_upsert_fees_raw_empty_input_returns_zero_counts() -> None:
         "updated": 0,
         "skipped": 0,
     }
+
+
+def test_build_fee_url_respects_base(monkeypatch: pytest.MonkeyPatch) -> None:
+    from services.fees_h10 import client
+
+    monkeypatch.setattr(client, "_helium_base_url", lambda: "https://example.com", raising=False)
+    assert client.build_fee_url("ASINX") == "https://example.com/financials/fba-fees/ASINX"
+
+
+def test_helium_key_prefers_manual_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    from services.fees_h10 import client
+
+    monkeypatch.setattr(client, "H10_KEY", "manual-secret", raising=False)
+    monkeypatch.setattr(client, "SETTINGS", client.SETTINGS, raising=False)
+    monkeypatch.setattr(client.SETTINGS, "HELIUM10_KEY", "env-secret", raising=False)
+
+    assert client._helium_key() == "manual-secret"

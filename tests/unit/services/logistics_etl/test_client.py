@@ -9,7 +9,6 @@ from decimal import Decimal
 from types import SimpleNamespace
 from urllib.parse import urlparse
 
-import httpx
 import pytest
 
 from services.logistics_etl import client
@@ -44,21 +43,20 @@ async def test_fetch_sources_csv_normalizes_rows(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_download_with_retries_http_recovers(monkeypatch):
-    attempts = {"count": 0}
+    calls: dict[str, object] = {}
 
-    async def fake_download(url, timeout_s):
-        attempts["count"] += 1
-        if attempts["count"] == 1:
-            request = httpx.Request("GET", url)
-            response = httpx.Response(503, request=request)
-            raise httpx.HTTPStatusError("server error", request=request, response=response)
+    async def fake_download(url, timeout_s=None, retries=None):
+        calls["url"] = url
+        calls["timeout_s"] = timeout_s
+        calls["retries"] = retries
         return b"ok", {}
 
     monkeypatch.setattr(client, "_download_http", fake_download)
     data, meta = await client._download_with_retries("http://logistics.example/rates.csv", timeout_s=1, retries=2)
     assert data == b"ok"
     assert meta == {}
-    assert attempts["count"] == 2
+    assert calls["timeout_s"] == 1
+    assert int(calls["retries"]) >= 2
 
 
 @pytest.mark.asyncio
@@ -192,34 +190,66 @@ async def test_fetch_sources_unsupported_format(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_ensure_http_client_respects_settings(monkeypatch):
+    from services.logistics_etl import client as client_module
+
+    existing = client_module._HTTP_CLIENT
+    if existing is not None:
+        await existing.aclose()
+    client_module._HTTP_CLIENT = None
+    client_module._HTTP_CLIENT_CONFIG = None
+
+    config = SimpleNamespace(
+        LOGISTICS_TIMEOUT_S=9.5,
+        LOGISTICS_RETRIES=4,
+        ETL_RETRY_ATTEMPTS=2,
+        HTTP_MAX_RETRIES=1,
+    )
+    monkeypatch.setattr(client_module, "Settings", lambda: config, raising=False)
+
+    http_client = await client_module._ensure_http_client()
+    try:
+        assert http_client.integration == "logistics_etl"
+        assert http_client._total_timeout_s == 9.5  # type: ignore[attr-defined]
+        assert http_client._max_retries == 4  # type: ignore[attr-defined]
+    finally:
+        await http_client.aclose()
+        client_module._HTTP_CLIENT = None
+        client_module._HTTP_CLIENT_CONFIG = None
+
+
+@pytest.mark.asyncio
 async def test_download_http_falls_back_to_content(monkeypatch):
     class DummyResponse:
         def __init__(self) -> None:
             self.headers = {"content-type": "text/csv"}
             self.content = b"carrier,origin\n"
+            self.closed = False
+            self.status_code = 200
 
         def raise_for_status(self) -> None:
             return None
 
-    class DummyStream:
-        async def __aenter__(self_inner):
-            return DummyResponse()
+        async def aiter_bytes(self, _chunk_size: int):
+            yield self.content
 
-        async def __aexit__(self_inner, exc_type, exc, tb):
-            return False
+        async def aread(self):
+            return self.content
+
+        async def aclose(self):
+            self.closed = True
 
     class DummyClient:
-        def __init__(self) -> None:
-            self.called = False
+        async def request(self, *_args, **_kwargs):
+            return DummyResponse()
 
-        def stream(self, *_args, **_kwargs):
-            self.called = True
-            return DummyStream()
+        async def aclose(self):
+            return None
 
-    async def fake_get_client():
+    async def fake_ensure_http_client(**_kwargs):
         return DummyClient()
 
-    monkeypatch.setattr(client.http_client, "get_client", fake_get_client)
+    monkeypatch.setattr(client, "_ensure_http_client", fake_ensure_http_client)
 
     body, meta = await client._download_http("https://example.com/data.csv")
     assert body.startswith(b"carrier")

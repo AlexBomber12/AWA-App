@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import inspect
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
@@ -235,6 +236,12 @@ class _BaseHTTPClient:
         headers: dict[str, str] | None = None,
         base_url: str | None = None,
         transport: httpx.BaseTransport | None = None,
+        max_retries: int | None = None,
+        total_timeout_s: float | None = None,
+        backoff_base_s: float | None = None,
+        backoff_max_s: float | None = None,
+        retry_jitter_s: float | None = None,
+        retry_status_codes: tuple[int, ...] | list[int] | set[int] | frozenset[int] | None = None,
     ) -> None:
         self.integration = (integration or "default").strip().lower() or "default"
         self._timeout = timeout or _default_timeout()
@@ -242,12 +249,13 @@ class _BaseHTTPClient:
         self._headers = headers
         self._base_url = base_url
         self._transport = transport
-        self._max_retries = max(1, int(settings.HTTP_MAX_RETRIES))
-        self._total_timeout_s = float(settings.HTTP_TOTAL_TIMEOUT_S)
-        self._backoff_base = float(settings.HTTP_BACKOFF_BASE_S)
-        self._backoff_max = float(settings.HTTP_BACKOFF_MAX_S)
-        self._retry_jitter = float(settings.HTTP_BACKOFF_JITTER_S)
-        self._retry_status_codes = frozenset(settings.HTTP_RETRY_STATUS_CODES or [])
+        self._max_retries = max(1, int(max_retries if max_retries is not None else settings.HTTP_MAX_RETRIES))
+        self._total_timeout_s = float(total_timeout_s if total_timeout_s is not None else settings.HTTP_TOTAL_TIMEOUT_S)
+        self._backoff_base = float(backoff_base_s if backoff_base_s is not None else settings.HTTP_BACKOFF_BASE_S)
+        self._backoff_max = float(backoff_max_s if backoff_max_s is not None else settings.HTTP_BACKOFF_MAX_S)
+        self._retry_jitter = float(retry_jitter_s if retry_jitter_s is not None else settings.HTTP_BACKOFF_JITTER_S)
+        configured_statuses = retry_status_codes if retry_status_codes is not None else settings.HTTP_RETRY_STATUS_CODES
+        self._retry_status_codes = frozenset(configured_statuses or [])
         self._task_id = getattr(getattr(settings, "etl", None), "task_id", None)
         self._request_id = structlog_contextvars.get_contextvars().get("request_id")
 
@@ -342,11 +350,13 @@ class HTTPClient(_BaseHTTPClient):
         action: Callable[[], httpx.Response],
         log_context: _RequestLog,
         cleanup: Callable[[], None] | None = None,
+        allowed_statuses: frozenset[int] | None = None,
     ) -> httpx.Response:
         start = time.perf_counter()
         attempts = 0
         final_exc: Exception | None = None
         final_attempts = 0
+        allowed = allowed_statuses or frozenset()
         retrying = Retrying(
             stop=stop_after_attempt(self._max_retries) | stop_after_delay(self._total_timeout_s),
             wait=self._new_wait(),
@@ -368,6 +378,11 @@ class HTTPClient(_BaseHTTPClient):
                             response=response,
                             retry_after=retry_after,
                         )
+                    if response.status_code in allowed:
+                        duration = time.perf_counter() - start
+                        self._record_outcome(method, "success", duration)
+                        log_context.success(response.status_code, attempts=attempts)
+                        return response
                     response.raise_for_status()
                     duration = time.perf_counter() - start
                     self._record_outcome(method, "success", duration)
@@ -394,6 +409,11 @@ class HTTPClient(_BaseHTTPClient):
 
     def request(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
         method_name = (method or "GET").upper()
+        allowed_statuses: frozenset[int] | None = None
+        if "allowed_statuses" in kwargs:
+            raw_allowed = kwargs.pop("allowed_statuses")
+            if raw_allowed is not None:
+                allowed_statuses = frozenset(int(code) for code in raw_allowed)
         log_context = _RequestLog(
             integration=self.integration,
             method=method_name,
@@ -407,6 +427,7 @@ class HTTPClient(_BaseHTTPClient):
             url=url,
             action=lambda: self._client.request(method_name, url, **kwargs),
             log_context=log_context,
+            allowed_statuses=allowed_statuses,
         )
 
     def get(self, url: str, **kwargs: Any) -> httpx.Response:
@@ -436,6 +457,7 @@ class HTTPClient(_BaseHTTPClient):
         dest_path: Path,
         method: str = "GET",
         chunk_size: int = 1 << 20,
+        on_chunk: Callable[[bytes], Any] | None = None,
         **kwargs: Any,
     ) -> Path:
         method_name = (method or "GET").upper()
@@ -466,6 +488,8 @@ class HTTPClient(_BaseHTTPClient):
                 dest_path.parent.mkdir(parents=True, exist_ok=True)
                 with dest_path.open("wb") as handle:
                     for chunk in response.iter_bytes(chunk_size=chunk_size):
+                        if on_chunk is not None:
+                            on_chunk(chunk)
                         handle.write(chunk)
                 return response
 
@@ -495,6 +519,12 @@ class AsyncHTTPClient(_BaseHTTPClient):
             client_kwargs["base_url"] = self._base_url
         self._client = httpx.AsyncClient(**client_kwargs)
 
+    async def __aenter__(self) -> AsyncHTTPClient:
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb) -> None:
+        await self.aclose()
+
     async def aclose(self) -> None:
         await self._client.aclose()
 
@@ -518,11 +548,13 @@ class AsyncHTTPClient(_BaseHTTPClient):
         action: Callable[[], Awaitable[httpx.Response]],
         log_context: _RequestLog,
         cleanup: Callable[[], None] | None = None,
+        allowed_statuses: frozenset[int] | None = None,
     ) -> httpx.Response:
         start = time.perf_counter()
         attempts = 0
         final_exc: Exception | None = None
         final_attempts = 0
+        allowed = allowed_statuses or frozenset()
         retrying = AsyncRetrying(
             stop=stop_after_attempt(self._max_retries) | stop_after_delay(self._total_timeout_s),
             wait=self._new_wait(),
@@ -547,6 +579,11 @@ class AsyncHTTPClient(_BaseHTTPClient):
                             response=response,
                             retry_after=retry_after,
                         )
+                    if response.status_code in allowed:
+                        duration = time.perf_counter() - start
+                        self._record_outcome(method, "success", duration)
+                        log_context.success(response.status_code, attempts=attempts)
+                        return response
                     response.raise_for_status()
                     duration = time.perf_counter() - start
                     self._record_outcome(method, "success", duration)
@@ -572,6 +609,11 @@ class AsyncHTTPClient(_BaseHTTPClient):
 
     async def request(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
         method_name = (method or "GET").upper()
+        allowed_statuses: frozenset[int] | None = None
+        if "allowed_statuses" in kwargs:
+            raw_allowed = kwargs.pop("allowed_statuses")
+            if raw_allowed is not None:
+                allowed_statuses = frozenset(int(code) for code in raw_allowed)
         log_context = _RequestLog(
             integration=self.integration,
             method=method_name,
@@ -585,6 +627,7 @@ class AsyncHTTPClient(_BaseHTTPClient):
             url=url,
             action=lambda: self._client.request(method_name, url, **kwargs),
             log_context=log_context,
+            allowed_statuses=allowed_statuses,
         )
 
     async def get(self, url: str, **kwargs: Any) -> httpx.Response:
@@ -614,6 +657,7 @@ class AsyncHTTPClient(_BaseHTTPClient):
         dest_path: Path,
         method: str = "GET",
         chunk_size: int = 1 << 20,
+        on_chunk: Callable[[bytes], Any] | None = None,
         **kwargs: Any,
     ) -> Path:
         method_name = (method or "GET").upper()
@@ -644,6 +688,10 @@ class AsyncHTTPClient(_BaseHTTPClient):
                 dest_path.parent.mkdir(parents=True, exist_ok=True)
                 with dest_path.open("wb") as handle:
                     async for chunk in response.aiter_bytes(chunk_size=chunk_size):
+                        if on_chunk is not None:
+                            maybe_awaitable = on_chunk(chunk)
+                            if inspect.isawaitable(maybe_awaitable):
+                                await maybe_awaitable
                         handle.write(chunk)
                 return response
 

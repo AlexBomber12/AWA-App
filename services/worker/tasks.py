@@ -11,7 +11,6 @@ from typing import TYPE_CHECKING, Any, cast
 
 import aioboto3
 import structlog
-from botocore.config import Config
 from celery import states
 
 from awa_common.metrics import (
@@ -19,7 +18,7 @@ from awa_common.metrics import (
     record_ingest_task_failure,
     record_ingest_task_outcome,
 )
-from awa_common.minio import get_s3_client_kwargs
+from awa_common.minio import get_s3_client_config, get_s3_client_kwargs
 from awa_common.settings import settings
 from services.alert_bot import worker as alerts_worker
 from services.worker.celery_app import celery_app
@@ -81,11 +80,7 @@ async def _download_minio_async(uri: str) -> Path:
     bucket = parsed.netloc
     key = parsed.path.lstrip("/")
     session = aioboto3.Session()
-    config = Config(
-        max_pool_connections=settings.S3_MAX_CONNECTIONS,
-        connect_timeout=float(settings.ETL_CONNECT_TIMEOUT_S),
-        read_timeout=float(settings.ETL_READ_TIMEOUT_S),
-    )
+    config = get_s3_client_config()
     tmpdir = Path(tempfile.mkdtemp(prefix="ingest_"))
     dst = tmpdir / Path(key).name
     async with session.client("s3", config=config, **get_s3_client_kwargs()) as client:

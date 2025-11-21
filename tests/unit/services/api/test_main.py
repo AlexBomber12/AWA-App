@@ -112,31 +112,24 @@ async def test_wait_for_redis_retries(monkeypatch):
 async def test_check_llm_sets_fallback(monkeypatch):
     called = {}
 
-    class DummyResponse:
+    class DummyClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
         async def __aenter__(self):
             return self
 
         async def __aexit__(self, exc_type, exc, tb):
             return False
 
-        async def get(self, url):
+        async def get(self, url, timeout=None):
             called["url"] = url
             raise RuntimeError("unreachable")
-
-    class DummyClient:
-        def __init__(self, *args, **kwargs):
-            pass
-
-        async def __aenter__(self):
-            return DummyResponse()
-
-        async def __aexit__(self, exc_type, exc, tb):
-            return False
 
     monkeypatch.setattr(main.settings, "LLM_PROVIDER", "lan")
     monkeypatch.setattr(main.settings, "LLM_PROVIDER_FALLBACK", "stub")
     main.settings.__dict__.pop("llm", None)
-    monkeypatch.setattr(main.httpx, "AsyncClient", DummyClient)
+    monkeypatch.setattr(main, "AsyncHTTPClient", lambda **_kwargs: DummyClient())
     await main._check_llm()
     assert main.settings.LLM_PROVIDER == "stub"
 

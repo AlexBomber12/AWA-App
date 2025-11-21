@@ -15,7 +15,7 @@ async def test_download_with_retries_success(monkeypatch) -> None:
     meta = {"content_type": "text/csv"}
     calls = {"count": 0}
 
-    async def _fake_http(url: str, timeout_s: int):
+    async def _fake_http(url: str, timeout_s: int, retries=None):
         calls["count"] += 1
         return payload, meta
 
@@ -48,7 +48,7 @@ async def test_download_http_parses_metadata(monkeypatch) -> None:
             self.url = url
             return _DummyResponse()
 
-    async def _fake_client():
+    async def _fake_client(*args, **kwargs):
         return _DummyClient()
 
     monkeypatch.setattr(client, "_ensure_http_client", _fake_client, raising=False)
@@ -57,6 +57,61 @@ async def test_download_http_parses_metadata(monkeypatch) -> None:
     assert meta["content_type"] == "text/csv"
     assert meta["etag"] == "abc123"
     assert meta["seqno"] == "v2"
+
+
+@pytest.mark.asyncio
+async def test_ensure_http_client_closes_on_config_change(monkeypatch) -> None:
+    closed: dict[str, bool] = {}
+
+    class _DummyClient:
+        async def aclose(self):
+            closed["called"] = True
+
+    monkeypatch.setattr(client, "_HTTP_CLIENT", _DummyClient(), raising=False)
+    monkeypatch.setattr(client, "_HTTP_CLIENT_CONFIG", (1.0, 1), raising=False)
+    monkeypatch.setenv("LOGISTICS_TIMEOUT_S", "2")
+    monkeypatch.setenv("LOGISTICS_RETRIES", "1")
+    new_client = await client._ensure_http_client(timeout_s=3, retries=2)
+    assert closed.get("called") is True
+    assert new_client is not None
+
+
+@pytest.mark.asyncio
+async def test_legacy_wrapper_delegates(monkeypatch) -> None:
+    sentinel = object()
+
+    async def _fake(*args, **kwargs):
+        return sentinel
+
+    monkeypatch.setattr(client, "_ensure_http_client", _fake, raising=False)
+    out = await client.http_client.get_client()
+    assert out is sentinel
+
+
+@pytest.mark.asyncio
+async def test_download_http_falls_back_to_content(monkeypatch) -> None:
+    class _DummyResponse:
+        def __init__(self):
+            self.headers = {}
+            self.content = b"abc"
+
+        def raise_for_status(self):
+            return None
+
+        def close(self):
+            return None
+
+    class _DummyClient:
+        async def request(self, method: str, url: str, **kwargs):
+            return _DummyResponse()
+
+    async def _fake_client(**kwargs):
+        return _DummyClient()
+
+    monkeypatch.setattr(client, "_ensure_http_client", _fake_client, raising=False)
+    body, meta = await client._download_http("https://example.com/data", timeout_s=1)
+    assert body == b"abc"
+    assert meta["content_type"] is None
 
 
 def test_parse_rows_from_csv_fixture() -> None:

@@ -162,6 +162,38 @@ def test_retry_wait_prefers_retry_after() -> None:
     assert wait(state) == pytest.approx(5.0)
 
 
+def test_http_client_allows_status(monkeypatch: pytest.MonkeyPatch) -> None:
+    events = _patch_metrics(monkeypatch)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(304, request=request, headers={"ETag": "v1"})
+
+    client = HTTPClient(integration="unit", transport=httpx.MockTransport(handler))
+    resp = client.request("GET", "https://example.com/resource", allowed_statuses={304})
+    assert resp.status_code == 304
+    resp.close()
+    assert ("unit", "GET", "success") in events["requests"]
+
+
+def test_http_client_download_calls_on_chunk(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    events = _patch_metrics(monkeypatch)
+    content = b"onetwothree"
+    seen = {"bytes": 0}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=content, request=request)
+
+    def on_chunk(chunk: bytes) -> None:
+        seen["bytes"] += len(chunk)
+
+    client = HTTPClient(integration="unit", transport=httpx.MockTransport(handler))
+    target = tmp_path / "payload.bin"
+    client.download_to_file("https://example.com/object", dest_path=target, chunk_size=4, on_chunk=on_chunk)
+    assert seen["bytes"] == len(content)
+    assert target.read_bytes() == content
+    assert ("unit", "GET", "success") in events["requests"]
+
+
 @pytest.mark.anyio
 async def test_async_http_client_retries(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(http_client.settings, "HTTP_MAX_RETRIES", 2, raising=False)
@@ -197,6 +229,21 @@ async def test_async_http_client_download(tmp_path: Path, monkeypatch: pytest.Mo
     path = await client.download_to_file("https://example.com/async-blob", dest_path=dest)
     await client.aclose()
     assert path.read_bytes() == content
+    assert ("unit", "GET", "success") in events["requests"]
+
+
+@pytest.mark.anyio
+async def test_async_http_client_allowed_status(monkeypatch: pytest.MonkeyPatch) -> None:
+    events = _patch_metrics(monkeypatch)
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(304, request=request)
+
+    client = AsyncHTTPClient(integration="unit", transport=httpx.MockTransport(handler))
+    response = await client.request("GET", "https://example.com/cache", allowed_statuses={304})
+    assert response.status_code == 304
+    await response.aclose()
+    await client.aclose()
     assert ("unit", "GET", "success") in events["requests"]
 
 

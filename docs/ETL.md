@@ -21,15 +21,25 @@ components in `packages/awa_common` to deliver repeatable pipelines that survive
 
 ## HTTP Policy
 
-- Always call `packages/awa_common/etl/http.request` or `.download`. Defaults from
-  `packages/awa_common/settings.Settings`:
-  - Connect timeout 5 s, read timeout 30 s, total budget 60 s.
-  - Up to 5 attempts with exponential backoff (0.5 s base, 30 s cap) shared between retries.
-  - Retries on httpx transport errors and status codes `{429,500,502,503,504}`. `Retry-After` headers
-    are honoured for `429` or any response providing the header.
-- Each retry logs `etl_http_retry` with `attempt`, `sleep`, `source`, `task_id`, and increments
-  `etl_retry_total{job,reason}` (reason in `{429, timeout, 5xx, exception}`) so operations can see
-  churn without exploding cardinality.
+- Always call `awa_common.http_client.HTTPClient` / `AsyncHTTPClient` for outbound requests; the
+  deprecated `packages/awa_common/etl/http` shims remain only for legacy tests.
+- Defaults come from `settings.HTTP_*`: connect 5 s, read 30 s, total 60 s with `HTTP_MAX_RETRIES`
+  exponential backoff (`HTTP_BACKOFF_BASE_S`/`HTTP_BACKOFF_MAX_S`/`HTTP_BACKOFF_JITTER_S`) and
+  retryable status codes in `HTTP_RETRY_STATUS_CODES` (honours `Retry-After`).
+- Integration-specific knobs live in settings and stay env-driven: `HELIUM10_BASE_URL`,
+  `HELIUM10_TIMEOUT_S`, `HELIUM10_MAX_RETRIES`, `LOGISTICS_TIMEOUT_S`/`LOGISTICS_RETRIES`/retry
+  backoff, LLM timeouts (`LLM_REQUEST_TIMEOUT_S`), plus `S3_CONNECT_TIMEOUT_S` /
+  `S3_READ_TIMEOUT_S` / `S3_ADDRESSING_STYLE` for storage clients.
+- Every attempt emits `external_http_requests_total`, latency histograms, and `external_http_retries_total`
+  with the `integration` label so backoff/throttling is visible alongside structured
+  `external_http.retry` logs. Use `allowed_statuses={...}` when cacheable responses (e.g. JWKS 304)
+  should be treated as success without incrementing failures.
+
+## Object storage
+
+- Build S3/MinIO clients with `awa_common.minio.get_s3_client_kwargs()` and
+  `get_s3_client_config()` so endpoint, credentials, pool sizing, and connect/read timeouts stay
+  centralised. Avoid ad-hoc boto3/aioboto3 kwargs in API/worker routes.
 
 ## Shared validation & retry helpers
 

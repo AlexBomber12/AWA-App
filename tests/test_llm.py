@@ -5,30 +5,20 @@ import pytest
 from awa_common import llm
 
 
-class DummyResp:
-    def __init__(self, json_data):
-        self._data = json_data
-
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, exc_type, exc, tb):
-        pass
-
-    def raise_for_status(self):
-        pass
-
-    def json(self):
-        return self._data
-
-
 @pytest.mark.asyncio
 @pytest.mark.parametrize("provider", ["lan", "openai"])
 async def test_generate(monkeypatch, provider):
-    async def fake_post(self, url, json=None, headers=None):
-        return DummyResp({"choices": [{"message": {"content": "hi"}}]})
+    class DummyClient:
+        async def __aenter__(self):
+            return self
 
-    monkeypatch.setattr(llm.httpx.AsyncClient, "post", fake_post)
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def post_json(self, *_args, **_kwargs):
+            return {"choices": [{"message": {"content": "hi"}}]}
+
+    monkeypatch.setattr(llm, "_build_http_client", lambda timeout, integration: DummyClient())
 
     if provider == "openai":
 

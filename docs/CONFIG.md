@@ -67,9 +67,12 @@ Use `settings.db.url` for SQLAlchemy engines and `settings.db.async_dsn` for asy
 | `MINIO_ENDPOINT`, `MINIO_SECURE` | Host and TLS toggle |
 | `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY` | Credentials |
 | `MINIO_BUCKET`, `AWS_REGION` | Default bucket name + region |
+| `S3_CONNECT_TIMEOUT_S`, `S3_READ_TIMEOUT_S` | boto3/aioboto3 client timeouts |
+| `S3_ADDRESSING_STYLE` | Optional `path`/`virtual` addressing hint |
 | `INGEST_*` | Chunk sizes, streaming controls, idempotency |
 
-Call `settings.s3.client_kwargs()` when constructing boto3/aioboto3 clients.
+Call `settings.s3.client_kwargs()` + `settings.s3.client_config()` (or
+`awa_common.minio.get_s3_client_kwargs/config`) when constructing boto3/aioboto3 clients.
 
 ## Security & API (`settings.security`)
 
@@ -117,6 +120,14 @@ Call `settings.s3.client_kwargs()` when constructing boto3/aioboto3 clients.
 | `LLM_REQUEST_TIMEOUT_S`, `LLM_LAN_HEALTH_TIMEOUT_S` | Request + LAN readiness timeouts |
 
 `settings.llm` centralises the provider order and timeouts used by the API and price importer services.
+
+## External APIs
+
+| Variable | Description |
+| --- | --- |
+| `HELIUM10_BASE_URL`, `HELIUM10_TIMEOUT_S`, `HELIUM10_MAX_RETRIES` | Helium10 client base URL and retry/timeouts |
+| `LOGISTICS_TIMEOUT_S`, `LOGISTICS_RETRIES` | Per-source timeout + retry budget for logistics ETL |
+| `HTTP_*` (`HTTP_CONNECT_TIMEOUT_S`, `HTTP_READ_TIMEOUT_S`, `HTTP_TOTAL_TIMEOUT_S`, `HTTP_MAX_RETRIES`, `HTTP_BACKOFF_*`, `HTTP_RETRY_STATUS_CODES`) | Shared outbound HTTP defaults used by `awa_common.http_client` |
 
 ## ETL (`settings.etl`)
 

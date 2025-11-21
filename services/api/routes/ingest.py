@@ -12,12 +12,12 @@ import aioboto3
 import httpx
 import sentry_sdk
 import structlog
-from botocore.config import Config
 from celery import states
 from fastapi import APIRouter, Depends, File, Request, UploadFile
 from fastapi.responses import JSONResponse
 
 from awa_common.files import ALLOWED_UPLOAD_EXTENSIONS, sanitize_upload_name
+from awa_common.http_client import AsyncHTTPClient, HTTPClientError
 from awa_common.metrics import (
     ingest_upload_inflight,
     record_ingest_download,
@@ -25,7 +25,7 @@ from awa_common.metrics import (
     record_ingest_upload,
     record_ingest_upload_failure,
 )
-from awa_common.minio import get_s3_client_kwargs
+from awa_common.minio import get_s3_client_config, get_s3_client_kwargs
 from awa_common.settings import settings
 from etl.load_csv import ImportFileError
 from services.api.routes.ingest_errors import IngestRequestError, ingest_error_response, respond_with_ingest_error
@@ -282,17 +282,15 @@ async def _download_minio(parsed: ParseResult) -> tuple[Path, str]:  # pragma: n
     bucket = parsed.netloc
     key = parsed.path.lstrip("/")
     session = aioboto3.Session()
-    config = Config(
-        max_pool_connections=settings.S3_MAX_CONNECTIONS,
-        connect_timeout=float(settings.ETL_CONNECT_TIMEOUT_S),
-        read_timeout=float(settings.ETL_READ_TIMEOUT_S),
-    )
+    config = get_s3_client_config()
     start = time.perf_counter()
     try:
         async with session.client("s3", config=config, **get_s3_client_kwargs()) as client:
             response = await client.get_object(Bucket=bucket, Key=key)
             async with response["Body"] as body:
                 path, digest, size_bytes = await _write_stream_to_temp(body.iter_chunks(), scheme=parsed.scheme)
+    except IngestRequestError:
+        raise
     except Exception as exc:
         record_ingest_download_failure(scheme=parsed.scheme, reason=exc.__class__.__name__)
         raise IngestRequestError(
@@ -307,19 +305,29 @@ async def _download_minio(parsed: ParseResult) -> tuple[Path, str]:  # pragma: n
 
 
 async def _download_http(uri: str, scheme: str) -> tuple[Path, str]:  # pragma: no cover - network path
-    timeout = httpx.Timeout(connect=settings.ETL_CONNECT_TIMEOUT_S, read=settings.ETL_READ_TIMEOUT_S)
+    timeout = httpx.Timeout(
+        timeout=settings.ETL_TOTAL_TIMEOUT_S,
+        connect=settings.ETL_CONNECT_TIMEOUT_S,
+        read=settings.ETL_READ_TIMEOUT_S,
+        write=settings.ETL_READ_TIMEOUT_S,
+    )
     chunk_size = max(1, int(settings.INGEST_CHUNK_SIZE_MB) * 1024 * 1024)
     start = time.perf_counter()
+    response: httpx.Response | None = None
     try:
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            async with client.stream("GET", uri, follow_redirects=True) as response:
-                response.raise_for_status()
+        async with AsyncHTTPClient(
+            integration="ingest_download",
+            timeout=timeout,
+            total_timeout_s=float(settings.ETL_TOTAL_TIMEOUT_S),
+        ) as client:
+            response = await client.request("GET", uri, follow_redirects=True, timeout=timeout)
 
-                async def iterator() -> AsyncIterator[bytes]:
-                    async for chunk in response.aiter_bytes(chunk_size):
-                        yield chunk
+            async def iterator() -> AsyncIterator[bytes]:
+                assert response is not None
+                async for chunk in response.aiter_bytes(chunk_size):
+                    yield chunk
 
-                path, digest, size_bytes = await _write_stream_to_temp(iterator(), scheme=scheme)
+            path, digest, size_bytes = await _write_stream_to_temp(iterator(), scheme=scheme)
     except httpx.HTTPStatusError as exc:
         status = exc.response.status_code if exc.response is not None else 502
         record_ingest_download_failure(scheme=scheme, reason=str(status))
@@ -336,6 +344,15 @@ async def _download_http(uri: str, scheme: str) -> tuple[Path, str]:  # pragma: 
             detail="Timeout downloading source",
             hint="Retry later or reduce file size.",
         ) from exc
+    except IngestRequestError:
+        raise
+    except HTTPClientError as exc:
+        record_ingest_download_failure(scheme=scheme, reason=exc.__class__.__name__)
+        raise IngestRequestError(
+            status_code=502,
+            code="bad_request",
+            detail="Failed to download source",
+        ) from exc
     except Exception as exc:  # pragma: no cover
         record_ingest_download_failure(scheme=scheme, reason=exc.__class__.__name__)
         raise IngestRequestError(
@@ -343,6 +360,13 @@ async def _download_http(uri: str, scheme: str) -> tuple[Path, str]:  # pragma: 
             code="bad_request",
             detail="Failed to download source",
         ) from exc
+    finally:
+        if response is not None:
+            close = getattr(response, "aclose", None)
+            if callable(close):
+                await close()
+            elif hasattr(response, "close"):
+                response.close()
     duration = time.perf_counter() - start
     record_ingest_download(size_bytes, duration, scheme=scheme)
     return path, digest

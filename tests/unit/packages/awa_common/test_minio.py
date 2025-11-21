@@ -4,6 +4,7 @@ import sys
 from types import SimpleNamespace
 
 import pytest
+from botocore.config import Config
 
 from awa_common import minio as minio_module
 from awa_common.settings import Settings
@@ -45,6 +46,24 @@ def test_get_s3_client_kwargs_preserves_custom_endpoint(monkeypatch):
     assert kwargs["endpoint_url"] == "https://storage.example.com:9443"
 
 
+def test_get_s3_client_config_uses_shared_defaults(monkeypatch):
+    _fresh_settings(
+        monkeypatch,
+        MINIO_ENDPOINT="minio:9000",
+        S3_CONNECT_TIMEOUT_S="3.5",
+        S3_READ_TIMEOUT_S="9.5",
+        S3_MAX_CONNECTIONS="77",
+        S3_ADDRESSING_STYLE="path",
+    )
+
+    cfg = minio_module.get_s3_client_config()
+    assert isinstance(cfg, Config)
+    assert cfg.connect_timeout == 3.5
+    assert cfg.read_timeout == 9.5
+    assert cfg.max_pool_connections == 77
+    assert cfg.s3.get("addressing_style") == "path"
+
+
 def test_missing_s3_settings_raise(monkeypatch):
     monkeypatch.setattr(minio_module, "settings", SimpleNamespace(s3=None))
     with pytest.raises(RuntimeError):
@@ -78,3 +97,24 @@ def test_create_boto3_client_uses_shared_kwargs(monkeypatch):
     assert captured["service"] == "s3"
     assert captured["config"] is sentinel
     assert captured["kwargs"]["endpoint_url"].startswith("http://")
+
+
+def test_create_boto3_client_builds_default_config(monkeypatch):
+    _fresh_settings(monkeypatch, MINIO_ENDPOINT="minio:9000")
+    captured: dict[str, object] = {}
+
+    class DummyClient:
+        pass
+
+    def fake_client(service, *, config=None, **kwargs):
+        captured["service"] = service
+        captured["config"] = config
+        captured["kwargs"] = kwargs
+        return DummyClient()
+
+    monkeypatch.setitem(sys.modules, "boto3", SimpleNamespace(client=fake_client))
+
+    client = minio_module.create_boto3_client()
+    assert isinstance(client, DummyClient)
+    assert isinstance(captured["config"], Config)
+    assert captured["service"] == "s3"

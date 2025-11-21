@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+import types
 from typing import Any
 
 import pytest
@@ -155,3 +156,104 @@ async def test_validate_access_token_fast_path(issuer_settings):
         await asyncio.wait_for(oidc.validate_access_token(token, cfg=settings, provider=provider), timeout=0.2)
     finally:
         await provider.close()
+
+
+@pytest.mark.anyio
+async def test_jwks_wrapper_handles_plain_client(monkeypatch):
+    calls: dict[str, object] = {}
+
+    class DummyResponse:
+        async def aclose(self):
+            calls["response_closed"] = True
+
+        def json(self):
+            return {"jwks_uri": "https://issuer.example/jwks"}
+
+    class PlainClient:
+        async def get(self, url: str, **kwargs):
+            calls["url"] = url
+            calls["allowed"] = kwargs.get("allowed_statuses")
+            return DummyResponse()
+
+        async def aclose(self):
+            calls["client_closed"] = True
+
+    wrapper = oidc._JSONHTTPClientWrapper(PlainClient())
+
+    await wrapper.get("https://issuer.example/.well-known", allowed_statuses=frozenset({304}))
+    payload = await wrapper.get_json("https://issuer.example/.well-known/openid-configuration")
+    await wrapper.aclose()
+
+    assert calls["url"].endswith("/openid-configuration")
+    assert calls.get("allowed") is None
+    assert payload["jwks_uri"].endswith("/jwks")
+    assert calls.get("response_closed") is True
+    assert calls.get("client_closed") is True
+
+
+@pytest.mark.anyio
+async def test_http_get_json_uses_client(monkeypatch):
+    from awa_common.security import oidc
+
+    class DummyClient:
+        async def get_json(self, url: str, **kwargs):
+            return {"issuer": url}
+
+    provider = oidc.AsyncJwksProvider(cfg=settings, client=DummyClient())
+    payload = await provider._http_get_json("https://issuer.example/.well-known")
+    assert payload["issuer"].endswith("/.well-known")
+
+
+def _dummy_settings(**overrides):
+    base = {
+        "OIDC_JWKS_TIMEOUT_TOTAL_S": 5.0,
+        "OIDC_JWKS_TIMEOUT_CONNECT_S": 1.0,
+        "OIDC_JWKS_TIMEOUT_READ_S": 1.0,
+        "OIDC_JWKS_POOL_LIMIT": 1,
+        "OIDC_JWKS_MAX_RETRIES": 2,
+        "OIDC_JWKS_TTL_SECONDS": 1,
+        "OIDC_JWKS_STALE_GRACE_SECONDS": 1,
+        "OIDC_JWKS_BACKGROUND_REFRESH": True,
+        "OIDC_ISSUER": "https://issuer.example",
+        "OIDC_AUDIENCE": "aud",
+    }
+    base.update(overrides)
+    return types.SimpleNamespace(**base)
+
+
+@pytest.mark.asyncio
+async def test_provider_background_disabled_in_testing(monkeypatch):
+    cfg = _dummy_settings(TESTING=True)
+    provider = oidc.AsyncJwksProvider(cfg=cfg, client=types.SimpleNamespace(get_json=lambda *a, **kw: {}))
+    assert provider._background_enabled is False
+
+
+@pytest.mark.asyncio
+async def test_get_entry_waits_within_grace(monkeypatch):
+    cfg = _dummy_settings(TESTING=False, OIDC_JWKS_STALE_GRACE_SECONDS=2)
+    provider = oidc.AsyncJwksProvider(cfg=cfg, client=types.SimpleNamespace(get_json=lambda *a, **kw: {}))
+    provider._ttl = 1  # type: ignore[attr-defined]
+    provider._stale_grace = 2  # type: ignore[attr-defined]
+
+    key_set = JsonWebKey.import_key_set({"keys": []})
+    entry = oidc._JWKSCacheEntry(
+        issuer=cfg.OIDC_ISSUER.rstrip("/"),
+        jwks_uri="https://issuer.example/jwks",
+        fetched_at=time.time() - 1.2,
+        key_set=key_set,
+        keys_by_kid={},
+        etag=None,
+    )
+    provider._cache[entry.issuer] = entry  # type: ignore[attr-defined]
+
+    called: dict[str, bool] = {}
+
+    async def fake_refresh(issuer, cfg, *, force, background):
+        called["refreshed"] = True
+        return entry
+
+    provider._refresh = fake_refresh  # type: ignore[assignment]
+
+    result = await provider.get_entry(cfg)
+    assert result is entry
+    assert called.get("refreshed") is True

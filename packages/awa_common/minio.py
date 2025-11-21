@@ -38,6 +38,23 @@ def get_s3_client_kwargs(*, secure_override: bool | None = None) -> dict[str, An
     return _s3_settings().client_kwargs(secure_override=secure_override)
 
 
+def get_s3_client_config(
+    *,
+    connect_timeout: float | None = None,
+    read_timeout: float | None = None,
+    max_pool_connections: int | None = None,
+    addressing_style: str | None = None,
+) -> Config:
+    """Return a botocore Config for S3 clients aligned with shared settings."""
+
+    return _s3_settings().client_config(
+        connect_timeout=connect_timeout,
+        read_timeout=read_timeout,
+        max_pool_connections=max_pool_connections,
+        addressing_style=addressing_style,
+    )
+
+
 def create_boto3_client(*, config: Config | None = None, **overrides: Any) -> BaseClient:
     """Instantiate a boto3 S3 client that respects the shared configuration."""
 
@@ -47,6 +64,7 @@ def create_boto3_client(*, config: Config | None = None, **overrides: Any) -> Ba
         raise RuntimeError("boto3 is required to create an S3 client") from exc
 
     client_kwargs = get_s3_client_kwargs()
+    client_config = config or get_s3_client_config()
     if overrides:
         client_kwargs.update(overrides)
-    return boto3.client("s3", config=config, **client_kwargs)
+    return boto3.client("s3", config=client_config, **client_kwargs)
