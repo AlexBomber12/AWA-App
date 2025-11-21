@@ -55,3 +55,7 @@ def test_build_alert_requests_flattens_chats() -> None:
     assert isinstance(requests[0], AlertRequest)
     assert {req.chat_id for req in requests} == {"chat1", "chat2"}
     assert all(req.dedupe_key == "roi:1" for req in requests)
+
+
+def test_build_alert_requests_empty_decisions() -> None:
+    assert build_alert_requests([]) == []

@@ -187,3 +187,37 @@ def test_run_alertbot_startup_validation_handles_errors(monkeypatch):
     monkeypatch.setitem(sys.modules, "services.alert_bot.worker", stub)
     celery_module._run_alertbot_startup_validation()
     assert calls == ["called"]
+
+
+def test_run_alertbot_startup_validation_import_failure(monkeypatch):
+    def boom(_name):
+        raise ImportError("nope")
+
+    monkeypatch.setattr(importlib, "import_module", boom)
+    celery_module._run_alertbot_startup_validation()
+
+
+def test_run_alertbot_startup_validation_system_exit(monkeypatch):
+    class DummyExc(SystemExit):
+        pass
+
+    def fake_run():
+        raise DummyExc("bye")
+
+    stub = SimpleNamespace(run_startup_validation=fake_run, AlertConfigurationError=DummyExc)
+    monkeypatch.setitem(sys.modules, "services.alert_bot.worker", stub)
+    with pytest.raises(DummyExc):
+        celery_module._run_alertbot_startup_validation()
+
+
+def test_run_alertbot_startup_validation_alert_error(monkeypatch):
+    class DummyError(Exception):
+        pass
+
+    def fake_run():
+        raise DummyError("config")
+
+    stub = SimpleNamespace(run_startup_validation=fake_run, AlertConfigurationError=DummyError)
+    monkeypatch.setitem(sys.modules, "services.alert_bot.worker", stub)
+    with pytest.raises(DummyError):
+        celery_module._run_alertbot_startup_validation()

@@ -216,6 +216,13 @@ async def test_request_handles_http_status_error() -> None:
     assert result.error_type == "HTTP_5xx"
 
 
+def test_error_type_from_status_variants() -> None:
+    assert telegram._error_type_from_status(None) == "CONNECTION"  # type: ignore[attr-defined]
+    assert telegram._error_type_from_status(400) == "HTTP_4xx"  # type: ignore[attr-defined]
+    assert telegram._error_type_from_status(429) == "HTTP_429"  # type: ignore[attr-defined]
+    assert telegram._error_type_from_status(503) == "HTTP_5xx"  # type: ignore[attr-defined]
+
+
 @pytest.mark.asyncio
 async def test_request_handles_timeout() -> None:
     class RaisingClient:
@@ -226,6 +233,18 @@ async def test_request_handles_timeout() -> None:
     result = await client.send_message(chat_id=1, text="fail")
     assert result.ok is False
     assert result.error_type == "TIMEOUT"
+
+
+@pytest.mark.asyncio
+async def test_request_handles_http_client_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    class RaisingClient:
+        async def post(self, url, json):
+            raise telegram.HTTPClientError("bad")  # type: ignore[attr-defined]
+
+    client = telegram.AsyncTelegramClient(token="12345:ABCDE", client=RaisingClient())
+    response = await client._request("sendMessage", payload={})  # type: ignore[attr-defined]
+    assert response.ok is False
+    assert response.error_type == "CONNECTION"
 
 
 @pytest.mark.asyncio

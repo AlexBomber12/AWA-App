@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -337,3 +338,73 @@ async def test_runner_integration_happy_path(monkeypatch: pytest.MonkeyPatch) ->
     result = await runner.run(now=datetime(2024, 1, 1, tzinfo=UTC))
     assert result["notifications_sent"] == 1
     assert sent_metric._value.get() == before + 1
+
+
+@pytest.mark.asyncio
+async def test_runner_invalid_config_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    bad_settings = _settings(telegram_token="")  # invalidate
+    runner = _runner(settings=bad_settings)
+    with pytest.raises(worker.AlertConfigurationError):
+        await runner.run(now=datetime(2024, 1, 1, tzinfo=UTC))
+
+
+@pytest.mark.asyncio
+async def test_validate_startup_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    runner = _runner(settings=_settings(enabled=False))
+    # should return early without raising
+    await runner.validate_startup()
+
+
+@pytest.mark.asyncio
+async def test_validate_startup_invokes_validation(monkeypatch: pytest.MonkeyPatch) -> None:
+    runner = _runner()
+    calls: list[list[worker.AlertRequest]] = []
+
+    async def fake_ensure(runtime, requests, fail_fast=False):
+        calls.append(requests)
+
+    monkeypatch.setattr(runner, "_ensure_validation", fake_ensure)
+    rule = alert_config.AlertRule(
+        id="roi",
+        type="roi_drop",
+        enabled=True,
+        schedule=None,
+        chat_ids=["@ops"],
+        parse_mode="HTML",
+        params={},
+        template=None,
+    )
+    monkeypatch.setattr(runner, "_load_config", lambda: None)
+    monkeypatch.setattr(runner, "_resolve_rules", lambda _runtime=None: ([rule], "config"))
+
+    async def fake_validate(_chat_ids):
+        return True, None
+
+    monkeypatch.setattr(runner, "_transport", SimpleNamespace(validate=fake_validate))
+    await runner.validate_startup()
+    assert calls  # ensure branch executed
+
+
+def test_run_startup_validation_fallback_loop(monkeypatch: pytest.MonkeyPatch) -> None:
+    called = {"fallback": False}
+
+    async def fake_validate():
+        return None
+
+    def fake_run(_coro):
+        raise RuntimeError("no loop")
+
+    class DummyLoop:
+        def run_until_complete(self, coro):
+            called["fallback"] = True
+            return None
+
+        def close(self):
+            called["closed"] = True
+
+    monkeypatch.setattr(worker, "RUNNER", SimpleNamespace(validate_startup=fake_validate))
+    monkeypatch.setattr(worker.asyncio, "run", fake_run)
+    monkeypatch.setattr(worker.asyncio, "new_event_loop", lambda: DummyLoop())
+
+    worker.run_startup_validation()
+    assert called["fallback"] is True
