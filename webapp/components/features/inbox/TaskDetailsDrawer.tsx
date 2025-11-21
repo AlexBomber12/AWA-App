@@ -3,18 +3,20 @@
 import { useMemo } from "react";
 
 import { Button, Drawer, DrawerContent, DrawerDescription, DrawerFooter, DrawerHeader, DrawerTitle } from "@/components/ui";
-import type { Task } from "@/lib/api/inboxClient";
+import type { Task } from "@/lib/api/inboxTypes";
 import { PermissionGuard } from "@/lib/permissions/client";
 import { cn } from "@/lib/utils";
 
 import {
-  TASK_PRIORITY_STYLES,
   TASK_STATE_STYLES,
+  formatDecisionLabel,
   formatTaskDate,
   formatTaskEntity,
   formatTaskPriority,
   formatTaskSource,
   formatTaskState,
+  reasonToText,
+  taskPriorityStyle,
 } from "./taskFormatters";
 
 type TaskDetailsDrawerProps = {
@@ -50,11 +52,14 @@ export function TaskDetailsDrawer({
     if (!task) {
       return [];
     }
+    const deadline = task.deadlineAt ?? task.decision.deadlineAt;
+
     return [
       { label: "Entity", value: `${formatTaskEntity(task.entity)} · ${task.entity.type}` },
       { label: "Source", value: formatTaskSource(task.source) },
       { label: "Assignee", value: task.assignee ?? "Unassigned" },
-      { label: "Due", value: formatTaskDate(task.due) },
+      { label: "Deadline", value: formatTaskDate(deadline) },
+      { label: "Next request", value: formatTaskDate(task.nextRequestAt ?? task.decision.nextRequestAt) },
       { label: "Created", value: formatTaskDate(task.createdAt) },
       { label: "Updated", value: formatTaskDate(task.updatedAt) },
     ];
@@ -64,12 +69,16 @@ export function TaskDetailsDrawer({
     return null;
   }
 
+  const reasons = task.why?.length ? task.why : task.decision.why;
+  const alternatives = task.alternatives?.length ? task.alternatives : task.decision.alternatives;
+  const metrics = task.decision.metrics;
+
   return (
     <Drawer open={isOpen} onOpenChange={(open) => (!open ? onClose() : undefined)}>
       <DrawerContent className="max-w-lg">
         <DrawerHeader>
           <DrawerTitle className="text-xl">{task.summary}</DrawerTitle>
-          <DrawerDescription>Review and resolve the decision from Decision Engine.</DrawerDescription>
+          <DrawerDescription>Review the virtual buyer recommendation and decide how to proceed.</DrawerDescription>
         </DrawerHeader>
         <div className="flex flex-1 flex-col gap-6 overflow-y-auto py-4">
           <div className="space-y-3 rounded-xl border border-border bg-muted/20 p-4">
@@ -81,10 +90,10 @@ export function TaskDetailsDrawer({
               <span
                 className={cn(
                   "rounded-full px-3 py-1 text-xs font-semibold uppercase",
-                  TASK_PRIORITY_STYLES[task.decision.priority]
+                  taskPriorityStyle(task.priority ?? task.decision.priority)
                 )}
               >
-                {formatTaskPriority(task.decision.priority)} priority
+                {formatTaskPriority(task.priority ?? task.decision.priority)} priority
               </span>
             </div>
             <dl className="grid grid-cols-1 gap-2 text-sm text-muted-foreground">
@@ -100,43 +109,60 @@ export function TaskDetailsDrawer({
           <div className="space-y-4 rounded-xl border border-border bg-background p-4">
             <SectionTitle>Decision</SectionTitle>
             <div className="space-y-2 text-sm">
-              <p>
-                <span className="font-semibold text-foreground">Action:</span>{" "}
-                {task.decision.decision.replaceAll("_", " ")}
-              </p>
-              {task.decision.deadlineAt ? (
-                <p>
-                  <span className="font-semibold text-foreground">Deadline:</span> {formatTaskDate(task.decision.deadlineAt)}
-                </p>
-              ) : null}
+              <p className="text-lg font-semibold capitalize">{formatDecisionLabel(task.decision.decision)}</p>
               {task.decision.defaultAction ? (
-                <p>
-                  <span className="font-semibold text-foreground">Default action:</span> {task.decision.defaultAction}
-                </p>
-              ) : null}
-              {task.decision.nextRequestAt ? (
-                <p>
-                  <span className="font-semibold text-foreground">Next request:</span> {formatTaskDate(task.decision.nextRequestAt)}
-                </p>
+                <p className="text-sm text-muted-foreground">{task.decision.defaultAction}</p>
               ) : null}
             </div>
 
+            {metrics ? (
+              <div className="grid gap-3 sm:grid-cols-3">
+                {metrics.roi !== undefined ? (
+                  <div className="rounded-lg border border-border bg-muted/20 p-3 text-sm">
+                    <p className="text-xs uppercase text-muted-foreground">ROI</p>
+                    <p className="text-lg font-semibold">{metrics.roi.toFixed(1)}%</p>
+                  </div>
+                ) : null}
+                {metrics.riskAdjustedRoi !== undefined ? (
+                  <div className="rounded-lg border border-border bg-muted/20 p-3 text-sm">
+                    <p className="text-xs uppercase text-muted-foreground">Risk-adjusted ROI</p>
+                    <p className="text-lg font-semibold">{metrics.riskAdjustedRoi.toFixed(1)}%</p>
+                  </div>
+                ) : null}
+                {metrics.maxCogs !== undefined ? (
+                  <div className="rounded-lg border border-border bg-muted/20 p-3 text-sm">
+                    <p className="text-xs uppercase text-muted-foreground">Max COGS</p>
+                    <p className="text-lg font-semibold">${metrics.maxCogs.toFixed(2)}</p>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
             <div className="space-y-2">
               <p className="text-sm font-semibold">Why</p>
-              <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
-                {task.decision.why.map((reason) => (
-                  <li key={reason}>{reason}</li>
+              <ul className="space-y-2">
+                {reasons.map((reason, index) => (
+                  <li key={`${reasonToText(reason)}-${index}`} className="flex items-start gap-2 rounded-md bg-muted/30 p-2 text-sm">
+                    <span className="mt-0.5 text-xs text-muted-foreground">●</span>
+                    <span className="text-muted-foreground">{reasonToText(reason)}</span>
+                  </li>
                 ))}
               </ul>
             </div>
 
             <div className="space-y-2">
               <p className="text-sm font-semibold">Alternatives</p>
-              <ul className="list-disc space-y-1 pl-5 text-sm text-muted-foreground">
-                {task.decision.alternatives.map((alt) => (
-                  <li key={alt}>{alt}</li>
+              <div className="flex flex-wrap gap-2">
+                {alternatives.map((alt, index) => (
+                  <span
+                    key={`${alt.decision}-${index}`}
+                    className="rounded-full border border-border bg-muted/30 px-3 py-1 text-xs font-semibold"
+                  >
+                    {formatDecisionLabel(alt.decision)}
+                    {alt.label ? ` — ${alt.label}` : ""}
+                  </span>
                 ))}
-              </ul>
+              </div>
             </div>
           </div>
         </div>
@@ -154,10 +180,10 @@ export function TaskDetailsDrawer({
             <div className="flex flex-col gap-2">
               <div className="flex flex-wrap gap-2">
                 <Button onClick={() => onApply(task)} isLoading={isActionPending}>
-                  Apply decision
+                  Mark as done
                 </Button>
                 <Button variant="outline" onClick={() => onDecline(task)} isLoading={isActionPending}>
-                  Decline
+                  Undo decision
                 </Button>
                 <Button variant="secondary" onClick={() => onSnooze(task)} isLoading={isActionPending}>
                   Snooze

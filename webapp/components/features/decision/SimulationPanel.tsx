@@ -2,30 +2,23 @@
 
 import { useMemo, useState } from "react";
 
-import type { Rule, SimulationScenario } from "@/lib/api/decisionClient";
+import type { Rule, SimulationInput, SimulationScenario } from "@/lib/api/decisionTypes";
 import { PermissionGuard } from "@/lib/permissions/client";
 import { cn } from "@/lib/utils";
 
-import { Button, Input } from "@/components/ui";
+import { Button, Checkbox, Input } from "@/components/ui";
+import { formatTaskPriority } from "../inbox/taskFormatters";
 
 type SimulationPanelProps = {
   selectedRule: Rule | null;
   scenarios: SimulationScenario[];
   isLoading?: boolean;
-  onRunSimulation: (payload: { ruleId: string; input: Record<string, unknown> }) => void;
+  onRunSimulation: (payload: { ruleId: string; input: SimulationInput }) => void;
   isRunningSimulation?: boolean;
   selectedScenarioId: string | null;
   onSelectScenario: (scenarioId: string) => void;
   canConfigure?: boolean;
 };
-
-const formatScenarioStatus = (scenario: SimulationScenario) => (scenario.result ? "Completed" : "Pending");
-
-const formatStatLabel = (label: string) =>
-  label
-    .replace(/([A-Z])/g, " $1")
-    .replace(/_/g, " ")
-    .trim();
 
 const formatDecisionLabel = (value: string) => value.replaceAll("_", " ");
 
@@ -39,9 +32,11 @@ export function SimulationPanel({
   onSelectScenario,
   canConfigure = false,
 }: SimulationPanelProps) {
-  const [roiDelta, setRoiDelta] = useState("3.5");
-  const [priceChange, setPriceChange] = useState("1.2");
-  const [notes, setNotes] = useState("");
+  const [price, setPrice] = useState("24.5");
+  const [cost, setCost] = useState("13.2");
+  const [category, setCategory] = useState("");
+  const [volatility, setVolatility] = useState("5");
+  const [observeOnly, setObserveOnly] = useState(false);
 
   const filteredScenarios = useMemo(
     () => scenarios.filter((scenario) => !selectedRule || scenario.ruleId === selectedRule.id),
@@ -63,19 +58,22 @@ export function SimulationPanel({
     if (!selectedRule || !canConfigure) {
       return;
     }
+
     const payload = {
       ruleId: selectedRule.id,
       input: {
-        roiDelta: Number(roiDelta) || 0,
-        priceChange: Number(priceChange) || 0,
-        notes: notes.trim() || undefined,
+        price: Number(price) || undefined,
+        cost: Number(cost) || undefined,
+        volatility: Number(volatility) || undefined,
+        category: category.trim() || undefined,
+        observeOnly,
       },
     };
     onRunSimulation(payload);
   };
 
   return (
-    <div className="space-y-6">
+  <div className="space-y-6">
       <form onSubmit={handleSubmit} className="space-y-4 rounded-2xl border border-border bg-background p-5 shadow-sm">
         <div>
           <p className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Simulation input</p>
@@ -84,23 +82,25 @@ export function SimulationPanel({
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="text-sm font-medium">
-            ROI delta %
-            <Input value={roiDelta} onChange={(event) => setRoiDelta(event.target.value)} className="mt-1" />
+            Target price
+            <Input value={price} onChange={(event) => setPrice(event.target.value)} className="mt-1" />
           </label>
           <label className="text-sm font-medium">
-            Price change %
-            <Input value={priceChange} onChange={(event) => setPriceChange(event.target.value)} className="mt-1" />
+            Cost
+            <Input value={cost} onChange={(event) => setCost(event.target.value)} className="mt-1" />
+          </label>
+          <label className="text-sm font-medium">
+            Volatility %
+            <Input value={volatility} onChange={(event) => setVolatility(event.target.value)} className="mt-1" />
+          </label>
+          <label className="text-sm font-medium">
+            Category
+            <Input value={category} onChange={(event) => setCategory(event.target.value)} className="mt-1" placeholder="Optional category" />
           </label>
         </div>
-        <label className="text-sm font-medium">
-          Notes
-          <textarea
-            value={notes}
-            onChange={(event) => setNotes(event.target.value)}
-            className="mt-1 w-full rounded-md border border-border bg-transparent p-2 text-sm"
-            rows={3}
-            placeholder="Optional context for the scenario"
-          />
+        <label className="flex items-center gap-2 text-sm font-medium">
+          <Checkbox checked={observeOnly} onChange={(event) => setObserveOnly(event.target.checked)} />
+          Observe only (no actions saved)
         </label>
         <PermissionGuard
           resource="decision"
@@ -142,7 +142,9 @@ export function SimulationPanel({
                   )}
                 >
                   <p className="text-sm font-semibold">{scenario.name}</p>
-                  <p className="text-xs text-muted-foreground">{formatScenarioStatus(scenario)}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {scenario.metrics ? "Simulation only, not saved" : "Pending"}
+                  </p>
                 </button>
               );
             })}
@@ -154,30 +156,50 @@ export function SimulationPanel({
         <p className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Scenario result</p>
         {!activeScenario ? (
           <p className="mt-4 text-sm text-muted-foreground">Select a simulation to view details.</p>
-        ) : activeScenario.result ? (
+        ) : activeScenario.metrics ? (
           <div className="mt-4 space-y-4">
             <div>
-              <p className="text-base font-semibold">{activeScenario.result.summary}</p>
-              <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                {Object.entries(activeScenario.result.stats).map(([key, value]) => (
-                  <div key={key} className="rounded-lg border border-border bg-muted/20 p-3 text-sm">
-                    <p className="text-xs uppercase text-muted-foreground">{formatStatLabel(key)}</p>
-                    <p className="text-lg font-semibold">{value}</p>
+              <p className="text-base font-semibold">{activeScenario.description ?? "Simulation output"}</p>
+              <p className="text-xs text-muted-foreground">Simulation only, not saved.</p>
+              <div className="mt-3 grid gap-3 sm:grid-cols-3">
+                {activeScenario.metrics.roi !== undefined ? (
+                  <div className="rounded-lg border border-border bg-muted/20 p-3 text-sm">
+                    <p className="text-xs uppercase text-muted-foreground">ROI</p>
+                    <p className="text-lg font-semibold">{activeScenario.metrics.roi.toFixed(1)}%</p>
                   </div>
-                ))}
+                ) : null}
+                {activeScenario.metrics.riskAdjustedRoi !== undefined ? (
+                  <div className="rounded-lg border border-border bg-muted/20 p-3 text-sm">
+                    <p className="text-xs uppercase text-muted-foreground">Risk-adjusted ROI</p>
+                    <p className="text-lg font-semibold">{activeScenario.metrics.riskAdjustedRoi.toFixed(1)}%</p>
+                  </div>
+                ) : null}
+                {activeScenario.metrics.maxCogs !== undefined ? (
+                  <div className="rounded-lg border border-border bg-muted/20 p-3 text-sm">
+                    <p className="text-xs uppercase text-muted-foreground">Max COGS</p>
+                    <p className="text-lg font-semibold">${activeScenario.metrics.maxCogs.toFixed(2)}</p>
+                  </div>
+                ) : null}
               </div>
             </div>
             <div className="space-y-2">
-              <p className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Sample decisions</p>
+              <p className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Simulated decisions</p>
               <div className="space-y-3">
-                {activeScenario.result.sampleDecisions.map((decision, index) => (
+                {activeScenario.decisions.map((decision, index) => (
                   <div key={`${decision.decision}-${index}`} className="rounded-lg border border-border bg-muted/20 p-3 text-sm">
                     <p className="font-semibold capitalize">{formatDecisionLabel(decision.decision)}</p>
-                    <p className="text-xs text-muted-foreground">Priority: {decision.priority}</p>
+                    <p className="text-xs text-muted-foreground">Priority: {formatTaskPriority(decision.priority)}</p>
+                    <div className="mt-2 space-y-1 text-xs text-muted-foreground">
+                      {decision.metrics?.roi !== undefined ? <p>ROI: {decision.metrics.roi.toFixed(1)}%</p> : null}
+                      {decision.metrics?.riskAdjustedRoi !== undefined ? (
+                        <p>Risk-adjusted ROI: {decision.metrics.riskAdjustedRoi.toFixed(1)}%</p>
+                      ) : null}
+                    </div>
                     <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-muted-foreground">
-                      {decision.why.map((reason) => (
-                        <li key={reason}>{reason}</li>
-                      ))}
+                      {decision.why.map((reason, index) => {
+                        const label = typeof reason === "string" ? reason : reason.title;
+                        return <li key={`${label}-${index}`}>{label}</li>;
+                      })}
                     </ul>
                   </div>
                 ))}

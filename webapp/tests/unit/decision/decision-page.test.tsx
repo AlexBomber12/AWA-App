@@ -9,7 +9,8 @@ import type { ReactNode } from "react";
 
 import { DecisionEnginePage } from "@/components/features/decision/DecisionEnginePage";
 import { ToastProvider } from "@/components/providers/ToastProvider";
-import type { DecisionRulesResponse, SimulationScenario, SimulationScenariosResponse } from "@/lib/api/decisionClient";
+import type { DecisionRulesResponse, SimulationScenariosResponse } from "@/lib/api/decisionClient";
+import type { SimulationScenario } from "@/lib/api/decisionTypes";
 
 const user = userEvent.setup();
 
@@ -19,9 +20,10 @@ const rulesResponse: DecisionRulesResponse = {
       id: "rule-1",
       name: "Story Rule 1",
       description: "First rule",
-      active: true,
+      isActive: true,
       scope: "sku",
-      params: {},
+      conditions: [{ field: "roi", operator: "<", value: 20 }],
+      actions: [{ action: "update_price" }],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     },
@@ -29,9 +31,10 @@ const rulesResponse: DecisionRulesResponse = {
       id: "rule-2",
       name: "Story Rule 2",
       description: "Second rule",
-      active: false,
+      isActive: false,
       scope: "vendor",
-      params: {},
+      conditions: [{ vendorId: "22", field: "lead_time_slip", operator: ">", value: 2 }],
+      actions: [{ action: "blocked_observe" }],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     },
@@ -46,19 +49,17 @@ const scenariosResponse: SimulationScenariosResponse = {
       description: "Completed scenario",
       ruleId: "rule-1",
       input: {},
-      result: {
-        summary: "Existing scenario summary",
-        stats: { affectedSkus: 10, avgRoiDelta: 2 },
-        sampleDecisions: [
-          {
-            decision: "update_price",
-            priority: "high",
-            defaultAction: "Adjust price",
-            why: ["ROI low"],
-            alternatives: ["Request discount"],
-          },
-        ],
-      },
+      metrics: { roi: 18.4, riskAdjustedRoi: 16.1, maxCogs: 14.5 },
+      decisions: [
+        {
+          decision: "update_price",
+          priority: "high",
+          defaultAction: "Adjust price",
+          why: ["ROI low"],
+          alternatives: [{ decision: "request_discount", label: "Request discount" }],
+        },
+      ],
+      createdAt: new Date().toISOString(),
     },
   ],
 };
@@ -69,19 +70,17 @@ const newScenario: SimulationScenario = {
   description: "New simulation",
   ruleId: "rule-1",
   input: { roiDelta: 4 },
-  result: {
-    summary: "Simulation success output",
-    stats: { affectedSkus: 25, avgRoiDelta: 4 },
-    sampleDecisions: [
-      {
-        decision: "update_price",
-        priority: "high",
-        defaultAction: "Boost price",
-        why: ["Projected ROI gain"],
-        alternatives: ["Continue"],
-      },
-    ],
-  },
+  metrics: { roi: 21.2, riskAdjustedRoi: 19.1, maxCogs: 13.2 },
+  decisions: [
+    {
+      decision: "update_price",
+      priority: "high",
+      defaultAction: "Boost price",
+      why: ["Projected ROI gain"],
+      alternatives: [{ decision: "continue", label: "Continue" }],
+    },
+  ],
+  createdAt: new Date().toISOString(),
 };
 
 const server = setupServer(
@@ -95,8 +94,8 @@ const server = setupServer(
     }
     return res(ctx.json({ rules: rulesResponse.rules, scenarios: scenariosResponse.scenarios }));
   }),
-  rest.post("http://localhost:3000/api/bff/decision/simulate", (_req, res, ctx) => {
-    return res(ctx.json(newScenario));
+  rest.post("http://localhost:3000/api/bff/decision", (_req, res, ctx) => {
+    return res(ctx.status(201), ctx.json(newScenario));
   })
 );
 
@@ -127,16 +126,13 @@ const renderWithProviders = (ui: ReactNode, roles: string[] = ["admin"]) => {
 };
 
 describe("DecisionEnginePage", () => {
-  it("renders rules and toggles active flag", async () => {
+  it("renders rules and allows selecting a rule", async () => {
     renderWithProviders(<DecisionEnginePage />);
 
     const ruleCard = await screen.findByRole("button", { name: /Story Rule 1/i });
-    const toggleButton = within(ruleCard).getByRole("button", { name: /^Pause$/i });
-    await user.click(toggleButton);
-
-    await waitFor(() => {
-      expect(within(ruleCard).getByRole("button", { name: /^Activate$/i })).toBeInTheDocument();
-    });
+    expect(within(ruleCard).getByText(/Active/i)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Story Rule 2/i }));
+    await waitFor(() => expect(screen.getAllByRole("button", { name: /Story Rule/i }).length).toBeGreaterThanOrEqual(2));
   });
 
   it("runs a simulation and displays the new result", async () => {
@@ -145,6 +141,7 @@ describe("DecisionEnginePage", () => {
     await waitFor(() => expect(screen.getByText("Story Rule 1")).toBeInTheDocument());
     await user.click(screen.getByRole("button", { name: /Run simulation/i }));
 
-    await waitFor(() => expect(screen.getByText("Simulation success output")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("Story Simulation")).toBeInTheDocument());
+    expect(screen.getAllByText(/Simulation only/).length).toBeGreaterThan(0);
   });
 });
