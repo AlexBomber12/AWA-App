@@ -277,10 +277,12 @@ async def _wait_for_db(max_attempts: int | None = None, delay_s: float | None = 
 
 async def _wait_for_redis(url: str) -> aioredis.Redis:
     delay = 0.2
-    for _ in range(50):
+    app_env = str(getattr(settings, "APP_ENV", "dev") or "dev").lower()
+    attempts = 5 if app_env in {"dev", "local", "test"} else 50
+    for _ in range(attempts):
         try:
             r = aioredis.from_url(url, encoding="utf-8", decode_responses=True)
-            await r.ping()
+            await asyncio.wait_for(r.ping(), timeout=1.0)
             return r
         except Exception:
             await asyncio.sleep(delay)
