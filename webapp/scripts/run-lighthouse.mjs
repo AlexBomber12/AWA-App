@@ -111,6 +111,7 @@ const run = async () => {
       : `npm run dev -- --hostname 127.0.0.1 --port ${resolvedPort}`);
 
   let serverProcess;
+  let serverExited;
   if (SHOULD_START_SERVER) {
     if (LIGHTHOUSE_MODE === "prod") {
       console.log(`Lighthouse: building app with "${BUILD_COMMAND}"...`);
@@ -134,6 +135,7 @@ const run = async () => {
         BROWSER: "none",
       },
     });
+    serverExited = new Promise((resolve) => serverProcess?.once("exit", () => resolve(null)));
   }
 
   const serverReady = await waitForServer(baseUrl, WAIT_TIMEOUT_MS);
@@ -190,6 +192,7 @@ const run = async () => {
     rmSync(userDataDir, { recursive: true, force: true });
     if (serverProcess) {
       serverProcess.kill("SIGTERM");
+      await serverExited;
     }
   }
 };
