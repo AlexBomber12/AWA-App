@@ -264,9 +264,11 @@ class Settings(BaseSettings):
         if value is None:
             return value
         lower = value.lower()
-        if lower not in {"local", "cloud"}:
-            raise ValueError("LLM provider must be 'local' or 'cloud'")
-        return lower
+        if lower in {"local", "cloud"}:
+            return lower
+        if lower == "stub":
+            return "local"
+        raise ValueError("LLM provider must be 'local' or 'cloud'")
 
     # Shared HTTP client defaults
     HTTP_CONNECT_TIMEOUT_S: float = Field(
