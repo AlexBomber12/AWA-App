@@ -110,8 +110,8 @@ const run = async () => {
       ? `npm run start -- --hostname 127.0.0.1 --port ${resolvedPort}`
       : `npm run dev -- --hostname 127.0.0.1 --port ${resolvedPort}`);
 
-let serverProcess;
-let serverExited = Promise.resolve();
+  let serverProcess;
+  let serverExited = Promise.resolve();
   if (SHOULD_START_SERVER) {
     if (LIGHTHOUSE_MODE === "prod") {
       console.log(`Lighthouse: building app with "${BUILD_COMMAND}"...`);
@@ -130,6 +130,7 @@ let serverExited = Promise.resolve();
     serverProcess = spawn(startCommand, {
       shell: true,
       stdio: "inherit",
+      detached: true,
       env: {
         ...process.env,
         BROWSER: "none",
@@ -191,12 +192,18 @@ let serverExited = Promise.resolve();
     await chrome.kill();
     rmSync(userDataDir, { recursive: true, force: true });
     if (serverProcess) {
-        const killTimeout = setTimeout(() => {
-        if (!serverProcess.killed) {
-          serverProcess.kill("SIGKILL");
+      const killTimeout = setTimeout(() => {
+        try {
+          process.kill(-serverProcess.pid, "SIGKILL");
+        } catch {
+          // best effort
         }
       }, 5000);
-      serverProcess.kill("SIGTERM");
+      try {
+        process.kill(-serverProcess.pid, "SIGTERM");
+      } catch {
+        // already exited
+      }
       await serverExited;
       clearTimeout(killTimeout);
     }
