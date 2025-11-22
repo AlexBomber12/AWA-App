@@ -131,9 +131,9 @@ def _resolve_streaming_chunk_rows(
 
     if chunk_size is not None:
         return max(1, chunk_size), chunk_mb
-    if chunk_size_mb is not None:
-        return _chunk_rows_from_mb(chunk_mb), chunk_mb
-    if chunk_mb_set and not rows_env_set:
+    if rows_env_set:
+        return rows_env, chunk_mb
+    if chunk_size_mb is not None or chunk_mb_set:
         return _chunk_rows_from_mb(chunk_mb), chunk_mb
     return rows_env, chunk_mb
 
