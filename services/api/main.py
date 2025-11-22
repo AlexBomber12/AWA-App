@@ -277,10 +277,12 @@ async def _wait_for_db(max_attempts: int | None = None, delay_s: float | None = 
 
 async def _wait_for_redis(url: str) -> aioredis.Redis:
     delay = 0.2
-    for _ in range(50):
+    app_env = str(getattr(settings, "APP_ENV", "dev") or "dev").lower()
+    attempts = 5 if app_env in {"dev", "local", "test"} else 50
+    for _ in range(attempts):
         try:
             r = aioredis.from_url(url, encoding="utf-8", decode_responses=True)
-            await r.ping()
+            await asyncio.wait_for(r.ping(), timeout=1.0)
             return r
         except Exception:
             await asyncio.sleep(delay)
@@ -315,10 +317,10 @@ async def _check_llm() -> None:
         _BASE_LLM_PROVIDER = env_lower
 
     llm_cfg = getattr(cfg, "llm", None)
-    provider = (llm_cfg.provider if llm_cfg else current_lower or "stub").lower()
-    lan_base = (llm_cfg.lan_health_base_url if llm_cfg else None) or getattr(cfg, "LAN_BASE_URL", "http://lan-llm:8000")
+    provider = (llm_cfg.provider if llm_cfg else current_lower or "local").lower()
+    local_base = getattr(llm_cfg, "provider_base_url", None) or getattr(cfg, "LLM_PROVIDER_BASE_URL", None) or ""
     lan_timeout = float(getattr(llm_cfg, "lan_health_timeout_s", getattr(cfg, "LLM_LAN_HEALTH_TIMEOUT_S", 1.0)))
-    if provider != "lan":
+    if provider != "local":
         return
     try:
         async with AsyncHTTPClient(
@@ -326,14 +328,15 @@ async def _check_llm() -> None:
             total_timeout_s=lan_timeout,
             max_retries=1,
         ) as client:
-            await client.get(f"{lan_base}/ready", timeout=lan_timeout)
+            if local_base:
+                await client.get(f"{local_base}/ready", timeout=lan_timeout)
     except Exception:
-        fallback = (
-            llm_cfg.fallback_provider if llm_cfg else getattr(cfg, "LLM_PROVIDER_FALLBACK", "stub") or "stub"
-        ).lower()
+        fallback_raw = llm_cfg.secondary_provider if llm_cfg else getattr(cfg, "LLM_SECONDARY_PROVIDER", None)
+        fallback = str(fallback_raw or provider or "local").lower()
         os.environ["LLM_PROVIDER"] = fallback
         object.__setattr__(cfg, "LLM_PROVIDER", fallback)
         cfg.__dict__["LLM_PROVIDER"] = fallback
+        cfg.__dict__.pop("llm", None)
         try:
             cfg.model_fields_set.add("LLM_PROVIDER")
         except Exception:

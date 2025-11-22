@@ -60,26 +60,35 @@ def test_celery_settings_alertbot_cron(monkeypatch):
 
 
 def test_llm_and_observability_settings(monkeypatch):
-    monkeypatch.setenv("LLM_PROVIDER", "openai")
-    monkeypatch.setenv("LLM_PROVIDER_FALLBACK", "stub")
-    monkeypatch.setenv("LLM_URL", "http://llm:9000/llm")
-    monkeypatch.setenv("LLM_BASE_URL", "http://lan:9000")
+    monkeypatch.setenv("LLM_PROVIDER", "cloud")
+    monkeypatch.setenv("LLM_SECONDARY_PROVIDER", "local")
+    monkeypatch.setenv("LLM_BASE_URL", "http://gateway:9000")
+    monkeypatch.setenv("LLM_PROVIDER_BASE_URL", "http://local-llm:8001")
     monkeypatch.setenv("LLM_API_KEY", "lan-key")
-    monkeypatch.setenv("OPENAI_MODEL", "gpt-4o")
-    monkeypatch.setenv("OPENAI_API_KEY", "openai-key")
+    monkeypatch.setenv("LLM_LOCAL_MODEL", "local-m")
+    monkeypatch.setenv("LLM_CLOUD_MODEL", "gpt-5-turbo")
+    monkeypatch.setenv("LLM_CLOUD_API_KEY", "openai-key")
+    monkeypatch.setenv("LLM_EMAIL_CLOUD_THRESHOLD_CHARS", "5")
+    monkeypatch.setenv("LLM_PRICELIST_CLOUD_THRESHOLD_ROWS", "10")
+    monkeypatch.setenv("LLM_MIN_CONFIDENCE", "0.25")
     monkeypatch.setenv("LLM_LAN_HEALTH_TIMEOUT_S", "2")
     monkeypatch.setenv("SENTRY_TRACES_SAMPLE_RATE", "0.2")
     monkeypatch.setenv("SENTRY_PROFILES_SAMPLE_RATE", "0.1")
     cfg = Settings()
     llm_cfg = cfg.llm
     observability = cfg.observability
-    assert llm_cfg.provider == "openai"
-    assert llm_cfg.fallback_provider == "stub"
-    assert llm_cfg.local_url.endswith(":9000/llm")
-    assert llm_cfg.lan_api_key == "lan-key"
-    assert llm_cfg.openai_model == "gpt-4o"
-    assert llm_cfg.openai_api_key == "openai-key"
-    assert llm_cfg.lan_health_timeout_s == 2.0
+    assert llm_cfg.provider == "cloud"
+    assert llm_cfg.secondary_provider == "local"
+    assert llm_cfg.base_url == "http://gateway:9000"
+    assert llm_cfg.provider_base_url == "http://local-llm:8001"
+    assert llm_cfg.api_key == "lan-key"
+    assert llm_cfg.local_model == "local-m"
+    assert llm_cfg.cloud_model == "gpt-5-turbo"
+    assert llm_cfg.cloud_api_key == "openai-key"
+    assert llm_cfg.email_cloud_threshold_chars == 5
+    assert llm_cfg.pricelist_cloud_threshold_rows == 10
+    assert llm_cfg.min_confidence == 0.25
+    assert llm_cfg.request_timeout_s == cfg.LLM_REQUEST_TIMEOUT_S
     assert observability.sentry_traces_sample_rate == 0.2
     assert observability.sentry_profiles_sample_rate == 0.1
 

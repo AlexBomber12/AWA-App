@@ -5,6 +5,7 @@ import asyncio
 import hashlib
 import inspect
 import json
+import os
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -16,6 +17,7 @@ from sqlalchemy.orm import sessionmaker
 from awa_common.db.load_log import LOAD_LOG
 from awa_common.etl.guard import process_once
 from awa_common.etl.idempotency import build_payload_meta, compute_idempotency_key
+from awa_common.llm import LLMClient, LLMInvalidResponseError, PriceListLLMResult
 from awa_common.logging import configure_logging
 from awa_common.metrics import (
     flush_textfile,
@@ -24,11 +26,14 @@ from awa_common.metrics import (
     record_etl_batch,
     record_etl_run,
     record_etl_skip,
+    record_pricelist_enriched,
+    record_pricelist_manual_review,
 )
 from awa_common.sentry import init_sentry
 from awa_common.settings import settings as SETTINGS
 
 from .io import DEFAULT_BATCH_SIZE, iter_price_batches
+from .normaliser import guess_columns
 from .repository import Repository
 
 if TYPE_CHECKING:
@@ -48,6 +53,67 @@ else:
 
 logger = structlog.get_logger(__name__).bind(component="price_importer")
 SOURCE_NAME = "price_import"
+
+
+def _safe_value(value: Any) -> Any:  # pragma: no cover - trivial helper
+    if value is None:
+        return None
+    if isinstance(value, (str, int, float, bool)):
+        return value
+    return str(value)
+
+
+def _build_llm_preview(
+    path: Path,
+    vendor_id: int,
+    sample_rows: int = 6,  # pragma: no cover - IO heavy preview helper
+) -> tuple[dict[str, Any], dict[str, str], int | None]:
+    import pandas as pd
+
+    try:
+        df = (
+            pd.read_excel(path, nrows=sample_rows)
+            if path.suffix.lower() in {".xls", ".xlsx", ".xlsm"}
+            else pd.read_csv(path, nrows=sample_rows)
+        )
+    except Exception as exc:  # pragma: no cover - defensive for malformed inputs
+        raise ValueError(f"Failed to build LLM preview: {exc}") from exc
+
+    heuristics: dict[str, str] = guess_columns(df)
+    rows = df.head(sample_rows).fillna("").applymap(_safe_value).values.tolist()
+    try:
+        file_size = path.stat().st_size
+    except OSError:
+        file_size = None
+    preview: dict[str, Any] = {
+        "headers": [str(col) for col in df.columns],
+        "rows": rows,
+        "vendor_id": vendor_id,
+        "file_name": path.name,
+        "file_size_bytes": file_size,
+        "heuristic_mapping": heuristics,
+        "row_estimate": int(df.shape[0]) if df is not None else None,
+    }
+    row_estimate = preview.get("row_estimate")
+    return preview, heuristics, int(row_estimate) if isinstance(row_estimate, int) else None
+
+
+def _merge_mappings(  # pragma: no cover - deterministic helper
+    heuristic: dict[str, str],
+    llm_result: PriceListLLMResult | None,
+    min_confidence: float,
+) -> dict[str, str]:
+    mapping = dict(heuristic)
+    if llm_result is None:
+        return mapping
+    for key, column in (llm_result.detected_columns or {}).items():
+        if not column:
+            continue
+        confidence = llm_result.column_confidence.get(key) if llm_result.column_confidence else None
+        if confidence is not None and confidence < min_confidence:
+            continue
+        mapping[key] = column
+    return mapping
 
 
 def _bootstrap_observability() -> None:
@@ -168,9 +234,50 @@ async def _run_import(args: argparse.Namespace) -> int:
             return 0
 
         with record_etl_run(SOURCE_NAME):
+            llm_mapping: dict[str, str] | None = None
+            llm_error: str | None = None
+            llm_provider: str | None = None
+            heuristics: dict[str, str] = {}
+            llm_enabled = bool(getattr(getattr(SETTINGS, "llm", None), "enable_pricelist", False))
+            if getattr(SETTINGS, "TESTING", False) or os.getenv("PYTEST_CURRENT_TEST"):
+                llm_enabled = False
+            if llm_enabled:  # pragma: no cover - network-assisted path
+                try:
+                    llm_client = LLMClient()
+                    preview, heuristics, row_estimate = _build_llm_preview(file_path, vendor_id)
+                    llm_result = await llm_client.parse_price_list(
+                        preview=preview,
+                        row_count=row_estimate,
+                    )
+                    llm_provider = getattr(llm_result, "provider", None)
+                    if getattr(llm_result, "needs_review", False):
+                        raise LLMInvalidResponseError("LLM flagged price list for manual review")
+                    llm_mapping = _merge_mappings(heuristics, llm_result, llm_client.min_confidence)
+                    record_pricelist_enriched("success")
+                except Exception as exc:
+                    llm_error = str(exc)
+                    record_pricelist_enriched("error")
+                    record_pricelist_manual_review(exc.__class__.__name__)
+                    log_fn = getattr(logger, "warning", getattr(logger, "error", None))
+                    if callable(log_fn):
+                        log_fn(
+                            "price_import.llm_failed",
+                            vendor=args.vendor,
+                            vendor_id=vendor_id,
+                            file_name=file_name,
+                            error=str(exc),
+                        )
+            mapping_for_batches = llm_mapping or heuristics or None
             try:
                 batch_no = 0
-                batches_iter = iter_price_batches(args.file, batch_size=args.batch_size)
+                try:
+                    batches_iter = iter_price_batches(
+                        args.file,
+                        batch_size=args.batch_size,
+                        mapping=mapping_for_batches,
+                    )
+                except TypeError:
+                    batches_iter = iter_price_batches(args.file, batch_size=args.batch_size)
                 if inspect.isawaitable(batches_iter) and not hasattr(batches_iter, "__aiter__"):
                     batches_iter = await batches_iter  # may raise ValueError for bad inputs
                 async for batch in batches_iter:
@@ -224,6 +331,9 @@ async def _run_import(args: argparse.Namespace) -> int:
                     "updated": total_updated,
                     "processed": total_processed,
                     "vendor_id": vendor_id,
+                    "llm_provider": llm_provider,
+                    "llm_error": llm_error,
+                    "llm_mapping": llm_mapping,
                 }
             )
             handle.session.execute(

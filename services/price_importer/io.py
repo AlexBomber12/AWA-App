@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncIterator, Generator, Sequence
+from collections.abc import AsyncIterator, Generator, Mapping, Sequence
 from pathlib import Path
 from typing import Any, cast
 
@@ -150,13 +150,15 @@ def _next_frame(iterator: Generator[pd.DataFrame]) -> pd.DataFrame | None:
         return None
 
 
-async def _validate_frame(frame: pd.DataFrame, sem: asyncio.Semaphore) -> list[PriceRowDict]:
+async def _validate_frame(
+    frame: pd.DataFrame, sem: asyncio.Semaphore, mapping: Mapping[str, str] | None
+) -> list[PriceRowDict]:
     async with sem:
-        return await asyncio.to_thread(_normalize_and_validate, frame)
+        return await asyncio.to_thread(_normalize_and_validate, frame, mapping)
 
 
-def _normalize_and_validate(frame: pd.DataFrame) -> list[PriceRowDict]:
-    cleaned = normalise(frame)
+def _normalize_and_validate(frame: pd.DataFrame, mapping: Mapping[str, str] | None) -> list[PriceRowDict]:
+    cleaned = normalise(frame, mapping=mapping)
     records = cleaned.to_dict(orient="records")
     if not records:
         return []
@@ -167,6 +169,7 @@ async def iter_price_batches(
     path: str | Path,
     batch_size: int | None = None,
     max_workers: int | None = None,
+    mapping: Mapping[str, str] | None = None,
 ) -> AsyncIterator[list[PriceRowDict]]:
     """
     Yield validated, normalised price rows with bounded concurrency.
@@ -189,7 +192,7 @@ async def iter_price_batches(
                 break
             if frame.empty:
                 continue
-            task = asyncio.create_task(_validate_frame(frame, sem))
+            task = asyncio.create_task(_validate_frame(frame, sem, mapping))
             pending[idx] = task
             idx += 1
             if len(pending) >= worker_limit:

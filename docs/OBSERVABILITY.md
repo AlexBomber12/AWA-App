@@ -95,6 +95,19 @@ debug incidents.
 - Outbound connectors should use `awa_common.http_client` so the `external_http_*` series stays
   consistent across agents and dashboards.
 
+### LLM & Enrichment
+
+- `llm_requests_total{task,provider,outcome,service,env,version}` and
+  `llm_request_latency_seconds_bucket{task,provider,...}` cover gateway calls from the LLM client/server.
+- `llm_request_errors_total{task,provider,error_type,...}` highlights malformed JSON, provider timeouts,
+  or validation failures; `llm_fallback_total{task,from_provider,to_provider,reason,...}` counts explicit
+  retries from local → cloud.
+- Downstream ETL stages emit `email_enriched_total{outcome,...}`, `email_needs_manual_review_total{reason,...}`,
+  `pricelists_enriched_total{outcome,...}`, and `pricelists_needs_manual_review_total{reason,...}` so ops
+  teams can spot rising manual-review rates.
+- Suggested SLOs: 95 % of `llm_requests_total{provider="local"}` < 2 s, < 1 % error rate for local, and
+  < 3 % manual-review rate for `pricelists_needs_manual_review_total` over a 1 h window.
+
 ### Stats Aggregates
 
 - `stats_cache_hits_total{endpoint,service,env,version}` and `stats_cache_miss_total{...}` measure

@@ -324,33 +324,41 @@ class ObservabilitySettings(SettingsGroup):
 
 class LLMSettings(SettingsGroup):
     provider: str
-    fallback_provider: str
-    local_url: str
-    lan_api_base_url: str
-    lan_health_base_url: str
-    lan_health_timeout_s: float
-    lan_api_key: str | None
-    remote_url: str | None
-    openai_model: str
-    openai_api_key: str | None
-    openai_api_base: str | None
+    secondary_provider: str | None
+    base_url: str
+    provider_base_url: str
+    api_key: str | None
+    local_model: str
+    cloud_model: str
+    cloud_api_key: str | None
+    cloud_api_base: str | None
     request_timeout_s: float
+    email_cloud_threshold_chars: int
+    pricelist_cloud_threshold_rows: int
+    allow_cloud_fallback: bool
+    enable_email: bool
+    enable_pricelist: bool
+    min_confidence: float
 
     @classmethod
     def from_settings(cls, cfg: Settings) -> LLMSettings:
         return cls(
             provider=cfg.LLM_PROVIDER,
-            fallback_provider=cfg.LLM_PROVIDER_FALLBACK,
-            local_url=cfg.LLM_URL,
-            lan_api_base_url=cfg.LLM_BASE_URL,
-            lan_health_base_url=cfg.LAN_BASE_URL,
-            lan_health_timeout_s=float(cfg.LLM_LAN_HEALTH_TIMEOUT_S),
-            lan_api_key=cfg.LLM_API_KEY,
-            remote_url=cfg.LLM_REMOTE_URL,
-            openai_model=cfg.OPENAI_MODEL,
-            openai_api_key=cfg.OPENAI_API_KEY,
-            openai_api_base=cfg.OPENAI_API_BASE,
+            secondary_provider=cfg.LLM_SECONDARY_PROVIDER,
+            base_url=cfg.LLM_BASE_URL,
+            provider_base_url=cfg.LLM_PROVIDER_BASE_URL or cfg.LLM_BASE_URL,
+            api_key=cfg.LLM_API_KEY,
+            local_model=cfg.LLM_LOCAL_MODEL,
+            cloud_model=cfg.LLM_CLOUD_MODEL,
+            cloud_api_key=cfg.LLM_CLOUD_API_KEY,
+            cloud_api_base=cfg.LLM_CLOUD_API_BASE,
             request_timeout_s=float(cfg.LLM_REQUEST_TIMEOUT_S),
+            email_cloud_threshold_chars=int(cfg.LLM_EMAIL_CLOUD_THRESHOLD_CHARS),
+            pricelist_cloud_threshold_rows=int(cfg.LLM_PRICELIST_CLOUD_THRESHOLD_ROWS),
+            allow_cloud_fallback=bool(cfg.LLM_ALLOW_CLOUD_FALLBACK),
+            enable_email=bool(cfg.LLM_ENABLE_EMAIL),
+            enable_pricelist=bool(cfg.LLM_ENABLE_PRICELIST),
+            min_confidence=float(cfg.LLM_MIN_CONFIDENCE),
         )
 
 
