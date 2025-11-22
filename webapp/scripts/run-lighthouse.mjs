@@ -145,7 +145,8 @@ const run = async () => {
     process.exit(1);
   }
 
-  const userDataDir = mkdtempSync(path.join(os.tmpdir(), "lighthouse-user-"));
+  const tmpRoot = process.env.LIGHTHOUSE_TMP ?? (path.isAbsolute(os.tmpdir()) ? os.tmpdir() : "/tmp");
+  const userDataDir = mkdtempSync(path.join(tmpRoot, "lighthouse-user-"));
 
   const chrome = await launch({
     chromeFlags: ["--headless", "--no-sandbox", "--disable-gpu"],
