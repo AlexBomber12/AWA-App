@@ -27,7 +27,8 @@ from tests.utils.strict_spy import StrictSpy
 @pytest.fixture(autouse=True)
 def _test_env_defaults(monkeypatch: pytest.MonkeyPatch):
     """Ensure deterministic baseline environment for tests."""
-    monkeypatch.setenv("LLM_PROVIDER", "STUB")
+    monkeypatch.setenv("LLM_PROVIDER", "LOCAL")
+    monkeypatch.setenv("LLM_SECONDARY_PROVIDER", "CLOUD")
     monkeypatch.setenv("SENTRY_DSN", "")
     monkeypatch.setenv("SENTRY_METRICS_ENABLED", "0")
     monkeypatch.setenv("CELERY_LOOP_LAG_MONITOR", "0")
@@ -87,6 +88,7 @@ def _env_fast_flags(monkeypatch: pytest.MonkeyPatch):
     """Disable background refreshers and favor tiny timeouts during unit tests."""
     monkeypatch.setenv("OIDC_JWKS_BACKGROUND_REFRESH", "0")
     monkeypatch.setenv("LLM_REQUEST_TIMEOUT_S", "0.05")
+    monkeypatch.setenv("LLM_PROVIDER_BASE_URL", "http://localhost:8001")
     monkeypatch.setattr(settings, "OIDC_JWKS_BACKGROUND_REFRESH", False, raising=False)
     monkeypatch.setattr(settings, "LLM_REQUEST_TIMEOUT_S", 0.05, raising=False)
 

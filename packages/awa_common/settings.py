@@ -258,6 +258,16 @@ class Settings(BaseSettings):
         validate_cron_expr(value, source=info.field_name)
         return value
 
+    @field_validator("LLM_PROVIDER", "LLM_SECONDARY_PROVIDER")
+    @classmethod
+    def _validate_llm_provider(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        lower = value.lower()
+        if lower not in {"local", "cloud"}:
+            raise ValueError("LLM provider must be 'local' or 'cloud'")
+        return lower
+
     # Shared HTTP client defaults
     HTTP_CONNECT_TIMEOUT_S: float = Field(
         default=5.0,
@@ -317,22 +327,31 @@ class Settings(BaseSettings):
     SP_CLIENT_SECRET: str | None = None
     SP_API_BASE_URL: str | None = None
 
-    # Optional: LLM placeholders (no usage change in this PR)
-    LLM_PROVIDER: str = Field(default="STUB")
-    LLM_PROVIDER_FALLBACK: str = "stub"
-    LLM_URL: str = "http://llm:8000/llm"
-    LLM_REMOTE_URL: str | None = None
+    # LLM routing
+    LLM_PROVIDER: str = Field(default="local")
+    LLM_SECONDARY_PROVIDER: str | None = None
     LLM_BASE_URL: str = Field(default="http://localhost:8000", validation_alias=AliasChoices("LLM_BASE_URL"))
-    LAN_BASE_URL: str = Field(default="http://lan-llm:8000", validation_alias=AliasChoices("LAN_BASE"))
+    LLM_PROVIDER_BASE_URL: str | None = None
     LLM_API_KEY: str | None = None
-    OPENAI_MODEL: str = "gpt-4o-mini"
-    OPENAI_API_BASE: str | None = None
-    OPENAI_API_KEY: str | None = None
+    LLM_LOCAL_MODEL: str = "gpt-4o-mini"
+    LLM_CLOUD_MODEL: str = "gpt-5"
+    LLM_CLOUD_API_KEY: str | None = Field(
+        default=None, validation_alias=AliasChoices("LLM_CLOUD_API_KEY", "OPENAI_API_KEY")
+    )
+    LLM_CLOUD_API_BASE: str | None = Field(
+        default=None, validation_alias=AliasChoices("LLM_CLOUD_API_BASE", "OPENAI_API_BASE")
+    )
     LLM_REQUEST_TIMEOUT_S: float = Field(
         default=60.0,
         validation_alias=AliasChoices("LLM_REQUEST_TIMEOUT_S", "LLM_TIMEOUT_SECS"),
     )
     LLM_LAN_HEALTH_TIMEOUT_S: float = 1.0
+    LLM_EMAIL_CLOUD_THRESHOLD_CHARS: int = 12000
+    LLM_PRICELIST_CLOUD_THRESHOLD_ROWS: int = 500
+    LLM_ALLOW_CLOUD_FALLBACK: bool = True
+    LLM_ENABLE_EMAIL: bool = False
+    LLM_ENABLE_PRICELIST: bool = False
+    LLM_MIN_CONFIDENCE: float = 0.35
 
     # Auth configuration (Keycloak OIDC)
     OIDC_ISSUER: str = Field(default="https://keycloak.local/realms/awa")
@@ -598,8 +617,13 @@ class Settings(BaseSettings):
             "LOG_LEVEL": self.LOG_LEVEL,
             "REQUEST_TIMEOUT_S": self.REQUEST_TIMEOUT_S,
             "LLM_PROVIDER": self.LLM_PROVIDER,
-            "OPENAI_API_BASE": bool(self.OPENAI_API_BASE),
-            "OPENAI_API_KEY": bool(self.OPENAI_API_KEY),
+            "LLM_SECONDARY_PROVIDER": self.LLM_SECONDARY_PROVIDER,
+            "LLM_BASE_URL": self.LLM_BASE_URL,
+            "LLM_PROVIDER_BASE_URL": bool(self.LLM_PROVIDER_BASE_URL),
+            "LLM_LOCAL_MODEL": self.LLM_LOCAL_MODEL,
+            "LLM_CLOUD_MODEL": self.LLM_CLOUD_MODEL,
+            "LLM_CLOUD_API_BASE": bool(self.LLM_CLOUD_API_BASE),
+            "LLM_CLOUD_API_KEY": bool(self.LLM_CLOUD_API_KEY),
             "TELEGRAM_TOKEN": bool(self.TELEGRAM_TOKEN),
             "OIDC_ISSUER": self.OIDC_ISSUER,
             "QUEUE_NAMES": self.QUEUE_NAMES,

@@ -532,6 +532,55 @@ ALERTBOT_STARTUP_VALIDATION_OK = Gauge(
     (*BASE_LABELS,),
     registry=REGISTRY,
 )
+LLM_REQUESTS_TOTAL = Counter(
+    "llm_requests_total",
+    "LLM request attempts grouped by task/provider/outcome",
+    ("task", "provider", "outcome", *BASE_LABELS),
+    registry=REGISTRY,
+)
+LLM_REQUEST_LATENCY_SECONDS = Histogram(
+    "llm_request_latency_seconds",
+    "LLM request latency",
+    ("task", "provider", *BASE_LABELS),
+    buckets=HTTP_BUCKETS,
+    registry=REGISTRY,
+)
+LLM_REQUEST_ERRORS_TOTAL = Counter(
+    "llm_request_errors_total",
+    "LLM errors grouped by task/provider/error type",
+    ("task", "provider", "error_type", *BASE_LABELS),
+    registry=REGISTRY,
+)
+LLM_FALLBACK_TOTAL = Counter(
+    "llm_fallback_total",
+    "LLM fallback attempts between providers",
+    ("task", "from_provider", "to_provider", "reason", *BASE_LABELS),
+    registry=REGISTRY,
+)
+EMAIL_ENRICHED_TOTAL = Counter(
+    "email_enriched_total",
+    "Email enrichment outcomes",
+    ("outcome", *BASE_LABELS),
+    registry=REGISTRY,
+)
+EMAIL_NEEDS_MANUAL_REVIEW_TOTAL = Counter(
+    "email_needs_manual_review_total",
+    "Emails flagged for manual review",
+    ("reason", *BASE_LABELS),
+    registry=REGISTRY,
+)
+PRICELISTS_ENRICHED_TOTAL = Counter(
+    "pricelists_enriched_total",
+    "Price lists enriched via LLM",
+    ("outcome", *BASE_LABELS),
+    registry=REGISTRY,
+)
+PRICELISTS_NEEDS_MANUAL_REVIEW_TOTAL = Counter(
+    "pricelists_needs_manual_review_total",
+    "Price lists flagged for manual mapping/review",
+    ("reason", *BASE_LABELS),
+    registry=REGISTRY,
+)
 EVENT_LOOP_LAG_SECONDS = Gauge(
     "event_loop_lag_seconds",
     "Observed event loop scheduling lag",
@@ -1013,6 +1062,50 @@ def record_logistics_upsert_batch(duration_s: float) -> None:
     LOGISTICS_UPSERT_BATCH_SECONDS.labels(**_with_base_labels()).observe(max(duration_s, 0.0))
 
 
+def _llm_labels(task: str, provider: str | None) -> dict[str, str]:
+    return _with_base_labels(task=(task or "unknown"), provider=(provider or "unknown"))
+
+
+def record_llm_request(task: str, provider: str | None, outcome: str, duration_s: float) -> None:
+    labels = _llm_labels(task, provider)
+    LLM_REQUESTS_TOTAL.labels(**{**labels, "outcome": (outcome or "unknown")}).inc()
+    LLM_REQUEST_LATENCY_SECONDS.labels(**labels).observe(max(duration_s, 0.0))
+
+
+def record_llm_error(task: str, provider: str | None, error_type: str) -> None:
+    LLM_REQUEST_ERRORS_TOTAL.labels(
+        **_llm_labels(task, provider),
+        error_type=(error_type or "error"),
+    ).inc()
+
+
+def record_llm_fallback(task: str, from_provider: str, to_provider: str, reason: str) -> None:
+    LLM_FALLBACK_TOTAL.labels(
+        **_with_base_labels(
+            task=(task or "unknown"),
+            from_provider=(from_provider or "unknown"),
+            to_provider=(to_provider or "unknown"),
+            reason=(reason or "unspecified"),
+        )
+    ).inc()
+
+
+def record_email_enriched(outcome: str) -> None:
+    EMAIL_ENRICHED_TOTAL.labels(**_with_base_labels(outcome=(outcome or "unknown"))).inc()
+
+
+def record_email_needs_manual_review(reason: str) -> None:
+    EMAIL_NEEDS_MANUAL_REVIEW_TOTAL.labels(**_with_base_labels(reason=(reason or "unknown"))).inc()
+
+
+def record_pricelist_enriched(outcome: str) -> None:
+    PRICELISTS_ENRICHED_TOTAL.labels(**_with_base_labels(outcome=(outcome or "unknown"))).inc()
+
+
+def record_pricelist_manual_review(reason: str) -> None:
+    PRICELISTS_NEEDS_MANUAL_REVIEW_TOTAL.labels(**_with_base_labels(reason=(reason or "unknown"))).inc()
+
+
 def record_price_importer_rows(stage: str, rows: int) -> None:
     if rows <= 0:
         return
@@ -1250,6 +1343,14 @@ __all__ = [
     "OIDC_VALIDATE_FAILURES_TOTAL",
     "QUEUE_BACKLOG",
     "EVENT_LOOP_LAG_SECONDS",
+    "LLM_REQUESTS_TOTAL",
+    "LLM_REQUEST_LATENCY_SECONDS",
+    "LLM_REQUEST_ERRORS_TOTAL",
+    "LLM_FALLBACK_TOTAL",
+    "EMAIL_ENRICHED_TOTAL",
+    "EMAIL_NEEDS_MANUAL_REVIEW_TOTAL",
+    "PRICELISTS_ENRICHED_TOTAL",
+    "PRICELISTS_NEEDS_MANUAL_REVIEW_TOTAL",
     "PRICE_IMPORTER_VALIDATE_SECONDS",
     "PRICE_IMPORTER_ROWS_TOTAL",
     "MetricsMiddleware",
@@ -1295,6 +1396,13 @@ __all__ = [
     "record_etl_retry",
     "record_logistics_upsert_rows",
     "record_logistics_upsert_batch",
+    "record_llm_request",
+    "record_llm_error",
+    "record_llm_fallback",
+    "record_email_enriched",
+    "record_email_needs_manual_review",
+    "record_pricelist_enriched",
+    "record_pricelist_manual_review",
     "record_price_importer_rows",
     "record_price_importer_validation",
     "register_metrics_endpoint",

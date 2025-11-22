@@ -24,7 +24,7 @@ The database (Postgres 16) and object storage (MinIO) act as the single source o
 - **`services/worker`** — Background jobs (Celery and standalone cron helpers) that process queues, notifications, and repricing workflows.
 - **`services/price_importer`** — CLI entry point that loads vendor spreadsheets, enforces schema validation, and upserts into `vendor_prices`.
 - **`services/logistics_etl`** — Async ingestion job that hydrates freight-rate tables and publishes metrics for alerting.
-- **`services/llm_server`** — Lightweight FastAPI wrapper around a llama.cpp binary; used for templating outbound communications when `LLM_PROVIDER=lan`.
+- **`services/llm_server`** — JSON-only LLM gateway that routes `classify_email`/`parse_price_list` tasks between local and cloud providers.
 - **Agents** — Containerized ETL/scoring/repricing workloads scheduled via cron (see [Agents](agents.md) for cadence and configuration).
 
 ## Data & messaging layers

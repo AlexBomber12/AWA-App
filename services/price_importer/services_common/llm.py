@@ -1,18 +1,19 @@
 from __future__ import annotations
 
-import importlib
-from typing import Any, cast
+from typing import cast
 
 from awa_common.http_client import AsyncHTTPClient
+from awa_common.llm import (
+    EmailLLMResult,
+    LLMClient,
+    PriceListLLMResult,
+    classify_email,
+    generate,
+    parse_price_list,
+)
 from awa_common.settings import settings
 
 _LLM_CFG = getattr(settings, "llm", None)
-LLM_PROVIDER = (_LLM_CFG.provider if _LLM_CFG else "lan").lower()
-LOCAL_URL = (_LLM_CFG.local_url if _LLM_CFG else None) or "http://llm:8000/llm"
-LAN_BASE = (_LLM_CFG.lan_api_base_url if _LLM_CFG else None) or "http://localhost:8000"
-LAN_KEY = (_LLM_CFG.lan_api_key if _LLM_CFG else None) or ""
-OPENAI_MODEL = (_LLM_CFG.openai_model if _LLM_CFG else None) or "gpt-4o-mini"
-OPENAI_API_KEY = (_LLM_CFG.openai_api_key if _LLM_CFG else None) or ""
 LLM_TIMEOUT_S = float(getattr(_LLM_CFG, "request_timeout_s", getattr(settings, "LLM_REQUEST_TIMEOUT_S", 60.0)))
 
 
@@ -27,23 +28,11 @@ def _llm_client(integration: str) -> AsyncHTTPClient:
 async def _local_llm(prompt: str, temp: float, max_toks: int) -> str:
     async with _llm_client("llm_local") as cli:
         data = await cli.post_json(
-            LOCAL_URL,
+            getattr(_LLM_CFG, "base_url", "http://localhost:8000/llm"),
             json={"prompt": prompt, "temperature": temp, "max_tokens": max_toks},
             timeout=LLM_TIMEOUT_S,
         )
-    return cast(str, data["completion"])
-
-
-async def _openai_llm(prompt: str, temp: float, max_toks: int) -> str:
-    openai: Any = importlib.import_module("openai")
-    openai.api_key = OPENAI_API_KEY
-    rsp = await openai.ChatCompletion.acreate(
-        model=OPENAI_MODEL,
-        messages=[{"role": "user", "content": prompt}],
-        temperature=temp,
-        max_tokens=max_toks,
-    )
-    return cast(str, rsp.choices[0].message.content).strip()
+    return cast(str, data.get("completion") or data.get("text") or data)
 
 
 async def _remote_generate(base: str, key: str | None, prompt: str, max_tokens: int, model: str) -> str:
@@ -60,18 +49,18 @@ async def _remote_generate(base: str, key: str | None, prompt: str, max_tokens: 
             headers=headers,
             timeout=LLM_TIMEOUT_S,
         )
-    return cast(str, data["choices"][0]["message"]["content"]).strip()
+    return cast(str, data.get("choices", [{}])[0].get("message", {}).get("content") or data)
 
 
-async def generate(
-    prompt: str,
-    temperature: float = 0.7,
-    max_tokens: int = 256,
-    provider: str | None = None,
-) -> str:
-    prov = (provider or LLM_PROVIDER).lower()
-    if prov == "openai":
-        return await _openai_llm(prompt, temperature, max_tokens)
-    if prov == "lan":
-        return await _remote_generate(LAN_BASE, LAN_KEY or None, prompt, max_tokens, OPENAI_MODEL)
-    return await _local_llm(prompt, temperature, max_tokens)
+__all__ = [
+    "LLMClient",
+    "generate",
+    "classify_email",
+    "parse_price_list",
+    "EmailLLMResult",
+    "PriceListLLMResult",
+    "_llm_client",
+    "_local_llm",
+    "_remote_generate",
+    "LLM_TIMEOUT_S",
+]

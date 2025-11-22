@@ -96,6 +96,39 @@ sa.Index("ix_tasks_asin_vendor", tasks.c.asin, tasks.c.vendor_id)
 sa.Index("ix_events_message_id", events.c.message_id)
 sa.Index("ix_events_ts", events.c.ts)
 
+inbox_messages = sa.Table(
+    "inbox_messages",
+    METADATA,
+    sa.Column("message_id", sa.Text(), primary_key=True),
+    sa.Column("thread_id", sa.Text(), sa.ForeignKey("inbox_threads.thread_id"), nullable=False),
+    sa.Column("subject", sa.Text(), nullable=True),
+    sa.Column("sender", sa.Text(), nullable=True),
+    sa.Column(
+        "recipients",
+        postgresql.JSONB(astext_type=sa.Text()),
+        nullable=False,
+        server_default=sa.text("'[]'::jsonb"),
+    ),
+    sa.Column("body", sa.Text(), nullable=True),
+    sa.Column("has_price_list_attachment", sa.Boolean(), nullable=False, server_default=sa.text("false")),
+    sa.Column("language", sa.String(length=8), nullable=True),
+    sa.Column("intent", sa.String(length=64), nullable=True),
+    sa.Column("facts", postgresql.JSONB(astext_type=sa.Text()), nullable=True, server_default=sa.text("'{}'::jsonb")),
+    sa.Column("llm_provider", sa.String(length=32), nullable=True),
+    sa.Column("confidence", sa.Numeric(5, 4), nullable=True),
+    sa.Column("needs_manual_review", sa.Boolean(), nullable=False, server_default=sa.text("false")),
+    sa.Column("error", sa.Text(), nullable=True),
+    sa.Column("created_at", sa.TIMESTAMP(timezone=True), server_default=sa.text("now()"), nullable=False),
+    sa.Column(
+        "updated_at",
+        sa.TIMESTAMP(timezone=True),
+        server_default=sa.text("now()"),
+        server_onupdate=sa.text("now()"),
+        nullable=False,
+    ),
+)
+sa.Index("ix_inbox_messages_intent", inbox_messages.c.intent)
+
 
 def _to_float(value: Any) -> float | None:
     if value is None:
@@ -228,13 +261,46 @@ class DecisionEventRecord:
         )
 
 
+@dataclass(slots=True)
+class InboxMessageRecord:
+    message_id: str
+    thread_id: str
+    subject: str | None
+    sender: str | None
+    recipients: list[Any]
+    intent: str | None
+    facts: dict[str, Any] | None
+    llm_provider: str | None
+    confidence: float | None
+    needs_manual_review: bool
+    error: str | None = None
+
+    @classmethod
+    def from_mapping(cls, data: Mapping[str, Any]) -> InboxMessageRecord:
+        return cls(
+            message_id=str(data.get("message_id") or ""),
+            thread_id=str(data.get("thread_id") or ""),
+            subject=data.get("subject"),
+            sender=data.get("sender"),
+            recipients=list(_parse_json(data.get("recipients"), [])),
+            intent=data.get("intent"),
+            facts=_parse_json(data.get("facts"), {}) or {},
+            llm_provider=data.get("llm_provider"),
+            confidence=_to_float(data.get("confidence")),
+            needs_manual_review=bool(data.get("needs_manual_review")),
+            error=data.get("error"),
+        )
+
+
 __all__: Sequence[str] = [
     "DecisionCandidate",
     "DecisionEventRecord",
     "DecisionTaskRecord",
+    "InboxMessageRecord",
     "METADATA",
     "PlannedDecisionTask",
     "events",
+    "inbox_messages",
     "inbox_threads",
     "tasks",
 ]

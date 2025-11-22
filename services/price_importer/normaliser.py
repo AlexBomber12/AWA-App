@@ -14,7 +14,7 @@ _FIELD_MAP = {
 }
 
 
-def guess_columns(df: pd.DataFrame) -> Mapping[str, str]:
+def guess_columns(df: pd.DataFrame) -> dict[str, str]:
     lower = {c.lower(): c for c in df.columns}
     mapping: dict[str, str] = {}
     for key, options in _FIELD_MAP.items():
@@ -26,8 +26,20 @@ def guess_columns(df: pd.DataFrame) -> Mapping[str, str]:
     return mapping
 
 
-def normalise(df: pd.DataFrame) -> pd.DataFrame:
+def normalise(df: pd.DataFrame, mapping: Mapping[str, str] | None = None) -> pd.DataFrame:
+    """Normalise vendor price frames using heuristic and optional LLM mapping."""
+
     cols = guess_columns(df)
-    df = df.rename(columns={v: k for k, v in cols.items()})
+    if mapping:
+        mapping_lower = {k: str(v).strip().lower() for k, v in mapping.items() if v is not None}
+        resolved: dict[str, str] = {}
+        lower_cols = {c.lower(): c for c in df.columns}
+        for target, source in mapping_lower.items():
+            col_name = lower_cols.get(source)
+            if col_name:
+                resolved[target] = col_name
+        if resolved:
+            cols.update(resolved)
+    df = df.rename(columns={v: k for k, v in cols.items() if v in df.columns})
     keep = [c for c in ["sku", "cost", "moq", "lead_time_days", "currency"] if c in df.columns]
     return df[keep]

@@ -102,10 +102,14 @@ def settings_env(monkeypatch: pytest.MonkeyPatch):
         "SENTRY_DSN": "",
         "NEXT_PUBLIC_API_URL": "http://localhost:8000",
         "REQUEST_TIMEOUT_S": 5,
-        "LLM_PROVIDER": "STUB",
-        "LLM_PROVIDER_FALLBACK": "STUB",
-        "OPENAI_API_BASE": "",
-        "OPENAI_API_KEY": "",
+        "LLM_PROVIDER": "LOCAL",
+        "LLM_SECONDARY_PROVIDER": "CLOUD",
+        "LLM_BASE_URL": "http://localhost:8000",
+        "LLM_PROVIDER_BASE_URL": "http://localhost:8001",
+        "LLM_CLOUD_API_BASE": "",
+        "LLM_CLOUD_API_KEY": "",
+        "LLM_ENABLE_EMAIL": "0",
+        "LLM_ENABLE_PRICELIST": "0",
     }
 
     for key, value in overrides.items():

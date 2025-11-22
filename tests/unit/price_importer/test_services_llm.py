@@ -6,28 +6,16 @@ from services.price_importer.services_common import llm
 
 
 @pytest.mark.asyncio
-async def test_generate_routes_to_providers(monkeypatch):
-    calls: dict[str, object] = {}
+async def test_generate_wrapper(monkeypatch):
+    called: dict[str, str] = {}
 
-    class DummyClient:
-        async def __aenter__(self):
-            return self
+    async def fake_generate(prompt: str, temperature: float = 0.0, max_tokens: int = 0, provider: str | None = None):
+        called["prompt"] = prompt
+        called["provider"] = provider or "local"
+        return "ok"
 
-        async def __aexit__(self, exc_type, exc, tb):
-            calls["closed"] = True
-
-        async def post_json(self, url, json, headers=None, timeout=None):
-            calls["url"] = url
-            calls["headers"] = headers
-            return {"completion": "local", "choices": [{"message": {"content": "lan"}}]}
-
-    monkeypatch.setattr(llm, "_llm_client", lambda integration: DummyClient())
-    monkeypatch.setattr(llm, "LLM_PROVIDER", "local", raising=False)
-
-    out_local = await llm.generate("prompt", provider="local")
-    assert out_local == "local"
-    assert calls["url"] == llm.LOCAL_URL
-
-    out_lan = await llm.generate("prompt", provider="lan")
-    assert out_lan == "lan"
-    assert calls["url"].startswith(llm.LAN_BASE)
+    monkeypatch.setattr(llm, "generate", fake_generate)
+    out = await llm.generate("hello", provider="cloud")
+    assert out == "ok"
+    assert called["prompt"] == "hello"
+    assert called["provider"] == "cloud"

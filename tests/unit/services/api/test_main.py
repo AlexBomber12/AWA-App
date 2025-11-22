@@ -126,12 +126,13 @@ async def test_check_llm_sets_fallback(monkeypatch):
             called["url"] = url
             raise RuntimeError("unreachable")
 
-    monkeypatch.setattr(main.settings, "LLM_PROVIDER", "lan")
-    monkeypatch.setattr(main.settings, "LLM_PROVIDER_FALLBACK", "stub")
-    main.settings.__dict__.pop("llm", None)
     monkeypatch.setattr(main, "AsyncHTTPClient", lambda **_kwargs: DummyClient())
+    monkeypatch.setattr(main.settings, "LLM_PROVIDER", "local")
+    monkeypatch.setattr(main.settings, "LLM_SECONDARY_PROVIDER", "cloud")
+    monkeypatch.setattr(main.settings, "LLM_PROVIDER_BASE_URL", "http://llm")
+    main.settings.__dict__.pop("llm", None)
     await main._check_llm()
-    assert main.settings.LLM_PROVIDER == "stub"
+    assert main.settings.LLM_PROVIDER == "cloud"
 
 
 @pytest.mark.asyncio

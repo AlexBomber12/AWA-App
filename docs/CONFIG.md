@@ -114,10 +114,14 @@ Call `settings.s3.client_kwargs()` + `settings.s3.client_config()` (or
 
 | Variable | Description |
 | --- | --- |
-| `LLM_PROVIDER`, `LLM_PROVIDER_FALLBACK` | Provider chain (`lan`, `local`, `openai`, `stub`) |
-| `LLM_URL`, `LLM_BASE_URL`, `LAN_BASE` | Local and LAN inference endpoints |
-| `LLM_API_KEY`, `OPENAI_API_KEY`, `OPENAI_MODEL` | Credential material |
-| `LLM_REQUEST_TIMEOUT_S`, `LLM_LAN_HEALTH_TIMEOUT_S` | Request + LAN readiness timeouts |
+| `LLM_PROVIDER`, `LLM_SECONDARY_PROVIDER` | Default + optional secondary provider (`local` or `cloud`) |
+| `LLM_BASE_URL`, `LLM_PROVIDER_BASE_URL` | Gateway URL (clients) and downstream local provider base (OpenAI-compatible) |
+| `LLM_API_KEY`, `LLM_LOCAL_MODEL` | Local provider auth + model name |
+| `LLM_CLOUD_MODEL`, `LLM_CLOUD_API_KEY`, `LLM_CLOUD_API_BASE` | Cloud GPT-5 configuration |
+| `LLM_REQUEST_TIMEOUT_S`, `LLM_LAN_HEALTH_TIMEOUT_S` | Request + readiness timeouts |
+| `LLM_EMAIL_CLOUD_THRESHOLD_CHARS`, `LLM_PRICELIST_CLOUD_THRESHOLD_ROWS` | Size triggers to route traffic to cloud |
+| `LLM_ENABLE_EMAIL`, `LLM_ENABLE_PRICELIST` | Feature flags to enable LLM enrichment for email and price lists |
+| `LLM_MIN_CONFIDENCE` | Minimum confidence before treating LLM output as invalid/needs manual review |
 
 `settings.llm` centralises the provider order and timeouts used by the API and price importer services.
 
