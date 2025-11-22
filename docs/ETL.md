@@ -45,6 +45,16 @@ components in `packages/awa_common` to deliver repeatable pipelines that survive
   `get_s3_client_config()` so endpoint, credentials, pool sizing, and connect/read timeouts stay
   centralised. Avoid ad-hoc boto3/aioboto3 kwargs in API/worker routes.
 
+## Streaming ingest
+
+- Celery `ingest.import_file` switches to streaming mode when `INGEST_STREAMING_ENABLED=1` and the
+  resolved payload size strictly exceeds `INGEST_STREAMING_THRESHOLD_MB`. Smaller files continue down
+  the legacy in-memory path.
+- Streaming chunk sizing defaults to `INGEST_STREAMING_CHUNK_SIZE` rows. `INGEST_STREAMING_CHUNK_SIZE_MB`
+  remains available as a size-based hint and is converted to rows when the row override is not set.
+- API uploads (`/ingest` or `/upload`) always enqueue the Celery task; the legacy worker-side
+  `ingest_router` HTTP shim has been removed in favour of the unified API entrypoints.
+
 ## Shared validation & retry helpers
 
 - Ingest endpoints now return a structured `ErrorResponse` (defined in `services/api/schemas.py`) with machine

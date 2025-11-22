@@ -155,10 +155,6 @@ Upload CSV/XLSX attachments to MinIO and trigger ingestion.
 
 Returns {"status": "success"} when processing completes.
 
-<a id="ingest.ingest_router"></a>
-
-# ingest.ingest\_router
-
 <a id="ingest.celery_app"></a>
 
 # ingest.celery\_app
