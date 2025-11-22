@@ -2,7 +2,9 @@
 
 import { spawn } from "node:child_process";
 import net from "node:net";
-import { existsSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 
 import lighthouse from "lighthouse";
@@ -143,9 +145,12 @@ const run = async () => {
     process.exit(1);
   }
 
+  const userDataDir = mkdtempSync(path.join(os.tmpdir(), "lighthouse-user-"));
+
   const chrome = await launch({
     chromeFlags: ["--headless", "--no-sandbox", "--disable-gpu"],
     chromePath: await resolveChromePath(),
+    userDataDir,
   });
 
   try {
@@ -181,6 +186,7 @@ const run = async () => {
     }
   } finally {
     await chrome.kill();
+    rmSync(userDataDir, { recursive: true, force: true });
     if (serverProcess) {
       serverProcess.kill("SIGTERM");
     }
