@@ -1,4 +1,4 @@
-import { render } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 
 import { DashboardPageClient } from "@/components/features/dashboard/DashboardPageClient";
 import { type StatsKpi } from "@/lib/api/statsClient";
@@ -45,5 +45,48 @@ describe("DashboardPageClient", () => {
     const { asFragment } = render(<DashboardPageClient />);
 
     expect(asFragment()).toMatchSnapshot();
+  });
+
+  it("renders KPI error state and ROI skeleton when loading", () => {
+    mockUseApiQuery.mockReset();
+    mockUseApiQuery
+      .mockReturnValueOnce({
+        data: undefined,
+        isPending: false,
+        error: new Error("kpi failed"),
+        refetch: jest.fn(),
+      })
+      .mockReturnValueOnce({
+        data: undefined,
+        isPending: true,
+        error: null,
+        refetch: jest.fn(),
+      });
+
+    const { container } = render(<DashboardPageClient />);
+
+    expect(screen.getByText(/Unable to load KPIs/i)).toBeInTheDocument();
+    expect(container.querySelectorAll(".animate-pulse").length).toBeGreaterThan(0);
+  });
+
+  it("shows ROI error when the trend query fails", () => {
+    mockUseApiQuery.mockReset();
+    mockUseApiQuery
+      .mockReturnValueOnce({
+        data: mockKpi,
+        isPending: false,
+        error: null,
+        refetch: jest.fn(),
+      })
+      .mockReturnValueOnce({
+        data: undefined,
+        isPending: false,
+        error: new Error("roi failed"),
+        refetch: jest.fn(),
+      });
+
+    render(<DashboardPageClient />);
+
+    expect(screen.getByText(/Unable to load ROI trend/i)).toBeInTheDocument();
   });
 });

@@ -116,8 +116,8 @@ jobs:
             artifacts/precommit.patch
           if-no-files-found: ignore
 
-  unit:
-    name: unit
+  tests-backend:
+    name: tests-backend
     needs: lint
     uses: ./.github/workflows/python-job.yml
     with:
@@ -178,7 +178,7 @@ jobs:
     name: integration
     needs:
       - lint
-      - unit
+      - tests-backend
       - decide_integration_needed
     if: ${{ always() && (needs.decide_integration_needed.outputs.run_integration == 'true' || (github.event_name == 'workflow_dispatch' && github.event.inputs.force_full_integration == 'true') || (github.event_name == 'pull_request' && contains(join(github.event.pull_request.labels.*.name, ' '), 'run-integration'))) }}
     uses: ./.github/workflows/python-job.yml
@@ -193,8 +193,8 @@ jobs:
       minio-secret-key: miniosecret
       minio-bucket: awa-ci
 
-  e2e:
-    name: e2e-smoke
+  api-e2e:
+    name: api-e2e-smoke
     needs:
       - integration
     if: ${{ needs.integration.result == 'success' }}
@@ -203,10 +203,10 @@ jobs:
       marker: e2e
       python-version: '3.12'
 
-  webapp-qa:
-    name: webapp-qa
+  tests-frontend:
+    name: tests-frontend
     runs-on: ubuntu-latest
-    needs: unit
+    needs: lint
     timeout-minutes: 35
     steps:
       - name: Checkout
@@ -227,11 +227,17 @@ jobs:
 
       - name: Frontend lint
         working-directory: webapp
-        run: npm run lint
+        run: |
+          mkdir -p ../artifacts
+          npm run lint | tee ../artifacts/frontend-lint.log
 
       - name: Frontend unit tests with coverage
         working-directory: webapp
-        run: npm run test:coverage
+        env:
+          CI: "true"
+        run: |
+          mkdir -p ../artifacts
+          npm run test:coverage | tee ../artifacts/frontend-tests.log
 
       - name: Upload frontend coverage
         if: always()
@@ -241,28 +247,20 @@ jobs:
           path: webapp/coverage
           if-no-files-found: ignore
 
-      - name: Install Playwright browsers
-        working-directory: webapp
-        run: npx playwright install --with-deps
-
       - name: Storybook build
         working-directory: webapp
-        run: npm run storybook:build
-
-      - name: Frontend e2e smoke tests
-        working-directory: webapp
-        env:
-          NEXT_PUBLIC_API_URL: http://localhost:8000
-          NEXT_PUBLIC_APP_ENV: ci
-          CI: "true"
-        run: npm run test:e2e
+        run: |
+          mkdir -p ../artifacts
+          npm run storybook:build | tee ../artifacts/storybook.log
 
       - name: Build webapp
         working-directory: webapp
         env:
           NEXT_PUBLIC_API_URL: http://localhost:8000
           NEXT_PUBLIC_APP_ENV: ci
-        run: npm run build
+        run: |
+          mkdir -p ../artifacts
+          npm run build | tee ../artifacts/webapp-build.log
 
       - name: Lighthouse audit
         working-directory: webapp
@@ -272,7 +270,72 @@ jobs:
           NEXT_PUBLIC_API_URL: http://localhost:8000
           NEXT_PUBLIC_APP_ENV: ci
         continue-on-error: true
-        run: npm run lighthouse
+        run: |
+          mkdir -p ../artifacts
+          npm run lighthouse | tee ../artifacts/lighthouse.log
+
+      - name: Upload frontend logs
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: logs-tests-frontend
+          path: artifacts
+          if-no-files-found: ignore
+
+  ui-e2e:
+    name: e2e-ui
+    runs-on: ubuntu-latest
+    needs:
+      - tests-frontend
+      - tests-backend
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: webapp/package-lock.json
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('webapp/package-lock.json') }}
+
+      - name: Install dependencies
+        working-directory: webapp
+        run: npm ci
+
+      - name: Install Playwright browsers
+        working-directory: webapp
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Playwright e2e
+        working-directory: webapp
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:8000
+          NEXT_PUBLIC_APP_ENV: ci
+          CI: "true"
+        run: |
+          mkdir -p ../artifacts
+          npm run test:e2e | tee ../artifacts/e2e-ui.log
+
+      - name: Upload Playwright artifacts
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: logs-e2e-ui
+          path: |
+            webapp/test-results
+            webapp/playwright-report
+            artifacts/e2e-ui.log
+          if-no-files-found: ignore
 
   secret-scan:
     name: secret-scan
@@ -304,12 +367,13 @@ jobs:
     runs-on: ubuntu-24.04
     needs:
       - lint
-      - unit
+      - tests-backend
       - decide_integration_needed
       - integration
-      - e2e
+      - api-e2e
       - secret-scan
-      - webapp-qa
+      - tests-frontend
+      - ui-e2e
     if: always()
     permissions:
       contents: read

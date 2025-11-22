@@ -331,8 +331,13 @@ async def _check_llm() -> None:
             if local_base:
                 await client.get(f"{local_base}/ready", timeout=lan_timeout)
     except Exception:
-        fallback_raw = llm_cfg.secondary_provider if llm_cfg else getattr(cfg, "LLM_SECONDARY_PROVIDER", None)
-        fallback = str(fallback_raw or provider or "local").lower()
+        fallback_source = (
+            (llm_cfg.secondary_provider if llm_cfg else None)
+            or getattr(cfg, "LLM_SECONDARY_PROVIDER", None)
+            or provider
+            or "local"
+        )
+        fallback = fallback_source.lower()
         os.environ["LLM_PROVIDER"] = fallback
         object.__setattr__(cfg, "LLM_PROVIDER", fallback)
         cfg.__dict__["LLM_PROVIDER"] = fallback

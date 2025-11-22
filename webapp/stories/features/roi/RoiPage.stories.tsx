@@ -97,10 +97,37 @@ const sortRows = (rows: RoiRow[], sort: RoiSort | undefined) => {
   }
 };
 
-const buildRoiHandlers = (): FetchMockHandler[] => [
+const delayedResponse = (response: Response, delayMs = 1200) =>
+  new Promise<Response>((resolve) => setTimeout(() => resolve(response), delayMs));
+
+type RoiStoryMode = "default" | "loading" | "empty" | "error";
+
+const buildRoiHandlers = (mode: RoiStoryMode = "default"): FetchMockHandler[] => [
   {
     predicate: ({ url, method }) => method === "GET" && url.includes("/api/bff/roi") && !url.includes("/bulk-approve"),
     response: ({ url }) => {
+      if (mode === "error") {
+        return new Response(JSON.stringify({ code: "BFF_ERROR", message: "Unable to load ROI rows." }), {
+          status: 500,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+
+      if (mode === "empty") {
+        return new Response(
+          JSON.stringify({
+            items: [],
+            pagination: {
+              page: 1,
+              pageSize: 50,
+              total: 0,
+              totalPages: 1,
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      }
+
       const params = new URL(url).searchParams;
       const state = mergeRoiTableStateWithDefaults(parseRoiSearchParams(params));
       const filters = state.filters ?? ROI_TABLE_DEFAULTS.filters ?? {};
@@ -121,10 +148,11 @@ const buildRoiHandlers = (): FetchMockHandler[] => [
           totalPages,
         },
       };
-      return new Response(JSON.stringify(response), {
+      const payload = new Response(JSON.stringify(response), {
         status: 200,
         headers: { "Content-Type": "application/json" },
       });
+      return mode === "loading" ? delayedResponse(payload) : payload;
     },
   },
   {
@@ -162,8 +190,8 @@ export default meta;
 
 type Story = StoryObj<typeof RoiPage>;
 
-const renderWithMocks = () => (
-  <FetchMock handlers={buildRoiHandlers()}>
+const renderWithMocks = (mode: RoiStoryMode = "default") => (
+  <FetchMock handlers={buildRoiHandlers(mode)}>
     <AppShell initialSession={mockSession} initialPath="/roi">
       <RoiPage />
     </AppShell>
@@ -193,4 +221,16 @@ export const Default: Story = {
     await user.click(canvas.getByRole("button", { name: /Apply filters/i }));
     await waitFor(() => expect(canvas.getByText("ROI-0003")).toBeInTheDocument());
   },
+};
+
+export const Loading: Story = {
+  render: () => renderWithMocks("loading"),
+};
+
+export const EmptyState: Story = {
+  render: () => renderWithMocks("empty"),
+};
+
+export const ErrorState: Story = {
+  render: () => renderWithMocks("error"),
 };

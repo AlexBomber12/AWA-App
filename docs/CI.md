@@ -1,17 +1,20 @@
 # Continuous Integration
 
-The `CI` workflow keeps feedback fast by splitting validation into three stages:
+The `CI` workflow keeps feedback fast by splitting validation into focused jobs:
 
-- **prepare matrix** inspects `services/` to discover Python services and the default Python version. The job emits the service matrix that drives parallel test shards.
-- **lint** runs once for the whole repo with `pre-commit`, `ruff`, and `mypy` to avoid redundant work across shards.
-- **test** runs in parallel per service from the discovered matrix. Each shard installs only the dependencies declared for its service (pinning to `constraints.txt`), executes `pytest -q`, and publishes a per-service coverage XML artifact.
-- **migrations** executes a full Alembic round-trip (`upgrade → downgrade → upgrade`) against a PostgreSQL 16 service using `services/api/alembic.ini`, ensuring irreversible migrations are caught early.
+- **lint** — repository-wide `pre-commit`, `ruff`, `mypy`, yamllint, and actionlint.
+- **tests-backend** — `./scripts/ci/run_unit.sh` with diff-cover and per-package coverage gates (`scripts/ci/check_coverage_thresholds.py`).
+- **decide_integration_needed** — determines whether DB/ETL-sensitive changes require the heavy integration suite.
+- **integration** — Postgres+Redis+MinIO services plus `pytest -q -m integration tests/integration` when `run_integration=true`.
+- **api-e2e-smoke** — dockerised API image built with Buildx and probed via `/ready` (runs only after a successful integration job).
+- **tests-frontend** — Node 20 job running `npm ci`, `npm run lint`, `npm run test:coverage`, `npm run storybook:build`, `npm run build`, and a best-effort `npm run lighthouse`.
+- **e2e-ui** — Playwright journey (test login → Dashboard → ROI → SKU → Ingest → Returns → Inbox) with traces/screenshots on failure.
+- **secret-scan** — gitleaks on PRs.
+- **mirror-logs** — aggregates `logs-*` and coverage artifacts from every job and mirrors them into the `ci-logs` branch for triage.
 
-Frontend code rides alongside these stages through the `webapp-qa` job, which installs `webapp/` dependencies on Node 20 and runs linting, Jest coverage, Storybook build, Playwright e2e, Lighthouse, and a production `next build`. The job is wired to pull requests that touch `webapp/` plus all pushes to `main`, so UI regressions are caught before merge.
+All jobs inherit BuildKit defaults (`DOCKER_BUILDKIT=1`, `COMPOSE_DOCKER_CLI_BUILD=1`) and use `actions/setup-python@v5` with pip caching keyed on `constraints.txt` plus each service's `requirements*.txt`. Caching keeps dependency installs fast while still respecting the global constraints lockfile. Frontend jobs use `actions/setup-node@v6` with npm caching keyed on `webapp/package-lock.json` and cache Playwright browsers via `~/.cache/ms-playwright`.
 
-All jobs inherit BuildKit defaults (`DOCKER_BUILDKIT=1`, `COMPOSE_DOCKER_CLI_BUILD=1`) and use `actions/setup-python@v5` with pip caching keyed on `constraints.txt` plus each service's `requirements*.txt`. Caching keeps dependency installs fast while still respecting the global constraints lockfile.
-
-Every job produces a `debug-bundle-<job>.tar.gz` artifact even on success. The bundle captures:
+Python jobs (lint/tests-backend/integration/api-e2e) emit `debug-bundle-<job>.tar.gz` artifacts capturing:
 
 - `python --version` and `pip freeze` for the executed environment
 - Docker state (`docker ps`, `docker compose ps/logs`) when available
