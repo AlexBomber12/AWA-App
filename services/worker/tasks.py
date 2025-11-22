@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import importlib
+import os
 import shutil
 import tempfile
 import time
@@ -106,15 +107,29 @@ def _resolve_uri_to_path(uri: str) -> Path:
     return Path(uri)
 
 
-def _streaming_knobs() -> tuple[bool, int, int, int]:
+def _streaming_knobs() -> tuple[bool, int, int | None, int]:
     etl_cfg = getattr(settings, "etl", None)
     enabled = bool(etl_cfg.ingest_streaming_enabled if etl_cfg else getattr(settings, "INGEST_STREAMING_ENABLED", True))
     threshold_mb = int(
         etl_cfg.ingest_streaming_threshold_mb if etl_cfg else getattr(settings, "INGEST_STREAMING_THRESHOLD_MB", 50)
     )
-    chunk_size = int(
-        etl_cfg.ingest_streaming_chunk_size if etl_cfg else getattr(settings, "INGEST_STREAMING_CHUNK_SIZE", 50_000)
+    default_rows = 50_000
+    chunk_rows_value = int(
+        etl_cfg.ingest_streaming_chunk_size
+        if etl_cfg
+        else getattr(settings, "INGEST_STREAMING_CHUNK_SIZE", default_rows)
     )
+    env_chunk_override = os.getenv("INGEST_STREAMING_CHUNK_SIZE")
+    rows_override = False
+    if env_chunk_override is not None:
+        try:
+            chunk_rows_value = int(env_chunk_override)
+            rows_override = True
+        except ValueError:
+            rows_override = False
+    if chunk_rows_value != default_rows:
+        rows_override = True
+    chunk_size = max(1, chunk_rows_value) if rows_override else None
     chunk_size_mb = int(
         etl_cfg.ingest_streaming_chunk_size_mb if etl_cfg else getattr(settings, "INGEST_STREAMING_CHUNK_SIZE_MB", 8)
     )
