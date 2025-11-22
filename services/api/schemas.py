@@ -10,15 +10,25 @@ if TYPE_CHECKING:
 else:
     from awa_common.schemas import BaseStrictModel
 
-ErrorCode = Literal["unsupported_file_format", "bad_request", "unprocessable_entity", "validation_error"]
+ErrorCode = Literal[
+    "unsupported_file_format",
+    "bad_request",
+    "unprocessable_entity",
+    "validation_error",
+    "payload_too_large",
+]
+
+
+class ErrorDetail(BaseStrictModel):
+    code: ErrorCode | str = Field(..., description="Machine-readable error code")
+    detail: str = Field(..., description="Human-readable description of the error")
+    hint: str | None = Field(None, description="Optional recovery guidance")
 
 
 class ErrorResponse(BaseStrictModel):
     """Standard error payload returned by ETL ingest routes."""
 
-    code: ErrorCode = Field(..., description="Machine-readable error code")
-    detail: str = Field(..., description="Human-readable description of the error")
-    hint: str | None = Field(None, description="Optional recovery guidance")
+    error: ErrorDetail = Field(..., description="Structured error object")
     request_id: str = Field(..., description="Correlation identifier echoed from the request")
 
 
