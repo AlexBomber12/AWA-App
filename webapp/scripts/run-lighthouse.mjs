@@ -147,7 +147,7 @@ const run = async () => {
     process.exit(1);
   }
 
-  const tmpRoot = process.env.LIGHTHOUSE_TMP ?? (path.isAbsolute(os.tmpdir()) ? os.tmpdir() : "/tmp");
+  const tmpRoot = path.resolve(process.env.LIGHTHOUSE_TMP ?? os.tmpdir() ?? "/tmp");
   const userDataDir = mkdtempSync(path.join(tmpRoot, "lighthouse-user-"));
 
   const chrome = await launch({
