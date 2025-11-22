@@ -107,33 +107,28 @@ def _resolve_uri_to_path(uri: str) -> Path:
     return Path(uri)
 
 
-def _streaming_knobs() -> tuple[bool, int, int | None, int]:
+def _streaming_knobs() -> tuple[bool, int, int, int]:
     etl_cfg = getattr(settings, "etl", None)
     enabled = bool(etl_cfg.ingest_streaming_enabled if etl_cfg else getattr(settings, "INGEST_STREAMING_ENABLED", True))
     threshold_mb = int(
-        etl_cfg.ingest_streaming_threshold_mb if etl_cfg else getattr(settings, "INGEST_STREAMING_THRESHOLD_MB", 50)
+        etl_cfg.ingest_streaming_threshold_mb if etl_cfg else getattr(settings, "INGEST_STREAMING_THRESHOLD_MB", 0)
     )
-    default_rows = 50_000
-    chunk_rows_value = int(
-        etl_cfg.ingest_streaming_chunk_size
-        if etl_cfg
-        else getattr(settings, "INGEST_STREAMING_CHUNK_SIZE", default_rows)
+    default_chunk_rows = (
+        etl_cfg.ingest_streaming_chunk_size if etl_cfg else getattr(settings, "INGEST_STREAMING_CHUNK_SIZE", 50_000)
     )
     env_chunk_override = os.getenv("INGEST_STREAMING_CHUNK_SIZE")
-    rows_override = False
     if env_chunk_override is not None:
         try:
-            chunk_rows_value = int(env_chunk_override)
-            rows_override = True
+            chunk_rows = int(env_chunk_override)
         except ValueError:
-            rows_override = False
-    if chunk_rows_value != default_rows:
-        rows_override = True
-    chunk_size = max(1, chunk_rows_value) if rows_override else None
+            chunk_rows = int(default_chunk_rows)
+    else:
+        chunk_rows = int(default_chunk_rows)
+    chunk_rows = max(1, chunk_rows)
     chunk_size_mb = int(
-        etl_cfg.ingest_streaming_chunk_size_mb if etl_cfg else getattr(settings, "INGEST_STREAMING_CHUNK_SIZE_MB", 8)
+        etl_cfg.ingest_streaming_chunk_size_mb if etl_cfg else getattr(settings, "INGEST_STREAMING_CHUNK_SIZE_MB", 0)
     )
-    return enabled, threshold_mb, chunk_size, chunk_size_mb
+    return enabled, threshold_mb, chunk_rows, chunk_size_mb
 
 
 @celery_app.task(name="ingest.import_file", bind=True)  # type: ignore[misc]
@@ -160,10 +155,13 @@ def task_import_file(
 
         run_ingest = load_csv.import_file
         streaming_enabled, threshold_mb, chunk_size_rows, chunk_size_mb = _streaming_knobs()
-        file_size_bytes = local_path.stat().st_size if local_path.exists() else None
+        try:
+            file_size_bytes = os.path.getsize(local_path)
+        except OSError:
+            file_size_bytes = 0
         threshold_bytes = max(threshold_mb, 0) * 1024 * 1024
-        streaming = bool(streaming_enabled and file_size_bytes is not None and file_size_bytes > threshold_bytes)
-        chunk_rows = load_csv.resolve_streaming_chunk_rows(chunk_size=chunk_size_rows, chunk_size_mb=chunk_size_mb)
+        streaming = bool(streaming_enabled and file_size_bytes > threshold_bytes)
+        streaming_chunk_size = chunk_size_rows if streaming else None
 
         self.update_state(state=states.STARTED, meta={"stage": "ingest"})
         record_ingest_task_mode("ingest.import_file", streaming=streaming, chunk_size_mb=chunk_size_mb)
@@ -174,15 +172,16 @@ def task_import_file(
             force=force,
             idempotency_key=idempotency_key,
             streaming=streaming,
-            chunk_size=chunk_rows,
+            chunk_size=streaming_chunk_size,
         )
         summary: dict[str, Any] = {}
         if isinstance(result, dict):
             summary.update(result)
         summary.setdefault("status", "success")
         summary.setdefault("streaming", streaming)
-        summary.setdefault("streaming_chunk_rows", chunk_rows)
+        summary.setdefault("streaming_chunk_rows", streaming_chunk_size)
         summary.setdefault("streaming_chunk_size_mb", chunk_size_mb)
+        summary.setdefault("streaming_threshold_mb", threshold_mb)
         self.update_state(state=states.SUCCESS, meta=summary)
         success = True
         return summary
