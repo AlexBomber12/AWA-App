@@ -84,3 +84,16 @@ def test_main_logs_validation_errors(monkeypatch, tmp_path):
         importer.main([str(tmp_file), "--vendor", "ACME"])
 
     assert captured and captured[0][0] == "price_import.validation_failed"
+
+
+def test_merge_mappings_and_safe_value():
+    importer = _get_importer_module()
+    llm_result = importer.PriceListLLMResult(
+        detected_columns={"vendor_sku": "SKU", "unit_price": "Price"},
+        column_confidence={"vendor_sku": 0.9, "unit_price": 0.2},
+    )
+    merged = importer._merge_mappings({"vendor_sku": "guess"}, llm_result, min_confidence=0.5)
+    assert merged["vendor_sku"] == "SKU"
+    assert "unit_price" not in merged  # confidence too low keeps heuristic
+    assert importer._safe_value(None) is None
+    assert importer._safe_value({"x": 1}) == "{'x': 1}"

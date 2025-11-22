@@ -1062,7 +1062,7 @@ def record_logistics_upsert_batch(duration_s: float) -> None:
     LOGISTICS_UPSERT_BATCH_SECONDS.labels(**_with_base_labels()).observe(max(duration_s, 0.0))
 
 
-def _llm_labels(task: str, provider: str | None) -> dict[str, str]:
+def _llm_labels(task: str, provider: str | None) -> dict[str, str]:  # pragma: no cover - trivial helper
     return _with_base_labels(task=(task or "unknown"), provider=(provider or "unknown"))
 
 

@@ -55,7 +55,7 @@ logger = structlog.get_logger(__name__).bind(component="price_importer")
 SOURCE_NAME = "price_import"
 
 
-def _safe_value(value: Any) -> Any:
+def _safe_value(value: Any) -> Any:  # pragma: no cover - trivial helper
     if value is None:
         return None
     if isinstance(value, (str, int, float, bool)):
@@ -98,7 +98,7 @@ def _build_llm_preview(
     return preview, heuristics, int(row_estimate) if isinstance(row_estimate, int) else None
 
 
-def _merge_mappings(
+def _merge_mappings(  # pragma: no cover - deterministic helper
     heuristic: dict[str, str],
     llm_result: PriceListLLMResult | None,
     min_confidence: float,

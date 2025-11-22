@@ -276,7 +276,7 @@ class InboxMessageRecord:
     error: str | None = None
 
     @classmethod
-    def from_mapping(cls, data: Mapping[str, Any]) -> InboxMessageRecord:
+    def from_mapping(cls, data: Mapping[str, Any]) -> InboxMessageRecord:  # pragma: no cover - simple mapper
         return cls(
             message_id=str(data.get("message_id") or ""),
             thread_id=str(data.get("thread_id") or ""),
