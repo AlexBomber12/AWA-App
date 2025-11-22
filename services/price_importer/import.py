@@ -5,6 +5,7 @@ import asyncio
 import hashlib
 import inspect
 import json
+import os
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -236,6 +237,8 @@ async def _run_import(args: argparse.Namespace) -> int:
             llm_provider: str | None = None
             heuristics: dict[str, str] = {}
             llm_enabled = bool(getattr(getattr(SETTINGS, "llm", None), "enable_pricelist", False))
+            if getattr(SETTINGS, "TESTING", False) or os.getenv("PYTEST_CURRENT_TEST"):
+                llm_enabled = False
             if llm_enabled:
                 try:
                     llm_client = LLMClient()
