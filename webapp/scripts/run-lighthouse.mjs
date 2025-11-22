@@ -191,8 +191,14 @@ const run = async () => {
     await chrome.kill();
     rmSync(userDataDir, { recursive: true, force: true });
     if (serverProcess) {
+        const killTimeout = setTimeout(() => {
+        if (!serverProcess.killed) {
+          serverProcess.kill("SIGKILL");
+        }
+      }, 5000);
       serverProcess.kill("SIGTERM");
       await serverExited;
+      clearTimeout(killTimeout);
     }
   }
 };
