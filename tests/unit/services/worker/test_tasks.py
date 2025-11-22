@@ -191,3 +191,63 @@ def test_task_import_file_forwards_force_flag(monkeypatch, tmp_path):
     assert calls["force"] is True
     assert calls["idempotency_key"] == "key123"
     assert local.name in Path(calls["path"]).name
+
+
+def _stub_streaming_settings(monkeypatch, *, threshold_mb: int, chunk_rows: int) -> None:
+    monkeypatch.setattr(tasks_module.settings, "etl", None, raising=False)
+    tasks_module.settings.__dict__.pop("etl", None)
+    monkeypatch.setattr(tasks_module.settings, "INGEST_STREAMING_ENABLED", True, raising=False)
+    monkeypatch.setattr(tasks_module.settings, "INGEST_STREAMING_THRESHOLD_MB", threshold_mb, raising=False)
+    monkeypatch.setattr(tasks_module.settings, "INGEST_STREAMING_CHUNK_SIZE", chunk_rows, raising=False)
+    monkeypatch.setattr(tasks_module.settings, "INGEST_STREAMING_CHUNK_SIZE_MB", 3, raising=False)
+
+
+def _run_task_and_capture_streaming(monkeypatch, file_path: Path) -> tuple[dict, dict]:
+    calls: dict[str, object] = {}
+
+    def fake_import(
+        path,
+        report_type=None,
+        celery_update=None,
+        force=False,
+        idempotency_key=None,
+        streaming=False,
+        chunk_size=None,
+    ):
+        calls["path"] = path
+        calls["streaming"] = streaming
+        calls["chunk_size"] = chunk_size
+        return {"rows": 1, "dialect": "returns_report", "target_table": "returns_raw"}
+
+    monkeypatch.setattr(tasks_module, "_resolve_uri_to_path", lambda uri: file_path)
+    monkeypatch.setattr("etl.load_csv.import_file", fake_import)
+    monkeypatch.setattr(
+        "etl.load_csv.resolve_streaming_chunk_rows", lambda chunk_size=None, chunk_size_mb=None: chunk_size
+    )
+    monkeypatch.setattr(tasks_module.task_import_file, "update_state", lambda *a, **k: None, raising=False)
+    result = tasks_module.task_import_file.run(uri=f"file://{file_path}")
+    return calls, result
+
+
+def test_task_import_file_uses_legacy_mode_below_threshold(monkeypatch, tmp_path):
+    target = tmp_path / "small.csv"
+    target.write_bytes(b"x" * (4 * 1024 * 1024))
+    _stub_streaming_settings(monkeypatch, threshold_mb=5, chunk_rows=777)
+
+    calls, result = _run_task_and_capture_streaming(monkeypatch, target)
+
+    assert calls["streaming"] is False
+    assert calls["chunk_size"] == 777
+    assert result["streaming"] is False
+
+
+def test_task_import_file_streams_large_files(monkeypatch, tmp_path):
+    target = tmp_path / "large.csv"
+    target.write_bytes(b"x" * (6 * 1024 * 1024))
+    _stub_streaming_settings(monkeypatch, threshold_mb=5, chunk_rows=888)
+
+    calls, result = _run_task_and_capture_streaming(monkeypatch, target)
+
+    assert calls["streaming"] is True
+    assert calls["chunk_size"] == 888
+    assert result["streaming"] is True

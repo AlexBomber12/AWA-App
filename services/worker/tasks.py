@@ -106,16 +106,19 @@ def _resolve_uri_to_path(uri: str) -> Path:
     return Path(uri)
 
 
-def _streaming_knobs() -> tuple[bool, int, int]:
+def _streaming_knobs() -> tuple[bool, int, int, int]:
     etl_cfg = getattr(settings, "etl", None)
     enabled = bool(etl_cfg.ingest_streaming_enabled if etl_cfg else getattr(settings, "INGEST_STREAMING_ENABLED", True))
     threshold_mb = int(
         etl_cfg.ingest_streaming_threshold_mb if etl_cfg else getattr(settings, "INGEST_STREAMING_THRESHOLD_MB", 50)
     )
+    chunk_size = int(
+        etl_cfg.ingest_streaming_chunk_size if etl_cfg else getattr(settings, "INGEST_STREAMING_CHUNK_SIZE", 50_000)
+    )
     chunk_size_mb = int(
         etl_cfg.ingest_streaming_chunk_size_mb if etl_cfg else getattr(settings, "INGEST_STREAMING_CHUNK_SIZE_MB", 8)
     )
-    return enabled, threshold_mb, chunk_size_mb
+    return enabled, threshold_mb, chunk_size, chunk_size_mb
 
 
 @celery_app.task(name="ingest.import_file", bind=True)  # type: ignore[misc]
@@ -141,11 +144,11 @@ def task_import_file(
         from etl import load_csv
 
         run_ingest = load_csv.import_file
-        streaming_enabled, threshold_mb, chunk_size_mb = _streaming_knobs()
+        streaming_enabled, threshold_mb, chunk_size_rows, chunk_size_mb = _streaming_knobs()
         file_size_bytes = local_path.stat().st_size if local_path.exists() else None
         threshold_bytes = max(threshold_mb, 0) * 1024 * 1024
         streaming = bool(streaming_enabled and file_size_bytes is not None and file_size_bytes > threshold_bytes)
-        chunk_rows = load_csv.resolve_streaming_chunk_rows(chunk_size=None, chunk_size_mb=chunk_size_mb)
+        chunk_rows = load_csv.resolve_streaming_chunk_rows(chunk_size=chunk_size_rows, chunk_size_mb=chunk_size_mb)
 
         self.update_state(state=states.STARTED, meta={"stage": "ingest"})
         record_ingest_task_mode("ingest.import_file", streaming=streaming, chunk_size_mb=chunk_size_mb)

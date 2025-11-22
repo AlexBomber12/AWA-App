@@ -20,6 +20,12 @@ def test_validate_upload_file_rejects_extension():
     assert excinfo.value.code == "unsupported_file_format"
 
 
+def test_validate_upload_file_accepts_string_name():
+    safe_name, ext = ingest_utils.validate_upload_file("Report.CSV")
+    assert safe_name.endswith(".csv")
+    assert ext == "csv"
+
+
 def test_ensure_size_limit_raises_payload_too_large():
     request = Request({"type": "http", "headers": [(b"content-length", b"1024")]})
     with pytest.raises(ApiError) as excinfo:
