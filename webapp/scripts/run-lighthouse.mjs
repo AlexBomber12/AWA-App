@@ -110,8 +110,8 @@ const run = async () => {
       ? `npm run start -- --hostname 127.0.0.1 --port ${resolvedPort}`
       : `npm run dev -- --hostname 127.0.0.1 --port ${resolvedPort}`);
 
-  let serverProcess;
-  let serverExited;
+let serverProcess;
+let serverExited = Promise.resolve();
   if (SHOULD_START_SERVER) {
     if (LIGHTHOUSE_MODE === "prod") {
       console.log(`Lighthouse: building app with "${BUILD_COMMAND}"...`);
@@ -203,7 +203,13 @@ const run = async () => {
   }
 };
 
-run().catch((error) => {
-  console.error("Lighthouse script failed", error);
-  process.exit(1);
-});
+run()
+  .then(() => {
+    // Ensure no stray handles keep the process alive in CI
+    setTimeout(() => process.exit(0), 50);
+  })
+  .catch((error) => {
+    console.error("Lighthouse script failed", error);
+    // Use a short delay so console flushes
+    setTimeout(() => process.exit(1), 50);
+  });
