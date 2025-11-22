@@ -7,6 +7,7 @@ import pytest
 from fastapi import UploadFile
 from starlette.requests import Request
 
+from services.api.ingest_utils import ApiError, IngestUpload
 from services.api.routes import upload as upload_module
 
 
@@ -19,55 +20,58 @@ class DummyAsyncResult:
 
 
 async def test_upload_streams_and_dispatches_task(monkeypatch):
-    async def fake_stream(*_a, **_k):
-        return 10, "abc123"
-
-    monkeypatch.setattr(upload_module, "_upload_stream_to_s3", fake_stream)
+    async def fake_upload_to_minio(*_a, **_k):
+        return IngestUpload(
+            uri="minio://bucket/key",
+            digest="abc123",
+            total_bytes=10,
+            extension="csv",
+            object_key="key",
+        )
 
     recorded = {}
 
-    def fake_apply_async(*_a, **kwargs):
-        recorded.update(kwargs)
+    def fake_enqueue(upload_target, *, report_type=None, force=False, log=None):
+        recorded["upload"] = upload_target
         return DummyAsyncResult()
 
-    monkeypatch.setattr(upload_module.task_import_file, "apply_async", fake_apply_async)
+    monkeypatch.setattr(upload_module, "upload_file_to_minio", fake_upload_to_minio)
+    monkeypatch.setattr(upload_module, "enqueue_import_task", fake_enqueue)
     scope = {"type": "http", "headers": []}
     request = Request(scope)
     upload = UploadFile(filename="report.csv", file=BytesIO(b"col\n1\n"))
     response = await upload_module.upload(request, upload)
     assert response.status_code == 202
-    assert recorded["kwargs"]["idempotency_key"] == "abc123"
-
-
-def test_ensure_size_limit_enforces_header():
-    request = Request({"type": "http", "headers": [(b"content-length", b"1024")]})
-    upload_module._ensure_size_limit(request, max_bytes=2048)
-    with pytest.raises(upload_module.IngestRequestError):
-        upload_module._ensure_size_limit(request, max_bytes=100)
-
-
-def test_ensure_size_limit_ignores_bad_header():
-    request = Request({"type": "http", "headers": [(b"content-length", b"invalid")]})
-    upload_module._ensure_size_limit(request, max_bytes=1)
+    payload = json.loads(response.body.decode())
+    assert payload["idempotency_key"] == "abc123"
+    assert recorded["upload"].digest == "abc123"
 
 
 @pytest.mark.asyncio
 async def test_upload_records_failure(monkeypatch):
     async def failing(*_a, **_k):
-        raise upload_module.IngestRequestError(status_code=413, code="bad_request", detail="too big")
+        raise ApiError(status_code=413, code="payload_too_large", detail="too big")
 
-    fail_called = {}
-
-    monkeypatch.setattr(upload_module, "_upload_stream_to_s3", failing)
-    monkeypatch.setattr(
-        upload_module, "record_ingest_upload_failure", lambda **_k: fail_called.setdefault("called", True)
-    )
+    monkeypatch.setattr(upload_module, "upload_file_to_minio", failing)
     request = Request({"type": "http", "headers": []})
     upload = UploadFile(filename="name.csv", file=BytesIO(b"data"))
 
     response = await upload_module.upload(request, upload)
     assert response.status_code == 413
     payload = json.loads(response.body.decode())
-    assert payload["code"] == "bad_request"
-    assert payload["detail"] == "too big"
-    assert fail_called.get("called") is True
+    assert payload["error"]["code"] == "payload_too_large"
+    assert payload["error"]["detail"] == "too big"
+
+
+@pytest.mark.asyncio
+async def test_upload_handles_unexpected_exception(monkeypatch):
+    async def boom(*_a, **_k):
+        raise RuntimeError("kaboom")
+
+    monkeypatch.setattr(upload_module, "upload_file_to_minio", boom)
+    request = Request({"type": "http", "headers": []})
+    upload = UploadFile(filename="name.csv", file=BytesIO(b"data"))
+    response = await upload_module.upload(request, upload)
+    assert response.status_code == 500
+    payload = json.loads(response.body.decode())
+    assert payload["error"]["code"] == "bad_request"

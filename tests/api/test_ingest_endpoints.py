@@ -3,6 +3,8 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
+from services.api.ingest_utils import IngestUpload
+
 pytestmark = pytest.mark.integration
 
 
@@ -13,9 +15,8 @@ def _get_client(monkeypatch) -> TestClient:
     monkeypatch.setenv("CELERY_TASK_STORE_EAGER_RESULT", "true")
     from importlib import reload
 
-    import api.routers.ingest as ingest_module
-
     import services.api.main as main_module
+    import services.api.routes.ingest as ingest_module
     import services.worker.celery_app as celery_module
     import services.worker.tasks as tasks_module
 
@@ -98,4 +99,49 @@ def test_ingest_failure(monkeypatch, tmp_path) -> None:
 
         resp = client.post("/ingest", json={"uri": f"file://{f}"})
         assert resp.status_code == 500
-        assert resp.json()["detail"] == "boom"
+        assert resp.json()["error"]["detail"] == "boom"
+
+
+def test_ingest_rejects_large_upload(monkeypatch) -> None:
+    with _get_client(monkeypatch) as client:
+        monkeypatch.setattr("services.api.ingest_utils.settings", "MAX_REQUEST_BYTES", 5, raising=False)
+        resp = client.post("/ingest", files={"file": ("big.csv", b"abcdefghi")})
+        assert resp.status_code == 413
+        body = resp.json()
+        assert body["error"]["code"] == "payload_too_large"
+        assert "maximum size" in body["error"]["detail"]
+
+
+def test_ingest_rejects_unsupported_extension(monkeypatch) -> None:
+    with _get_client(monkeypatch) as client:
+        resp = client.post("/ingest", files={"file": ("test.pdf", b"data")})
+        assert resp.status_code == 400
+        body = resp.json()
+        assert body["error"]["code"] == "unsupported_file_format"
+        assert body["error"]["hint"]
+
+
+def test_upload_endpoint_still_dispatches(monkeypatch) -> None:
+    class DummyAsync:
+        id = "task-xyz"
+
+    def fake_upload(_file, request, log=None):
+        return IngestUpload(
+            uri="minio://bucket/raw/amazon/key.csv",
+            digest="digest",
+            total_bytes=5,
+            extension="csv",
+            object_key="raw/amazon/key.csv",
+        )
+
+    def fake_enqueue(upload_target, *, report_type=None, force=False, log=None):
+        return DummyAsync()
+
+    with _get_client(monkeypatch) as client:
+        monkeypatch.setattr("services.api.routes.upload.upload_file_to_minio", fake_upload)
+        monkeypatch.setattr("services.api.routes.upload.enqueue_import_task", fake_enqueue)
+        resp = client.post("/upload", files={"file": ("data.csv", b"a,b\n1,2\n")})
+        assert resp.status_code == 202
+        body = resp.json()
+        assert body["task_id"] == "task-xyz"
+        assert body["idempotency_key"] == "digest"
