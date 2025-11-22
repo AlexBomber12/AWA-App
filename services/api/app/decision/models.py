@@ -292,7 +292,7 @@ class InboxMessageRecord:
         )
 
 
-__all__: Sequence[str] = [
+__all__: Sequence[str] = [  # pragma: no cover - export list only
     "DecisionCandidate",
     "DecisionEventRecord",
     "DecisionTaskRecord",

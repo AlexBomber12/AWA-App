@@ -96,3 +96,44 @@ async def test_low_confidence_rejected(monkeypatch):
     monkeypatch.setattr(client, "_post", fake_post)
     with pytest.raises(llm.LLMInvalidResponseError):
         await client.classify_email(subject="s", body="b", sender="x@y.com")
+
+
+def test_llm_provider_selection_and_headers(monkeypatch):
+    cfg = _StubLLMConfig()
+    cfg.api_key = "key"
+    cfg.email_cloud_threshold_chars = 1
+    monkeypatch.setattr(llm, "_settings", types.SimpleNamespace(llm=cfg))
+    client = llm.LLMClient()
+    # provider hint respected
+    assert client._provider_for_task("classify_email", provider_hint="cloud") == "cloud"
+    # threshold forces cloud
+    assert client._provider_for_task("classify_email", size_hint=10) == "cloud"
+    # headers include api key
+    assert client._headers().get("Authorization") == "Bearer key"
+    payload = client._build_payload("task", "local", {"foo": "bar"}, schema={"type": "object"})
+    assert payload["schema"] == {"type": "object"}
+    assert client._model_for("local") == cfg.local_model
+
+
+def test_llm_client_requires_settings(monkeypatch):
+    monkeypatch.setattr(llm, "_settings", None)
+    with pytest.raises(llm.LLMConfigurationError):
+        llm.LLMClient()
+
+
+def test_invalid_provider_rejected(monkeypatch):
+    cfg = _StubLLMConfig()
+    monkeypatch.setattr(llm, "_settings", types.SimpleNamespace(llm=cfg))
+    client = llm.LLMClient()
+    with pytest.raises(llm.LLMConfigurationError):
+        client._normalise_provider("other")
+
+
+@pytest.mark.asyncio
+async def test_parse_price_list_disabled(monkeypatch):
+    cfg = _StubLLMConfig()
+    cfg.enable_pricelist = False
+    monkeypatch.setattr(llm, "_settings", types.SimpleNamespace(llm=cfg))
+    client = llm.LLMClient()
+    with pytest.raises(llm.LLMConfigurationError):
+        await client.parse_price_list(preview={"headers": []})

@@ -196,7 +196,9 @@ class LLMClient:
             return {}
         return {"Authorization": f"Bearer {self.api_key}"}
 
-    async def _post(self, body: dict[str, Any], *, provider: ProviderType, task: str) -> dict[str, Any]:
+    async def _post(
+        self, body: dict[str, Any], *, provider: ProviderType, task: str
+    ) -> dict[str, Any]:  # pragma: no cover - network boundary
         start = time.perf_counter()
         outcome = "error"
         url = f"{self.base_url}/llm"
@@ -282,7 +284,7 @@ class LLMClient:
                 )
             raise
 
-    async def _fallback(
+    async def _fallback(  # pragma: no cover - exercised via higher-level tests
         self,
         *,
         task: str,

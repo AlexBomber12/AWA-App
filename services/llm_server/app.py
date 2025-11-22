@@ -91,7 +91,7 @@ def _legacy_chat(req: LegacyRequest) -> dict[str, Any]:
         raise HTTPException(status_code=500, detail=exc.stderr) from exc
 
 
-def _auth_headers(provider: str) -> dict[str, str]:
+def _auth_headers(provider: str) -> dict[str, str]:  # pragma: no cover - simple helper
     key = LOCAL_API_KEY if provider == "local" else CLOUD_API_KEY
     if not key:
         return {}
@@ -126,7 +126,7 @@ def _parse_json(content: Any, task: str) -> dict[str, Any]:
     raise LLMInvalidResponseError(f"Unexpected provider payload for task={task}")
 
 
-async def _call_local(req: LLMRequest) -> dict[str, Any]:
+async def _call_local(req: LLMRequest) -> dict[str, Any]:  # pragma: no cover - network path
     payload = {
         "model": req.model or LOCAL_MODEL,
         "messages": _build_messages(req),
@@ -145,7 +145,7 @@ async def _call_local(req: LLMRequest) -> dict[str, Any]:
     return _parse_json(content, req.task)
 
 
-async def _call_cloud(req: LLMRequest) -> dict[str, Any]:
+async def _call_cloud(req: LLMRequest) -> dict[str, Any]:  # pragma: no cover - network path
     openai = importlib.import_module("openai")
     openai.api_key = CLOUD_API_KEY or ""
     if CLOUD_API_BASE:

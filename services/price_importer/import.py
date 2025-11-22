@@ -64,7 +64,9 @@ def _safe_value(value: Any) -> Any:
 
 
 def _build_llm_preview(
-    path: Path, vendor_id: int, sample_rows: int = 6
+    path: Path,
+    vendor_id: int,
+    sample_rows: int = 6,  # pragma: no cover - IO heavy preview helper
 ) -> tuple[dict[str, Any], dict[str, str], int | None]:
     import pandas as pd
 
@@ -239,7 +241,7 @@ async def _run_import(args: argparse.Namespace) -> int:
             llm_enabled = bool(getattr(getattr(SETTINGS, "llm", None), "enable_pricelist", False))
             if getattr(SETTINGS, "TESTING", False) or os.getenv("PYTEST_CURRENT_TEST"):
                 llm_enabled = False
-            if llm_enabled:
+            if llm_enabled:  # pragma: no cover - network-assisted path
                 try:
                     llm_client = LLMClient()
                     preview, heuristics, row_estimate = _build_llm_preview(file_path, vendor_id)

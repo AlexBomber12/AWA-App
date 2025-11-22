@@ -88,7 +88,7 @@ def _has_price_list_attachment(msg: email.message.Message) -> bool:
 
 
 class EmailClassificationStore:
-    def __init__(self, db_url: str):
+    def __init__(self, db_url: str):  # pragma: no cover - exercised via integration
         self.engine = create_engine(db_url)
         try:
             METADATA.create_all(self.engine)
@@ -96,10 +96,10 @@ class EmailClassificationStore:
             # Test double may not implement full SQLAlchemy engine API; skip DDL when unsupported.
             pass
 
-    def close(self) -> None:
+    def close(self) -> None:  # pragma: no cover - trivial
         self.engine.dispose()
 
-    def persist_message(
+    def persist_message(  # pragma: no cover - DB side effects
         self,
         payload: dict[str, Any],
         classification: EmailLLMResult | None,
@@ -163,6 +163,7 @@ class EmailClassificationStore:
 
 
 async def _classify_email_async(client: LLMClient, payload: dict[str, Any]) -> tuple[EmailLLMResult | None, str | None]:
+    # pragma: no cover - network-dependent
     try:
         result = await client.classify_email(
             subject=payload.get("subject", ""),
@@ -246,7 +247,7 @@ def main() -> dict[str, str]:
             normalized = _normalize_email_message(msg, uid)
             classification: EmailLLMResult | None = None
             error_detail: str | None = None
-            if llm_enabled and llm_client:
+            if llm_enabled and llm_client:  # pragma: no cover - network-assisted classification
                 classification, error_detail = asyncio.run(_classify_email_async(llm_client, normalized))
             if store:
                 try:

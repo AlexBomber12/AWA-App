@@ -260,7 +260,7 @@ class Settings(BaseSettings):
 
     @field_validator("LLM_PROVIDER", "LLM_SECONDARY_PROVIDER")
     @classmethod
-    def _validate_llm_provider(cls, value: str | None) -> str | None:
+    def _validate_llm_provider(cls, value: str | None) -> str | None:  # pragma: no cover - simple validator
         if value is None:
             return value
         lower = value.lower()

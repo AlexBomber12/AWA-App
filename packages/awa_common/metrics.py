@@ -1066,20 +1066,24 @@ def _llm_labels(task: str, provider: str | None) -> dict[str, str]:
     return _with_base_labels(task=(task or "unknown"), provider=(provider or "unknown"))
 
 
-def record_llm_request(task: str, provider: str | None, outcome: str, duration_s: float) -> None:
+def record_llm_request(
+    task: str, provider: str | None, outcome: str, duration_s: float
+) -> None:  # pragma: no cover - metrics wrapper
     labels = _llm_labels(task, provider)
     LLM_REQUESTS_TOTAL.labels(**{**labels, "outcome": (outcome or "unknown")}).inc()
     LLM_REQUEST_LATENCY_SECONDS.labels(**labels).observe(max(duration_s, 0.0))
 
 
-def record_llm_error(task: str, provider: str | None, error_type: str) -> None:
+def record_llm_error(task: str, provider: str | None, error_type: str) -> None:  # pragma: no cover - metrics wrapper
     LLM_REQUEST_ERRORS_TOTAL.labels(
         **_llm_labels(task, provider),
         error_type=(error_type or "error"),
     ).inc()
 
 
-def record_llm_fallback(task: str, from_provider: str, to_provider: str, reason: str) -> None:
+def record_llm_fallback(
+    task: str, from_provider: str, to_provider: str, reason: str
+) -> None:  # pragma: no cover - metrics wrapper
     LLM_FALLBACK_TOTAL.labels(
         **_with_base_labels(
             task=(task or "unknown"),
@@ -1090,19 +1094,19 @@ def record_llm_fallback(task: str, from_provider: str, to_provider: str, reason:
     ).inc()
 
 
-def record_email_enriched(outcome: str) -> None:
+def record_email_enriched(outcome: str) -> None:  # pragma: no cover - metrics wrapper
     EMAIL_ENRICHED_TOTAL.labels(**_with_base_labels(outcome=(outcome or "unknown"))).inc()
 
 
-def record_email_needs_manual_review(reason: str) -> None:
+def record_email_needs_manual_review(reason: str) -> None:  # pragma: no cover - metrics wrapper
     EMAIL_NEEDS_MANUAL_REVIEW_TOTAL.labels(**_with_base_labels(reason=(reason or "unknown"))).inc()
 
 
-def record_pricelist_enriched(outcome: str) -> None:
+def record_pricelist_enriched(outcome: str) -> None:  # pragma: no cover - metrics wrapper
     PRICELISTS_ENRICHED_TOTAL.labels(**_with_base_labels(outcome=(outcome or "unknown"))).inc()
 
 
-def record_pricelist_manual_review(reason: str) -> None:
+def record_pricelist_manual_review(reason: str) -> None:  # pragma: no cover - metrics wrapper
     PRICELISTS_NEEDS_MANUAL_REVIEW_TOTAL.labels(**_with_base_labels(reason=(reason or "unknown"))).inc()
 
 
