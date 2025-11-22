@@ -253,13 +253,15 @@ async def _run_import(args: argparse.Namespace) -> int:
                     llm_error = str(exc)
                     record_pricelist_enriched("error")
                     record_pricelist_manual_review(exc.__class__.__name__)
-                    logger.warning(
-                        "price_import.llm_failed",
-                        vendor=args.vendor,
-                        vendor_id=vendor_id,
-                        file_name=file_name,
-                        error=str(exc),
-                    )
+                    log_fn = getattr(logger, "warning", getattr(logger, "error", None))
+                    if callable(log_fn):
+                        log_fn(
+                            "price_import.llm_failed",
+                            vendor=args.vendor,
+                            vendor_id=vendor_id,
+                            file_name=file_name,
+                            error=str(exc),
+                        )
             mapping_for_batches = llm_mapping or heuristics or None
             try:
                 batch_no = 0
