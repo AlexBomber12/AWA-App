@@ -277,10 +277,12 @@ async def _wait_for_db(max_attempts: int | None = None, delay_s: float | None = 
 
 async def _wait_for_redis(url: str) -> aioredis.Redis:
     delay = 0.2
-    for _ in range(50):
+    app_env = str(getattr(settings, "APP_ENV", "dev") or "dev").lower()
+    attempts = 5 if app_env in {"dev", "local", "test"} else 50
+    for _ in range(attempts):
         try:
             r = aioredis.from_url(url, encoding="utf-8", decode_responses=True)
-            await r.ping()
+            await asyncio.wait_for(r.ping(), timeout=1.0)
             return r
         except Exception:
             await asyncio.sleep(delay)
@@ -329,9 +331,8 @@ async def _check_llm() -> None:
             if local_base:
                 await client.get(f"{local_base}/ready", timeout=lan_timeout)
     except Exception:
-        fallback = (
-            llm_cfg.secondary_provider if llm_cfg else getattr(cfg, "LLM_SECONDARY_PROVIDER", None) or provider
-        ).lower()
+        fallback_raw = llm_cfg.secondary_provider if llm_cfg else getattr(cfg, "LLM_SECONDARY_PROVIDER", None)
+        fallback = str(fallback_raw or provider or "local").lower()
         os.environ["LLM_PROVIDER"] = fallback
         object.__setattr__(cfg, "LLM_PROVIDER", fallback)
         cfg.__dict__["LLM_PROVIDER"] = fallback
