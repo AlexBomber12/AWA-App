@@ -207,6 +207,12 @@ AWA_INGEST_TASK_FAILURES_TOTAL = Counter(
     ("task", "error_type", *BASE_LABELS),
     registry=REGISTRY,
 )
+AWA_INGEST_MODE_TOTAL = Counter(
+    "awa_ingest_mode_total",
+    "Ingest mode selection grouped by task and chunk sizing",
+    ("task", "mode", "chunk_size_mb", *BASE_LABELS),
+    registry=REGISTRY,
+)
 API_INGEST_4XX_TOTAL = Counter(
     "api_ingest_4xx_total",
     "ETL ingest API 4xx responses grouped by error code",
@@ -1015,6 +1021,15 @@ def record_ingest_task_failure(task: str, exc: BaseException) -> None:
     AWA_INGEST_TASK_FAILURES_TOTAL.labels(**labels).inc()
 
 
+def record_ingest_task_mode(task: str, *, streaming: bool, chunk_size_mb: int | None) -> None:
+    labels = _with_base_labels(
+        task=(task or "unknown").strip() or "unknown",
+        mode="streaming" if streaming else "legacy",
+        chunk_size_mb=str(max(int(chunk_size_mb or 0), 0)),
+    )
+    AWA_INGEST_MODE_TOTAL.labels(**labels).inc()
+
+
 def logistics_source_label(source: str | None) -> str:
     label = (source or "unknown").strip() or "unknown"
     if len(label) > 80:
@@ -1380,6 +1395,7 @@ __all__ = [
     "record_ingest_upload_failure",
     "record_ingest_task_outcome",
     "record_ingest_task_failure",
+    "record_ingest_task_mode",
     "record_ingest_download",
     "record_ingest_download_failure",
     "record_redis_error",

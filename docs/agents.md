@@ -36,7 +36,7 @@ Generates a weekly CSV file containing recommended restock quantities. This agen
 ## Large report streaming
 - `etl.load_csv.import_file` accepts `streaming=True` plus an optional `chunk_size` to stream CSV or XLSX uploads through `copy_df_via_temp`. Leave the flag unset to preserve the legacy in-memory behaviour.
 - Use `etl.load_csv.load_large_csv(path, chunk_size=...)` when other workflows need the chunked iterator used by the agents.
-- Tune chunk sizing via `INGEST_STREAMING_CHUNK_SIZE` (default `50_000` rows) when deploying agents that process 100 MB+ datasets.
+- Tune chunk sizing via `INGEST_STREAMING_CHUNK_SIZE` (default `50_000` rows) when deploying agents that process 100 MB+ datasets, or set `INGEST_STREAMING_CHUNK_SIZE_MB` alongside `INGEST_STREAMING_THRESHOLD_MB` to opt into the new size-aware streaming defaults without changing the code paths.
 - Run `python tests/performance/streaming_benchmark.py --size-mb 120` to verify peak RSS stays below a few hundred megabytes before enabling streaming mode in production.
 
 ## Lifecycle

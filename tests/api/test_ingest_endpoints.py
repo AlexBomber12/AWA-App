@@ -28,7 +28,15 @@ def _get_client(monkeypatch) -> TestClient:
 
 
 def test_ingest_file_upload(monkeypatch, tmp_path) -> None:
-    def fake_import_file(path: str, report_type=None, celery_update=None, force=False, idempotency_key=None):
+    def fake_import_file(
+        path: str,
+        report_type=None,
+        celery_update=None,
+        force=False,
+        idempotency_key=None,
+        streaming=False,
+        chunk_size=None,
+    ):
         return {"rows": 2, "dialect": "returns_report", "target_table": "returns_raw"}
 
     monkeypatch.setattr("etl.load_csv.import_file", fake_import_file)
@@ -46,7 +54,15 @@ def test_ingest_file_upload(monkeypatch, tmp_path) -> None:
 
 
 def test_ingest_json_uri(monkeypatch, tmp_path) -> None:
-    def fake_import_file(path: str, report_type=None, celery_update=None, force=False, idempotency_key=None):
+    def fake_import_file(
+        path: str,
+        report_type=None,
+        celery_update=None,
+        force=False,
+        idempotency_key=None,
+        streaming=False,
+        chunk_size=None,
+    ):
         return {"rows": 1, "dialect": "returns_report", "target_table": "returns_raw"}
 
     monkeypatch.setattr("etl.load_csv.import_file", fake_import_file)
@@ -64,7 +80,15 @@ def test_ingest_json_uri(monkeypatch, tmp_path) -> None:
 
 
 def test_ingest_failure(monkeypatch, tmp_path) -> None:
-    def bad_import_file(path: str, report_type=None, celery_update=None, force=False, idempotency_key=None):
+    def bad_import_file(
+        path: str,
+        report_type=None,
+        celery_update=None,
+        force=False,
+        idempotency_key=None,
+        streaming=False,
+        chunk_size=None,
+    ):
         raise RuntimeError("boom")
 
     monkeypatch.setattr("etl.load_csv.import_file", bad_import_file)

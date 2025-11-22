@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import gzip
 from collections import deque
 from typing import Any
+
+import pytest
 
 from etl import load_csv
 
@@ -79,14 +82,51 @@ def test_load_large_csv_streams_chunks(tmp_path) -> None:
     assert sum(len(chunk) for chunk in chunks) == 105
 
 
-def test_import_file_streaming_matches_full_load(monkeypatch, tmp_path) -> None:
-    csv_path = tmp_path / "returns.csv"
+def test_load_large_csv_streams_gz_chunks(tmp_path) -> None:
+    csv_path = tmp_path / "returns.csv.gz"
     header = "asin,qty,refund_amount,return_reason,return_date,currency"
     rows = [
         header,
-        *(f"ASIN{i:03d},{i % 3 + 1},2.5,damaged,2024-01-{(i % 28) + 1:02d},USD" for i in range(60)),
+        *(f"ASIN{i:03d},1,2.5,damaged,2024-01-01,USD" for i in range(40)),
     ]
-    csv_path.write_text("\n".join(rows), encoding="utf-8")
+    with gzip.open(csv_path, "wb") as handle:
+        handle.write("\n".join(rows).encode("utf-8"))
+
+    chunks = list(load_csv.load_large_csv(csv_path, chunk_size=10))
+    assert len(chunks) >= 4
+    assert sum(len(chunk) for chunk in chunks) == 40
+
+
+@pytest.mark.parametrize("extension", ["csv", "csv.gz", "xlsx"])
+def test_import_file_streaming_matches_full_load(monkeypatch, tmp_path, extension, xlsx_file_factory) -> None:
+    columns = ["asin", "qty", "refund_amount", "return_reason", "return_date", "currency"]
+    records = [
+        {
+            "asin": f"ASIN{i:03d}",
+            "qty": i % 3 + 1,
+            "refund_amount": 2.5,
+            "return_reason": "damaged",
+            "return_date": f"2024-01-{(i % 28) + 1:02d}",
+            "currency": "USD",
+        }
+        for i in range(60)
+    ]
+
+    if extension == "xlsx":
+        csv_path = xlsx_file_factory(headers=columns, rows=records, name="returns.xlsx")
+    else:
+        lines = [",".join(columns)]
+        for rec in records:
+            lines.append(
+                f"{rec['asin']},{rec['qty']},{rec['refund_amount']},{rec['return_reason']},{rec['return_date']},{rec['currency']}"
+            )
+        csv_path = tmp_path / f"returns.{extension}"
+        content = "\n".join(lines).encode("utf-8")
+        if extension.endswith(".gz"):
+            with gzip.open(csv_path, "wb") as handle:
+                handle.write(content)
+        else:
+            csv_path.write_bytes(content)
 
     monkeypatch.setenv("INGEST_IDEMPOTENT", "false")
     monkeypatch.setenv("ANALYZE_MIN_ROWS", "999999")
@@ -114,4 +154,6 @@ def test_import_file_streaming_matches_full_load(monkeypatch, tmp_path) -> None:
     assert eager_result["rows"] == streaming_result["rows"] == 60
     assert eager_result["status"] == streaming_result["status"] == "success"
     assert eager_result["dialect"] == streaming_result["dialect"] == "returns_report"
+    assert eager_result["streaming"] is False
+    assert streaming_result["streaming"] is True
     assert _flatten(eager_batches) == _flatten(streaming_batches)
