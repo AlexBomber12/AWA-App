@@ -61,3 +61,17 @@ async def test_upload_records_failure(monkeypatch):
     payload = json.loads(response.body.decode())
     assert payload["error"]["code"] == "payload_too_large"
     assert payload["error"]["detail"] == "too big"
+
+
+@pytest.mark.asyncio
+async def test_upload_handles_unexpected_exception(monkeypatch):
+    async def boom(*_a, **_k):
+        raise RuntimeError("kaboom")
+
+    monkeypatch.setattr(upload_module, "upload_file_to_minio", boom)
+    request = Request({"type": "http", "headers": []})
+    upload = UploadFile(filename="name.csv", file=BytesIO(b"data"))
+    response = await upload_module.upload(request, upload)
+    assert response.status_code == 500
+    payload = json.loads(response.body.decode())
+    assert payload["error"]["code"] == "bad_request"
