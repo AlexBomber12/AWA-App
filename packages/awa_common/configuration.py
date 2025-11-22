@@ -458,6 +458,8 @@ class EtlSettings(SettingsGroup):
     retry_status_codes: Iterable[int]
     use_copy: bool
     ingest_chunk_size_mb: int
+    ingest_streaming_threshold_mb: int
+    ingest_streaming_chunk_size_mb: int
     ingest_streaming_chunk_size: int
     ingest_streaming_enabled: bool
     ingest_idempotent: bool
@@ -493,6 +495,8 @@ class EtlSettings(SettingsGroup):
             retry_status_codes=list(cfg.ETL_RETRY_STATUS_CODES or []),
             use_copy=bool(cfg.USE_COPY),
             ingest_chunk_size_mb=int(cfg.INGEST_CHUNK_SIZE_MB),
+            ingest_streaming_threshold_mb=int(cfg.INGEST_STREAMING_THRESHOLD_MB),
+            ingest_streaming_chunk_size_mb=int(cfg.INGEST_STREAMING_CHUNK_SIZE_MB),
             ingest_streaming_chunk_size=int(cfg.INGEST_STREAMING_CHUNK_SIZE),
             ingest_streaming_enabled=bool(cfg.INGEST_STREAMING_ENABLED),
             ingest_idempotent=bool(cfg.INGEST_IDEMPOTENT),

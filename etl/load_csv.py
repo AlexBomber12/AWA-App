@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import tempfile
 import time
 from collections.abc import Callable, Iterator
@@ -55,6 +56,15 @@ USE_COPY = bool(_ETL_CFG.use_copy if _ETL_CFG else getattr(settings, "USE_COPY",
 STREAMING_CHUNK_ENV = int(
     _ETL_CFG.ingest_streaming_chunk_size if _ETL_CFG else getattr(settings, "INGEST_STREAMING_CHUNK_SIZE", 50_000)
 )
+STREAMING_CHUNK_SIZE_MB = int(
+    _ETL_CFG.ingest_streaming_chunk_size_mb if _ETL_CFG else getattr(settings, "INGEST_STREAMING_CHUNK_SIZE_MB", 8)
+)
+STREAMING_ENABLED = bool(
+    _ETL_CFG.ingest_streaming_enabled if _ETL_CFG else getattr(settings, "INGEST_STREAMING_ENABLED", True)
+)
+STREAMING_THRESHOLD_MB = int(
+    _ETL_CFG.ingest_streaming_threshold_mb if _ETL_CFG else getattr(settings, "INGEST_STREAMING_THRESHOLD_MB", 50)
+)
 BUCKET = get_bucket_name()
 CSV_EXTENSIONS = {".csv", ".txt", ".tsv"}
 XLSX_EXTENSIONS = {".xlsx", ".xlsm"}
@@ -76,6 +86,69 @@ class _StreamingMetadata:
     rows: int
     keyword_full: bool
     transaction_full: bool
+
+
+def _is_field_set(name: str) -> bool:
+    field_set: set[str] = getattr(settings, "model_fields_set", set())
+    return name in field_set
+
+
+def _chunk_rows_from_mb(chunk_size_mb: int) -> int:
+    approx = int((max(chunk_size_mb, 1) * 1024 * 1024) / 256)
+    return max(1, approx)
+
+
+def _resolve_streaming_chunk_rows(
+    chunk_size: int | None = None,
+    *,
+    chunk_size_mb: int | None = None,
+) -> tuple[int, int]:
+    if chunk_size is not None and chunk_size <= 0:
+        raise ValueError("chunk_size must be positive")
+    env_rows_override = os.getenv("INGEST_STREAMING_CHUNK_SIZE")
+    rows_env_set = _is_field_set("INGEST_STREAMING_CHUNK_SIZE") or env_rows_override is not None
+    rows_env_value = STREAMING_CHUNK_ENV
+    if env_rows_override is not None:
+        try:
+            rows_env_value = int(env_rows_override)
+        except ValueError:
+            rows_env_value = STREAMING_CHUNK_ENV
+    rows_env = max(1, rows_env_value)
+
+    env_chunk_mb_override = os.getenv("INGEST_STREAMING_CHUNK_SIZE_MB")
+    chunk_mb_value = STREAMING_CHUNK_SIZE_MB
+    if env_chunk_mb_override is not None:
+        try:
+            chunk_mb_value = int(env_chunk_mb_override)
+        except ValueError:
+            chunk_mb_value = STREAMING_CHUNK_SIZE_MB
+    chunk_mb = chunk_size_mb if chunk_size_mb is not None else chunk_mb_value
+    chunk_mb_set = (
+        chunk_size_mb is not None
+        or _is_field_set("INGEST_STREAMING_CHUNK_SIZE_MB")
+        or env_chunk_mb_override is not None
+    )
+
+    if chunk_size is not None:
+        return max(1, chunk_size), chunk_mb
+    if chunk_size_mb is not None:
+        return _chunk_rows_from_mb(chunk_mb), chunk_mb
+    if chunk_mb_set and not rows_env_set:
+        return _chunk_rows_from_mb(chunk_mb), chunk_mb
+    return rows_env, chunk_mb
+
+
+def resolve_streaming_chunk_rows(chunk_size: int | None = None, *, chunk_size_mb: int | None = None) -> int:
+    rows, _ = _resolve_streaming_chunk_rows(chunk_size, chunk_size_mb=chunk_size_mb)
+    return rows
+
+
+def _is_csv_like(path: Path) -> bool:
+    suffix = path.suffix.lower()
+    if suffix in CSV_EXTENSIONS:
+        return True
+    suffixes = [s.lower() for s in path.suffixes]
+    return suffix in {".gz", ".gzip"} and len(suffixes) > 1 and suffixes[-2] in CSV_EXTENSIONS
 
 
 def _read_csv_flex(path: Path) -> pd.DataFrame:
@@ -262,15 +335,14 @@ def _process_streaming_chunks(
     return total
 
 
-def load_large_csv(path: Path, *, chunk_size: int = STREAMING_CHUNK_ENV) -> Iterator[pd.DataFrame]:
-    if chunk_size <= 0:
-        raise ValueError("chunk_size must be positive")
+def load_large_csv(path: Path, *, chunk_size: int | None = None) -> Iterator[pd.DataFrame]:
+    chunk_rows, _ = _resolve_streaming_chunk_rows(chunk_size)
     suffix = path.suffix.lower()
     if suffix in XLSX_EXTENSIONS:
-        yield from _stream_xlsx_chunks(path, chunk_size)
+        yield from _stream_xlsx_chunks(path, chunk_rows)
         return
-    if suffix in CSV_EXTENSIONS:
-        yield from _stream_csv_chunks(path, chunk_size)
+    if _is_csv_like(path):
+        yield from _stream_csv_chunks(path, chunk_rows)
         return
     raise ImportValidationError(f"Streaming is only supported for CSV or XLSX files: {path}")
 
@@ -422,9 +494,10 @@ def import_file(  # noqa: C901
         raise ImportValidationError("empty file")
     if _dialect_override == "test_generic":
         streaming = False
+    streaming = bool(streaming and STREAMING_ENABLED)
 
     explicit_dialect = _dialect_override or report_type
-    chunk_rows = chunk_size or STREAMING_CHUNK_ENV
+    chunk_rows, chunk_size_mb = _resolve_streaming_chunk_rows(chunk_size)
 
     df: pd.DataFrame | None = None
     metadata: _StreamingMetadata | None = None
@@ -485,7 +558,13 @@ def import_file(  # noqa: C901
     analyze_min = int(_ETL_CFG.analyze_min_rows if _ETL_CFG else getattr(settings, "ANALYZE_MIN_ROWS", 50_000))
     warnings: list[str] = []
 
-    meta_extra: dict[str, Any] = {"force": bool(force), "file_sha256": idempotency_key or _sha256_file(file_path)}
+    meta_extra: dict[str, Any] = {
+        "force": bool(force),
+        "file_sha256": idempotency_key or _sha256_file(file_path),
+        "streaming_chunk_rows": chunk_rows,
+        "streaming_chunk_size_mb": chunk_size_mb,
+        "streaming_threshold_mb": STREAMING_THRESHOLD_MB,
+    }
     if metadata:
         meta_extra["rows_estimated"] = metadata.rows
     elif df is not None:
@@ -650,6 +729,9 @@ def import_file(  # noqa: C901
                 target_table=target_table,
                 dialect=dialect,
                 rows=rows_loaded,
+                streaming=streaming,
+                chunk_rows=chunk_rows,
+                chunk_size_mb=chunk_size_mb,
             )
             return {
                 "status": "success",
@@ -658,6 +740,9 @@ def import_file(  # noqa: C901
                 "target_table": target_table,
                 "warnings": warnings,
                 "idempotency_key": idempotency_value,
+                "streaming": streaming,
+                "streaming_chunk_rows": chunk_rows,
+                "streaming_chunk_size_mb": chunk_size_mb,
             }
     except ImportValidationError:
         logger.warning(

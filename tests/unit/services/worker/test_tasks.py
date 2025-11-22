@@ -27,8 +27,11 @@ def test_task_import_file_success(monkeypatch, tmp_path):
 
     monkeypatch.setattr(tasks_module, "_resolve_uri_to_path", lambda uri: local)
 
-    def fake_import(path, report_type=None, celery_update=None, force=False, idempotency_key=None):
+    def fake_import(
+        path, report_type=None, celery_update=None, force=False, idempotency_key=None, streaming=False, chunk_size=None
+    ):
         assert "data.csv" in path
+        assert streaming is False
         if celery_update:
             celery_update({"progress": 50})
         return payload
@@ -164,7 +167,15 @@ def test_task_import_file_forwards_force_flag(monkeypatch, tmp_path):
 
     calls: dict[str, object] = {}
 
-    def fake_import(path, report_type=None, celery_update=None, force=False, idempotency_key=None):
+    def fake_import(
+        path,
+        report_type=None,
+        celery_update=None,
+        force=False,
+        idempotency_key=None,
+        streaming=False,
+        chunk_size=None,
+    ):
         calls["path"] = path
         calls["report_type"] = report_type
         calls["force"] = force

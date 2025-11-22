@@ -16,6 +16,7 @@ from celery import states
 from awa_common.metrics import (
     instrument_task as _instrument_task,
     record_ingest_task_failure,
+    record_ingest_task_mode,
     record_ingest_task_outcome,
 )
 from awa_common.minio import get_s3_client_config, get_s3_client_kwargs
@@ -105,6 +106,18 @@ def _resolve_uri_to_path(uri: str) -> Path:
     return Path(uri)
 
 
+def _streaming_knobs() -> tuple[bool, int, int]:
+    etl_cfg = getattr(settings, "etl", None)
+    enabled = bool(etl_cfg.ingest_streaming_enabled if etl_cfg else getattr(settings, "INGEST_STREAMING_ENABLED", True))
+    threshold_mb = int(
+        etl_cfg.ingest_streaming_threshold_mb if etl_cfg else getattr(settings, "INGEST_STREAMING_THRESHOLD_MB", 50)
+    )
+    chunk_size_mb = int(
+        etl_cfg.ingest_streaming_chunk_size_mb if etl_cfg else getattr(settings, "INGEST_STREAMING_CHUNK_SIZE_MB", 8)
+    )
+    return enabled, threshold_mb, chunk_size_mb
+
+
 @celery_app.task(name="ingest.import_file", bind=True)  # type: ignore[misc]
 @instrument_task("ingest.import_file", emit_metrics=False)
 def task_import_file(
@@ -125,20 +138,33 @@ def task_import_file(
         if "ingest_" in str(local_path.parent):
             tmp_dir = local_path.parent
 
-        from etl.load_csv import import_file as run_ingest
+        from etl import load_csv
+
+        run_ingest = load_csv.import_file
+        streaming_enabled, threshold_mb, chunk_size_mb = _streaming_knobs()
+        file_size_bytes = local_path.stat().st_size if local_path.exists() else None
+        threshold_bytes = max(threshold_mb, 0) * 1024 * 1024
+        streaming = bool(streaming_enabled and file_size_bytes is not None and file_size_bytes > threshold_bytes)
+        chunk_rows = load_csv.resolve_streaming_chunk_rows(chunk_size=None, chunk_size_mb=chunk_size_mb)
 
         self.update_state(state=states.STARTED, meta={"stage": "ingest"})
+        record_ingest_task_mode("ingest.import_file", streaming=streaming, chunk_size_mb=chunk_size_mb)
         result = run_ingest(
             str(local_path),
             report_type=report_type,
             celery_update=lambda m: self.update_state(state=states.STARTED, meta=m),
             force=force,
             idempotency_key=idempotency_key,
+            streaming=streaming,
+            chunk_size=chunk_rows,
         )
         summary: dict[str, Any] = {}
         if isinstance(result, dict):
             summary.update(result)
         summary.setdefault("status", "success")
+        summary.setdefault("streaming", streaming)
+        summary.setdefault("streaming_chunk_rows", chunk_rows)
+        summary.setdefault("streaming_chunk_size_mb", chunk_size_mb)
         self.update_state(state=states.SUCCESS, meta=summary)
         success = True
         return summary
