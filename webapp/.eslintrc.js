@@ -1,6 +1,8 @@
 module.exports = {
   root: true,
-  extends: ["next/core-web-vitals", "next/typescript", "prettier"],
+  parser: "@typescript-eslint/parser",
+  plugins: ["@typescript-eslint"],
+  extends: ["next/core-web-vitals", "plugin:@typescript-eslint/recommended", "prettier"],
   parserOptions: {
     tsconfigRootDir: __dirname,
   },

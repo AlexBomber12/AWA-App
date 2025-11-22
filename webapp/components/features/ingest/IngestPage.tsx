@@ -14,16 +14,18 @@ export type SessionJob = {
 };
 
 type IngestPageProps = {
-  initialJobs?: SessionJob[];
+  initialJobs?: SessionJob[] | null;
 };
 
-export function IngestPage({ initialJobs = [] }: IngestPageProps) {
+export function IngestPage({ initialJobs }: IngestPageProps) {
   const { can } = usePermissions();
   const canIngest = can({ resource: "ingest", action: "ingest" });
-  const [jobs, setJobs] = useState<SessionJob[]>(initialJobs);
+  const [jobs, setJobs] = useState<SessionJob[]>(() => initialJobs ?? []);
 
   useEffect(() => {
-    setJobs(initialJobs);
+    if (initialJobs) {
+      setJobs(initialJobs);
+    }
   }, [initialJobs]);
 
   const handleJobStarted = useCallback((job: IngestJobStatusType) => {

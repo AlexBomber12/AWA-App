@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react";
 
 import { IngestPage, type SessionJob } from "@/components/features/ingest/IngestPage";
 import { AppShell, PageBody, PageHeader } from "@/components/layout";
+import type { Role } from "@/lib/permissions/server";
 
 import { FetchMock, type FetchMockHandler } from "../../utils/fetchMock";
 
@@ -82,7 +83,7 @@ export default meta;
 
 type Story = StoryObj<typeof IngestPage>;
 
-const renderIngest = (mode: IngestStoryMode, initialJobs?: SessionJob[], roles: string[] = ["ops"]) => (
+const renderIngest = (mode: IngestStoryMode, initialJobs?: SessionJob[], roles: Role[] = ["ops"]) => (
   <FetchMock handlers={buildHandlers(mode)}>
     <AppShell
       initialSession={{ user: { name: "Ops Lead", email: "ops@example.com", roles }, expires: "" }}
