@@ -40,6 +40,8 @@ describe("AppShell navigation RBAC", () => {
       </AppShell>
     );
 
+    expect(screen.queryAllByRole("link", { name: "Ingest" })).toHaveLength(0);
+    expect(screen.queryAllByRole("link", { name: "Settings" })).toHaveLength(0);
     expect(screen.queryAllByRole("link", { name: "Inbox" })).toHaveLength(0);
     expect(screen.queryAllByRole("link", { name: "Decision Engine" })).toHaveLength(0);
   });
@@ -56,6 +58,8 @@ describe("AppShell navigation RBAC", () => {
       </AppShell>
     );
 
+    expect(screen.getAllByRole("link", { name: "Ingest" }).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByRole("link", { name: "Settings" }).length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByRole("link", { name: "Inbox" }).length).toBeGreaterThanOrEqual(1);
     expect(screen.queryAllByRole("link", { name: "Decision Engine" })).toHaveLength(0);
   });
@@ -72,6 +76,8 @@ describe("AppShell navigation RBAC", () => {
       </AppShell>
     );
 
+    expect(screen.getAllByRole("link", { name: "Ingest" }).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByRole("link", { name: "Settings" }).length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByRole("link", { name: "Inbox" }).length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByRole("link", { name: "Decision Engine" }).length).toBeGreaterThanOrEqual(1);
   });

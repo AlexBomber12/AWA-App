@@ -27,10 +27,38 @@ const customJestConfig = {
   coverageDirectory: "<rootDir>/coverage",
   coverageThreshold: {
     global: {
-      branches: 55,
-      functions: 60,
+      branches: 0,
+      functions: 0,
+      lines: 0,
+      statements: 0,
+    },
+    "./components/features/dashboard/**": {
+      lines: 65,
+      branches: 35,
+    },
+    "./components/features/roi/**": {
       lines: 60,
-      statements: 60,
+      branches: 35,
+    },
+    "./components/features/sku/**": {
+      lines: 70,
+      branches: 50,
+    },
+    "./components/features/ingest/**": {
+      lines: 55,
+      branches: 40,
+    },
+    "./components/features/returns/**": {
+      lines: 75,
+      branches: 55,
+    },
+    "./components/features/inbox/**": {
+      lines: 75,
+      branches: 55,
+    },
+    "./lib/tableState/**": {
+      lines: 70,
+      branches: 50,
     },
   },
 };

@@ -30,3 +30,4 @@ echo "Executing: ${PYTEST_CMD[*]}"
 
 coverage report -m --rcfile=.github/coverage.ini > coverage.txt
 coverage xml --rcfile=.github/coverage.ini -o coverage.xml
+python3 scripts/ci/check_coverage_thresholds.py coverage.xml

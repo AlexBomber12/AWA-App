@@ -159,6 +159,7 @@ export function RoiTable({
             <button
               type="button"
               className="font-semibold text-brand hover:underline"
+              data-testid={`roi-row-${row.original.asin ?? row.id ?? row.index}`}
               onClick={() => goToSku(row.original.asin)}
             >
               {row.original.asin}

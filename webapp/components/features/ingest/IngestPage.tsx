@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { EmptyState } from "@/components/data";
 import { IngestJobForm } from "@/components/features/ingest/IngestJobForm";
@@ -8,15 +8,23 @@ import { IngestJobStatus } from "@/components/features/ingest/IngestJobStatus";
 import type { IngestJobStatus as IngestJobStatusType } from "@/lib/api/ingestClient";
 import { usePermissions } from "@/lib/permissions/client";
 
-type SessionJob = {
+export type SessionJob = {
   taskId: string;
   status: IngestJobStatusType;
 };
 
-export function IngestPage() {
+type IngestPageProps = {
+  initialJobs?: SessionJob[];
+};
+
+export function IngestPage({ initialJobs = [] }: IngestPageProps) {
   const { can } = usePermissions();
   const canIngest = can({ resource: "ingest", action: "ingest" });
-  const [jobs, setJobs] = useState<SessionJob[]>([]);
+  const [jobs, setJobs] = useState<SessionJob[]>(initialJobs);
+
+  useEffect(() => {
+    setJobs(initialJobs);
+  }, [initialJobs]);
 
   const handleJobStarted = useCallback((job: IngestJobStatusType) => {
     const taskId = typeof job?.task_id === "string" ? job.task_id : null;

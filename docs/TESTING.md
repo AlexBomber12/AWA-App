@@ -49,8 +49,8 @@ CI has three logical test groups plus an e2e smoke check that rides on top of in
 4. **Selective targets** — run any path directly (`pytest -q tests/unit/services/price_importer/test_parser.py`) when iterating on a single module.
 
 ## Coverage policy
-- Coverage thresholds live in `pytest.ini`/`coverage.xml` and are enforced by the unit job only.
-- Integration tests still upload coverage XML (for diffing) but do not gate merges.
+- Backend gates run via `scripts/ci/check_coverage_thresholds.py` (api.routes, worker, etl, awa_common.etl) after `./scripts/ci/run_unit.sh` emits `coverage.xml`. Integration tests still upload coverage XML for diffing but do not gate merges.
+- Frontend coverage uses path-specific Jest thresholds for dashboard/ROI/SKU/ingest/returns/inbox and `lib/tableState`; run `npm run test:coverage` from `webapp/` to validate locally.
 - Generate a local report with `pytest -q --cov --cov-report=term-missing` when you need detailed file-by-file deltas.
 
 ## CI stages overview
