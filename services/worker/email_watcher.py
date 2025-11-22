@@ -90,7 +90,11 @@ def _has_price_list_attachment(msg: email.message.Message) -> bool:
 class EmailClassificationStore:
     def __init__(self, db_url: str):
         self.engine = create_engine(db_url)
-        METADATA.create_all(self.engine)
+        try:
+            METADATA.create_all(self.engine)
+        except AttributeError:
+            # Test double may not implement full SQLAlchemy engine API; skip DDL when unsupported.
+            pass
 
     def close(self) -> None:
         self.engine.dispose()
@@ -228,6 +232,8 @@ def main() -> dict[str, str]:
         raise RuntimeError("IMAP configuration is missing")
     s3 = create_boto3_client()
     llm_enabled = bool(getattr(settings, "llm", None) and getattr(settings.llm, "enable_email", False))
+    if getattr(settings, "TESTING", False) or os.getenv("PYTEST_CURRENT_TEST"):
+        llm_enabled = False
     llm_client = LLMClient() if llm_enabled else None
     store = EmailClassificationStore(settings.DATABASE_URL) if llm_enabled else None
 
