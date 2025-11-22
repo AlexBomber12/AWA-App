@@ -119,11 +119,12 @@ components in `packages/awa_common` to deliver repeatable pipelines that survive
 ## Supported pipelines
 
 - **CSV/XLSX ingest (`etl.load_csv`)** – entrypoints: `python -m etl.load_csv --source ... --table auto` and
-  the Celery task `ingest.import_file`. Idempotency key comes from the uploaded file hash/dialect (or the
-  API-provided key) and `payload_meta` records `source_uri`, `target_table`, `dialect`, `rows`,
-  `file_sha256`, and flags such as `streaming`/`force`. Returns are handled through the
-  `returns_report` dialect; the legacy `services/returns_etl` CLI was retired (see
-  `docs/legacy_samples/returns_loader.md`).
+  the Celery task `ingest.import_file`. Worker containers no longer expose any HTTP ingest route; use the
+  API `/ingest` or `/upload` endpoints (which trigger the same Celery task) or call the task internally.
+  Idempotency key comes from the uploaded file hash/dialect (or the API-provided key) and `payload_meta`
+  records `source_uri`, `target_table`, `dialect`, `rows`, `file_sha256`, and flags such as
+  `streaming`/`force`. Returns are handled through the `returns_report` dialect; the legacy
+  `services/returns_etl` CLI was retired (see `docs/legacy_samples/returns_loader.md`).
 - **Helium10 fees (`services.fees_h10.worker.refresh_fees`)** – keyed on the sorted ASIN list with metadata
   for `asin_count` and source URL; duplicate keys set `status='skipped'` before any API calls.
 - **SP fees (`services.etl.sp_fees`)** – keyed on mode + SKU list + date; supports live SP API or fixture
