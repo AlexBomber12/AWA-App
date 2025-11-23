@@ -249,3 +249,49 @@ def test_task_import_file_streams_large_files(monkeypatch, tmp_path):
     assert calls["streaming"] is True
     assert calls["chunk_size"] == 888
     assert result["streaming"] is True
+
+
+def test_streaming_knobs_handles_invalid_env(monkeypatch):
+    monkeypatch.setenv("INGEST_STREAMING_CHUNK_SIZE", "bad")
+    monkeypatch.setattr(tasks_module.settings, "etl", None, raising=False)
+    monkeypatch.setattr(tasks_module.settings, "INGEST_STREAMING_CHUNK_SIZE", 25, raising=False)
+
+    enabled, threshold_mb, chunk_rows, chunk_mb = tasks_module._streaming_knobs()
+
+    assert enabled is True
+    assert threshold_mb == tasks_module.settings.INGEST_STREAMING_THRESHOLD_MB
+    assert chunk_rows == 25
+    assert chunk_mb == tasks_module.settings.INGEST_STREAMING_CHUNK_SIZE_MB
+    monkeypatch.delenv("INGEST_STREAMING_CHUNK_SIZE", raising=False)
+
+
+def test_task_import_file_handles_missing_size(monkeypatch, tmp_path):
+    target = tmp_path / "small.csv"
+    target.write_text("x", encoding="utf-8")
+
+    def fake_size(_path):
+        raise OSError("missing")
+
+    calls: dict[str, object] = {}
+
+    def fake_import(
+        path,
+        report_type=None,
+        celery_update=None,
+        force=False,
+        idempotency_key=None,
+        streaming=False,
+        chunk_size=None,
+    ):
+        calls["streaming"] = streaming
+        return {}
+
+    monkeypatch.setattr(tasks_module.os.path, "getsize", fake_size)
+    monkeypatch.setattr(tasks_module, "_resolve_uri_to_path", lambda uri: target)
+    monkeypatch.setattr("etl.load_csv.import_file", fake_import)
+    monkeypatch.setattr(tasks_module.task_import_file, "update_state", lambda *a, **k: None, raising=False)
+
+    result = tasks_module.task_import_file.run(uri=f"file://{target}")
+
+    assert calls["streaming"] is False
+    assert result["streaming"] is False

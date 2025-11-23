@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import shutil
 from io import BytesIO
+from pathlib import Path
 
 import httpx
 import pytest
@@ -323,6 +324,29 @@ async def test_write_stream_to_temp_too_large(monkeypatch):
         await ingest_utils._write_stream_to_temp(gen(), scheme="http")
 
 
+@pytest.mark.asyncio
+async def test_read_upload_file_spools_to_disk(monkeypatch):
+    class TrackUpload(UploadFile):
+        def __init__(self, data: bytes):
+            self.closed = False
+            super().__init__(filename="spool.csv", file=BytesIO(data))
+
+        async def close(self):
+            self.closed = True
+            return await super().close()
+
+    upload = TrackUpload(b"a" * 10)
+    payload, digest, total, ext = await ingest_utils.read_upload_file(
+        upload, chunk_size=2, max_bytes=100, spool_threshold=5
+    )
+    assert isinstance(payload, Path)
+    assert total == 10
+    assert digest == hashlib.sha256(b"a" * 10).hexdigest()
+    assert ext == "csv"
+    assert upload.closed is True
+    shutil.rmtree(payload.parent, ignore_errors=True)
+
+
 def test_error_from_failure_maps_import_validation(monkeypatch):
     err = ingest_utils.ImportFileError("invalid")
     err.status_code = 422
@@ -406,6 +430,62 @@ async def test_download_minio_failure(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_upload_payload_to_minio_bytes_and_abort():
+    class DummyClient:
+        def __init__(self):
+            self.aborted = False
+
+        async def create_multipart_upload(self, **_k):
+            return {"UploadId": "u1"}
+
+        async def upload_part(self, **_k):
+            raise RuntimeError("boom")
+
+        async def complete_multipart_upload(self, **_k):
+            return None
+
+        async def abort_multipart_upload(self, **_k):
+            self.aborted = True
+
+    client = DummyClient()
+    with pytest.raises(ApiError):
+        await ingest_utils._upload_payload_to_minio(
+            client, bucket="b", key="k", payload=b"x" * 10, total_bytes=10, chunk_size=3
+        )
+    assert client.aborted is True
+
+
+@pytest.mark.asyncio
+async def test_upload_payload_to_minio_path(tmp_path):
+    payload = tmp_path / "data.bin"
+    payload.write_bytes(b"1234567")
+    calls: dict[str, list] = {"parts": []}
+
+    class DummyClient:
+        async def create_multipart_upload(self, **_k):
+            return {"UploadId": "u2"}
+
+        async def upload_part(self, **_k):
+            calls["parts"].append(_k["Body"])
+            return {"ETag": "etag"}
+
+        async def complete_multipart_upload(self, **_k):
+            calls["completed"] = True
+
+        async def abort_multipart_upload(self, **_k):
+            calls["aborted"] = True
+
+        async def put_object(self, **_k):
+            calls["put"] = _k["Body"]
+
+    await ingest_utils._upload_payload_to_minio(
+        DummyClient(), bucket="b", key="k", payload=payload, total_bytes=payload.stat().st_size, chunk_size=2
+    )
+    assert calls["parts"] and any(len(p) <= 2 for p in calls["parts"])
+    assert calls.get("completed") is True
+
+
+@pytest.mark.asyncio
 async def test_download_http_success(monkeypatch):
     class DummyResponse:
         def __init__(self):
@@ -480,3 +560,52 @@ async def test_download_http_timeout(monkeypatch):
         await ingest_utils.download_uri_to_temp("http://example.com/file.csv", log=ingest_utils.logger)
     assert excinfo.value.status_code == 504
     assert failures["reason"] == "timeout"
+
+
+@pytest.mark.asyncio
+async def test_upload_file_to_minio_cleans_payload(monkeypatch, tmp_path):
+    payload = tmp_path / "data.csv"
+    payload.write_bytes(b"abc")
+    removed: dict[str, Path] = {}
+
+    async def fake_read(file, chunk_size=None, max_bytes=None, spool_threshold=None):
+        return payload, "dig", 3, "csv"
+
+    class DummyClient:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+        async def create_multipart_upload(self, **_k):
+            return {"UploadId": "u"}
+
+        async def upload_part(self, **_k):
+            return {"ETag": "etag"}
+
+        async def complete_multipart_upload(self, **_k):
+            return None
+
+        async def put_object(self, **_k):
+            return None
+
+    class DummySession:
+        def client(self, *_a, **_k):
+            return DummyClient()
+
+    def fake_rmtree(path, ignore_errors=False):
+        removed["path"] = Path(path)
+
+    upload = UploadFile(filename="data.csv", file=BytesIO(b"abc"))
+    request = Request({"type": "http", "headers": []})
+    monkeypatch.setattr(ingest_utils, "read_upload_file", fake_read)
+    monkeypatch.setattr(ingest_utils, "get_s3_client_config", lambda: None)
+    monkeypatch.setattr(ingest_utils, "get_s3_client_kwargs", lambda: {})
+    monkeypatch.setattr(ingest_utils.aioboto3, "Session", lambda: DummySession())
+    monkeypatch.setattr(ingest_utils.shutil, "rmtree", fake_rmtree)
+
+    result = await ingest_utils.upload_file_to_minio(upload, request=request, log=ingest_utils.logger)
+
+    assert result.uri.startswith("minio://")
+    assert removed.get("path") == payload.parent
