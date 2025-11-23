@@ -203,7 +203,7 @@ def _stub_streaming_settings(monkeypatch, *, threshold_mb: int, chunk_rows: int 
     monkeypatch.setattr(tasks_module.settings, "INGEST_STREAMING_CHUNK_SIZE_MB", chunk_mb, raising=False)
 
 
-def _run_task_and_capture_streaming(monkeypatch, file_path: Path, resolver=None) -> tuple[dict, dict]:
+def _run_task_and_capture_streaming(monkeypatch, file_path: Path) -> tuple[dict, dict]:
     calls: dict[str, object] = {}
 
     def fake_import(
@@ -222,9 +222,6 @@ def _run_task_and_capture_streaming(monkeypatch, file_path: Path, resolver=None)
 
     monkeypatch.setattr(tasks_module, "_resolve_uri_to_path", lambda uri: file_path)
     monkeypatch.setattr("etl.load_csv.import_file", fake_import)
-    if resolver is None:
-        resolver = lambda chunk_size=None, chunk_size_mb=None: chunk_size  # noqa: E731
-    monkeypatch.setattr("etl.load_csv.resolve_streaming_chunk_rows", resolver)
     monkeypatch.setattr(tasks_module.task_import_file, "update_state", lambda *a, **k: None, raising=False)
     result = tasks_module.task_import_file.run(uri=f"file://{file_path}")
     return calls, result
@@ -238,7 +235,7 @@ def test_task_import_file_uses_legacy_mode_below_threshold(monkeypatch, tmp_path
     calls, result = _run_task_and_capture_streaming(monkeypatch, target)
 
     assert calls["streaming"] is False
-    assert calls["chunk_size"] == 777
+    assert calls["chunk_size"] is None
     assert result["streaming"] is False
 
 
@@ -254,22 +251,47 @@ def test_task_import_file_streams_large_files(monkeypatch, tmp_path):
     assert result["streaming"] is True
 
 
-def test_task_import_file_respects_mb_chunk_override(monkeypatch, tmp_path):
-    target = tmp_path / "large_mb.csv"
-    target.write_bytes(b"x" * (6 * 1024 * 1024))
-    _stub_streaming_settings(monkeypatch, threshold_mb=1, chunk_rows=None, chunk_mb=4)
+def test_streaming_knobs_handles_invalid_env(monkeypatch):
+    monkeypatch.setenv("INGEST_STREAMING_CHUNK_SIZE", "bad")
+    monkeypatch.setattr(tasks_module.settings, "etl", None, raising=False)
+    monkeypatch.setattr(tasks_module.settings, "INGEST_STREAMING_CHUNK_SIZE", 25, raising=False)
 
-    resolver_calls: dict[str, object] = {}
+    enabled, threshold_mb, chunk_rows, chunk_mb = tasks_module._streaming_knobs()
 
-    def resolver(chunk_size=None, chunk_size_mb=None):
-        resolver_calls["chunk_size"] = chunk_size
-        resolver_calls["chunk_size_mb"] = chunk_size_mb
-        return 123  # pretend MB conversion produced this row count
+    assert enabled is True
+    assert threshold_mb == tasks_module.settings.INGEST_STREAMING_THRESHOLD_MB
+    assert chunk_rows == 25
+    assert chunk_mb == tasks_module.settings.INGEST_STREAMING_CHUNK_SIZE_MB
+    monkeypatch.delenv("INGEST_STREAMING_CHUNK_SIZE", raising=False)
 
-    calls, result = _run_task_and_capture_streaming(monkeypatch, target, resolver=resolver)
 
-    assert resolver_calls["chunk_size"] is None
-    assert resolver_calls["chunk_size_mb"] == 4
-    assert calls["chunk_size"] == 123
-    assert result["streaming"] is True
-    assert result["streaming_chunk_rows"] == 123
+def test_task_import_file_handles_missing_size(monkeypatch, tmp_path):
+    target = tmp_path / "small.csv"
+    target.write_text("x", encoding="utf-8")
+
+    def fake_size(_path):
+        raise OSError("missing")
+
+    calls: dict[str, object] = {}
+
+    def fake_import(
+        path,
+        report_type=None,
+        celery_update=None,
+        force=False,
+        idempotency_key=None,
+        streaming=False,
+        chunk_size=None,
+    ):
+        calls["streaming"] = streaming
+        return {}
+
+    monkeypatch.setattr(tasks_module.os.path, "getsize", fake_size)
+    monkeypatch.setattr(tasks_module, "_resolve_uri_to_path", lambda uri: target)
+    monkeypatch.setattr("etl.load_csv.import_file", fake_import)
+    monkeypatch.setattr(tasks_module.task_import_file, "update_state", lambda *a, **k: None, raising=False)
+
+    result = tasks_module.task_import_file.run(uri=f"file://{target}")
+
+    assert calls["streaming"] is False
+    assert result["streaming"] is False

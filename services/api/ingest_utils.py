@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import datetime
 import hashlib
+import shutil
 import tempfile
 import time
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterator
 from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import IO, Any
 from urllib.parse import ParseResult, urlparse
 
 import aioboto3
@@ -58,39 +59,6 @@ class IngestUpload:
     path: Path | None = None
 
 
-class _UploadStream:
-    """Shared stream reader that enforces size limits while hashing payloads."""
-
-    def __init__(self, file: UploadFile, *, chunk_size: int, max_bytes: int, detail: str, hint: str) -> None:
-        self.file = file
-        self.chunk_size = chunk_size
-        self.max_bytes = max_bytes
-        self.detail = detail
-        self.hint = hint
-        self._hasher = hashlib.sha256()
-        self.total = 0
-
-    async def __aiter__(self) -> AsyncIterator[bytes]:
-        while True:
-            chunk = await self.file.read(self.chunk_size)
-            if not chunk:
-                break
-            self.total += len(chunk)
-            if self.total > self.max_bytes:
-                raise ApiError(
-                    status_code=413,
-                    code="payload_too_large",
-                    detail=self.detail,
-                    hint=self.hint,
-                )
-            self._hasher.update(chunk)
-            yield chunk
-
-    @property
-    def digest(self) -> str:
-        return self._hasher.hexdigest()
-
-
 class ApiError(Exception):
     """Raised when an ingest or upload request cannot be processed."""
 
@@ -100,6 +68,97 @@ class ApiError(Exception):
         self.code = code
         self.detail = detail
         self.hint = hint
+
+
+def sanitize_filename(name: str) -> tuple[str, str]:
+    """Return a sanitized filename and extension or raise an ApiError."""
+
+    if not name:
+        raise ApiError(status_code=400, code="bad_request", detail="Filename is required")
+    try:
+        safe_name = sanitize_upload_name(name)
+    except ValueError as exc:
+        message = str(exc)
+        hint = None
+        if "Unsupported file extension" in message:
+            code: ErrorCode | str = "unsupported_file_format"
+            hint = "Upload CSV or XLSX files exported from Amazon reports."
+        else:
+            code = "bad_request"
+        raise ApiError(status_code=400, code=code, detail=message, hint=hint) from exc
+
+    lowered = safe_name.lower()
+    if not any(lowered.endswith(ext) for ext in _SUPPORTED_SUFFIXES):
+        suffix = Path(name or "").suffix.lower() or "unknown"
+        raise ApiError(
+            status_code=400,
+            code="unsupported_file_format",
+            detail=f"Files with extension '{suffix}' are not supported",
+            hint="Upload CSV or XLSX files exported from Amazon reports.",
+        )
+    extension = Path(safe_name).suffix.lstrip(".") or "unknown"
+    return safe_name, extension
+
+
+async def read_upload_file(
+    file: UploadFile,
+    *,
+    chunk_size: int | None = None,
+    max_bytes: int | None = None,
+    spool_threshold: int | None = None,
+) -> tuple[bytes | Path, str, int, str]:
+    """Stream an UploadFile while enforcing limits and hashing content.
+
+    Returns the buffered bytes or a temp file path along with the digest,
+    total bytes read, and detected extension.
+    """
+
+    safe_name, extension = sanitize_filename(file.filename or "")
+    chunk = max(1, int(chunk_size or _upload_limits()[0]))
+    limit = int(max_bytes if max_bytes is not None else settings.MAX_REQUEST_BYTES)
+    spool_limit = int(spool_threshold if spool_threshold is not None else getattr(settings, "SPOOL_MAX_BYTES", limit))
+    hasher = hashlib.sha256()
+    total = 0
+    buffer = bytearray()
+    tmp_path: Path | None = None
+    tmp_handle = None
+    tmp_dir: Path | None = None
+    try:
+        while True:
+            chunk_bytes = await file.read(chunk)
+            if not chunk_bytes:
+                break
+            total += len(chunk_bytes)
+            if total > limit:
+                raise ApiError(
+                    status_code=413,
+                    code="payload_too_large",
+                    detail=_UPLOAD_TOO_LARGE_DETAIL,
+                    hint=_UPLOAD_TOO_LARGE_HINT,
+                )
+            hasher.update(chunk_bytes)
+            if tmp_path:
+                assert tmp_handle is not None
+                tmp_handle.write(chunk_bytes)
+                continue
+            buffer.extend(chunk_bytes)
+            if len(buffer) > spool_limit:
+                tmp_dir = Path(tempfile.mkdtemp(prefix="ingest_api_"))
+                tmp_path = tmp_dir / safe_name
+                tmp_handle = tmp_path.open("wb")
+                if buffer:
+                    tmp_handle.write(buffer)
+                    buffer.clear()
+        if tmp_handle:
+            tmp_handle.flush()
+    finally:
+        with suppress(Exception):
+            if tmp_handle:
+                tmp_handle.close()
+        with suppress(Exception):
+            await file.close()
+    payload: bytes | Path = tmp_path if tmp_path is not None else bytes(buffer)
+    return payload, hasher.hexdigest(), total, extension
 
 
 def route_path(request: Request) -> str:
@@ -153,31 +212,7 @@ def validate_upload_file(file: UploadFile | str) -> tuple[str, str]:
     """Ensure the uploaded filename is safe and uses a supported extension."""
 
     name = file.filename if isinstance(file, UploadFile) else file
-    if not name:
-        raise ApiError(status_code=400, code="bad_request", detail="Filename is required")
-    try:
-        safe_name = sanitize_upload_name(name)
-    except ValueError as exc:
-        message = str(exc)
-        hint = None
-        if "Unsupported file extension" in message:
-            code = "unsupported_file_format"
-            hint = "Upload CSV or XLSX files exported from Amazon reports."
-        else:
-            code = "bad_request"
-        raise ApiError(status_code=400, code=code, detail=message, hint=hint) from exc
-
-    lowered = safe_name.lower()
-    if not any(lowered.endswith(ext) for ext in _SUPPORTED_SUFFIXES):
-        suffix = Path(name or "").suffix.lower() or "unknown"
-        raise ApiError(
-            status_code=400,
-            code="unsupported_file_format",
-            detail=f"Files with extension '{suffix}' are not supported",
-            hint="Upload CSV or XLSX files exported from Amazon reports.",
-        )
-    extension = Path(safe_name).suffix.lstrip(".") or "unknown"
-    return safe_name, extension
+    return sanitize_filename(name or "")
 
 
 def ensure_size_limit(request: Request, *, max_bytes: int) -> None:
@@ -237,31 +272,30 @@ async def persist_upload_to_temp(file: UploadFile, request: Request, *, log: Bou
     """Persist an uploaded file to a temp directory, hashing content as it streams."""
 
     extension = Path(file.filename or "").suffix.lstrip(".") or "unknown"
+    tmp_path: Path | None = None
     try:
         safe_name, extension = validate_upload_file(file)
         chunk_size, max_bytes = _upload_limits()
         ensure_size_limit(request, max_bytes=max_bytes)
-        stream = _UploadStream(
-            file,
-            chunk_size=chunk_size,
-            max_bytes=max_bytes,
-            detail=_UPLOAD_TOO_LARGE_DETAIL,
-            hint=_UPLOAD_TOO_LARGE_HINT,
-        )
-        tmp_dir = Path(tempfile.mkdtemp(prefix="ingest_api_"))
-        tmp_path = tmp_dir / safe_name
         start = time.perf_counter()
         with ingest_upload_inflight():
-            with tmp_path.open("wb") as handle:
-                async for chunk in stream:
-                    handle.write(chunk)
-        await file.close()
+            payload, digest, total_bytes, extension = await read_upload_file(
+                file, chunk_size=chunk_size, max_bytes=max_bytes
+            )
+            if isinstance(payload, Path):
+                tmp_path = payload
+            else:
+                tmp_dir = Path(tempfile.mkdtemp(prefix="ingest_api_"))
+                tmp_path = tmp_dir / safe_name
+                with tmp_path.open("wb") as handle:
+                    handle.write(payload)
         duration = time.perf_counter() - start
-        record_ingest_upload(stream.total, duration, extension=extension)
+        assert tmp_path is not None
+        record_ingest_upload(total_bytes, duration, extension=extension)
         return IngestUpload(
             uri=f"file://{tmp_path}",
-            digest=stream.digest,
-            total_bytes=stream.total,
+            digest=digest,
+            total_bytes=total_bytes,
             extension=extension,
             path=tmp_path,
         )
@@ -281,74 +315,36 @@ async def upload_file_to_minio(file: UploadFile, request: Request, *, log: Bound
 
     extension = Path(file.filename or "").suffix.lstrip(".") or "unknown"
     session = aioboto3.Session()
+    payload_path: Path | None = None
     try:
         safe_name, extension = validate_upload_file(file)
         chunk_size, max_bytes = _upload_limits()
         ensure_size_limit(request, max_bytes=max_bytes)
-        bucket, key = _build_minio_key(safe_name)
-        stream = _UploadStream(
-            file,
-            chunk_size=chunk_size,
-            max_bytes=max_bytes,
-            detail=_UPLOAD_TOO_LARGE_DETAIL,
-            hint=_UPLOAD_TOO_LARGE_HINT,
-        )
+        bucket, key = build_minio_key(safe_name)
         client_kwargs = get_s3_client_kwargs()
         config = get_s3_client_config()
         start = time.perf_counter()
         async with session.client("s3", config=config, **client_kwargs) as client:
-            upload_id: str | None = None
-            parts: list[dict[str, Any]] = []
-            part_no = 1
-            buffer = bytearray()
-
-            async def _flush_part(payload: bytes, number: int) -> None:
-                nonlocal parts
-                response = await client.upload_part(
-                    Bucket=bucket, Key=key, UploadId=upload_id, PartNumber=number, Body=payload
-                )
-                parts.append({"ETag": response["ETag"], "PartNumber": number})
-
             with ingest_upload_inflight():
-                try:
-                    async for chunk in stream:
-                        buffer.extend(chunk)
-                        if upload_id is None and len(buffer) >= chunk_size:
-                            upload = await client.create_multipart_upload(Bucket=bucket, Key=key)
-                            upload_id = upload["UploadId"]
-                        while upload_id and len(buffer) >= chunk_size:
-                            payload = bytes(buffer[:chunk_size])
-                            del buffer[:chunk_size]
-                            await _flush_part(payload, part_no)
-                            part_no += 1
-                    if upload_id is None:
-                        await client.put_object(Bucket=bucket, Key=key, Body=bytes(buffer))
-                    else:
-                        if buffer:
-                            await _flush_part(bytes(buffer), part_no)
-                        await client.complete_multipart_upload(
-                            Bucket=bucket,
-                            Key=key,
-                            UploadId=upload_id,
-                            MultipartUpload={"Parts": parts},
-                        )
-                except ApiError:
-                    raise
-                except Exception as exc:
-                    if upload_id:
-                        with suppress(Exception):
-                            await client.abort_multipart_upload(Bucket=bucket, Key=key, UploadId=upload_id)
-                    raise ApiError(
-                        status_code=500,
-                        code="bad_request",
-                        detail="Failed to upload file to object storage",
-                    ) from exc
+                payload, digest, total_bytes, extension = await read_upload_file(
+                    file, chunk_size=chunk_size, max_bytes=max_bytes
+                )
+                if isinstance(payload, Path):
+                    payload_path = payload
+                await _upload_payload_to_minio(
+                    client,
+                    bucket=bucket,
+                    key=key,
+                    payload=payload,
+                    total_bytes=total_bytes,
+                    chunk_size=chunk_size,
+                )
         duration = time.perf_counter() - start
-        record_ingest_upload(stream.total, duration, extension=extension)
+        record_ingest_upload(total_bytes, duration, extension=extension)
         return IngestUpload(
             uri=f"minio://{bucket}/{key}",
-            digest=stream.digest,
-            total_bytes=stream.total,
+            digest=digest,
+            total_bytes=total_bytes,
             extension=extension,
             object_key=key,
         )
@@ -361,6 +357,8 @@ async def upload_file_to_minio(file: UploadFile, request: Request, *, log: Bound
     finally:
         with suppress(Exception):
             await file.close()
+        if payload_path:
+            shutil.rmtree(payload_path.parent, ignore_errors=True)
 
 
 async def download_uri_to_temp(uri: str, *, log: BoundLogger) -> IngestUpload:
@@ -386,6 +384,66 @@ def _upload_limits() -> tuple[int, int]:
     chunk_size = max(1, int(settings.INGEST_CHUNK_SIZE_MB) * 1024 * 1024)
     max_bytes = int(settings.MAX_REQUEST_BYTES)
     return chunk_size, max_bytes
+
+
+async def _upload_payload_to_minio(
+    client: Any,
+    *,
+    bucket: str,
+    key: str,
+    payload: bytes | Path,
+    total_bytes: int,
+    chunk_size: int,
+) -> None:
+    part_size = max(1, int(chunk_size))
+    upload_id: str | None = None
+    parts: list[dict[str, Any]] = []
+    handle: IO[bytes] | None = None
+    iterator: Iterator[bytes]
+    try:
+        if isinstance(payload, Path):
+            handle = payload.open("rb")
+        else:
+            handle = None
+        if total_bytes <= part_size:
+            if isinstance(payload, bytes):
+                body = payload
+            else:
+                assert handle is not None
+                body = handle.read()
+            await client.put_object(Bucket=bucket, Key=key, Body=body)
+            return
+
+        if isinstance(payload, bytes):
+            iterator = (payload[i : i + part_size] for i in range(0, len(payload), part_size))
+        else:
+            assert handle is not None
+            iterator = iter(lambda: handle.read(part_size), b"")
+        upload = await client.create_multipart_upload(Bucket=bucket, Key=key)
+        upload_id = upload["UploadId"]
+        for part_no, data in enumerate(iterator, start=1):
+            response = await client.upload_part(
+                Bucket=bucket, Key=key, UploadId=upload_id, PartNumber=part_no, Body=data
+            )
+            parts.append({"ETag": response["ETag"], "PartNumber": part_no})
+        await client.complete_multipart_upload(
+            Bucket=bucket,
+            Key=key,
+            UploadId=upload_id,
+            MultipartUpload={"Parts": parts},
+        )
+    except Exception as exc:
+        if upload_id:
+            with suppress(Exception):
+                await client.abort_multipart_upload(Bucket=bucket, Key=key, UploadId=upload_id)
+        raise ApiError(
+            status_code=500,
+            code="bad_request",
+            detail="Failed to upload file to object storage",
+        ) from exc
+    finally:
+        if handle:
+            handle.close()
 
 
 async def _download_minio(parsed: ParseResult) -> IngestUpload:
@@ -554,7 +612,7 @@ async def _write_stream_to_temp(chunks: AsyncIterator[bytes], *, scheme: str) ->
     return tmp_path, hasher.hexdigest(), total
 
 
-def _build_minio_key(filename: str) -> tuple[str, str]:
+def build_minio_key(filename: str) -> tuple[str, str]:
     bucket = get_bucket_name()
     today = datetime.date.today().strftime("%Y-%m")
     key = f"raw/amazon/{today}/{filename}"
@@ -621,6 +679,7 @@ ingest_error_response = api_error_response
 
 __all__ = [
     "ApiError",
+    "build_minio_key",
     "IngestRequestError",
     "IngestUpload",
     "api_error_response",
@@ -631,8 +690,10 @@ __all__ = [
     "ingest_error_response",
     "meta_from_result",
     "persist_upload_to_temp",
+    "read_upload_file",
     "respond_with_ingest_error",
     "route_path",
+    "sanitize_filename",
     "unexpected_error_response",
     "upload_file_to_minio",
     "validate_upload_file",
