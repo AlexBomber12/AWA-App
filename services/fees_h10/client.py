@@ -73,6 +73,13 @@ async def _get_http_client() -> AsyncHTTPClient:
         return _HTTP_CLIENT
 
 
+async def init_http_client(force: bool = False) -> AsyncHTTPClient:
+    """Initialise and cache the Helium10 HTTP client."""
+    if force:
+        await close_http_client()
+    return await _get_http_client()
+
+
 async def close_http_client() -> None:
     global _HTTP_CLIENT
     client = _HTTP_CLIENT

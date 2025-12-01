@@ -28,16 +28,13 @@ from awa_common.metrics import (
 )
 from awa_common.sentry import init_sentry
 from awa_common.settings import settings as SETTINGS
-from services.etl import http_client as legacy_http_client
 
 from . import db_async
-from .client import close_http_client, fetch_fees
+from .client import close_http_client, fetch_fees, init_http_client
 
 configure_logging(service="fees_h10", level=SETTINGS.LOG_LEVEL)
 metrics_init(service="fees_h10", env=SETTINGS.APP_ENV, version=SETTINGS.APP_VERSION)
 init_sentry("fees_h10")
-# Compatibility shim for legacy patching sites.
-http_client = legacy_http_client
 
 _AsyncToSyncType = Callable[[Callable[..., Awaitable[Any]]], Callable[..., Any]]
 
@@ -249,11 +246,10 @@ async def _bulk(asins: list[str]) -> dict[str, int]:
 
 
 async def _run_refresh(asins: list[str]) -> dict[str, int]:
-    await http_client.init_http()
+    await init_http_client()
     try:
         return await _bulk(asins)
     finally:
-        await http_client.close_http()
         await close_http_client()
         await db_async.close_pool()
 

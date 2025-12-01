@@ -30,8 +30,8 @@ async def test_run_refresh_persists_rows(monkeypatch: pytest.MonkeyPatch) -> Non
 
     monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg://localhost/db")
     monkeypatch.setattr(worker, "fetch_fees", fake_fetch, raising=False)
-    monkeypatch.setattr(worker.http_client, "init_http", fake_init, raising=False)
-    monkeypatch.setattr(worker.http_client, "close_http", fake_close, raising=False)
+    monkeypatch.setattr(worker, "init_http_client", fake_init, raising=False)
+    monkeypatch.setattr(worker, "close_http_client", fake_close, raising=False)
     monkeypatch.setattr(worker.db_async, "upsert_fee_rows", fake_upsert, raising=False)
     monkeypatch.setattr(worker.db_async, "close_pool", fake_close, raising=False)
 
@@ -63,8 +63,8 @@ async def test_run_refresh_skips_without_database(monkeypatch: pytest.MonkeyPatc
     monkeypatch.delenv("DATABASE_URL", raising=False)
     monkeypatch.setattr(worker, "_database_configured", lambda: False, raising=False)
     monkeypatch.setattr(worker, "fetch_fees", fake_fetch, raising=False)
-    monkeypatch.setattr(worker.http_client, "init_http", fake_init, raising=False)
-    monkeypatch.setattr(worker.http_client, "close_http", fake_close, raising=False)
+    monkeypatch.setattr(worker, "init_http_client", fake_init, raising=False)
+    monkeypatch.setattr(worker, "close_http_client", fake_close, raising=False)
     monkeypatch.setattr(worker.db_async, "upsert_fee_rows", fake_upsert, raising=False)
     monkeypatch.setattr(worker.db_async, "close_pool", fake_close, raising=False)
 
@@ -99,8 +99,8 @@ async def test_fetch_single_limits_concurrency(monkeypatch: pytest.MonkeyPatch) 
         return None
 
     monkeypatch.setattr(worker.db_async, "upsert_fee_rows", fake_upsert, raising=False)
-    monkeypatch.setattr(worker.http_client, "init_http", fake_init, raising=False)
-    monkeypatch.setattr(worker.http_client, "close_http", fake_close, raising=False)
+    monkeypatch.setattr(worker, "init_http_client", fake_init, raising=False)
+    monkeypatch.setattr(worker, "close_http_client", fake_close, raising=False)
     monkeypatch.setattr(worker.db_async, "close_pool", fake_close, raising=False)
     monkeypatch.setattr(worker.SETTINGS, "H10_MAX_CONCURRENCY", 2, raising=False)
 

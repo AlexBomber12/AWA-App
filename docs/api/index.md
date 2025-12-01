@@ -165,7 +165,10 @@ Returns {"status": "success"} when processing completes.
 
 <a id="etl.fba_fee_ingestor"></a>
 
-# etl.fba\_fee\_ingestor
+# etl.fba\_fee\_ingestor (legacy)
+
+Legacy Helium10 CLI now lives at `docs/legacy_samples/etl/fba_fee_ingestor.py`; use `services.fees_h10` for the
+supported Helium10 pipeline.
 
 <a id="etl.dialects.amazon_settlements"></a>
 
@@ -205,7 +208,9 @@ Returns {"status": "success"} when processing completes.
 
 <a id="etl.keepa_ingestor"></a>
 
-# etl.keepa\_ingestor
+# etl.keepa\_ingestor (legacy)
+
+Archived Keepa sample kept at `docs/legacy_samples/etl/keepa_ingestor.py`; not part of the supported ETL fleet.
 
 <a id="etl.db"></a>
 
@@ -213,7 +218,10 @@ Returns {"status": "success"} when processing completes.
 
 <a id="etl.sp_fees"></a>
 
-# etl.sp\_fees
+# etl.sp\_fees (legacy)
+
+Historical SP-API fees helper retained at `docs/legacy_samples/etl/sp_fees.py`; the active fees pipeline is
+`services.fees_h10`.
 
 <a id="api"></a>
 
