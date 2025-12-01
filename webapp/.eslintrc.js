@@ -11,8 +11,6 @@ module.exports = {
   rules: {
     "react/react-in-jsx-scope": "off",
     "react/jsx-uses-react": "off",
-    "react-hooks/set-state-in-effect": "off",
-    "react-hooks/refs": "off",
     "jsx-a11y/label-has-associated-control": "off",
     "react/prop-types": "off",
   },
