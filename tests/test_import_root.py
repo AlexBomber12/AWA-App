@@ -1,7 +1,6 @@
 import importlib
 
 MODULES = [
-    "db",
     "services.etl.helium_fees",
     "services.etl.keepa_ingestor",
     "services.etl.keepa_etl",

@@ -15,7 +15,6 @@ const customJestConfig = {
   },
   transformIgnorePatterns: ["/node_modules/(?!((?:until-async)|msw)/)"],
   testMatch: ["<rootDir>/tests/unit/**/*.test.{ts,tsx}"],
-  modulePathIgnorePatterns: ["<rootDir>/node_modules_old"],
   collectCoverageFrom: [
     "<rootDir>/components/features/dashboard/**/*.{ts,tsx}",
     "<rootDir>/components/features/roi/**/*.{ts,tsx}",

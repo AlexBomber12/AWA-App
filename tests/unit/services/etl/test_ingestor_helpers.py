@@ -80,7 +80,7 @@ def test_sp_build_rows_from_live(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setitem(
         sys.modules,
-        "sp_api.api",
+        "services.sp_api.api",
         types.SimpleNamespace(SellingPartnerAPI=lambda **kwargs: FakeAPI()),
     )
     rows = sp_fees.build_rows_from_live(

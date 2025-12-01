@@ -15,4 +15,4 @@ def _ensure_metadata(dist: str = "pytest") -> None:
 
 def test_smoke():
     _ensure_metadata()
-    importlib.import_module("src")
+    importlib.import_module("services.alert_bot")

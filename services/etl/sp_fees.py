@@ -76,7 +76,7 @@ def build_rows_from_live(
 ) -> list[dict[str, Any]]:
     from typing import cast
 
-    from sp_api.api import SellingPartnerAPI
+    from services.sp_api.api import SellingPartnerAPI
 
     client_factory = cast(Any, SellingPartnerAPI)
     api = cast(
