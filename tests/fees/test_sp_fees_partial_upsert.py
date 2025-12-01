@@ -72,32 +72,3 @@ def test_sp_fees_upsert_only_changes(pg_engine, ensure_test_fees_raw_table):
             text("SELECT amount FROM test_fees_raw WHERE asin='B2' AND fee_type='fba_pick_pack'")
         ).scalar_one()
     assert float(amt) == 2.50
-
-
-def test_sp_network_timeout_and_bad_json_do_not_write(pg_engine, ensure_test_fees_raw_table, monkeypatch):
-    _env()
-    import httpx
-
-    from services.etl import sp_fees as spfi
-
-    os.environ["ENABLE_LIVE"] = "1"
-    with pg_engine.begin() as conn:
-        conn.execute(text("TRUNCATE test_fees_raw;"))
-    dummy = type("DummyEngine", (), {"dispose": lambda self: None})()
-    monkeypatch.setattr("services.etl.sp_fees.create_engine", lambda dsn: dummy)
-    called = {"n": 0}
-    monkeypatch.setattr(
-        spfi.repo,
-        "upsert_fees_raw",
-        lambda *a, **k: called.__setitem__("n", called["n"] + 1),
-    )
-
-    def boom(*_args, **_kwargs):
-        raise httpx.TimeoutException("network timeout")
-
-    monkeypatch.setattr(spfi, "build_rows_from_live", boom)
-    assert spfi.main([]) == 1
-    with pg_engine.connect() as c:
-        count = c.execute(text("SELECT COUNT(*) FROM test_fees_raw")).scalar_one()
-    assert count == 0
-    assert called["n"] == 0

@@ -8,5 +8,5 @@ export PYTHONPATH="${PYTHONPATH:-/app:/app/services}"
 if [ "$#" -gt 0 ]; then
   exec "$@"
 else
-  exec python -m services.etl.keepa_ingestor
+  exec python -m services.etl.healthcheck
 fi

@@ -309,10 +309,10 @@ causing the script to crash.
 - **test** workflow (health-checks job)
 
 ## Summary
-`docker compose` reported `container awa-app-celery_worker-1 is unhealthy` because the ETL entrypoint always executed `python -m services.etl.keepa_ingestor`, ignoring the Celery command so the worker never started.
+`docker compose` reported `container awa-app-celery_worker-1 is unhealthy` because the legacy ETL entrypoint always executed `python -m services.etl.keepa_ingestor`, ignoring the Celery command so the worker never started.
 
 ## Fix
-- Allow `services/etl/entrypoint.sh` to execute the provided command after waiting for PostgreSQL, falling back to `python -m services.etl.keepa_ingestor` when none is supplied.
+- Allow `services/etl/entrypoint.sh` to execute the provided command after waiting for PostgreSQL, falling back to `python -m services.etl.healthcheck` when none is supplied.
 
 ## Logs
 - `ci-logs/latest/test/0_health-checks.txt`
@@ -636,10 +636,10 @@ Starting the ETL container crashed with `ModuleNotFoundError: No module named 's
 - **CI** workflow (compose-logs job)
 
 ## Summary
-`python -m services.etl.keepa_ingestor` crashed with `FileNotFoundError: [Errno 2] No such file or directory: 'tests/fixtures/keepa_sample.json'` when the ETL container started without the test fixtures present.
+`python -m services.etl.keepa_ingestor` (legacy fallback) crashed with `FileNotFoundError: [Errno 2] No such file or directory: 'tests/fixtures/keepa_sample.json'` when the ETL container started without the test fixtures present.
 
 ## Fix
-- Copy `tests/fixtures/keepa_sample.json` into the ETL image so the default ingest command finds the sample data.
+- Copy `tests/fixtures/keepa_sample.json` into the ETL image so the default ingest command finds the sample data. The default command now runs `services.etl.healthcheck` after quarantining `keepa_ingestor` under `docs/legacy_samples/etl/`.
 
 ## Logs
 - `ci-logs/latest/CI/compose-logs.txt`
@@ -664,10 +664,10 @@ Starting the ETL container crashed with `ModuleNotFoundError: No module named 's
 - **CI** workflow (compose-up job)
 
 ## Summary
-The ETL container exited during `docker compose up` because `python -m services.etl.keepa_ingestor` could not import `pg_utils`.
+The ETL container exited during `docker compose up` because the legacy default `python -m services.etl.keepa_ingestor` could not import `pg_utils`.
 
 ## Fix
-- Export `PYTHONPATH` in `services/etl/entrypoint.sh` so bundled modules like `pg_utils` are discoverable.
+- Export `PYTHONPATH` in `services/etl/entrypoint.sh` so bundled modules like `pg_utils` are discoverable. The default now runs the lightweight healthcheck instead of the legacy Keepa ingestor.
 
 ## Logs
 - `.codex/last-run/compose-logs.txt`

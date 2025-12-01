@@ -7,7 +7,7 @@ components in `packages/awa_common` to deliver repeatable pipelines that survive
 
 - The schema defined in `services/api/migrations/versions/0032_etl_reliability.py` creates
   `load_log` with a unique constraint on `(source, idempotency_key)`. Columns:
-  - `source` (≤128 chars) – logical agent name (`keepa_ingestor`, `fba_fee_ingestor`, …).
+- `source` (≤128 chars) – logical agent name (`fees_h10`, `ingest.import_file`, …).
   - `idempotency_key` (64-char BLAKE2 digest) computed in `packages/awa_common/etl/idempotency.py`.
   - `status` in `{pending, success, skipped, failed}`; constants live in
     `packages/awa_common/db/load_log.py`.
@@ -26,7 +26,8 @@ components in `packages/awa_common` to deliver repeatable pipelines that survive
 ## HTTP Policy
 
 - Always call `awa_common.http_client.HTTPClient` / `AsyncHTTPClient` for outbound requests; the
-  deprecated `packages/awa_common/etl/http` shims remain only for legacy tests.
+  deprecated `packages/awa_common/etl/http` shims remain only for legacy tests and the old
+  `services.etl.http_client` module has been removed entirely.
 - Defaults come from `settings.HTTP_*`: connect 5 s, read 30 s, total 60 s with `HTTP_MAX_RETRIES`
   exponential backoff (`HTTP_BACKOFF_BASE_S`/`HTTP_BACKOFF_MAX_S`/`HTTP_BACKOFF_JITTER_S`) and
   retryable status codes in `HTTP_RETRY_STATUS_CODES` (honours `Retry-After`).
@@ -89,14 +90,14 @@ components in `packages/awa_common` to deliver repeatable pipelines that survive
 
   with process_once(
       SessionLocal,
-      source="keepa_ingestor",
+      source="fees_h10",
       payload_meta=payload_meta,
       idempotency_key=key,
   ) as handle:
       if handle is None:
-          record_etl_skip("keepa_ingestor")
+          record_etl_skip("fees_h10")
           return
-      with record_etl_run("keepa_ingestor"):
+      with record_etl_run("fees_h10"):
       # use handle.session for transactional work
       ingest_rows(handle.session, payload_meta)
   ```
@@ -137,8 +138,6 @@ components in `packages/awa_common` to deliver repeatable pipelines that survive
   `services/returns_etl` CLI was retired (see `docs/legacy_samples/returns_loader.md`).
 - **Helium10 fees (`services.fees_h10.worker.refresh_fees`)** – keyed on the sorted ASIN list with metadata
   for `asin_count` and source URL; duplicate keys set `status='skipped'` before any API calls.
-- **SP fees (`services.etl.sp_fees`)** – keyed on mode + SKU list + date; supports live SP API or fixture
-  input and upserts into `fees_raw` using the shared guard.
 - **Logistics ETL (`services.logistics_etl.flow.run_once_with_guard` via Celery `logistics.etl.full`)** –
   fingerprints each snapshot by `seqno`/SHA256 and records `rows_in`/`rows_upserted` in `payload_meta`.
   Repeat runs with the same fingerprint are skipped; the historical `logistics_loadlog` table remains for
@@ -146,6 +145,12 @@ components in `packages/awa_common` to deliver repeatable pipelines that survive
 - **Price importer (`services.price_importer.import`)** – keyed on vendor and input file stats; run with
   `python -m services.price_importer.import --file ... --vendor ...`. `payload_meta` is updated with vendor
   and batch counters, and duplicate files are skipped unless a new idempotency key is supplied.
+
+## Legacy pipelines
+
+- Archived ingestors (`docs/legacy_samples/etl/keepa_ingestor.py`, `docs/legacy_samples/etl/fba_fee_ingestor.py`,
+  `docs/legacy_samples/etl/sp_fees.py`, etc.) are retained as references only and are no longer importable from
+  `services.etl.*`. Avoid wiring them into Celery or API codepaths; use `services.fees_h10` for Helium10 fees.
 
 ## Adding a Connector (Checklist)
 

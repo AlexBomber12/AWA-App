@@ -1,10 +1,10 @@
 import importlib
 
 MODULES = [
-    "services.etl.helium_fees",
-    "services.etl.keepa_ingestor",
-    "services.etl.keepa_etl",
-    "services.etl.sp_fees",
+    "services.etl.healthcheck",
+    "services.etl.dialects.schemas",
+    "services.fees_h10.client",
+    "services.fees_h10.worker",
 ]
 
 

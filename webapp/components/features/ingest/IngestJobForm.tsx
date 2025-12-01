@@ -209,7 +209,7 @@ export function IngestJobForm({ onJobStarted, disabled = false, className }: Ing
                     <FormControl>
                       <Input placeholder="returns_report" disabled={isDisabled} {...field} />
                     </FormControl>
-                    <FormDescription>Optional hint for the ETL agent (returns_report, keepa_ingestor, etc.).</FormDescription>
+                    <FormDescription>Optional hint for the ETL agent (e.g., returns_report dialect or another supported import type).</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}

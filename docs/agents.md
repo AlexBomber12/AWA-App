@@ -5,24 +5,17 @@ The agents layer automates scheduled data collection and operational tasks acros
 ## Fleet overview
 | Agent | Container / Schedule | Triggers | Outputs |
 | ----- | -------------------- | -------- | ------- |
-| `keepa_ingestor` | etl container / daily cron | new Keepa data | MinIO CSV file, Postgres log |
-| `fba_fee_ingestor` | etl container / daily cron | new Helium10 fees | Postgres `fees_raw` table |
-| `sp_fees_ingestor` | etl container / hourly cron | Amazon SP API data | Postgres `fees_raw` table |
+| `fees_h10` | fees_h10 worker / daily Celery beat (`fees.refresh`) | active ASIN list from DB | Postgres `fees_raw` table |
 | `sku_scoring_engine` | scoring container / nightly cron | updated SKU list | Postgres `scores` table |
 | `repricer_service` | repricer container / 15 min cron | pricing signals | `repricer_log` entries |
 | `restock_planner` | planner container / weekly cron | inventory changes | restock plan CSV |
 
 ## Agent descriptions
-### keepa_ingestor
-Fetches product metrics from the Keepa API. Results are written to a CSV object in MinIO and a brief summary is logged to Postgres. The agent requires `KEEPA_KEY`, `MINIO_ENDPOINT`, `MINIO_ACCESS_KEY`, `MINIO_SECRET_KEY`, and `DATABASE_URL`.
-
-### fba_fee_ingestor
-Downloads FBA fee data from Helium10. It reads `HELIUM_API_KEY` and `DATABASE_URL` to populate the `fees_raw` table. When run with `ENABLE_LIVE=1` it queries the live API, otherwise it loads fixture data for tests.
-
-### sp_fees_ingestor
-Retrieves fee estimates from Amazon’s Selling Partner API for a list of SKUs. Required variables are
-`SP_REFRESH_TOKEN`, `SP_CLIENT_ID`, `SP_CLIENT_SECRET`, `REGION`, `DATABASE_URL`, and optionally
-`SP_API_BASE_URL` when pointing at a mock endpoint.
+### fees_h10
+Refreshes Helium10 FBA fee data for active ASINs using the shared async HTTP client. The Celery beat
+task `fees.refresh` reads `HELIUM10_KEY` (or `etl.helium10_key`), honours `HELIUM10_BASE_URL`,
+`HELIUM10_TIMEOUT_S`, and `HELIUM10_MAX_RETRIES`, and upserts rows into `fees_raw`. Concurrency is
+limited by `H10_MAX_CONCURRENCY`.
 
 ### sku_scoring_engine
 Processes SKU information each night and updates the `scores` table with performance indicators used by other services.
@@ -32,6 +25,11 @@ Exposes a FastAPI service that computes optimal prices. It is invoked every 15 m
 
 ### restock_planner
 Generates a weekly CSV file containing recommended restock quantities. This agent monitors inventory levels and sales velocity to plan replenishment.
+
+### Legacy ETL samples
+The retired ingestors (`keepa_ingestor`, `fba_fee_ingestor`, `sp_fees_ingestor`) are archived under
+`docs/legacy_samples/etl/` and described in `docs/legacy_samples/ETL_LEGACY_NOTES.md`; they are no
+longer part of the supported fleet.
 
 ## Large report streaming
 - `etl.load_csv.import_file` accepts `streaming=True` plus an optional `chunk_size` to stream CSV or XLSX uploads through `copy_df_via_temp`. Leave the flag unset to preserve the legacy in-memory behaviour.
