@@ -3,22 +3,35 @@ import { useMemo, useState } from "react";
 
 import { RoiTable } from "@/components/features/roi/RoiTable";
 import { ErrorState } from "@/components/data";
-import type { RoiRow } from "@/components/features/roi/types";
+import type { RoiItem } from "@/components/features/roi/types";
 import type { ApiError } from "@/lib/api/apiError";
 import type { RoiSort } from "@/lib/tableState/roi";
 
-const makeRow = (index: number): RoiRow => ({
-  asin: `ASIN-${(index + 1).toString().padStart(4, "0")}`,
-  title: `Sample ROI SKU ${index + 1}`,
-  vendor_id: (index % 5) + 1,
-  category: index % 2 === 0 ? "Beauty" : "Outdoors",
-  cost: 10 + index,
-  freight: 2 + (index % 3),
-  fees: 1.5 + (index % 2),
-  roi_pct: 15 + index,
-});
+const makeRow = (index: number): RoiItem => {
+  const cost = 10 + index;
+  const freight = 2 + (index % 3);
+  const fees = 1.5 + (index % 2);
+  const roi = 15 + index;
+  const buyPrice = cost + freight + fees;
+  const margin = (roi / 100) * buyPrice;
+  return {
+    sku: `ASIN-${(index + 1).toString().padStart(4, "0")}`,
+    asin: `ASIN-${(index + 1).toString().padStart(4, "0")}`,
+    title: `Sample ROI SKU ${index + 1}`,
+    vendorId: String((index % 5) + 1),
+    category: index % 2 === 0 ? "Beauty" : "Outdoors",
+    cost,
+    freight,
+    fees,
+    roi,
+    margin,
+    buyPrice,
+    sellPrice: buyPrice + margin,
+    currency: "EUR",
+  };
+};
 
-const MOCK_ROWS: RoiRow[] = Array.from({ length: 50 }, (_, index) => makeRow(index));
+const MOCK_ROWS: RoiItem[] = Array.from({ length: 50 }, (_, index) => makeRow(index));
 const MOCK_ERROR: ApiError = { code: "BFF_ERROR", message: "Backend unavailable", status: 500 };
 
 const meta: Meta<typeof RoiTable> = {
@@ -182,7 +195,7 @@ export const SortedByVendor: Story = {
     const [pageSize, setPageSize] = useState(15);
     const [sort, setSort] = useState<RoiSort>("vendor_desc");
     const sortedRows = useMemo(
-      () => [...MOCK_ROWS].sort((a, b) => (b.vendor_id ?? 0) - (a.vendor_id ?? 0)),
+      () => [...MOCK_ROWS].sort((a, b) => Number(b.vendorId ?? 0) - Number(a.vendorId ?? 0)),
       []
     );
     const rows = useMemo(() => {

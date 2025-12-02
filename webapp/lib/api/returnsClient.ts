@@ -1,6 +1,7 @@
 import { fetchFromBff } from "@/lib/api/fetchFromBff";
 import type { ApiError } from "@/lib/api/apiError";
 import { useApiQuery, type UseApiQueryOptions } from "@/lib/api/useApiQuery";
+import type { BffListResponse, ReturnItem } from "@/lib/api/bffTypes";
 import {
   RETURNS_SORT_OPTIONS,
   RETURNS_TABLE_DEFAULTS,
@@ -13,23 +14,8 @@ import {
 const RETURNS_BFF_ENDPOINT = "/api/bff/returns";
 
 export type ReturnsFilters = ReturnsTableFilters;
-
-export type ReturnsRow = {
-  asin: string;
-  qty: number;
-  refundAmount: number;
-  avgRefundPerUnit: number;
-};
-
-export type ReturnsListResponse = {
-  items: ReturnsRow[];
-  pagination: {
-    page: number;
-    pageSize: number;
-    total: number;
-    totalPages: number;
-  };
-};
+export type { ReturnItem } from "@/lib/api/bffTypes";
+export type ReturnsRow = ReturnItem;
 
 export type ReturnsSummary = {
   totalAsins: number;
@@ -48,6 +34,9 @@ export type ReturnsListParams = {
 };
 
 export type { ReturnsSort };
+
+export type ReturnsListResponse = BffListResponse<ReturnItem> & { summary?: ReturnsSummary };
+export type ReturnsPageResponse = ReturnsListResponse;
 
 const buildListQuery = (params: ReturnsListParams): string => {
   const sort = params.sort && RETURNS_SORT_OPTIONS.includes(params.sort)
@@ -78,15 +67,17 @@ const buildStatsQuery = (filters?: ReturnsFilters): string => {
   return query.toString();
 };
 
-export async function getReturnsList(params: ReturnsListParams): Promise<ReturnsListResponse> {
+export async function getReturnsPage(params: ReturnsListParams): Promise<ReturnsPageResponse> {
   const query = buildListQuery(params);
-  const response = await fetchFromBff<ReturnsListResponse>(`${RETURNS_BFF_ENDPOINT}?${query}`);
-  return response;
+  return fetchFromBff<ReturnsPageResponse>(`${RETURNS_BFF_ENDPOINT}?${query}`);
 }
+
+export const getReturnsList = getReturnsPage;
 
 export async function getReturnsStats(filters?: ReturnsFilters): Promise<ReturnsSummary> {
   const query = buildStatsQuery(filters);
-  return fetchFromBff<ReturnsSummary>(`${RETURNS_BFF_ENDPOINT}?${query}`);
+  const response = await fetchFromBff<{ data: ReturnsSummary }>(`${RETURNS_BFF_ENDPOINT}?${query}`);
+  return response.data;
 }
 
 export const getReturnsListQueryKey = (params: ReturnsListParams) =>
@@ -106,12 +97,15 @@ type UseReturnsStatsQueryOptions = Omit<
 >;
 
 export function useReturnsListQuery(params: ReturnsListParams, options?: UseReturnsListQueryOptions) {
-  return useApiQuery<ReturnsListResponse, ApiError, ReturnsListResponse, ReturnType<typeof getReturnsListQueryKey>>({
+  return useApiQuery<ReturnsPageResponse, ApiError, ReturnsPageResponse, ReturnType<typeof getReturnsListQueryKey>>({
     queryKey: getReturnsListQueryKey(params),
-    queryFn: () => getReturnsList(params),
+    queryFn: () => getReturnsPage(params),
     ...options,
   });
 }
+
+export const useReturnsQuery = useReturnsListQuery;
+export const getReturnsPageQueryKey = getReturnsListQueryKey;
 
 export function useReturnsStatsQuery(filters?: ReturnsFilters, options?: UseReturnsStatsQueryOptions) {
   return useApiQuery<ReturnsSummary, ApiError, ReturnsSummary, ReturnType<typeof getReturnsStatsQueryKey>>({

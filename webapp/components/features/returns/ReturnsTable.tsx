@@ -5,7 +5,8 @@ import { useMemo } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
 
 import { DataTable, EmptyState, PaginationControls } from "@/components/data";
-import type { ReturnsListResponse, ReturnsRow, ReturnsSort } from "@/lib/api/returnsClient";
+import type { ReturnItem } from "@/lib/api/bffTypes";
+import type { ReturnsListResponse, ReturnsSort } from "@/lib/api/returnsClient";
 
 type SortableHeaderProps = {
   label: string;
@@ -52,7 +53,7 @@ const SortableHeader = ({ label, asc, desc, currentSort, onSortChange }: Sortabl
 };
 
 type ReturnsTableProps = {
-  rows: ReturnsRow[];
+  rows: ReturnItem[];
   pagination?: ReturnsListResponse["pagination"];
   isLoading?: boolean;
   page: number;
@@ -74,7 +75,7 @@ export function ReturnsTable({
   onPageSizeChange,
   onSortChange,
 }: ReturnsTableProps) {
-  const columns = useMemo<ColumnDef<ReturnsRow>[]>(
+  const columns = useMemo<ColumnDef<ReturnItem>[]>(
     () => [
       {
         accessorKey: "asin",
@@ -91,7 +92,7 @@ export function ReturnsTable({
         ),
       },
       {
-        accessorKey: "qty",
+        accessorKey: "quantity",
         header: () => (
           <SortableHeader
             label="Units returned"
@@ -101,10 +102,10 @@ export function ReturnsTable({
             onSortChange={onSortChange}
           />
         ),
-        cell: ({ row }) => row.original.qty.toLocaleString(),
+        cell: ({ row }) => row.original.quantity.toLocaleString(),
       },
       {
-        accessorKey: "refundAmount",
+        accessorKey: "reimbursementAmount",
         header: () => (
           <SortableHeader
             label="Refund amount"
@@ -114,12 +115,12 @@ export function ReturnsTable({
             onSortChange={onSortChange}
           />
         ),
-        cell: ({ row }) => <span className="font-medium">{formatCurrency(row.original.refundAmount)}</span>,
+        cell: ({ row }) => <span className="font-medium">{formatCurrency(row.original.reimbursementAmount)}</span>,
       },
       {
         accessorKey: "avgRefundPerUnit",
         header: "Avg refund / unit",
-        cell: ({ row }) => formatCurrency(row.original.avgRefundPerUnit),
+        cell: ({ row }) => formatCurrency(row.original.avgRefundPerUnit ?? 0),
       },
       {
         id: "actions",

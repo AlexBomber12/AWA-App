@@ -47,7 +47,7 @@ export function RoiTableContainer({ canApprove, onActionsChange }: RoiTableConta
     isRefetching,
     error,
     refetch,
-  } = roiClient.useRoiListQuery(
+  } = roiClient.useRoiQuery(
     {
       page: state.page,
       pageSize: state.pageSize,
@@ -139,7 +139,7 @@ export function RoiTableContainer({ canApprove, onActionsChange }: RoiTableConta
       ) : null}
 
       <RoiTable
-        rows={data?.items ?? []}
+        rows={data?.data ?? data?.items ?? []}
         pagination={data?.pagination}
         isLoading={isPending || isRefetching}
         page={state.page}

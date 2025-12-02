@@ -1,4 +1,5 @@
-import type { DecisionPayload, Rule, SimulationInput, SimulationScenario } from "@/lib/api/decisionTypes";
+import type { DecisionPayload, SimulationInput } from "@/lib/api/decisionTypes";
+import type { Rule, SimulationResult, SimulationScenario } from "@/lib/api/bffTypes";
 
 const BASE_DATE = Date.parse("2024-04-15T12:00:00.000Z");
 
@@ -8,6 +9,22 @@ const buildDecision = (decision: DecisionPayload): DecisionPayload => ({
   alternatives: [...decision.alternatives],
 });
 
+const toResult = (metrics: SimulationResult): SimulationResult => {
+  const roi = metrics.roi ?? 0;
+  const maxCogs = metrics.maxCogs ?? 0;
+  const margin = Number((metrics.revenueImpact ?? maxCogs).toFixed(2));
+  const breakEvenPrice = maxCogs ? Number((maxCogs * 1.05).toFixed(2)) : undefined;
+
+  return {
+    roi,
+    margin,
+    riskAdjustedRoi: metrics.riskAdjustedRoi,
+    maxCogs,
+    revenueImpact: metrics.revenueImpact,
+    breakEvenPrice,
+  };
+};
+
 export const DECISION_RULES: Rule[] = [
   {
     id: "rule-guardrail",
@@ -15,11 +32,12 @@ export const DECISION_RULES: Rule[] = [
     description: "Flags SKU and vendor pairs when ROI drops below 15% and proposes a discount request.",
     scope: "category",
     conditions: [
-      { category: "Home", field: "roi", operator: "<", value: 15, cadenceDays: 7 },
+      { category: "Home", field: "roi", op: "<", value: 15, cadenceDays: 7 },
       {
+        field: "volatility_pct",
         expression: "volatility_pct > 5",
         value: "rolling_volatility",
-        operator: ">",
+        op: ">",
         cadenceDays: 3,
       },
     ],
@@ -28,6 +46,7 @@ export const DECISION_RULES: Rule[] = [
       { action: "wait_until", cadenceDays: 1, defaultAction: "Observe for 24h" },
     ],
     cadence: { type: "rolling", days: 7 },
+    enabled: true,
     isActive: true,
     createdAt: new Date(BASE_DATE - 30 * 24 * 60 * 60 * 1000).toISOString(),
     updatedAt: new Date(BASE_DATE - 5 * 24 * 60 * 60 * 1000).toISOString(),
@@ -38,11 +57,12 @@ export const DECISION_RULES: Rule[] = [
     description: "Detects vendor shipments exceeding planned lead time by > 2 days and blocks repricing.",
     scope: "vendor",
     conditions: [
-      { field: "lead_time_slip", operator: ">", value: 2, vendorId: "2042" },
-      { field: "on_time_rate", operator: "<", value: 0.8, vendorId: "2042" },
+      { field: "lead_time_slip", op: ">", value: 2, vendorId: "2042" },
+      { field: "on_time_rate", op: "<", value: 0.8, vendorId: "2042" },
     ],
     actions: [{ action: "blocked_observe", defaultAction: "Pause repricing until inbound clears" }],
     cadence: { type: "calendar", days: 14 },
+    enabled: false,
     isActive: false,
     createdAt: new Date(BASE_DATE - 24 * 24 * 60 * 60 * 1000).toISOString(),
     updatedAt: new Date(BASE_DATE - 12 * 24 * 60 * 60 * 1000).toISOString(),
@@ -53,14 +73,15 @@ export const DECISION_RULES: Rule[] = [
     description: "Projects ROI impact for promo campaigns in Home and Outdoors categories.",
     scope: "campaign",
     conditions: [
-      { category: "Home", operator: "in", value: ["Home", "Outdoors"] },
-      { field: "promo_flag", operator: "==", value: true, cadenceDays: 14 },
+      { category: "Home", field: "category", op: "in", value: ["Home", "Outdoors"] },
+      { field: "promo_flag", op: "==", value: true, cadenceDays: 14 },
     ],
     actions: [
       { action: "update_price", defaultAction: "Apply +1.5% guardrail adjustment" },
       { action: "wait_until", defaultAction: "Observe promo performance for 24h" },
     ],
     cadence: { type: "calendar", days: 14 },
+    enabled: true,
     isActive: true,
     createdAt: new Date(BASE_DATE - 40 * 24 * 60 * 60 * 1000).toISOString(),
     updatedAt: new Date(BASE_DATE - 8 * 24 * 60 * 60 * 1000).toISOString(),
@@ -70,12 +91,13 @@ export const DECISION_RULES: Rule[] = [
     name: "Global Price Harmonization",
     description: "Ensures price deltas stay within tolerance across NA/EU regions.",
     scope: "global",
-    conditions: [{ field: "geo_price_delta", operator: ">", value: 7.5, expression: "delta_pct" }],
+    conditions: [{ field: "geo_price_delta", op: ">", value: 7.5, expression: "delta_pct" }],
     actions: [
       { action: "update_price", defaultAction: "Raise NA price by 1%" },
       { action: "continue", defaultAction: "Leave EU prices unchanged" },
     ],
     cadence: { type: "rolling", days: 10 },
+    enabled: true,
     isActive: true,
     createdAt: new Date(BASE_DATE - 60 * 24 * 60 * 60 * 1000).toISOString(),
     updatedAt: new Date(BASE_DATE - 6 * 24 * 60 * 60 * 1000).toISOString(),
@@ -88,19 +110,21 @@ export const SIMULATION_SCENARIOS: SimulationScenario[] = [
     name: "Home ROI boost",
     description: "Applies ROI guardrail rule to the Home category promo batch.",
     ruleId: "rule-guardrail",
-    input: {
+    baselineSku: "rule-guardrail",
+    parameters: {
       price: 24.5,
       cost: 13.2,
       volatility: 5.5,
       category: "Home",
       observeOnly: false,
     },
-    metrics: {
+    result: toResult({
       roi: 18.6,
       riskAdjustedRoi: 16.2,
       maxCogs: 14.8,
       revenueImpact: 4200,
-    },
+      margin: 14.8,
+    }),
     decisions: [
       buildDecision({
         decision: "update_price",
@@ -132,15 +156,17 @@ export const SIMULATION_SCENARIOS: SimulationScenario[] = [
     name: "Vendor backlog follow-up",
     description: "Tests vendor backlog rule with increased lead-time tolerance.",
     ruleId: "rule-vendor-late",
-    input: {
+    baselineSku: "rule-vendor-late",
+    parameters: {
       volatility: 3.2,
       observeOnly: true,
     },
-    metrics: {
+    result: toResult({
       roi: 16.4,
       riskAdjustedRoi: 12.2,
       maxCogs: 11.1,
-    },
+      margin: 11.1,
+    }),
     decisions: [
       buildDecision({
         decision: "blocked_observe",
@@ -157,17 +183,19 @@ export const SIMULATION_SCENARIOS: SimulationScenario[] = [
     name: "Global harmonization dry run",
     description: "Ensures global price harmonization rule can be simulated.",
     ruleId: "rule-global-harm",
-    input: {
+    baselineSku: "rule-global-harm",
+    parameters: {
       category: "Electronics",
       price: 32.4,
       cost: 14.8,
     },
-    metrics: {
+    result: toResult({
       roi: 21.5,
       riskAdjustedRoi: 18.5,
       maxCogs: 18.4,
       revenueImpact: 1800,
-    },
+      margin: 18.4,
+    }),
     decisions: [
       buildDecision({
         decision: "update_price",
@@ -192,6 +220,24 @@ export const buildSimulationScenario = (ruleId: string, input: SimulationInput):
   const roi = Math.min(24, 12 + score * 0.2);
   const riskAdjustedRoi = roi - 3;
   const maxCogs = Number((15 + score * 0.05).toFixed(2));
+  const revenueImpact = 420 + score;
+
+  const parameters = Object.fromEntries(
+    Object.entries(input ?? {}).map(([key, value]) => [
+      key,
+      typeof value === "string" || typeof value === "number" || typeof value === "boolean" ? value : String(value ?? ""),
+    ])
+  );
+
+  const baselineSku = typeof parameters.asin === "string" ? parameters.asin : ruleId;
+  const result: SimulationResult = {
+    roi,
+    margin: Number((maxCogs || roi).toFixed(2)),
+    riskAdjustedRoi,
+    maxCogs,
+    revenueImpact,
+    breakEvenPrice: Number((maxCogs * 1.05).toFixed(2)),
+  };
 
   const decisionBase: DecisionPayload = {
     decision: "update_price",
@@ -210,8 +256,10 @@ export const buildSimulationScenario = (ruleId: string, input: SimulationInput):
     name: `${rule?.name ?? "Decision"} simulation`,
     description: `Mock result for ${rule?.name ?? "selection"} using ${Object.keys(input ?? {}).length} inputs.`,
     ruleId,
-    input,
-    metrics: { roi, riskAdjustedRoi, maxCogs, revenueImpact: 420 + score },
+    baselineSku,
+    parameters,
+    result,
+    metrics: result,
     decisions: [
       buildDecision(decisionBase),
       buildDecision({
@@ -225,5 +273,6 @@ export const buildSimulationScenario = (ruleId: string, input: SimulationInput):
       }),
     ],
     createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   };
 };

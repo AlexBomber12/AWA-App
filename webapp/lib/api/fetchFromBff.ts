@@ -32,14 +32,26 @@ const readPayload = async (response: Response) => {
 };
 
 const toApiError = (status: number, payload: unknown): ApiError => {
-  if (payload && typeof payload === "object" && "code" in payload && "message" in payload) {
-    const errorPayload = payload as { code: string; message: string; details?: unknown; status?: number };
-    return createApiError({
-      code: errorPayload.code ?? "BFF_ERROR",
-      message: errorPayload.message ?? "Unexpected response from BFF.",
-      status: status ?? errorPayload.status ?? 500,
-      details: errorPayload.details ?? payload,
-    });
+  if (payload && typeof payload === "object") {
+    if ("error" in (payload as Record<string, unknown>)) {
+      const nested = (payload as { error?: { code?: string; message?: string; status?: number; details?: unknown } }).error;
+      return createApiError({
+        code: nested?.code ?? "BFF_ERROR",
+        message: nested?.message ?? "Unexpected response from BFF.",
+        status: status ?? nested?.status ?? 500,
+        details: nested?.details ?? payload,
+      });
+    }
+
+    if ("code" in payload && "message" in payload) {
+      const errorPayload = payload as { code: string; message: string; details?: unknown; status?: number };
+      return createApiError({
+        code: errorPayload.code ?? "BFF_ERROR",
+        message: errorPayload.message ?? "Unexpected response from BFF.",
+        status: status ?? errorPayload.status ?? 500,
+        details: errorPayload.details ?? payload,
+      });
+    }
   }
 
   return createApiError({

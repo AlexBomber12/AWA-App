@@ -15,6 +15,7 @@ jest.mock("@/components/features/roi/RoiTableContainer", () => ({
 
 jest.mock("@/lib/permissions/client", () => ({
   usePermissions: jest.fn(),
+  PermissionGuard: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
 
 const mockedPermissions = usePermissions as unknown as jest.MockedFunction<typeof usePermissions>;

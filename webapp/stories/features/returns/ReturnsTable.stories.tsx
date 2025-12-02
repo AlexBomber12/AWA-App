@@ -4,19 +4,27 @@ import { useMemo, useState } from "react";
 import { ErrorState } from "@/components/data";
 import { ReturnsTable } from "@/components/features/returns/ReturnsTable";
 import type { ApiError } from "@/lib/api/apiError";
-import type { ReturnsRow, ReturnsSort } from "@/lib/api/returnsClient";
+import type { ReturnItem, ReturnsSort } from "@/lib/api/returnsClient";
 
-const makeRow = (index: number): ReturnsRow => {
+const makeRow = (index: number): ReturnItem => {
   const refund = 25 + index * 3;
+  const quantity = (index + 1) * 2;
   return {
+    returnId: `RET-${(index + 1).toString().padStart(4, "0")}`,
     asin: `RET-${(index + 1).toString().padStart(4, "0")}`,
-    qty: (index + 1) * 2,
-    refundAmount: refund,
-    avgRefundPerUnit: refund / ((index + 1) * 2),
+    sku: `SKU-${(index + 1).toString().padStart(4, "0")}`,
+    quantity,
+    reimbursementAmount: refund,
+    avgRefundPerUnit: refund / quantity,
+    reason: "damaged",
+    currency: "EUR",
+    status: "paid",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
   };
 };
 
-const ROWS: ReturnsRow[] = Array.from({ length: 40 }, (_, index) => makeRow(index));
+const ROWS: ReturnItem[] = Array.from({ length: 40 }, (_, index) => makeRow(index));
 const MOCK_ERROR: ApiError = { code: "BFF_ERROR", message: "Failed to load returns.", status: 500 };
 
 const meta: Meta<typeof ReturnsTable> = {
@@ -30,22 +38,22 @@ export default meta;
 
 type Story = StoryObj<typeof ReturnsTable>;
 
-const sortRows = (rows: ReturnsRow[], sort: ReturnsSort | undefined) => {
+const sortRows = (rows: ReturnItem[], sort: ReturnsSort | undefined) => {
   const next = [...rows];
   switch (sort) {
     case "qty_asc":
-      return next.sort((a, b) => a.qty - b.qty);
+      return next.sort((a, b) => a.quantity - b.quantity);
     case "qty_desc":
-      return next.sort((a, b) => b.qty - a.qty);
+      return next.sort((a, b) => b.quantity - a.quantity);
     case "refund_asc":
-      return next.sort((a, b) => a.refundAmount - b.refundAmount);
+      return next.sort((a, b) => a.reimbursementAmount - b.reimbursementAmount);
     case "asin_asc":
       return next.sort((a, b) => a.asin.localeCompare(b.asin));
     case "asin_desc":
       return next.sort((a, b) => b.asin.localeCompare(a.asin));
     case "refund_desc":
     default:
-      return next.sort((a, b) => b.refundAmount - a.refundAmount);
+      return next.sort((a, b) => b.reimbursementAmount - a.reimbursementAmount);
   }
 };
 

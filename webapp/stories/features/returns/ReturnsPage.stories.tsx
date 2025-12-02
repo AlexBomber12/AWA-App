@@ -4,6 +4,7 @@ import type { Session } from "next-auth";
 
 import { ReturnsPage } from "@/components/features/returns/ReturnsPage";
 import { AppShell } from "@/components/layout";
+import type { ReturnItem } from "@/lib/api/bffTypes";
 import type { ReturnsListResponse, ReturnsSummary } from "@/lib/api/returnsClient";
 
 import { FetchMock, type FetchMockHandler } from "../../utils/fetchMock";
@@ -28,17 +29,25 @@ const buildDefaultListPayload = (pageParam: number, pageSizeParam: number): Retu
   const startIndex = (page - 1) * pageSize;
   const endIndex = Math.min(startIndex + pageSize, total);
 
-  const items = Array.from({ length: endIndex - startIndex }, (_, index) => {
+  const items: ReturnItem[] = Array.from({ length: endIndex - startIndex }, (_, index) => {
     const id = startIndex + index + 1;
     return {
+      returnId: formatAsin(id),
       asin: formatAsin(id),
-      qty: id * 2,
-      refundAmount: id * 25,
+      sku: `SKU-${id}`,
+      quantity: id * 2,
+      reimbursementAmount: id * 25,
       avgRefundPerUnit: 25,
+      reason: "customer_return",
+      currency: "EUR",
+      status: "paid",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     };
   });
 
   return {
+    data: items,
     items,
     pagination: {
       page,
@@ -73,7 +82,7 @@ const buildHandlers = (mode: ReturnsStoryMode): FetchMockHandler[] => [
     predicate: ({ url, method }) => method === "GET" && url.includes("/api/bff/returns") && new URL(url).searchParams.get("resource") === "list",
     response: ({ url }) => {
       if (mode.list === "error") {
-        return new Response(JSON.stringify({ code: "BFF_ERROR", message: "Failed to load returns list." }), {
+        return new Response(JSON.stringify({ error: { code: "BFF_ERROR", message: "Failed to load returns list." } }), {
           status: 500,
           headers: { "Content-Type": "application/json" },
         });
@@ -81,7 +90,7 @@ const buildHandlers = (mode: ReturnsStoryMode): FetchMockHandler[] => [
       if (mode.list === "empty") {
         return new Response(
           JSON.stringify({
-            items: [],
+            data: [],
             pagination: { page: 1, pageSize: 25, total: 0, totalPages: 1 },
           }),
           { status: 200, headers: { "Content-Type": "application/json" } }
@@ -98,7 +107,7 @@ const buildHandlers = (mode: ReturnsStoryMode): FetchMockHandler[] => [
   {
     predicate: ({ url, method }) => method === "GET" && url.includes("/api/bff/returns") && new URL(url).searchParams.get("resource") === "stats",
     response: () => {
-      const payload = JSON.stringify(summaryResponse);
+      const payload = JSON.stringify({ data: summaryResponse });
       const response = new Response(payload, { status: 200, headers: { "Content-Type": "application/json" } });
       return mode.stats === "loading" ? delayedResponse(response) : response;
     },

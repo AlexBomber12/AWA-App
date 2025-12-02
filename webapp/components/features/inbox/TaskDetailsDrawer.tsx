@@ -52,14 +52,16 @@ export function TaskDetailsDrawer({
     if (!task) {
       return [];
     }
-    const deadline = task.deadlineAt ?? task.decision.deadlineAt;
+    const deadline = task.deadlineAt ?? task.dueAt ?? task.decision?.deadlineAt ?? null;
+    const entityLabel = task.entity ? `${formatTaskEntity(task.entity)} · ${task.entity.type}` : "No entity";
+    const nextRequest = task.nextRequestAt ?? task.decision?.nextRequestAt ?? null;
 
     return [
-      { label: "Entity", value: `${formatTaskEntity(task.entity)} · ${task.entity.type}` },
+      { label: "Entity", value: entityLabel },
       { label: "Source", value: formatTaskSource(task.source) },
       { label: "Assignee", value: task.assignee ?? "Unassigned" },
       { label: "Deadline", value: formatTaskDate(deadline) },
-      { label: "Next request", value: formatTaskDate(task.nextRequestAt ?? task.decision.nextRequestAt) },
+      { label: "Next request", value: formatTaskDate(nextRequest) },
       { label: "Created", value: formatTaskDate(task.createdAt) },
       { label: "Updated", value: formatTaskDate(task.updatedAt) },
     ];
@@ -69,9 +71,10 @@ export function TaskDetailsDrawer({
     return null;
   }
 
-  const reasons = task.why?.length ? task.why : task.decision.why;
-  const alternatives = task.alternatives?.length ? task.alternatives : task.decision.alternatives;
-  const metrics = task.decision.metrics;
+  const reasons = task.why?.length ? task.why : task.decision?.why ?? [];
+  const alternatives = task.alternatives?.length ? task.alternatives : task.decision?.alternatives ?? [];
+  const metrics = task.decision?.metrics;
+  const decision = task.decision;
 
   return (
     <Drawer open={isOpen} onOpenChange={(open) => (!open ? onClose() : undefined)}>
@@ -84,17 +87,24 @@ export function TaskDetailsDrawer({
           <div className="space-y-3 rounded-xl border border-border bg-muted/20 p-4">
             <SectionTitle>Task</SectionTitle>
             <div className="flex flex-wrap gap-2">
-              <span className={cn("rounded-full px-3 py-1 text-xs font-semibold uppercase", TASK_STATE_STYLES[task.state])}>
-                {formatTaskState(task.state)}
+              <span
+                className={cn(
+                  "rounded-full px-3 py-1 text-xs font-semibold uppercase",
+                  TASK_STATE_STYLES[task.state ?? "open"] ?? TASK_STATE_STYLES.open
+                )}
+              >
+                {formatTaskState(task.state ?? "open")}
               </span>
               <span
                 className={cn(
                   "rounded-full px-3 py-1 text-xs font-semibold uppercase",
-                  taskPriorityStyle(task.priority ?? task.decision.priority)
+                  taskPriorityStyle(task.priority ?? task.decision?.priority ?? "medium")
                 )}
               >
-                {formatTaskPriority(task.priority ?? task.decision.priority)} priority
+                {formatTaskPriority(task.priority ?? task.decision?.priority ?? "medium")} priority
               </span>
+            </div>
+            <div className="flex flex-wrap gap-2">
             </div>
             <dl className="grid grid-cols-1 gap-2 text-sm text-muted-foreground">
               {metadata.map((item) => (
@@ -108,62 +118,71 @@ export function TaskDetailsDrawer({
 
           <div className="space-y-4 rounded-xl border border-border bg-background p-4">
             <SectionTitle>Decision</SectionTitle>
-            <div className="space-y-2 text-sm">
-              <p className="text-lg font-semibold capitalize">{formatDecisionLabel(task.decision.decision)}</p>
-              {task.decision.defaultAction ? (
-                <p className="text-sm text-muted-foreground">{task.decision.defaultAction}</p>
-              ) : null}
-            </div>
+            {decision ? (
+              <>
+                <div className="space-y-2 text-sm">
+                  <p className="text-lg font-semibold capitalize">{formatDecisionLabel(decision.decision)}</p>
+                  {decision.defaultAction ? (
+                    <p className="text-sm text-muted-foreground">{decision.defaultAction}</p>
+                  ) : null}
+                </div>
 
-            {metrics ? (
-              <div className="grid gap-3 sm:grid-cols-3">
-                {metrics.roi !== undefined ? (
-                  <div className="rounded-lg border border-border bg-muted/20 p-3 text-sm">
-                    <p className="text-xs uppercase text-muted-foreground">ROI</p>
-                    <p className="text-lg font-semibold">{metrics.roi.toFixed(1)}%</p>
+                {metrics ? (
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    {metrics.roi !== undefined ? (
+                      <div className="rounded-lg border border-border bg-muted/20 p-3 text-sm">
+                        <p className="text-xs uppercase text-muted-foreground">ROI</p>
+                        <p className="text-lg font-semibold">{metrics.roi.toFixed(1)}%</p>
+                      </div>
+                    ) : null}
+                    {metrics.riskAdjustedRoi !== undefined ? (
+                      <div className="rounded-lg border border-border bg-muted/20 p-3 text-sm">
+                        <p className="text-xs uppercase text-muted-foreground">Risk-adjusted ROI</p>
+                        <p className="text-lg font-semibold">{metrics.riskAdjustedRoi.toFixed(1)}%</p>
+                      </div>
+                    ) : null}
+                    {metrics.maxCogs !== undefined ? (
+                      <div className="rounded-lg border border-border bg-muted/20 p-3 text-sm">
+                        <p className="text-xs uppercase text-muted-foreground">Max COGS</p>
+                        <p className="text-lg font-semibold">${metrics.maxCogs.toFixed(2)}</p>
+                      </div>
+                    ) : null}
                   </div>
                 ) : null}
-                {metrics.riskAdjustedRoi !== undefined ? (
-                  <div className="rounded-lg border border-border bg-muted/20 p-3 text-sm">
-                    <p className="text-xs uppercase text-muted-foreground">Risk-adjusted ROI</p>
-                    <p className="text-lg font-semibold">{metrics.riskAdjustedRoi.toFixed(1)}%</p>
-                  </div>
-                ) : null}
-                {metrics.maxCogs !== undefined ? (
-                  <div className="rounded-lg border border-border bg-muted/20 p-3 text-sm">
-                    <p className="text-xs uppercase text-muted-foreground">Max COGS</p>
-                    <p className="text-lg font-semibold">${metrics.maxCogs.toFixed(2)}</p>
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
 
-            <div className="space-y-2">
-              <p className="text-sm font-semibold">Why</p>
-              <ul className="space-y-2">
-                {reasons.map((reason, index) => (
-                  <li key={`${reasonToText(reason)}-${index}`} className="flex items-start gap-2 rounded-md bg-muted/30 p-2 text-sm">
-                    <span className="mt-0.5 text-xs text-muted-foreground">●</span>
-                    <span className="text-muted-foreground">{reasonToText(reason)}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
+                <div className="space-y-2">
+                  <p className="text-sm font-semibold">Why</p>
+                  <ul className="space-y-2">
+                    {reasons.map((reason, index) => (
+                      <li
+                        key={`${reasonToText(reason)}-${index}`}
+                        className="flex items-start gap-2 rounded-md bg-muted/30 p-2 text-sm"
+                      >
+                        <span className="mt-0.5 text-xs text-muted-foreground">●</span>
+                        <span className="text-muted-foreground">{reasonToText(reason)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
 
-            <div className="space-y-2">
-              <p className="text-sm font-semibold">Alternatives</p>
-              <div className="flex flex-wrap gap-2">
-                {alternatives.map((alt, index) => (
-                  <span
-                    key={`${alt.decision}-${index}`}
-                    className="rounded-full border border-border bg-muted/30 px-3 py-1 text-xs font-semibold"
-                  >
-                    {formatDecisionLabel(alt.decision)}
-                    {alt.label ? ` — ${alt.label}` : ""}
-                  </span>
-                ))}
-              </div>
-            </div>
+                <div className="space-y-2">
+                  <p className="text-sm font-semibold">Alternatives</p>
+                  <div className="flex flex-wrap gap-2">
+                    {alternatives.map((alt, index) => (
+                      <span
+                        key={`${alt.decision}-${index}`}
+                        className="rounded-full border border-border bg-muted/30 px-3 py-1 text-xs font-semibold"
+                      >
+                        {formatDecisionLabel(alt.decision)}
+                        {alt.label ? ` — ${alt.label}` : ""}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">No decision provided.</p>
+            )}
           </div>
         </div>
 

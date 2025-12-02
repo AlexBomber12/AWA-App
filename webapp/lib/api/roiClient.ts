@@ -1,6 +1,7 @@
 import { fetchFromBff } from "@/lib/api/fetchFromBff";
 import type { ApiError } from "@/lib/api/apiError";
 import { useApiQuery, type UseApiQueryOptions } from "@/lib/api/useApiQuery";
+import type { BffListResponse, RoiItem } from "@/lib/api/bffTypes";
 import {
   ROI_TABLE_DEFAULTS,
   serializeRoiSearchParams,
@@ -9,26 +10,15 @@ import {
   type RoiTableState,
 } from "@/lib/tableState/roi";
 
-import type { components } from "./types.generated";
-
-export type RoiRow = components["schemas"]["RoiRow"];
-
-export type RoiTableResponse = {
-  items: RoiRow[];
-  pagination: {
-    page: number;
-    pageSize: number;
-    total: number;
-    totalPages: number;
-  };
-};
-
 export type RoiListParams = {
   page: number;
   pageSize: number;
   sort?: RoiSort;
   filters?: RoiTableFilters;
 };
+
+export type RoiPageResponse = BffListResponse<RoiItem>;
+export type RoiRow = RoiItem;
 
 const ROI_BFF_ENDPOINT = "/api/bff/roi";
 
@@ -42,30 +32,32 @@ const buildBffListQuery = (params: RoiListParams): string => {
   return serializeRoiSearchParams(state).toString();
 };
 
-async function getRoiList(params: RoiListParams): Promise<RoiTableResponse> {
+export async function getRoiPage(params: RoiListParams): Promise<RoiPageResponse> {
   const query = buildBffListQuery(params);
   const path = query ? `${ROI_BFF_ENDPOINT}?${query}` : ROI_BFF_ENDPOINT;
-  return fetchFromBff<RoiTableResponse>(path);
+  return fetchFromBff<RoiPageResponse>(path);
 }
 
 export const getRoiListQueryKey = (params: RoiListParams) =>
   ["roi", buildBffListQuery(params)] as const;
 
 type UseRoiListQueryOptions = Omit<
-  UseApiQueryOptions<RoiTableResponse, ApiError, RoiTableResponse, ReturnType<typeof getRoiListQueryKey>>,
+  UseApiQueryOptions<RoiPageResponse, ApiError, RoiPageResponse, ReturnType<typeof getRoiListQueryKey>>,
   "queryKey" | "queryFn"
 >;
 
-function useRoiListQuery(params: RoiListParams, options?: UseRoiListQueryOptions) {
-  return useApiQuery<RoiTableResponse, ApiError, RoiTableResponse, ReturnType<typeof getRoiListQueryKey>>({
+function useRoiQuery(params: RoiListParams, options?: UseRoiListQueryOptions) {
+  return useApiQuery<RoiPageResponse, ApiError, RoiPageResponse, ReturnType<typeof getRoiListQueryKey>>({
     queryKey: getRoiListQueryKey(params),
-    queryFn: () => getRoiList(params),
+    queryFn: () => getRoiPage(params),
     ...options,
   });
 }
 
 export const roiClient = {
-  getRoiList,
+  getRoiPage,
+  getRoiList: getRoiPage,
   getRoiListQueryKey,
-  useRoiListQuery,
+  useRoiQuery,
+  useRoiListQuery: useRoiQuery,
 };

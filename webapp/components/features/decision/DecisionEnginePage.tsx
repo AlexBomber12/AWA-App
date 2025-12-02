@@ -7,15 +7,13 @@ import { useQueryClient } from "@tanstack/react-query";
 import { ErrorState, FilterBar } from "@/components/data";
 import { PageBody, PageHeader } from "@/components/layout";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui";
-import type { SimulationScenariosResponse } from "@/lib/api/decisionClient";
 import {
-  simulationScenariosQueryKey,
-  useDecisionRulesQuery,
+  decisionSummaryQueryKey,
+  useDecisionSummaryQuery,
   useRunSimulationMutation,
-  useSimulationScenariosQuery,
 } from "@/lib/api/decisionClient";
-import type { Rule, SimulationScenario } from "@/lib/api/decisionTypes";
-import { usePermissions } from "@/lib/permissions/client";
+import type { Rule, SimulationInput, SimulationScenario } from "@/lib/api/decisionClient";
+import { PermissionGuard, usePermissions } from "@/lib/permissions/client";
 
 import { useToast } from "@/components/providers/ToastProvider";
 
@@ -33,8 +31,7 @@ const DEFAULT_RULE_FILTERS: RuleFilters = {
 };
 
 export function DecisionEnginePage() {
-  const rulesQuery = useDecisionRulesQuery();
-  const scenariosQuery = useSimulationScenariosQuery();
+  const decisionQuery = useDecisionSummaryQuery();
   const [selectedRuleId, setSelectedRuleId] = useState<string | null>(null);
   const [selectedScenarioId, setSelectedScenarioId] = useState<string | null>(null);
   const [ruleFilters, setRuleFilters] = useState<RuleFilters>(DEFAULT_RULE_FILTERS);
@@ -43,17 +40,18 @@ export function DecisionEnginePage() {
   const { can } = usePermissions();
   const canConfigure = can({ resource: "decision", action: "configure" });
 
-  const rules = useMemo(() => rulesQuery.data?.rules ?? [], [rulesQuery.data]);
+  const rules = useMemo(() => decisionQuery.data?.rules ?? [], [decisionQuery.data]);
   const filteredRules = useMemo(() => {
     return rules.filter((rule) => {
+      const active = "enabled" in rule ? rule.enabled : (rule as { isActive?: boolean }).isActive;
       const matchesStatus =
-        ruleFilters.status === "all" ? true : ruleFilters.status === "active" ? rule.isActive : !rule.isActive;
+        ruleFilters.status === "all" ? true : ruleFilters.status === "active" ? active : !active;
       const matchesScope = ruleFilters.scope === "all" ? true : rule.scope === ruleFilters.scope;
       return matchesStatus && matchesScope;
     });
   }, [ruleFilters, rules]);
 
-  const scenarios = useMemo(() => scenariosQuery.data?.scenarios ?? [], [scenariosQuery.data]);
+  const scenarios = useMemo(() => decisionQuery.data?.scenarios ?? [], [decisionQuery.data]);
 
   useEffect(() => {
     if (!selectedRuleId && filteredRules.length > 0) {
@@ -74,12 +72,15 @@ export function DecisionEnginePage() {
 
   const runSimulationMutation = useRunSimulationMutation({
     onSuccess: (scenario) => {
-      queryClient.setQueryData<SimulationScenariosResponse>(simulationScenariosQueryKey, (current) => {
-        if (!current) {
-          return { scenarios: [scenario] };
-        }
-        const filtered = current.scenarios.filter((item) => item.id !== scenario.id);
-        return { scenarios: [scenario, ...filtered] };
+      queryClient.setQueryData(decisionSummaryQueryKey, (current: unknown) => {
+        const summary = current as { rules?: Rule[]; scenarios?: SimulationScenario[]; tasks?: unknown };
+        const existingScenarios = summary?.scenarios ?? [];
+        const filtered = existingScenarios.filter((item) => item.id !== scenario.id);
+        return {
+          rules: summary?.rules ?? rules,
+          scenarios: [scenario, ...filtered],
+          tasks: summary?.tasks,
+        };
       });
       setSelectedScenarioId(scenario.id);
       pushToast({ title: "Simulation completed", variant: "success" });
@@ -89,7 +90,7 @@ export function DecisionEnginePage() {
     },
   });
 
-  const handleRunSimulation = (payload: { ruleId: string; input: SimulationScenario["input"] }) => {
+  const handleRunSimulation = (payload: { ruleId: string; input: SimulationInput }) => {
     runSimulationMutation.mutate(payload);
   };
 
@@ -102,10 +103,30 @@ export function DecisionEnginePage() {
     setSelectedScenarioId(scenarioId);
   };
 
-  return (
+  const unauthorized = (
     <>
       <PageHeader
         title="Decision Engine"
+        description="Review active rules, toggle their state, and run sandboxed simulations."
+        breadcrumbs={[
+          { label: "Dashboard", href: "/dashboard" },
+          { label: "Decision Engine", active: true },
+        ]}
+      />
+      <PageBody>
+        <div className="rounded-2xl border border-border bg-muted/30 p-8 text-center">
+          <p className="text-base font-semibold">Not authorized</p>
+          <p className="mt-1 text-sm text-muted-foreground">You need admin access to view Decision Engine rules.</p>
+        </div>
+      </PageBody>
+    </>
+  );
+
+  return (
+    <PermissionGuard resource="decision" action="view" requiredRoles={["admin"]} fallback={unauthorized}>
+      <>
+        <PageHeader
+          title="Decision Engine"
         description="Review active rules, toggle their state, and run sandboxed simulations."
         breadcrumbs={[
           { label: "Dashboard", href: "/dashboard" },
@@ -118,7 +139,7 @@ export function DecisionEnginePage() {
             ruleFilters.status !== DEFAULT_RULE_FILTERS.status || ruleFilters.scope !== DEFAULT_RULE_FILTERS.scope
           }
           onReset={() => setRuleFilters(DEFAULT_RULE_FILTERS)}
-          disableActions={rulesQuery.isFetching}
+          disableActions={decisionQuery.isFetching}
         >
           <div className="flex flex-col gap-1 text-sm">
             <span className="font-semibold">Status</span>
@@ -162,29 +183,29 @@ export function DecisionEnginePage() {
         </FilterBar>
         <div className="grid gap-6 lg:grid-cols-[320px,1fr]">
           <div>
-            {rulesQuery.error ? (
-              <ErrorState title="Unable to load rules" error={rulesQuery.error} onRetry={() => rulesQuery.refetch()} />
+            {decisionQuery.error ? (
+              <ErrorState title="Unable to load rules" error={decisionQuery.error} onRetry={() => decisionQuery.refetch()} />
             ) : (
               <DecisionRulesList
                 rules={filteredRules}
-                isLoading={rulesQuery.isPending || rulesQuery.isFetching}
+                isLoading={decisionQuery.isPending || decisionQuery.isFetching}
                 selectedRuleId={selectedRuleId}
                 onSelectRule={handleSelectRule}
               />
             )}
           </div>
           <div className="space-y-4">
-            {scenariosQuery.error ? (
+            {decisionQuery.error ? (
               <ErrorState
                 title="Unable to load simulations"
-                error={scenariosQuery.error}
-                onRetry={() => scenariosQuery.refetch()}
+                error={decisionQuery.error}
+                onRetry={() => decisionQuery.refetch()}
               />
             ) : null}
             <SimulationPanel
               selectedRule={selectedRule}
               scenarios={scenarios}
-              isLoading={scenariosQuery.isPending || scenariosQuery.isFetching}
+              isLoading={decisionQuery.isPending || decisionQuery.isFetching}
               onRunSimulation={handleRunSimulation}
               isRunningSimulation={runSimulationMutation.isPending}
               selectedScenarioId={selectedScenarioId}
@@ -194,6 +215,7 @@ export function DecisionEnginePage() {
           </div>
         </div>
       </PageBody>
-    </>
+      </>
+    </PermissionGuard>
   );
 }

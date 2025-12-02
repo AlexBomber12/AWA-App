@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useMemo, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, type ReactNode } from "react";
 import { useSession } from "next-auth/react";
 
 import {
@@ -67,18 +67,40 @@ export function usePermissions(): UsePermissionsResult {
 }
 
 type PermissionGuardProps = {
-  resource: Resource;
-  action: Action;
+  resource?: Resource;
+  action?: Action;
+  requiredRoles?: Role[];
   fallback?: ReactNode;
+  redirectTo?: string;
   children: ReactNode;
 };
 
-export function PermissionGuard({ resource, action, fallback = null, children }: PermissionGuardProps) {
-  const { can } = usePermissions();
-  const isAllowed = can({ resource, action });
+export function PermissionGuard({ resource, action, requiredRoles, fallback = null, redirectTo, children }: PermissionGuardProps) {
+  const { can, hasRole } = usePermissions();
+
+  const hasRequiredRole = requiredRoles?.length
+    ? requiredRoles.some((role) => hasRole(role))
+    : true;
+  const canAccess = resource && action ? can({ resource, action }) : true;
+  const isAllowed = hasRequiredRole && canAccess;
+
+  useEffect(() => {
+    if (!isAllowed && redirectTo) {
+      if (typeof window !== "undefined") {
+        window.location.replace(redirectTo);
+      }
+    }
+  }, [isAllowed, redirectTo]);
 
   return (isAllowed ? children : fallback) ?? null;
 }
+
+export const useHasPermission = (params: { resource?: Resource; action?: Action; requiredRoles?: Role[] }) => {
+  const { can, hasRole } = usePermissions();
+  const meetsRole = params.requiredRoles?.length ? params.requiredRoles.some((role) => hasRole(role)) : true;
+  const meetsPermission = params.resource && params.action ? can({ resource: params.resource, action: params.action }) : true;
+  return meetsRole && meetsPermission;
+};
 
 export type { Role, Resource, Action } from "./server";
 export { can, getUserRolesFromSession, hasRole, KNOWN_ROLES } from "./server";

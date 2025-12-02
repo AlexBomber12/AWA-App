@@ -45,18 +45,26 @@ const DEFAULT_FILTERS: FilterState = {
   assignee: "",
 };
 
-const cloneTaskResponse = (response: InboxListResponse): InboxListResponse => ({
-  ...response,
-  items: response.items.map((task) => ({
+const cloneTaskResponse = (response: InboxListResponse): InboxListResponse => {
+  const source = response.data ?? response.items ?? [];
+  const items = source.map((task) => ({
     ...task,
-    entity: { ...task.entity },
-    decision: {
-      ...task.decision,
-      why: [...task.decision.why],
-      alternatives: [...task.decision.alternatives],
-    },
-  })),
-});
+    entity: task.entity ? { ...task.entity } : task.entity,
+    decision: task.decision
+      ? {
+          ...task.decision,
+          why: [...task.decision.why],
+          alternatives: [...task.decision.alternatives],
+        }
+      : undefined,
+  }));
+
+  return {
+    ...response,
+    data: items,
+    items,
+  };
+};
 
 export function InboxPage() {
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
@@ -84,7 +92,7 @@ export function InboxPage() {
   const queryKey = useMemo(() => inboxTasksQueryKey(query), [query]);
   const inboxQuery = useInboxTasks(query);
 
-  const tasks = useMemo(() => inboxQuery.data?.items ?? EMPTY_TASKS, [inboxQuery.data]);
+  const tasks = useMemo(() => inboxQuery.data?.data ?? inboxQuery.data?.items ?? EMPTY_TASKS, [inboxQuery.data]);
   const selectedTask = useMemo(() => tasks.find((task) => task.id === selectedTaskId), [tasks, selectedTaskId]);
 
   useEffect(() => {
@@ -114,8 +122,9 @@ export function InboxPage() {
         return undefined;
       }
       const snapshot = cloneTaskResponse(current);
-      const nextItems = current.items.map((task) => (task.id === taskId ? updater(task) : task));
-      queryClient.setQueryData(queryKey, { ...current, items: nextItems });
+      const items = current.data ?? current.items ?? [];
+      const nextItems = items.map((task) => (task.id === taskId ? updater(task) : task));
+      queryClient.setQueryData(queryKey, { ...current, data: nextItems, items: nextItems });
       return () => queryClient.setQueryData(queryKey, snapshot);
     },
     [queryClient, queryKey]
@@ -168,10 +177,7 @@ export function InboxPage() {
             ...current,
             state: "snoozed",
             updatedAt: new Date().toISOString(),
-            decision: {
-              ...current.decision,
-              nextRequestAt: nextFollowUp,
-            },
+            decision: current.decision ? { ...current.decision, nextRequestAt: nextFollowUp } : undefined,
           })),
       });
     },
