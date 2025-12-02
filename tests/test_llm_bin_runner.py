@@ -3,7 +3,7 @@ import sys
 import pytest
 
 from services.llm_server.bin_runner import run_llm_binary
-from services.llm_server.errors import LLMBinaryNonZeroExitError, LLMBinaryTimeoutError
+from services.llm_server.errors import LLMBinaryNonZeroExitError, LLMBinaryOSFailure, LLMBinaryTimeoutError
 
 
 @pytest.mark.asyncio
@@ -47,3 +47,16 @@ async def test_run_llm_binary_truncates_output() -> None:
     assert truncated is True
     assert output.endswith("[truncated]")
     assert len(output) < 1200
+
+
+def test_decode_payload_truncates(monkeypatch: pytest.MonkeyPatch) -> None:
+    from services.llm_server import bin_runner
+
+    text = bin_runner._decode_payload(b"a" * 10, truncated=False, max_bytes=5)
+    assert text.endswith("[truncated]")
+
+
+@pytest.mark.asyncio
+async def test_run_llm_binary_oserror() -> None:
+    with pytest.raises(LLMBinaryOSFailure):
+        await run_llm_binary(["/nonexistent/binary"], timeout_s=0.1, max_output_bytes=10)
