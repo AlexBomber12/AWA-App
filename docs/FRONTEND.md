@@ -213,6 +213,24 @@ The repo uses **npm** (see `package-lock.json`). Run these from `webapp/`:
 CI executes `lint`, `test:unit`, `test:e2e`, and `build` in the `webapp-build` job. Local docker
 runs use `make webapp-up` which builds the Next.js image and exposes it on port `3000`.
 
+## BFF routes and user flows
+
+The webapp now relies on the Next.js BFF layer under `app/api/bff/*` as the sole integration point
+with FastAPI. Each route proxies the corresponding backend API, normalizes pagination metadata into
+camelCase, and enforces RBAC via `requirePermission`:
+
+| BFF route | Backend target | Frontend client/hook | Primary UI flow |
+| --- | --- | --- | --- |
+| `/api/bff/roi` | `/roi` | `lib/api/roiClient.ts` / `useRoiQuery` | ROI table/dashboard (`/roi`) |
+| `/api/bff/returns` | `/stats/returns` | `lib/api/returnsClient.ts` / `useReturnsListQuery` | Returns list + summary (`/returns`) |
+| `/api/bff/inbox` | `/decision/inbox` | `lib/api/inboxClient.ts` / `useInboxTasksQuery` | Inbox task list + TaskDetails drawer (`/inbox`) |
+| `/api/bff/decision` | `/decision/*` | `lib/api/decisionClient.ts` / `useDecisionSummaryQuery` | Decision Engine rules + simulations (`/decision`) |
+
+Front-end components must call these BFF clients instead of hitting FastAPI directly; this keeps
+React Query caches, DTO shaping, and permission checks consistent. `PermissionGuard` blocks action
+buttons (ROI bulk approve, Inbox actions, Decision simulations) for non-authorized roles and renders
+fallback messaging in Storybook, unit tests, and production.
+
 ## Roadmap & scope guardrails
 - **PR-UI-1A (this change):** Bootstrap App Router, Tailwind design tokens, shadcn/ui wiring,
   navigation stubs, Jest + Playwright smoke coverage, docker + docs integration.

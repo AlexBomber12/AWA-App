@@ -124,6 +124,11 @@ qa-fix: ensure-bootstrap
 
 test: unit integ
 
+.PHONY: test-all
+test-all:
+	$(MAKE) qa
+	cd webapp && npm run qa
+
 bootstrap:
 	bash scripts/dev/bootstrap_wsl.sh
 
