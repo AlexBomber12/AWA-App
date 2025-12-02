@@ -362,6 +362,12 @@ class Settings(BaseSettings):
     LLM_CLOUD_API_KEY: str | None = None
     LLM_CLOUD_API_BASE: str | None = None
     LLM_REQUEST_TIMEOUT_S: float = 60.0
+    LLM_REQUEST_TIMEOUT_SEC: float | None = None
+    LLM_MAX_RETRIES: int = 2
+    LLM_BACKOFF_BASE_MS: float = 500.0
+    LLM_BACKOFF_MAX_MS: float = 5000.0
+    LLM_BIN_TIMEOUT_SEC: float = 30.0
+    LLM_MAX_OUTPUT_BYTES: int = 65536
     LLM_LAN_HEALTH_TIMEOUT_S: float = 1.0
     LLM_EMAIL_CLOUD_THRESHOLD_CHARS: int = 12000
     LLM_PRICELIST_CLOUD_THRESHOLD_ROWS: int = 500

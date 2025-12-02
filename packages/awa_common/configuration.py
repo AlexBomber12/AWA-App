@@ -369,6 +369,11 @@ class LLMSettings(SettingsGroup):
     cloud_api_key: str | None
     cloud_api_base: str | None
     request_timeout_s: float
+    max_retries: int
+    backoff_base_ms: float
+    backoff_max_ms: float
+    bin_timeout_s: float
+    max_output_bytes: int
     email_cloud_threshold_chars: int
     pricelist_cloud_threshold_rows: int
     allow_cloud_fallback: bool
@@ -388,7 +393,14 @@ class LLMSettings(SettingsGroup):
             cloud_model=cfg.LLM_CLOUD_MODEL,
             cloud_api_key=cfg.LLM_CLOUD_API_KEY,
             cloud_api_base=cfg.LLM_CLOUD_API_BASE,
-            request_timeout_s=float(cfg.LLM_REQUEST_TIMEOUT_S),
+            request_timeout_s=float(
+                cfg.LLM_REQUEST_TIMEOUT_SEC if cfg.LLM_REQUEST_TIMEOUT_SEC is not None else cfg.LLM_REQUEST_TIMEOUT_S
+            ),
+            max_retries=int(cfg.LLM_MAX_RETRIES),
+            backoff_base_ms=float(cfg.LLM_BACKOFF_BASE_MS),
+            backoff_max_ms=float(cfg.LLM_BACKOFF_MAX_MS),
+            bin_timeout_s=float(cfg.LLM_BIN_TIMEOUT_SEC),
+            max_output_bytes=int(cfg.LLM_MAX_OUTPUT_BYTES),
             email_cloud_threshold_chars=int(cfg.LLM_EMAIL_CLOUD_THRESHOLD_CHARS),
             pricelist_cloud_threshold_rows=int(cfg.LLM_PRICELIST_CLOUD_THRESHOLD_ROWS),
             allow_cloud_fallback=bool(cfg.LLM_ALLOW_CLOUD_FALLBACK),
