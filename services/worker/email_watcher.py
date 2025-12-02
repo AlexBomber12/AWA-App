@@ -239,7 +239,9 @@ def main() -> dict[str, str]:  # pragma: no cover - orchestration entrypoint
     if getattr(settings, "TESTING", False) or os.getenv("PYTEST_CURRENT_TEST"):
         llm_enabled = False
     llm_client = LLMClient() if llm_enabled else None
-    store = EmailClassificationStore(settings.DATABASE_URL) if llm_enabled else None
+    db_cfg = getattr(settings, "db", None)
+    db_url = db_cfg.url if db_cfg else settings.DATABASE_URL
+    store = EmailClassificationStore(db_url) if llm_enabled else None
 
     with IMAPClient(host) as client:
         client.login(user, password)
@@ -287,7 +289,7 @@ def main() -> dict[str, str]:  # pragma: no cover - orchestration entrypoint
                     load_id = result.get("load_log_id")
                     inserted = result.get("rows")
                 if load_id is not None and inserted is not None:
-                    engine = create_engine(settings.DATABASE_URL)
+                    engine = create_engine(db_url)
                     with engine.begin() as db:
                         db.execute(
                             text("UPDATE load_log SET status='success', inserted_rows=:n WHERE id=:id"),

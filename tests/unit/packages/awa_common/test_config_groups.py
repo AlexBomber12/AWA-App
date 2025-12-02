@@ -7,12 +7,22 @@ def test_database_and_redis_settings(monkeypatch):
     monkeypatch.setenv("REDIS_URL", "redis://cache:6379/0")
     monkeypatch.setenv("BROKER_URL", "redis://broker:6379/1")
     monkeypatch.setenv("QUEUE_NAMES", "ingest,alerts")
+    monkeypatch.setenv("CACHE_REDIS_URL", "redis://cache:6379/2")
+    monkeypatch.setenv("CACHE_DEFAULT_TTL_S", "900")
+    monkeypatch.setenv("CACHE_NAMESPACE", "stats:")
+    monkeypatch.setenv("REDIS_BACKLOG_WARN_SIZE", "42")
+    monkeypatch.setenv("REDIS_BACKLOG_WARN_INTERVAL_S", "5")
     cfg = Settings()
     assert cfg.db.url.endswith("/app")
     assert cfg.db.async_dsn.startswith("postgresql+asyncpg://")
     assert cfg.redis.url == "redis://cache:6379/0"
     assert cfg.redis.broker_url == "redis://broker:6379/1"
     assert cfg.redis.queue_names == ["ingest", "alerts"]
+    assert cfg.redis.cache_url == "redis://cache:6379/2"
+    assert cfg.redis.cache_ttl_s == 900
+    assert cfg.redis.cache_namespace == "stats:"
+    assert cfg.redis.backlog_warn_size == 42
+    assert cfg.redis.backlog_warn_interval_s == 5.0
 
 
 def test_s3_and_celery_settings(monkeypatch):
@@ -99,3 +109,49 @@ def test_roi_settings(monkeypatch):
     cfg = Settings()
     assert cfg.roi.view_name == "custom_view"
     assert cfg.roi.materialized_view_name == "custom_mat"
+
+
+def test_limiter_settings(monkeypatch):
+    monkeypatch.setenv("RATE_LIMIT_VIEWER", "10/minute")
+    monkeypatch.setenv("RATE_LIMIT_OPS", "20/minute")
+    monkeypatch.setenv("RATE_LIMIT_ADMIN", "30/minute")
+    monkeypatch.setenv("RATE_LIMIT_WINDOW_SECONDS", "120")
+    monkeypatch.setenv("RATE_LIMIT_SCORE_PER_USER", "3")
+    monkeypatch.setenv("RATE_LIMIT_ROI_BY_VENDOR_PER_USER", "4")
+    monkeypatch.setenv("LIMITER_NEAR_LIMIT_THRESHOLD", "0.8")
+    monkeypatch.setenv("LIMITER_WARN_INTERVAL_S", "5")
+    cfg = Settings()
+    limiter = cfg.limiter
+    assert limiter.viewer_limit == "10/minute"
+    assert limiter.ops_limit == "20/minute"
+    assert limiter.admin_limit == "30/minute"
+    assert limiter.window_seconds == 120
+    assert limiter.score_per_user == 3
+    assert limiter.roi_by_vendor_per_user == 4
+    assert limiter.near_limit_threshold == 0.8
+    assert limiter.warn_interval_s == 5.0
+
+
+def test_ingestion_settings(monkeypatch):
+    monkeypatch.setenv("MAX_REQUEST_BYTES", "1024")
+    monkeypatch.setenv("INGEST_CHUNK_SIZE_MB", "2")
+    monkeypatch.setenv("INGEST_STREAMING_ENABLED", "0")
+    monkeypatch.setenv("INGEST_STREAMING_THRESHOLD_MB", "10")
+    monkeypatch.setenv("INGEST_STREAMING_CHUNK_SIZE_MB", "4")
+    monkeypatch.setenv("INGEST_STREAMING_CHUNK_SIZE", "123")
+    monkeypatch.setenv("SPOOL_MAX_BYTES", "500")
+    monkeypatch.setenv("INGEST_IDEMPOTENT", "0")
+    monkeypatch.setenv("ANALYZE_MIN_ROWS", "999")
+    monkeypatch.setenv("QUEUE_NAMES", "ingest,alerts")
+    cfg = Settings()
+    ingest = cfg.ingestion
+    assert ingest.max_request_bytes == 1024
+    assert ingest.chunk_size_mb == 2
+    assert ingest.streaming_enabled is False
+    assert ingest.streaming_threshold_mb == 10
+    assert ingest.streaming_chunk_size_mb == 4
+    assert ingest.streaming_chunk_size == 123
+    assert ingest.spool_max_bytes == 500
+    assert ingest.ingest_idempotent is False
+    assert ingest.analyze_min_rows == 999
+    assert ingest.queue_names == ["ingest", "alerts"]

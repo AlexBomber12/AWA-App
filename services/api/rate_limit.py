@@ -10,7 +10,7 @@ import structlog
 from fastapi import HTTPException, Request
 from fastapi_limiter import FastAPILimiter
 
-from awa_common.metrics import record_http_429, record_redis_error
+from awa_common.metrics import record_http_429, record_limiter_near_limit, record_redis_error
 from awa_common.security import oidc
 from awa_common.security.models import Role, UserCtx
 from awa_common.settings import Settings, parse_rate_limit, settings
@@ -30,24 +30,44 @@ class SmartRateLimiter:
     def __init__(self, cfg: Settings) -> None:
         self._cfg = cfg
         self._skip_paths = set(_DEFAULT_SKIP_PATHS)
+        limiter_cfg = getattr(cfg, "limiter", None)
+        viewer_limit = limiter_cfg.viewer_limit if limiter_cfg else cfg.RATE_LIMIT_VIEWER
+        ops_limit = limiter_cfg.ops_limit if limiter_cfg else cfg.RATE_LIMIT_OPS
+        admin_limit = limiter_cfg.admin_limit if limiter_cfg else cfg.RATE_LIMIT_ADMIN
         self._role_limits: dict[Role, tuple[int, int]] = {
-            Role.viewer: parse_rate_limit(cfg.RATE_LIMIT_VIEWER),
-            Role.ops: parse_rate_limit(cfg.RATE_LIMIT_OPS),
-            Role.admin: parse_rate_limit(cfg.RATE_LIMIT_ADMIN),
+            Role.viewer: parse_rate_limit(viewer_limit),
+            Role.ops: parse_rate_limit(ops_limit),
+            Role.admin: parse_rate_limit(admin_limit),
         }
-        window = max(int(cfg.RATE_LIMIT_WINDOW_SECONDS or 0), 1)
+        window_value = limiter_cfg.window_seconds if limiter_cfg else getattr(cfg, "RATE_LIMIT_WINDOW_SECONDS", 0)
+        window = max(int(window_value or 0), 1)
         self._profiles: dict[str, RateLimitProfile] = {
             "score": RateLimitProfile(
                 "score",
-                max(int(cfg.RATE_LIMIT_SCORE_PER_USER or 0), 1),
+                max(int((limiter_cfg.score_per_user if limiter_cfg else cfg.RATE_LIMIT_SCORE_PER_USER) or 0), 1),
                 window,
             ),
             "roi_by_vendor": RateLimitProfile(
                 "roi_by_vendor",
-                max(int(cfg.RATE_LIMIT_ROI_BY_VENDOR_PER_USER or 0), 1),
+                max(
+                    int(
+                        (limiter_cfg.roi_by_vendor_per_user if limiter_cfg else cfg.RATE_LIMIT_ROI_BY_VENDOR_PER_USER)
+                        or 0
+                    ),
+                    1,
+                ),
                 window,
             ),
         }
+        self._warn_threshold = float(
+            limiter_cfg.near_limit_threshold if limiter_cfg else getattr(cfg, "LIMITER_NEAR_LIMIT_THRESHOLD", 0.9)
+        )
+        self._warn_interval = float(
+            limiter_cfg.warn_interval_s if limiter_cfg else getattr(cfg, "LIMITER_WARN_INTERVAL_S", 60.0)
+        )
+        self._warn_threshold = max(0.0, min(self._warn_threshold, 1.0))
+        self._warn_interval = max(0.0, self._warn_interval)
+        self._warned_at: dict[str, float] = {}
 
     def dependency(self, profile: RateLimitProfile | None = None) -> Callable[[Request], Awaitable[None]]:
         async def _dependency(request: Request) -> None:
@@ -85,12 +105,12 @@ class SmartRateLimiter:
 
         bucket_prefix = profile.name if profile else "role"
         bucket_key = f"ratelimit:{bucket_prefix}:{build_rate_key(request, user)}"
-        allowed, remaining, reset_in = await self._consume(redis, bucket_key, limit, window)
+        role_label = _role_label(user, role)
+        allowed, remaining, reset_in = await self._consume(redis, bucket_key, limit, window, role_label)
         if allowed:
             return
 
         route_template = _route_template(request)
-        role_label = _role_label(user, role)
         logger.warning(
             "rate_limit_exceeded",
             route_template=route_template,
@@ -124,6 +144,27 @@ class SmartRateLimiter:
         except Exception:
             pass
 
+    async def _maybe_warn(self, key: str, limit: int, window: int, *, role_label: str, count: int) -> None:
+        if limit <= 0 or self._warn_threshold <= 0:
+            return
+        ratio = count / max(limit, 1)
+        if ratio < self._warn_threshold:
+            return
+        now = time.monotonic()
+        last = self._warned_at.get(key, 0.0)
+        if now - last < self._warn_interval:
+            return
+        self._warned_at[key] = now
+        logger.warning(
+            "rate_limit.near_limit",
+            key=key,
+            role=role_label,
+            used=count,
+            limit=limit,
+            window_s=window,
+        )
+        record_limiter_near_limit(key, role_label)
+
     async def _resolve_user(self, request: Request) -> UserCtx | None:
         user = getattr(request.state, "user", None)
         if isinstance(user, UserCtx):
@@ -141,7 +182,9 @@ class SmartRateLimiter:
                 logger.debug("rate_limit_token_error", error=str(exc))
         return None
 
-    async def _consume(self, redis: Any, key: str, limit: int, window: int) -> tuple[bool, int, int]:
+    async def _consume(
+        self, redis: Any, key: str, limit: int, window: int, role_label: str | None = None
+    ) -> tuple[bool, int, int]:
         try:
             count = await redis.incr(key)
         except Exception as exc:
@@ -159,6 +202,7 @@ class SmartRateLimiter:
             self._record_redis_error("ttl", key, exc)
             ttl = window
         reset_in = ttl if isinstance(ttl, int) and ttl > 0 else window
+        await self._maybe_warn(key, limit, window, role_label=role_label or "unknown", count=count)
         return count <= limit, remaining, reset_in
 
 

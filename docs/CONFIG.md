@@ -31,32 +31,40 @@ Configuration sources are applied in this order:
 | Variable | Description |
 | --- | --- |
 | `DATABASE_URL` | Primary SQLAlchemy DSN (sync) |
-| `PG_ASYNC_DSN` | Optional async-friendly DSN override |
+| `PG_ASYNC_DSN`, `POSTGRES_DSN` | Optional async-friendly DSN override |
+| `ASYNC_DB_POOL_SIZE`, `ASYNC_DB_MAX_OVERFLOW`, `ASYNC_DB_POOL_TIMEOUT` | Async SQLAlchemy pool sizing |
+| `DB_POOL_WARN_PCT`, `DB_POOL_WARN_INTERVAL_S` | Warning and metrics thresholds for pool saturation |
+| `DB_STATEMENT_TIMEOUT_SECONDS` | Statement timeout applied in async engines |
 | `ALERT_DB_POOL_*` | Pool sizes and timeouts for the alert-bot asyncpg pool |
 
 Use `settings.db.url` for SQLAlchemy engines and `settings.db.async_dsn` for asyncpg/SQLModel contexts.
+Near-capacity pools emit `db_pool.near_limit` warnings and update `db_pool_*` metrics when utilisation
+exceeds `DB_POOL_WARN_PCT`.
 
 ## Redis & Celery (`settings.redis`, `settings.celery`)
 
 | Variable | Description |
 | --- | --- |
 | `REDIS_URL` | Primary Redis (cache + broker) |
-| `CACHE_REDIS_URL` | Override for the shared cache backend (defaults to `REDIS_URL`) |
-| `CACHE_NAMESPACE`, `CACHE_DEFAULT_TTL_S` | Cache key prefix + default TTL for helpers |
 | `BROKER_URL` | Optional Celery broker override |
 | `RESULT_BACKEND` | Optional Celery result backend (defaults to `REDIS_URL`) |
 | `QUEUE_NAMES` | Comma-separated queue list for metrics |
+| `CACHE_REDIS_URL` | Override for the shared cache backend (defaults to `REDIS_URL`) |
+| `CACHE_NAMESPACE`, `CACHE_DEFAULT_TTL_S` | Cache key prefix + default TTL for helpers |
+| `REDIS_BACKLOG_WARN_SIZE`, `REDIS_BACKLOG_WARN_INTERVAL_S` | Backlog warning thresholds for queue metrics |
 | `CELERY_*` (`CELERY_WORKER_PREFETCH_MULTIPLIER`, `CELERY_TASK_TIME_LIMIT`, `CELERY_TASK_ALWAYS_EAGER`, etc.) | Worker tunables |
 | `BACKLOG_PROBE_SECONDS`, `SCHEDULE_*` | Metrics probe interval and scheduler toggles |
 
 `settings.celery` exposes typed helpers (`prefetch_multiplier`, `logistics_cron`, `alerts_schedule_cron`, etc.).
+Queue backlog probes emit `queue_backlog_high` warnings and increment `redis_backlog_warn_total{queue}`
+when `REDIS_BACKLOG_WARN_SIZE` is exceeded.
 
 ## Celery schedules & cron
 
 - `SCHEDULE_NIGHTLY_MAINTENANCE` / `NIGHTLY_MAINTENANCE_CRON` — runs `ingest.maintenance_nightly` (default `30 2 * * *`).
 - `SCHEDULE_MV_REFRESH` / `MV_REFRESH_CRON` — refreshes ROI materialized views (default `30 2 * * *`).
 - `SCHEDULE_LOGISTICS_ETL` / `LOGISTICS_CRON` — triggers `logistics.etl.full` (default `0 3 * * *`).
-- `ALERTS_EVALUATION_INTERVAL_CRON` (`ALERTS_CRON` alias) — cadence for `alertbot.run`; `CHECK_INTERVAL_MIN` becomes `*/N * * * *`.
+- `ALERTS_EVALUATION_INTERVAL_CRON` — cadence for `alertbot.run`; `CHECK_INTERVAL_MIN` becomes `*/N * * * *`. (Legacy `ALERTS_CRON` is deprecated and logged if used.)
 - Cron strings use the standard 5-field format and are validated via `CronSchedule`/`croniter` on worker startup; invalid values are logged and stop the worker from booting.
 - Use the typed settings above instead of ad-hoc environment parsing so configuration stays consistent across workers and beat.
 
@@ -69,19 +77,42 @@ Use `settings.db.url` for SQLAlchemy engines and `settings.db.async_dsn` for asy
 | `MINIO_BUCKET`, `AWS_REGION` | Default bucket name + region |
 | `S3_CONNECT_TIMEOUT_S`, `S3_READ_TIMEOUT_S` | boto3/aioboto3 client timeouts |
 | `S3_ADDRESSING_STYLE` | Optional `path`/`virtual` addressing hint |
-| `INGEST_*` | Chunk sizes, streaming controls, idempotency |
 
 Call `settings.s3.client_kwargs()` + `settings.s3.client_config()` (or
 `awa_common.minio.get_s3_client_kwargs/config`) when constructing boto3/aioboto3 clients.
+
+## Ingestion (`settings.ingestion`)
+
+| Variable | Description |
+| --- | --- |
+| `INGEST_CHUNK_SIZE_MB` | Default multipart chunk size (MB) for uploads |
+| `INGEST_STREAMING_ENABLED`, `INGEST_STREAMING_THRESHOLD_MB` | Toggle + threshold for streaming ingest |
+| `INGEST_STREAMING_CHUNK_SIZE`, `INGEST_STREAMING_CHUNK_SIZE_MB` | Row/MB chunk sizing when streaming |
+| `MAX_REQUEST_BYTES`, `SPOOL_MAX_BYTES` | Request/payload caps for API uploads |
+| `INGEST_IDEMPOTENT` | Enforce idempotent ingest dedupe in `load_log` |
+| `ANALYZE_MIN_ROWS` | Minimum rows before ANALYZE |
+| `QUEUE_NAMES` | Preferred ingest/broker queue names for backlog metrics |
 
 ## Security & API (`settings.security`)
 
 | Variable | Description |
 | --- | --- |
 | `CORS_ORIGINS` | Comma-separated origin list |
-| `MAX_REQUEST_BYTES` | Request body limit |
+| `SECURITY_HSTS_ENABLED`, `SECURITY_REFERRER_POLICY`, `SECURITY_FRAME_OPTIONS`, `SECURITY_X_CONTENT_TYPE_OPTIONS` | Security headers for the API |
 | `OIDC_*` | Keycloak / OIDC validation configuration |
-| `RATE_LIMIT_*` | Role-based rate limits |
+
+## Limiter (`settings.limiter`)
+
+| Variable | Description |
+| --- | --- |
+| `RATE_LIMIT_VIEWER`, `RATE_LIMIT_OPS`, `RATE_LIMIT_ADMIN` | Role-based rate limits for the API |
+| `RATE_LIMIT_WINDOW_SECONDS` | Shared window for role-based limits |
+| `RATE_LIMIT_SCORE_PER_USER`, `RATE_LIMIT_ROI_BY_VENDOR_PER_USER` | Endpoint-specific per-user quotas |
+| `LIMITER_NEAR_LIMIT_THRESHOLD`, `LIMITER_WARN_INTERVAL_S` | Near-saturation logging/metrics thresholds |
+| `REDIS_URL` | Backend for FastAPI rate limiting (shared with Redis broker/cache) |
+
+Approaching limits triggers `rate_limit.near_limit` warnings and increments
+`limiter_near_limit_total{key,role}` once per `LIMITER_WARN_INTERVAL_S`.
 
 ## Observability (`settings.observability`)
 
@@ -141,7 +172,7 @@ Call `settings.s3.client_kwargs()` + `settings.s3.client_config()` (or
 | `TASK_ID` | External task identifier for Keepa/Helium ETLs |
 | `KEEPA_KEY`, `HELIUM_API_KEY` | Third-party keys |
 | `REGION`, `SP_REFRESH_TOKEN`, `SP_CLIENT_ID`, `SP_CLIENT_SECRET`, `SP_FEES_DATE`, `SP_API_BASE_URL` | SP API credentials and base URL |
-| `HTTP_*` (`HTTP_CONNECT_TIMEOUT_S`, `HTTP_MAX_CONNECTIONS`, etc.) | Shared HTTP client tuning (legacy `ETL_*` aliases still work) |
+| `HTTP_*` (`HTTP_CONNECT_TIMEOUT_S`, `HTTP_MAX_CONNECTIONS`, etc.) | Shared HTTP client tuning (legacy `ETL_*` env vars are deprecated and logged when used) |
 
 ## Health checks
 

@@ -25,7 +25,8 @@ logger = get_task_logger(__name__)
 
 @celery_app.task(name="ingest.analyze_table")  # type: ignore[misc]
 def task_analyze_table(table_fqname: str) -> dict[str, str]:
-    engine = create_engine(settings.DATABASE_URL)
+    db_cfg = getattr(settings, "db", None)
+    engine = create_engine(db_cfg.url if db_cfg else settings.DATABASE_URL)
     try:
         with engine.begin() as conn:
             conn.execute(text(f"ANALYZE {table_fqname}"))
@@ -49,7 +50,8 @@ def task_maintenance_nightly() -> dict[str, Any]:
         "VACUUM_ENABLE",
         default=bool(maintenance_cfg.vacuum_enabled if maintenance_cfg else getattr(settings, "VACUUM_ENABLE", False)),
     )
-    engine = create_engine(settings.DATABASE_URL)
+    db_cfg = getattr(settings, "db", None)
+    engine = create_engine(db_cfg.url if db_cfg else settings.DATABASE_URL)
     processed: list[str] = []
     try:
         with engine.begin() as conn:
@@ -80,7 +82,8 @@ def _roi_materialized_view_names() -> tuple[str, str]:
 
 @celery_app.task(name="db.refresh_roi_mvs")  # type: ignore[misc]
 def task_refresh_roi_mvs(date_from: str | None = None, date_to: str | None = None) -> dict[str, Any]:
-    engine = create_engine(settings.DATABASE_URL)
+    db_cfg = getattr(settings, "db", None)
+    engine = create_engine(db_cfg.url if db_cfg else settings.DATABASE_URL)
     roi_view_name, roi_view_quoted = _roi_materialized_view_names()
     try:
         with engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
@@ -110,9 +113,14 @@ def _bust_stats_cache(date_from: str | None, date_to: str | None) -> dict[str, A
         logger.warning("stats_cache_window_parse_failed", error=str(exc))
 
     async def _purge() -> dict[str, int]:
-        cache_url = getattr(settings, "CACHE_REDIS_URL", None) or settings.REDIS_URL
+        redis_cfg = getattr(settings, "redis", None)
+        cache_url = (
+            redis_cfg.cache_url if redis_cfg else getattr(settings, "CACHE_REDIS_URL", None) or settings.REDIS_URL
+        )
         await configure_cache_backend(cache_url, suppress=False)
-        namespace = normalize_namespace(getattr(settings, "STATS_CACHE_NAMESPACE", "stats:"))
+        namespace = normalize_namespace(
+            redis_cfg.cache_namespace if redis_cfg else getattr(settings, "STATS_CACHE_NAMESPACE", "stats:")
+        )
         try:
             deleted = {
                 "kpi": await purge_prefix(f"{namespace}kpi"),

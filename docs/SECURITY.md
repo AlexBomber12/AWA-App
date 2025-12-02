@@ -93,6 +93,9 @@ single source of truth reflected in the codebase.
   `X-RateLimit-*` headers, logs a structured `rate_limit_exceeded` event, and increments the metric
   `http_429_total{route,role}` for observability. `/ready`, `/health`, and `/metrics` remain exempt
   via `@no_rate_limit`.
+- Near-saturation events emit `rate_limit.near_limit` warnings and bump
+  `limiter_near_limit_total{key,role}` once per interval after usage crosses
+  `LIMITER_NEAR_LIMIT_THRESHOLD`.
 
 ## Request Size & Timeout Guards
 
@@ -100,11 +103,11 @@ single source of truth reflected in the codebase.
   `MAX_REQUEST_BYTES` (1 048 576 bytes by default) with HTTP 413. Chunked uploads stop reading once the
   limit is crossed.
 - ETL agents use the shared HTTP client (`packages/awa_common/etl/http.request/download`) with:
-  - Connect timeout `ETL_CONNECT_TIMEOUT_S=5.0`
-  - Read timeout `ETL_READ_TIMEOUT_S=30.0`
-  - Total timeout `ETL_TOTAL_TIMEOUT_S=60.0`
-  - Up to `ETL_MAX_RETRIES=5` attempts, exponential backoff (`ETL_BACKOFF_BASE_S=0.5`,
-    `ETL_BACKOFF_MAX_S=30.0`), and retry-on-status for `ETL_RETRY_STATUS_CODES=[429,500,502,503,504]`.
+  - Connect timeout `HTTP_CONNECT_TIMEOUT_S=5.0`
+  - Read timeout `HTTP_READ_TIMEOUT_S=30.0`
+  - Total timeout `HTTP_TOTAL_TIMEOUT_S=60.0`
+  - Up to `HTTP_MAX_RETRIES=5` attempts, exponential backoff (`HTTP_BACKOFF_BASE_S=0.5`,
+    `HTTP_BACKOFF_MAX_S=30.0`), and retry-on-status for `HTTP_RETRY_STATUS_CODES=[429,500,502,503,504]`.
 - Retries log `etl_http_retry` events with `attempt`, `sleep`, and `status_code`, and increment
   `etl_retry_total{source,code}` in Prometheus.
 

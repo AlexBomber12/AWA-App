@@ -101,6 +101,11 @@ def _with_base_labels(**labels: str) -> dict[str, str]:
     return merged
 
 
+def _metrics_enabled() -> bool:
+    observability = getattr(settings, "observability", None)
+    return bool(observability.enable_metrics if observability else getattr(settings, "ENABLE_METRICS", True))
+
+
 HTTP_REQUESTS_TOTAL = Counter(
     "http_requests_total",
     "HTTP request count",
@@ -425,6 +430,42 @@ QUEUE_BACKLOG = Gauge(
     ("queue", *BASE_LABELS),
     registry=REGISTRY,
 )
+DB_POOL_IN_USE = Gauge(
+    "db_pool_in_use",
+    "Checked-out database connections",
+    ("pool", *BASE_LABELS),
+    registry=REGISTRY,
+)
+DB_POOL_CAPACITY = Gauge(
+    "db_pool_capacity",
+    "Configured database pool capacity (pool_size + max_overflow)",
+    ("pool", *BASE_LABELS),
+    registry=REGISTRY,
+)
+DB_POOL_OVERFLOW = Gauge(
+    "db_pool_overflow",
+    "Active overflow connections beyond pool_size",
+    ("pool", *BASE_LABELS),
+    registry=REGISTRY,
+)
+DB_POOL_NEAR_LIMIT_TOTAL = Counter(
+    "db_pool_near_limit_total",
+    "Database pool near-capacity warnings",
+    ("pool", *BASE_LABELS),
+    registry=REGISTRY,
+)
+LIMITER_NEAR_LIMIT_TOTAL = Counter(
+    "limiter_near_limit_total",
+    "Rate limiter usage approaching quota",
+    ("key", "role", *BASE_LABELS),
+    registry=REGISTRY,
+)
+REDIS_BACKLOG_WARN_TOTAL = Counter(
+    "redis_backlog_warn_total",
+    "Queue backlog crossed warning threshold",
+    ("queue", *BASE_LABELS),
+    registry=REGISTRY,
+)
 
 ALERTS_NOTIFICATIONS_SENT_TOTAL = Counter(
     "alerts_notifications_sent_total",
@@ -671,6 +712,7 @@ _TASK_LOCK = threading.Lock()
 _CELERY_METRICS_ENABLED = False
 _BACKLOG_THREAD: threading.Thread | None = None
 _BACKLOG_LOCK = threading.Lock()
+_BACKLOG_WARNED_AT: dict[str, float] = {}
 
 
 def _task_label(sender: Any) -> str:
@@ -773,6 +815,12 @@ def _maybe_start_backlog_probe(  # noqa: C901
     if not queues:
         return
 
+    redis_cfg = getattr(settings, "redis", None)
+    warn_size = getattr(redis_cfg, "backlog_warn_size", None) or getattr(settings, "REDIS_BACKLOG_WARN_SIZE", None)
+    warn_interval_s = float(
+        getattr(redis_cfg, "backlog_warn_interval_s", getattr(settings, "REDIS_BACKLOG_WARN_INTERVAL_S", 60.0))
+    )
+
     def _probe() -> None:
         try:
             client = redis.Redis.from_url(broker_url, decode_responses=False)
@@ -786,10 +834,25 @@ def _maybe_start_backlog_probe(  # noqa: C901
                     continue
                 backlog_value = cast(float | int, backlog)
                 QUEUE_BACKLOG.labels(**_with_base_labels(queue=queue)).set(float(backlog_value))
+                if warn_size and backlog_value >= warn_size:
+                    now = time.monotonic()
+                    last = _BACKLOG_WARNED_AT.get(queue, 0.0)
+                    if now - last >= max(warn_interval_s, 0.0):
+                        logger.warning(
+                            "queue_backlog_high",
+                            extra={
+                                "queue": queue,
+                                "backlog": backlog_value,
+                                "warn_threshold": warn_size,
+                            },
+                        )
+                        record_redis_backlog_warning(queue)
+                        _BACKLOG_WARNED_AT[queue] = now
             time.sleep(max(interval, 1))
 
     with _BACKLOG_LOCK:
         if _BACKLOG_THREAD is None:
+            _BACKLOG_WARNED_AT.clear()
             thread = threading.Thread(target=_probe, name="queue-backlog-metrics", daemon=True)
             _BACKLOG_THREAD = thread
             thread.start()
@@ -1242,6 +1305,39 @@ def record_http_429(route: str, role: str) -> None:
     HTTP_429_TOTAL.labels(**_with_base_labels(route=route_label, role=role_label)).inc()
 
 
+def record_limiter_near_limit(key: str, role: str) -> None:
+    """Record limiter keys approaching quota."""
+    if not _metrics_enabled():
+        return
+    labels = _with_base_labels(key=(key or "unknown"), role=(role or "unknown"))
+    LIMITER_NEAR_LIMIT_TOTAL.labels(**labels).inc()
+
+
+def record_db_pool_usage(pool: str, *, in_use: int, capacity: int, overflow: int | None = None) -> None:
+    """Update gauges for database pool utilisation."""
+    if not _metrics_enabled():
+        return
+    labels = _with_base_labels(pool=(pool or "default"))
+    DB_POOL_IN_USE.labels(**labels).set(max(in_use, 0))
+    DB_POOL_CAPACITY.labels(**labels).set(max(capacity, 0))
+    if overflow is not None:
+        DB_POOL_OVERFLOW.labels(**labels).set(max(overflow, 0))
+
+
+def record_db_pool_near_limit(pool: str) -> None:
+    """Increment warning counter when DB pool approaches capacity."""
+    if not _metrics_enabled():
+        return
+    DB_POOL_NEAR_LIMIT_TOTAL.labels(**_with_base_labels(pool=(pool or "default"))).inc()
+
+
+def record_redis_backlog_warning(queue: str) -> None:
+    """Increment warning counter when queue backlog crosses threshold."""
+    if not _metrics_enabled():
+        return
+    REDIS_BACKLOG_WARN_TOTAL.labels(**_with_base_labels(queue=(queue or "unknown"))).inc()
+
+
 async def monitor_event_loop_lag(interval_s: float = 0.5, *, warn_threshold_s: float | None = None) -> None:
     """Track event loop scheduling delay."""
     loop = asyncio.get_running_loop()
@@ -1361,6 +1457,12 @@ __all__ = [
     "OIDC_JWKS_AGE_SECONDS",
     "OIDC_VALIDATE_FAILURES_TOTAL",
     "QUEUE_BACKLOG",
+    "DB_POOL_IN_USE",
+    "DB_POOL_CAPACITY",
+    "DB_POOL_OVERFLOW",
+    "DB_POOL_NEAR_LIMIT_TOTAL",
+    "LIMITER_NEAR_LIMIT_TOTAL",
+    "REDIS_BACKLOG_WARN_TOTAL",
     "EVENT_LOOP_LAG_SECONDS",
     "LLM_REQUESTS_TOTAL",
     "LLM_REQUEST_LATENCY_SECONDS",
@@ -1406,6 +1508,10 @@ __all__ = [
     "record_oidc_jwks_refresh",
     "record_oidc_validation_failure",
     "record_http_429",
+    "record_limiter_near_limit",
+    "record_db_pool_usage",
+    "record_db_pool_near_limit",
+    "record_redis_backlog_warning",
     "record_http_client_request",
     "record_external_http_request",
     "observe_external_http_latency",

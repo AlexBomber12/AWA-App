@@ -132,13 +132,16 @@ async def lifespan(_app: FastAPI):
     init_async_engine()
     await _wait_for_db()
     await _check_llm()
-    redis_url = settings.REDIS_URL
+    redis_cfg = getattr(settings, "redis", None)
+    redis_url = redis_cfg.url if redis_cfg else settings.REDIS_URL
     stats_enabled = env_bool("STATS_ENABLE_CACHE", default=getattr(settings, "STATS_ENABLE_CACHE", False))
     limiter_redis: aioredis.Redis | None = None
     _app.state.stats_cache = None
-    _app.state.stats_cache_namespace = normalize_namespace(getattr(settings, "STATS_CACHE_NAMESPACE", "stats:"))
+    _app.state.stats_cache_namespace = normalize_namespace(
+        redis_cfg.cache_namespace if redis_cfg else getattr(settings, "STATS_CACHE_NAMESPACE", "stats:")
+    )
     _app.state.redis_health = {
-        "critical": bool(getattr(settings, "REDIS_HEALTH_CRITICAL", False)),
+        "critical": bool(redis_cfg.health_critical if redis_cfg else getattr(settings, "REDIS_HEALTH_CRITICAL", False)),
         "status": "unknown",
         "error": None,
     }
@@ -165,11 +168,11 @@ async def lifespan(_app: FastAPI):
         limiter_redis = None
         _app.state.limiter_redis = None
         _update_redis_health(_app.state, status="degraded", error=str(exc))
-        if getattr(settings, "REDIS_HEALTH_CRITICAL", False):
+        if bool(redis_cfg.health_critical if redis_cfg else getattr(settings, "REDIS_HEALTH_CRITICAL", False)):
             raise
     try:
         if stats_enabled:
-            cache_url = getattr(settings, "CACHE_REDIS_URL", None) or redis_url
+            cache_url = redis_cfg.cache_url if redis_cfg else getattr(settings, "CACHE_REDIS_URL", None) or redis_url
             await configure_cache_backend(cache_url, suppress=False)
             cache_ok = await ping_cache()
             if not cache_ok:
@@ -275,13 +278,15 @@ async def _wait_for_db(max_attempts: int | None = None, delay_s: float | None = 
         raise last_err
 
 
-async def _wait_for_redis(url: str) -> aioredis.Redis:
+async def _wait_for_redis(url: str | None = None) -> aioredis.Redis:
     delay = 0.2
     app_env = str(getattr(settings, "APP_ENV", "dev") or "dev").lower()
     attempts = 5 if app_env in {"dev", "local", "test"} else 50
+    redis_cfg = getattr(settings, "redis", None)
+    redis_url = url or (redis_cfg.url if redis_cfg else getattr(settings, "REDIS_URL", "redis://localhost/0"))
     for _ in range(attempts):
         try:
-            r = aioredis.from_url(url, encoding="utf-8", decode_responses=True)
+            r = aioredis.from_url(redis_url, encoding="utf-8", decode_responses=True)
             await asyncio.wait_for(r.ping(), timeout=1.0)
             return r
         except Exception:

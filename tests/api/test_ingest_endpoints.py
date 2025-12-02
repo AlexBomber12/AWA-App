@@ -10,8 +10,8 @@ pytestmark = pytest.mark.integration
 
 def _get_client(monkeypatch) -> TestClient:
     monkeypatch.setenv("CELERY_TASK_ALWAYS_EAGER", "true")
-    monkeypatch.setenv("CELERY_BROKER_URL", "memory://")
-    monkeypatch.setenv("CELERY_RESULT_BACKEND", "cache+memory://")
+    monkeypatch.setenv("BROKER_URL", "memory://")
+    monkeypatch.setenv("RESULT_BACKEND", "cache+memory://")
     monkeypatch.setenv("CELERY_TASK_STORE_EAGER_RESULT", "true")
     from importlib import reload
 

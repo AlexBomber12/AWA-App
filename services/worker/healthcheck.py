@@ -33,7 +33,8 @@ def _retry_budget() -> tuple[int, float]:
 
 
 def check_db() -> None:
-    dsn = settings.DATABASE_URL.replace("+psycopg", "")
+    db_cfg = getattr(settings, "db", None)
+    dsn = (db_cfg.url if db_cfg else settings.DATABASE_URL).replace("+psycopg", "")
     with psycopg.connect(dsn, connect_timeout=_db_timeout()) as conn:
         with conn.cursor() as cur:
             cur.execute("SELECT 1")
@@ -41,8 +42,9 @@ def check_db() -> None:
 
 def check_redis() -> None:
     timeout = _redis_timeout()
+    redis_cfg = getattr(settings, "redis", None)
     client = redis.Redis.from_url(
-        settings.REDIS_URL,
+        redis_cfg.url if redis_cfg else settings.REDIS_URL,
         socket_connect_timeout=timeout,
         socket_timeout=timeout,
     )

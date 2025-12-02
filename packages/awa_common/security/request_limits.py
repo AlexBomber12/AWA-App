@@ -16,7 +16,13 @@ class BodySizeLimitMiddleware(BaseHTTPMiddleware):
     def __init__(self, app: Any, *, settings: Any) -> None:
         super().__init__(app)
         self._settings = settings
-        self._max_bytes = int(getattr(settings, "MAX_REQUEST_BYTES", 1_048_576))
+        try:
+            settings.__dict__.pop("ingestion", None)
+        except Exception:
+            pass
+        ingest_cfg = getattr(settings, "ingestion", None)
+        default_limit = getattr(settings, "MAX_REQUEST_BYTES", 1_048_576)
+        self._max_bytes = int(getattr(ingest_cfg, "max_request_bytes", default_limit))
 
     async def dispatch(self, request: Request, call_next: Callable[[Request], Any]) -> Response:  # noqa: C901
         limit = self._max_bytes
