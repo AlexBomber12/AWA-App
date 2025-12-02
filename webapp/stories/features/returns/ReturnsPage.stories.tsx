@@ -4,6 +4,7 @@ import type { Session } from "next-auth";
 
 import { ReturnsPage } from "@/components/features/returns/ReturnsPage";
 import { AppShell } from "@/components/layout";
+import type { ReturnItem } from "@/lib/api/bffTypes";
 import type { ReturnsListResponse, ReturnsSummary } from "@/lib/api/returnsClient";
 
 import { FetchMock, type FetchMockHandler } from "../../utils/fetchMock";
@@ -28,7 +29,7 @@ const buildDefaultListPayload = (pageParam: number, pageSizeParam: number): Retu
   const startIndex = (page - 1) * pageSize;
   const endIndex = Math.min(startIndex + pageSize, total);
 
-  const items = Array.from({ length: endIndex - startIndex }, (_, index) => {
+  const items: ReturnItem[] = Array.from({ length: endIndex - startIndex }, (_, index) => {
     const id = startIndex + index + 1;
     return {
       returnId: formatAsin(id),

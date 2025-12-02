@@ -6,6 +6,10 @@ import type { Task } from "@/lib/api/inboxTypes";
 const MOCK_TASKS: Task[] = [
   {
     id: "task-story-1",
+    type: "ROI_REVIEW",
+    title: "Apply updated ROI guardrail",
+    description: "Review ROI guardrail adjustment for story SKU.",
+    status: "open",
     source: "decision_engine",
     entity: { type: "sku_vendor", asin: "B00STORY1", vendorId: "2042", label: "Story Yoga Mat" },
     summary: "Apply updated ROI guardrail",
@@ -22,7 +26,7 @@ const MOCK_TASKS: Task[] = [
         { decision: "wait_until", label: "Wait until next cycle" },
       ],
     },
-    priority: 95,
+    priority: "critical",
     deadlineAt: new Date().toISOString(),
     why: ["ROI under 15% threshold", { title: "Competitor move", detail: "Competitor price raised" }],
     alternatives: [
@@ -34,6 +38,10 @@ const MOCK_TASKS: Task[] = [
   },
   {
     id: "task-story-2",
+    type: "INBOX_THREAD",
+    title: "Follow up on onboarding checklist",
+    description: "Track vendor onboarding checklist status.",
+    status: "in_progress",
     source: "manual",
     entity: { type: "vendor", vendorId: "22", label: "Northwind Foods" },
     summary: "Follow up on onboarding checklist",

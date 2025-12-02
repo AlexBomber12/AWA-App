@@ -12,6 +12,14 @@ export type RunSimulationPayload = {
   input: SimulationInput;
 };
 
+export type DecisionRulesResponse = {
+  rules: Rule[];
+};
+
+export type SimulationScenariosResponse = {
+  scenarios: SimulationScenario[];
+};
+
 const DECISION_ENDPOINT = "/api/bff/decision";
 
 export const decisionSummaryQueryKey = ["decision", "summary"] as const;

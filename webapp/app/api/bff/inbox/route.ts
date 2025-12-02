@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { buildPaginationMeta, parseSortMeta, requirePermission } from "@/app/api/bff/utils";
+import { buildPaginationMeta, requirePermission } from "@/app/api/bff/utils";
 import type { Task, TaskPriority, TaskState } from "@/lib/api/bffTypes";
 import type { DecisionPriority } from "@/lib/api/decisionTypes";
 import { parsePositiveInt, parseString } from "@/lib/parsers";

@@ -34,6 +34,7 @@ export const DECISION_RULES: Rule[] = [
     conditions: [
       { category: "Home", field: "roi", op: "<", value: 15, cadenceDays: 7 },
       {
+        field: "volatility_pct",
         expression: "volatility_pct > 5",
         value: "rolling_volatility",
         op: ">",
@@ -72,7 +73,7 @@ export const DECISION_RULES: Rule[] = [
     description: "Projects ROI impact for promo campaigns in Home and Outdoors categories.",
     scope: "campaign",
     conditions: [
-      { category: "Home", op: "in", value: ["Home", "Outdoors"] },
+      { category: "Home", field: "category", op: "in", value: ["Home", "Outdoors"] },
       { field: "promo_flag", op: "==", value: true, cadenceDays: 14 },
     ],
     actions: [

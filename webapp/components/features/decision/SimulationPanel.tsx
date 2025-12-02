@@ -193,7 +193,7 @@ export function SimulationPanel({
             <div className="space-y-2">
               <p className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Simulated decisions</p>
               <div className="space-y-3">
-                {activeScenario.decisions.map((decision, index) => (
+                {(activeScenario.decisions ?? []).map((decision, index) => (
                   <div key={`${decision.decision}-${index}`} className="rounded-lg border border-border bg-muted/20 p-3 text-sm">
                     <p className="font-semibold capitalize">{formatDecisionLabel(decision.decision)}</p>
                     <p className="text-xs text-muted-foreground">Priority: {formatTaskPriority(decision.priority)}</p>

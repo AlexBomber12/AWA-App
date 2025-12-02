@@ -10,7 +10,7 @@ import type { ReactNode } from "react";
 import { DecisionEnginePage } from "@/components/features/decision/DecisionEnginePage";
 import { ToastProvider } from "@/components/providers/ToastProvider";
 import type { DecisionRulesResponse, SimulationScenariosResponse } from "@/lib/api/decisionClient";
-import type { SimulationScenario } from "@/lib/api/decisionTypes";
+import type { SimulationScenario } from "@/lib/api/bffTypes";
 
 const user = userEvent.setup();
 
@@ -21,8 +21,9 @@ const rulesResponse: DecisionRulesResponse = {
       name: "Story Rule 1",
       description: "First rule",
       isActive: true,
+      enabled: true,
       scope: "sku",
-      conditions: [{ field: "roi", operator: "<", value: 20 }],
+      conditions: [{ field: "roi", op: "<", value: 20 }],
       actions: [{ action: "update_price" }],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -32,8 +33,9 @@ const rulesResponse: DecisionRulesResponse = {
       name: "Story Rule 2",
       description: "Second rule",
       isActive: false,
+      enabled: false,
       scope: "vendor",
-      conditions: [{ vendorId: "22", field: "lead_time_slip", operator: ">", value: 2 }],
+      conditions: [{ vendorId: "22", field: "lead_time_slip", op: ">", value: 2 }],
       actions: [{ action: "blocked_observe" }],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -48,8 +50,10 @@ const scenariosResponse: SimulationScenariosResponse = {
       name: "Scenario One",
       description: "Completed scenario",
       ruleId: "rule-1",
-      input: {},
-      metrics: { roi: 18.4, riskAdjustedRoi: 16.1, maxCogs: 14.5 },
+      baselineSku: "scenario-1",
+      parameters: {},
+      result: { roi: 18.4, margin: 12.1, riskAdjustedRoi: 16.1, maxCogs: 14.5 },
+      metrics: { roi: 18.4, margin: 12.1, riskAdjustedRoi: 16.1, maxCogs: 14.5 },
       decisions: [
         {
           decision: "update_price",
@@ -69,8 +73,9 @@ const newScenario: SimulationScenario = {
   name: "Story Simulation",
   description: "New simulation",
   ruleId: "rule-1",
-  input: { roiDelta: 4 },
-  metrics: { roi: 21.2, riskAdjustedRoi: 19.1, maxCogs: 13.2 },
+  baselineSku: "scenario-new",
+  parameters: { roiDelta: 4 },
+  result: { roi: 21.2, margin: 13.4, riskAdjustedRoi: 19.1, maxCogs: 13.2 },
   decisions: [
     {
       decision: "update_price",

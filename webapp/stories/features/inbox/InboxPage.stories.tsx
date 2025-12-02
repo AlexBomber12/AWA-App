@@ -20,6 +20,7 @@ const mockSession = {
 } as Session & { accessToken: string };
 
 const buildResponse = (tasks: Task[]): InboxListResponse => ({
+  data: tasks,
   items: tasks,
   pagination: {
     page: 1,
@@ -37,6 +38,10 @@ const buildResponse = (tasks: Task[]): InboxListResponse => ({
 const sampleTasks: Task[] = [
   {
     id: "task-story-101",
+    type: "ROI_REVIEW",
+    title: "Review ROI guardrail",
+    description: "Review ROI guardrail for story SKU.",
+    status: "open",
     source: "decision_engine",
     entity: { type: "sku_vendor", asin: "B00-STORY-01", vendorId: "44", label: "Storybook Yoga Mat" },
     summary: "Request discount to restore ROI guardrail",
@@ -54,7 +59,7 @@ const sampleTasks: Task[] = [
       ],
       metrics: { roi: 11.5, riskAdjustedRoi: 9.2, maxCogs: 13.4 },
     },
-    priority: 95,
+    priority: "critical",
     deadlineAt: new Date(Date.now() + 36 * 60 * 60 * 1000).toISOString(),
     alternatives: [
       { decision: "wait_until", label: "Observe for 24h" },
@@ -66,6 +71,10 @@ const sampleTasks: Task[] = [
   },
   {
     id: "task-story-102",
+    type: "INBOX_THREAD",
+    title: "Vendor onboarding follow-up",
+    description: "Complete documents for onboarding.",
+    status: "in_progress",
     source: "email",
     entity: { type: "thread", threadId: "THREAD-22", label: "Vendor onboarding thread" },
     summary: "Complete vendor onboarding documents",
@@ -109,15 +118,17 @@ const buildHandlers = (mode: InboxStoryMode): FetchMockHandler[] => [
           headers: { "Content-Type": "application/json" },
         });
       }
-      const tasks =
+      const tasks: Task[] =
         mode === "highPriority"
           ? [
               {
                 ...sampleTasks[0],
                 id: "task-high",
                 summary: "Critical ROI exception",
-                decision: { ...sampleTasks[0].decision, priority: 99 },
-                priority: 99,
+                decision: sampleTasks[0].decision
+                  ? { ...sampleTasks[0].decision, priority: 99 }
+                  : undefined,
+                priority: "critical",
               },
             ]
           : sampleTasks;

@@ -2,7 +2,6 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, type ReactNode } from "react";
 import { useSession } from "next-auth/react";
-import { useRouter } from "next/navigation";
 
 import {
   can,
@@ -77,8 +76,7 @@ type PermissionGuardProps = {
 };
 
 export function PermissionGuard({ resource, action, requiredRoles, fallback = null, redirectTo, children }: PermissionGuardProps) {
-  const { can, hasRole, roles } = usePermissions();
-  const router = redirectTo ? useRouter() : null;
+  const { can, hasRole } = usePermissions();
 
   const hasRequiredRole = requiredRoles?.length
     ? requiredRoles.some((role) => hasRole(role))
@@ -87,10 +85,12 @@ export function PermissionGuard({ resource, action, requiredRoles, fallback = nu
   const isAllowed = hasRequiredRole && canAccess;
 
   useEffect(() => {
-    if (!isAllowed && redirectTo && router) {
-      router.replace(redirectTo);
+    if (!isAllowed && redirectTo) {
+      if (typeof window !== "undefined") {
+        window.location.replace(redirectTo);
+      }
     }
-  }, [isAllowed, redirectTo, router]);
+  }, [isAllowed, redirectTo]);
 
   return (isAllowed ? children : fallback) ?? null;
 }

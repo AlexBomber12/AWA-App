@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react";
 
 import { DecisionRulesList } from "@/components/features/decision/DecisionRulesList";
-import type { Rule } from "@/lib/api/decisionTypes";
+import type { Rule } from "@/lib/api/decisionClient";
 
 const MOCK_RULES: Rule[] = [
   {
@@ -9,8 +9,9 @@ const MOCK_RULES: Rule[] = [
     name: "Story ROI Guardrail",
     description: "Keeps ROI above 20%.",
     isActive: true,
+    enabled: true,
     scope: "sku",
-    conditions: [{ field: "roi", operator: "<", value: 20 }],
+    conditions: [{ field: "roi", op: "<", value: 20 }],
     actions: [{ action: "request_discount", defaultAction: "Request 3% discount" }],
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -20,8 +21,9 @@ const MOCK_RULES: Rule[] = [
     name: "Story Vendor Drift",
     description: "Flags vendors exceeding target lead time.",
     isActive: false,
+    enabled: false,
     scope: "vendor",
-    conditions: [{ field: "lead_time_slip", operator: ">", value: 2 }],
+    conditions: [{ field: "lead_time_slip", op: ">", value: 2 }],
     actions: [{ action: "blocked_observe", defaultAction: "Pause repricing" }],
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),

@@ -65,13 +65,19 @@ export const formatTaskPriority = (priority: DecisionPriority) => {
 
 export const formatDecisionLabel = (decision: string) => decision.replaceAll("_", " ");
 
-export const formatTaskSource = (source: Task["source"]) =>
-  ({
-    decision_engine: "Decision Engine",
-    email: "Inbox email",
-    manual: "Manual",
-    system: "System",
-  })[source] ?? source;
+const SOURCE_LABELS: Record<NonNullable<Task["source"]>, string> = {
+  decision_engine: "Decision Engine",
+  email: "Inbox email",
+  manual: "Manual",
+  system: "System",
+};
+
+export const formatTaskSource = (source: Task["source"]) => {
+  if (!source) {
+    return "Unknown source";
+  }
+  return SOURCE_LABELS[source as NonNullable<Task["source"]>] ?? source;
+};
 
 export const formatTaskDate = (value?: string | null, includeTime = true) => {
   if (!value) {

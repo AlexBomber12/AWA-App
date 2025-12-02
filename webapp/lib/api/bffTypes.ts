@@ -1,11 +1,4 @@
-import type {
-  DecisionAlternative,
-  DecisionPayload,
-  DecisionPriority,
-  DecisionReason,
-  RuleAction,
-  RuleScope,
-} from "@/lib/api/decisionTypes";
+import type { DecisionAlternative, DecisionPayload, DecisionReason, RuleAction, RuleScope } from "@/lib/api/decisionTypes";
 
 export type PaginationMeta = {
   page: number;
@@ -102,6 +95,7 @@ export type Task = {
   createdAt: string;
   updatedAt: string;
   dueAt?: string | null;
+  deadlineAt?: string | null;
   decisionId?: string | null;
   assignee?: string | null;
   source?: TaskSource | string | null;
@@ -133,6 +127,7 @@ export type Rule = {
   description: string | null;
   conditions: RuleCondition[];
   enabled: boolean;
+  isActive?: boolean;
   createdAt: string;
   updatedAt: string;
   scope?: RuleScope;
@@ -158,6 +153,7 @@ export type SimulationScenario = {
   baselineSku: string;
   parameters: Record<string, string | number | boolean | null>;
   result: SimulationResult;
+  metrics?: SimulationResult;
   createdAt: string;
   updatedAt?: string;
   ruleId?: string;

@@ -7,6 +7,10 @@ import type { Task } from "@/lib/api/inboxTypes";
 
 const mockTask: Task = {
   id: "drawer-task",
+  type: "ROI_REVIEW",
+  title: "Review price adjustment",
+  description: "Review price adjustment for Story Drawer SKU.",
+  status: "open",
   source: "decision_engine",
   entity: { type: "sku_vendor", asin: "B00DRAWER", vendorId: "300", label: "Story Drawer SKU" },
   summary: "Review price adjustment for Story Drawer SKU",

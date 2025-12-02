@@ -54,7 +54,6 @@ export async function GET(request: NextRequest) {
     const page = pagination?.page ?? state.page;
     const pageSize = pagination?.page_size ?? state.pageSize;
     const total = pagination?.total ?? apiResponse.items?.length ?? 0;
-    const totalPages = pagination?.total_pages ?? (total > 0 ? Math.ceil(total / pageSize) : 1);
 
     const data = (apiResponse.items ?? []).map((item) => toRoiItem(item));
 

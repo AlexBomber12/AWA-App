@@ -103,7 +103,7 @@ const buildListResponse = (
     data: mapped,
     items: mapped,
     pagination: buildPaginationMeta(page, pageSize, total),
-    sort: parseSortMeta(sortValue ?? pagination?.sort),
+    sort: parseSortMeta(sortValue),
     filters,
     summary: buildSummaryResponse(apiResponse),
   };

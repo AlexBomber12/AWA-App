@@ -177,10 +177,7 @@ export function InboxPage() {
             ...current,
             state: "snoozed",
             updatedAt: new Date().toISOString(),
-            decision: {
-              ...current.decision,
-              nextRequestAt: nextFollowUp,
-            },
+            decision: current.decision ? { ...current.decision, nextRequestAt: nextFollowUp } : undefined,
           })),
       });
     },

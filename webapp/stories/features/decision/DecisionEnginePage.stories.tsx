@@ -5,7 +5,7 @@ import type { Session } from "next-auth";
 import { DecisionEnginePage } from "@/components/features/decision/DecisionEnginePage";
 import { AppShell } from "@/components/layout";
 import type { DecisionRulesResponse, SimulationScenariosResponse } from "@/lib/api/decisionClient";
-import type { SimulationScenario } from "@/lib/api/decisionTypes";
+import type { SimulationScenario } from "@/lib/api/bffTypes";
 
 import { FetchMock, type FetchMockHandler } from "../../utils/fetchMock";
 
@@ -26,8 +26,9 @@ const rulesResponse: DecisionRulesResponse = {
       name: "Story Guardrail",
       description: "Ensures ROI stays above 15%.",
       isActive: true,
+      enabled: true,
       scope: "category",
-      conditions: [{ field: "roi", operator: "<", value: 15, category: "Home" }],
+      conditions: [{ field: "roi", op: "<", value: 15, category: "Home" }],
       actions: [{ action: "request_discount", defaultAction: "Request 5% discount" }],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -37,8 +38,9 @@ const rulesResponse: DecisionRulesResponse = {
       name: "Story Vendor Lead Time",
       description: "Blocks repricing when lead times slip.",
       isActive: false,
+      enabled: false,
       scope: "vendor",
-      conditions: [{ field: "lead_time_slip", operator: ">", value: 2 }],
+      conditions: [{ field: "lead_time_slip", op: ">", value: 2 }],
       actions: [{ action: "blocked_observe", defaultAction: "Pause repricing" }],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -53,8 +55,10 @@ const scenariosResponse: SimulationScenariosResponse = {
       name: "Story ROI boost",
       description: "Applies guardrail to promo batch.",
       ruleId: "rule-story-guardrail",
-      input: { price: 23, cost: 12.8 },
-      metrics: { roi: 18.4, riskAdjustedRoi: 15.9, maxCogs: 14.1 },
+      baselineSku: "story-sku-1",
+      parameters: { price: 23, cost: 12.8 },
+      result: { roi: 18.4, margin: 11.2, riskAdjustedRoi: 15.9, maxCogs: 14.1 },
+      metrics: { roi: 18.4, margin: 11.2, riskAdjustedRoi: 15.9, maxCogs: 14.1 },
       decisions: [
         {
           decision: "update_price",
@@ -74,8 +78,9 @@ const newScenario: SimulationScenario = {
   name: "Story Simulation",
   description: "New simulation",
   ruleId: "rule-story-guardrail",
-  input: { price: 22.4, cost: 11.5 },
-  metrics: { roi: 20.1, riskAdjustedRoi: 18.4, maxCogs: 13.8 },
+  baselineSku: "story-sku-1",
+  parameters: { price: 22.4, cost: 11.5 },
+  result: { roi: 20.1, margin: 12.8, riskAdjustedRoi: 18.4, maxCogs: 13.8 },
   decisions: [
     {
       decision: "update_price",

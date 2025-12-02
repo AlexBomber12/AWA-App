@@ -36,6 +36,7 @@ export type ReturnsListParams = {
 export type { ReturnsSort };
 
 export type ReturnsPageResponse = BffListResponse<ReturnItem> & { summary?: ReturnsSummary };
+export type ReturnsListResponse = ReturnsPageResponse;
 
 const buildListQuery = (params: ReturnsListParams): string => {
   const sort = params.sort && RETURNS_SORT_OPTIONS.includes(params.sort)

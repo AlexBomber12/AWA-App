@@ -41,18 +41,29 @@ export function InboxTable({ tasks, isLoading, onSelectTask, selectedTaskId }: I
       {
         header: "Decision",
         accessorKey: "decision.decision",
-        cell: ({ row }) => (
-          <div className="flex flex-col">
-            <span className="font-semibold capitalize">{formatDecisionLabel(row.original.decision.decision)}</span>
-            <span className="text-xs text-muted-foreground">{row.original.decision.defaultAction ?? "Suggested action"}</span>
-          </div>
-        ),
+        cell: ({ row }) => {
+          const decision = row.original.decision;
+          if (!decision) {
+            return (
+              <div className="flex flex-col">
+                <span className="font-semibold text-muted-foreground">No decision</span>
+                <span className="text-xs text-muted-foreground">Suggested action</span>
+              </div>
+            );
+          }
+          return (
+            <div className="flex flex-col">
+              <span className="font-semibold capitalize">{formatDecisionLabel(decision.decision)}</span>
+              <span className="text-xs text-muted-foreground">{decision.defaultAction ?? "Suggested action"}</span>
+            </div>
+          );
+        },
       },
       {
         header: "Priority",
         accessorKey: "priority",
         cell: ({ row }) => {
-          const priority = row.original.priority ?? row.original.decision.priority;
+          const priority = row.original.priority ?? row.original.decision?.priority ?? "medium";
           return (
             <span className={cn("rounded-full px-2 py-1 text-xs font-semibold uppercase", taskPriorityStyle(priority))}>
               {formatTaskPriority(priority)}
@@ -63,25 +74,36 @@ export function InboxTable({ tasks, isLoading, onSelectTask, selectedTaskId }: I
       {
         header: "Entity",
         accessorKey: "entity",
-        cell: ({ row }) => (
-          <div className="flex flex-col">
-            <span className="font-medium">{formatTaskEntity(row.original.entity)}</span>
-            <span className="text-xs uppercase text-muted-foreground">{row.original.entity.type}</span>
-          </div>
-        ),
+        cell: ({ row }) => {
+          const entity = row.original.entity;
+          if (!entity) {
+            return <span className="text-xs text-muted-foreground">No entity</span>;
+          }
+          return (
+            <div className="flex flex-col">
+              <span className="font-medium">{formatTaskEntity(entity)}</span>
+              <span className="text-xs uppercase text-muted-foreground">{entity.type}</span>
+            </div>
+          );
+        },
       },
       {
         header: "Deadline",
-        accessorKey: "deadlineAt",
-        cell: ({ row }) => formatTaskDate(row.original.deadlineAt ?? row.original.decision.deadlineAt, false),
+        accessorKey: "dueAt",
+        cell: ({ row }) => formatTaskDate(row.original.dueAt ?? row.original.decision?.deadlineAt ?? null, false),
       },
       {
         header: "State",
         accessorKey: "state",
         cell: ({ row }) => {
-          const state = row.original.state;
+          const state = row.original.state ?? "open";
           return (
-            <span className={cn("rounded-full px-2 py-1 text-xs font-semibold uppercase", TASK_STATE_STYLES[state])}>
+            <span
+              className={cn(
+                "rounded-full px-2 py-1 text-xs font-semibold uppercase",
+                TASK_STATE_STYLES[state] ?? TASK_STATE_STYLES.open
+              )}
+            >
               {formatTaskState(state)}
             </span>
           );
@@ -96,7 +118,7 @@ export function InboxTable({ tasks, isLoading, onSelectTask, selectedTaskId }: I
         header: "Why",
         accessorKey: "why",
         cell: ({ row }) => {
-          const reasons = row.original.why?.length ? row.original.why : row.original.decision.why;
+          const reasons = row.original.why?.length ? row.original.why : row.original.decision?.why;
           const preview = reasons?.length ? reasonToText(reasons[0]) : "—";
           return <span className="text-sm text-muted-foreground line-clamp-2">{preview}</span>;
         },
