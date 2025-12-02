@@ -78,6 +78,12 @@ def test_llm_and_observability_settings(monkeypatch):
     monkeypatch.setenv("LLM_LOCAL_MODEL", "local-m")
     monkeypatch.setenv("LLM_CLOUD_MODEL", "gpt-5-turbo")
     monkeypatch.setenv("LLM_CLOUD_API_KEY", "openai-key")
+    monkeypatch.setenv("LLM_REQUEST_TIMEOUT_SEC", "42")
+    monkeypatch.setenv("LLM_MAX_RETRIES", "7")
+    monkeypatch.setenv("LLM_BACKOFF_BASE_MS", "250")
+    monkeypatch.setenv("LLM_BACKOFF_MAX_MS", "2000")
+    monkeypatch.setenv("LLM_BIN_TIMEOUT_SEC", "12")
+    monkeypatch.setenv("LLM_MAX_OUTPUT_BYTES", "2048")
     monkeypatch.setenv("LLM_EMAIL_CLOUD_THRESHOLD_CHARS", "5")
     monkeypatch.setenv("LLM_PRICELIST_CLOUD_THRESHOLD_ROWS", "10")
     monkeypatch.setenv("LLM_MIN_CONFIDENCE", "0.25")
@@ -98,7 +104,12 @@ def test_llm_and_observability_settings(monkeypatch):
     assert llm_cfg.email_cloud_threshold_chars == 5
     assert llm_cfg.pricelist_cloud_threshold_rows == 10
     assert llm_cfg.min_confidence == 0.25
-    assert llm_cfg.request_timeout_s == cfg.LLM_REQUEST_TIMEOUT_S
+    assert llm_cfg.request_timeout_s == 42.0
+    assert llm_cfg.max_retries == 7
+    assert llm_cfg.backoff_base_ms == 250.0
+    assert llm_cfg.backoff_max_ms == 2000.0
+    assert llm_cfg.bin_timeout_s == 12.0
+    assert llm_cfg.max_output_bytes == 2048
     assert observability.sentry_traces_sample_rate == 0.2
     assert observability.sentry_profiles_sample_rate == 0.1
 

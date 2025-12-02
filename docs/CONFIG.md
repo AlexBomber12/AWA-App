@@ -149,7 +149,8 @@ Approaching limits triggers `rate_limit.near_limit` warnings and increments
 | `LLM_BASE_URL`, `LLM_PROVIDER_BASE_URL` | Gateway URL (clients) and downstream local provider base (OpenAI-compatible) |
 | `LLM_API_KEY`, `LLM_LOCAL_MODEL` | Local provider auth + model name |
 | `LLM_CLOUD_MODEL`, `LLM_CLOUD_API_KEY`, `LLM_CLOUD_API_BASE` | Cloud GPT-5 configuration |
-| `LLM_REQUEST_TIMEOUT_S`, `LLM_LAN_HEALTH_TIMEOUT_S` | Request + readiness timeouts |
+| `LLM_REQUEST_TIMEOUT_SEC` (`LLM_REQUEST_TIMEOUT_S` legacy), `LLM_MAX_RETRIES`, `LLM_BACKOFF_BASE_MS`, `LLM_BACKOFF_MAX_MS`, `LLM_LAN_HEALTH_TIMEOUT_S` | Request timeout + bounded retry/backoff for provider calls and LAN health probe timeout |
+| `LLM_BIN_TIMEOUT_SEC`, `LLM_MAX_OUTPUT_BYTES` | Local binary execution timeout and maximum stdout capture (extra bytes are truncated safely) |
 | `LLM_EMAIL_CLOUD_THRESHOLD_CHARS`, `LLM_PRICELIST_CLOUD_THRESHOLD_ROWS` | Size triggers to route traffic to cloud |
 | `LLM_ENABLE_EMAIL`, `LLM_ENABLE_PRICELIST` | Feature flags to enable LLM enrichment for email and price lists |
 | `LLM_MIN_CONFIDENCE` | Minimum confidence before treating LLM output as invalid/needs manual review |

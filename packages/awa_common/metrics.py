@@ -604,6 +604,25 @@ LLM_FALLBACK_TOTAL = Counter(
     ("task", "from_provider", "to_provider", "reason", *BASE_LABELS),
     registry=REGISTRY,
 )
+LLM_PROVIDER_REQUESTS_TOTAL = Counter(
+    "llm_provider_requests_total",
+    "LLM provider HTTP request outcomes grouped by provider/operation",
+    ("provider", "operation", "outcome", *BASE_LABELS),
+    registry=REGISTRY,
+)
+LLM_PROVIDER_LATENCY_SECONDS = Histogram(
+    "llm_provider_latency_seconds",
+    "LLM provider HTTP request latency",
+    ("provider", "operation", *BASE_LABELS),
+    buckets=HTTP_BUCKETS,
+    registry=REGISTRY,
+)
+LLM_PROVIDER_TIMEOUTS_TOTAL = Counter(
+    "llm_provider_timeouts_total",
+    "LLM provider HTTP request timeout count",
+    ("provider", "operation", *BASE_LABELS),
+    registry=REGISTRY,
+)
 EMAIL_ENRICHED_TOTAL = Counter(
     "email_enriched_total",
     "Email enrichment outcomes",
@@ -1172,6 +1191,28 @@ def record_llm_fallback(
     ).inc()
 
 
+def _llm_provider_labels(provider: str, operation: str) -> dict[str, str]:  # pragma: no cover - trivial helper
+    return _with_base_labels(
+        provider=(provider or "unknown"),
+        operation=(operation or "unknown"),
+    )
+
+
+def record_llm_provider_request(provider: str, operation: str, outcome: str) -> None:  # pragma: no cover
+    LLM_PROVIDER_REQUESTS_TOTAL.labels(
+        **_llm_provider_labels(provider, operation),
+        outcome=(outcome or "error"),
+    ).inc()
+
+
+def observe_llm_provider_latency(provider: str, operation: str, duration_s: float) -> None:  # pragma: no cover
+    LLM_PROVIDER_LATENCY_SECONDS.labels(**_llm_provider_labels(provider, operation)).observe(max(duration_s, 0.0))
+
+
+def record_llm_provider_timeout(provider: str, operation: str) -> None:  # pragma: no cover
+    LLM_PROVIDER_TIMEOUTS_TOTAL.labels(**_llm_provider_labels(provider, operation)).inc()
+
+
 def record_email_enriched(outcome: str) -> None:  # pragma: no cover - metrics wrapper
     EMAIL_ENRICHED_TOTAL.labels(**_with_base_labels(outcome=(outcome or "unknown"))).inc()
 
@@ -1525,6 +1566,9 @@ __all__ = [
     "record_llm_request",
     "record_llm_error",
     "record_llm_fallback",
+    "record_llm_provider_request",
+    "observe_llm_provider_latency",
+    "record_llm_provider_timeout",
     "record_email_enriched",
     "record_email_needs_manual_review",
     "record_pricelist_enriched",
