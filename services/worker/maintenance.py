@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
-from typing import Any
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 
 from celery.utils.log import get_task_logger
 from sqlalchemy import create_engine, text
@@ -22,8 +23,23 @@ from .celery_app import celery_app
 
 logger = get_task_logger(__name__)
 
+if TYPE_CHECKING:
+    from typing import ParamSpec, Protocol, TypeVar
 
-@celery_app.task(name="ingest.analyze_table")  # type: ignore[misc]
+    P = ParamSpec("P")
+    R = TypeVar("R", covariant=True)
+
+    class _CeleryTask(Protocol[P, R]):
+        def __call__(self, *args: P.args, **kwargs: P.kwargs) -> R: ...
+        def apply_async(self, *args: Any, **kwargs: Any) -> Any: ...
+        def delay(self, *args: P.args, **kwargs: P.kwargs) -> Any: ...
+
+    def celery_task(*args: Any, **kwargs: Any) -> Callable[[Callable[P, R]], _CeleryTask[P, R]]: ...
+else:
+    celery_task = celery_app.task
+
+
+@celery_task(name="ingest.analyze_table")
 def task_analyze_table(table_fqname: str) -> dict[str, str]:
     db_cfg = getattr(settings, "db", None)
     engine = create_engine(db_cfg.url if db_cfg else settings.DATABASE_URL)
@@ -35,7 +51,7 @@ def task_analyze_table(table_fqname: str) -> dict[str, str]:
         engine.dispose()
 
 
-@celery_app.task(name="ingest.maintenance_nightly")  # type: ignore[misc]
+@celery_task(name="ingest.maintenance_nightly")
 def task_maintenance_nightly() -> dict[str, Any]:
     maintenance_cfg = getattr(settings, "maintenance", None)
     if maintenance_cfg and maintenance_cfg.table_list:
@@ -80,7 +96,7 @@ def _roi_materialized_view_names() -> tuple[str, str]:
     return raw_name, quote_identifier(raw_name)
 
 
-@celery_app.task(name="db.refresh_roi_mvs")  # type: ignore[misc]
+@celery_task(name="db.refresh_roi_mvs")
 def task_refresh_roi_mvs(date_from: str | None = None, date_to: str | None = None) -> dict[str, Any]:
     db_cfg = getattr(settings, "db", None)
     engine = create_engine(db_cfg.url if db_cfg else settings.DATABASE_URL)

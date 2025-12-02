@@ -8,7 +8,7 @@ import tempfile
 import time
 from collections.abc import Callable
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, ParamSpec, TypeVar, cast
 
 import aioboto3
 import structlog
@@ -57,9 +57,10 @@ def _resolve_async_to_sync() -> Callable[..., Any]:
 async_to_sync = _resolve_async_to_sync()
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
-    from typing import Protocol, TypeVar
+    from typing import Protocol
 
+    P = ParamSpec("P")
+    R = TypeVar("R", covariant=True)
     _InstrumentFunc = TypeVar("_InstrumentFunc", bound=Callable[..., Any])
 
     class _InstrumentTaskCallable(Protocol):
@@ -67,9 +68,17 @@ if TYPE_CHECKING:
             self, task_name: str, *, emit_metrics: bool = True
         ) -> Callable[[_InstrumentFunc], _InstrumentFunc]: ...
 
+    class _CeleryTask(Protocol[P, R]):
+        def __call__(self, *args: P.args, **kwargs: P.kwargs) -> R: ...
+        def apply_async(self, *args: Any, **kwargs: Any) -> Any: ...
+        def delay(self, *args: P.args, **kwargs: P.kwargs) -> Any: ...
+
+    def celery_task(*args: Any, **kwargs: Any) -> Callable[[Callable[P, R]], _CeleryTask[P, R]]: ...
+
     instrument_task: _InstrumentTaskCallable = _instrument_task
 else:
     instrument_task = _instrument_task
+    celery_task = celery_app.task
 
 logger = structlog.get_logger(__name__)
 _evaluate_alerts_sync: Callable[[], dict[str, int]] = async_to_sync(alerts_worker.evaluate_alert_rules)
@@ -135,7 +144,7 @@ def _streaming_knobs() -> tuple[bool, int, int, int]:
     return enabled, threshold_mb, chunk_rows, chunk_size_mb
 
 
-@celery_app.task(name="ingest.import_file", bind=True)  # type: ignore[misc]
+@celery_task(name="ingest.import_file", bind=True)
 @instrument_task("ingest.import_file", emit_metrics=False)
 def task_import_file(
     self: Any,
@@ -208,7 +217,7 @@ def task_import_file(
             shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
-@celery_app.task(name="ingest.rebuild_views", bind=True)  # type: ignore[misc]
+@celery_task(name="ingest.rebuild_views", bind=True)
 @instrument_task("ingest.rebuild_views", emit_metrics=False)
 def task_rebuild_views(self: Any) -> dict[str, Any]:
     logger.info("rebuild_views.noop")
@@ -217,14 +226,14 @@ def task_rebuild_views(self: Any) -> dict[str, Any]:
 
 if getattr(getattr(settings, "app", None), "testing", getattr(settings, "TESTING", False)):
 
-    @celery_app.task(name="ingest.enqueue_import", bind=True)  # type: ignore[misc]
+    @celery_task(name="ingest.enqueue_import", bind=True)
     def enqueue_import(self: Any, *, uri: str, dialect: str) -> dict[str, Any]:  # pragma: no cover - helper for tests
         from etl.load_csv import import_file as run_ingest
 
         return run_ingest(uri, dialect=dialect)
 
 
-@celery_app.task(name="alertbot.run")  # type: ignore[misc]
+@celery_task(name="alertbot.run")
 @instrument_task("alertbot.run")
 def alertbot_run() -> dict[str, Any]:
     """Periodic task that evaluates alert rules and dispatches notifications."""
@@ -238,7 +247,7 @@ def evaluate_alert_rules() -> dict[str, Any]:
     return _evaluate_alerts_sync()
 
 
-@celery_app.task(name="alerts.rules_health")  # type: ignore[misc]
+@celery_task(name="alerts.rules_health")
 @instrument_task("alerts.rules_health")
 def alert_rules_health_task() -> dict[str, Any]:
     """Celery task that reports Telegram/config health."""

@@ -5,7 +5,7 @@ import json
 import time
 from collections.abc import Awaitable, Callable, Coroutine
 from decimal import ROUND_HALF_UP, Decimal
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, ParamSpec, TypeVar, cast
 
 import httpx
 import structlog
@@ -62,8 +62,10 @@ else:
 
 
 if TYPE_CHECKING:
-    from typing import Protocol, TypeVar
+    from typing import Protocol
 
+    P = ParamSpec("P")
+    R = TypeVar("R", covariant=True)
     _InstrumentFunc = TypeVar("_InstrumentFunc", bound=Callable[..., Any])
 
     class _InstrumentTaskCallable(Protocol):
@@ -71,9 +73,17 @@ if TYPE_CHECKING:
             self, task_name: str, *, emit_metrics: bool = True
         ) -> Callable[[_InstrumentFunc], _InstrumentFunc]: ...
 
+    class _CeleryTask(Protocol[P, R]):
+        def __call__(self, *args: P.args, **kwargs: P.kwargs) -> R: ...
+        def apply_async(self, *args: Any, **kwargs: Any) -> Any: ...
+        def delay(self, *args: P.args, **kwargs: P.kwargs) -> Any: ...
+
+    def shared_task_typed(*args: Any, **kwargs: Any) -> Callable[[Callable[P, R]], _CeleryTask[P, R]]: ...
+
     instrument_task: _InstrumentTaskCallable = _instrument_task
 else:
     instrument_task = _instrument_task
+    shared_task_typed = shared_task
 
 logger = structlog.get_logger(__name__).bind(component="fees_h10")
 SOURCE_NAME = "fees_h10"
@@ -254,7 +264,7 @@ async def _run_refresh(asins: list[str]) -> dict[str, int]:
         await db_async.close_pool()
 
 
-@shared_task(name="fees.refresh")  # type: ignore[misc]
+@shared_task_typed(name="fees.refresh")
 @instrument_task("fees_h10_update", emit_metrics=False)
 def refresh_fees() -> None:
     asins = list_active_asins()
