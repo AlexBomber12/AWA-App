@@ -64,8 +64,8 @@ async def test_fetch_pending_rows_includes_filters(monkeypatch):
     rows = await roi_repo.fetch_pending_rows(session, roi_min=10, vendor=42, category="Beauty")
     assert rows[0]["asin"] == "A1"
     sql, params = session.executed[0]
-    assert "vp.vendor_id = :vendor" in sql
-    assert params["vendor"] == "42"
+    assert "vendor_prices" in sql and "vendor_id = :vendor" in sql
+    assert params["vendor"] == 42
     assert params["category"] == "Beauty"
 
 
@@ -78,3 +78,38 @@ async def test_bulk_approve_returns_deduplicated_ids(monkeypatch):
     sql, params = session.executed[0]
     assert "UPDATE products" in sql
     assert params["asins"] == ("A1", "A2")
+
+
+def test_roi_listing_sql_has_stable_ordering(monkeypatch):
+    monkeypatch.setattr(roi_repo, "quote_identifier", lambda name: name)
+    roi_repo._roi_listing_sql.cache_clear()
+    stmt = roi_repo._roi_listing_sql(
+        "roi_view",
+        include_vendor=False,
+        include_category=True,
+        include_search=True,
+        include_roi_max=True,
+        sort_key="roi_pct_desc",
+    )
+    sql = str(stmt)
+    assert "ORDER BY vf.roi_pct DESC NULLS LAST, p.asin ASC" in sql
+    assert "LIMIT :limit OFFSET :offset" in sql
+    assert "vendor_prices" in sql
+    assert "JOIN LATERAL" in sql
+
+
+def test_roi_listing_sql_uses_vendor_filter(monkeypatch):
+    monkeypatch.setattr(roi_repo, "quote_identifier", lambda name: name)
+    roi_repo._roi_listing_sql.cache_clear()
+    stmt = roi_repo._roi_listing_sql(
+        "roi_view",
+        include_vendor=True,
+        include_category=False,
+        include_search=False,
+        include_roi_max=False,
+        sort_key="margin_desc",
+    )
+    sql = str(stmt)
+    assert "vendor_id = :vendor" in sql
+    assert "vf.roi_pct >= :roi_min" in sql
+    assert "NULLS LAST" in sql

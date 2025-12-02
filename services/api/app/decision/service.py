@@ -45,20 +45,86 @@ def _build_entity(candidate: DecisionCandidate) -> dict[str, object]:
     return entity
 
 
+def _build_links(candidate: DecisionCandidate) -> dict[str, object]:
+    links: dict[str, object] = {"asin": candidate.asin}
+    if candidate.vendor_id is not None:
+        links["vendor_id"] = candidate.vendor_id
+    if candidate.category:
+        links["category"] = candidate.category
+    return links
+
+
+def _reason(
+    code: str, message: str, *, data: dict[str, object] | None = None, metric: str | None = None
+) -> dict[str, object]:
+    payload: dict[str, object] = {"code": code, "message": message}
+    if metric:
+        payload["metric"] = metric
+    if data:
+        payload["data"] = data
+    return payload
+
+
+def _alternative(
+    action: str,
+    *,
+    label: str | None = None,
+    impact: str | None = None,
+    confidence: float | None = None,
+    why: Sequence[dict[str, object]] | None = None,
+) -> dict[str, object]:
+    payload: dict[str, object] = {"action": action}
+    if label:
+        payload["label"] = label
+    if impact:
+        payload["impact"] = impact
+    if confidence is not None:
+        payload["confidence"] = confidence
+    if why:
+        payload["why"] = list(why)
+    return payload
+
+
+def build_decision_task(
+    *,
+    candidate: DecisionCandidate,
+    decision: str,
+    priority: int,
+    summary: str,
+    default_action: str | None,
+    why: Sequence[dict[str, object]],
+    alternatives: Sequence[dict[str, object]],
+    deadline: dt.datetime | None = None,
+    state: str = "pending",
+    metrics: dict[str, float] | None = None,
+) -> PlannedDecisionTask:
+    return PlannedDecisionTask(
+        asin=candidate.asin,
+        vendor_id=candidate.vendor_id,
+        decision=decision,
+        priority=priority,
+        summary=summary,
+        default_action=default_action,
+        why=list(why),
+        alternatives=list(alternatives),
+        deadline_at=deadline,
+        entity=_build_entity(candidate),
+        metrics=metrics or {},
+        links=_build_links(candidate),
+        state=state,
+    )
+
+
 def _evaluate_candidate(candidate: DecisionCandidate) -> PlannedDecisionTask | None:
     if candidate.observe_only:
-        return PlannedDecisionTask(
-            asin=candidate.asin,
-            vendor_id=candidate.vendor_id,
+        return build_decision_task(
+            candidate=candidate,
             decision="blocked_observe",
             priority=OBSERVE_PRIORITY,
             summary="Observe-only SKU – hold pricing changes",
             default_action="Do not change price until manual review",
-            why=[
-                {"title": "Observe only", "detail": "SKU is marked as observe-only", "code": "observe_only_category"},
-            ],
-            alternatives=[{"decision": "wait_until", "label": "Re-evaluate after next ingest"}],
-            entity=_build_entity(candidate),
+            why=[_reason("observe_only_category", "SKU is marked as observe-only")],
+            alternatives=[_alternative("wait_until", label="Re-evaluate after next ingest")],
             metrics=_candidate_metrics(candidate),
         )
 
@@ -70,65 +136,59 @@ def _evaluate_candidate(candidate: DecisionCandidate) -> PlannedDecisionTask | N
 
     if roi_value <= ROI_CRITICAL_THRESHOLD:
         deadline = _now() + dt.timedelta(days=2)
-        return PlannedDecisionTask(
-            asin=candidate.asin,
-            vendor_id=candidate.vendor_id,
+        return build_decision_task(
+            candidate=candidate,
             decision="request_price",
             priority=REQUEST_PRIORITY,
             summary="ROI critical – request updated quote",
             default_action="Ask vendor for improved price to restore ROI",
             why=[
-                {
-                    "title": "ROI below guardrail",
-                    "detail": f"{roi_value:.1f}% <= {ROI_CRITICAL_THRESHOLD:.1f}%",
-                    "code": "roi_guardrail",
-                    "metric": "roi_pct",
-                },
+                _reason(
+                    "roi_guardrail",
+                    f"{roi_value:.1f}% <= {ROI_CRITICAL_THRESHOLD:.1f}%",
+                    metric="roi_pct",
+                    data={"threshold": ROI_CRITICAL_THRESHOLD},
+                ),
             ],
             alternatives=[
-                {"decision": "wait_until", "label": "Pause until next ROI ingest"},
-                {"decision": "switch_vendor", "label": "Switch vendor if alternate is available"},
+                _alternative("wait_until", label="Pause until next ROI ingest"),
+                _alternative("switch_vendor", label="Switch vendor if alternate is available"),
             ],
-            deadline_at=deadline,
-            entity=_build_entity(candidate),
+            deadline=deadline,
             metrics=metrics_payload,
         )
 
     if roi_value < ROI_TARGET:
         deadline = _now() + dt.timedelta(days=5)
-        return PlannedDecisionTask(
-            asin=candidate.asin,
-            vendor_id=candidate.vendor_id,
+        return build_decision_task(
+            candidate=candidate,
             decision="request_discount",
             priority=max(REQUEST_PRIORITY - 20, 10),
             summary="ROI below target – request discount",
             default_action="Negotiate discount to hit ROI target",
             why=[
-                {
-                    "title": "ROI under target",
-                    "detail": f"{roi_value:.1f}% < {ROI_TARGET:.1f}%",
-                    "code": "roi_under_target",
-                    "metric": "roi_pct",
-                },
+                _reason(
+                    "roi_under_target",
+                    f"{roi_value:.1f}% < {ROI_TARGET:.1f}%",
+                    metric="roi_pct",
+                    data={"target": ROI_TARGET},
+                ),
             ],
-            alternatives=[{"decision": "wait_until", "label": "Observe for 24h"}],
-            deadline_at=deadline,
-            entity=_build_entity(candidate),
+            alternatives=[_alternative("wait_until", label="Observe for 24h")],
+            deadline=deadline,
             metrics=metrics_payload,
         )
 
     # ROI acceptable; emit a low-priority continue task only when close to the target
     if roi_value <= ROI_TARGET + 5:
-        return PlannedDecisionTask(
-            asin=candidate.asin,
-            vendor_id=candidate.vendor_id,
+        return build_decision_task(
+            candidate=candidate,
             decision="continue",
             priority=CONTINUE_PRIORITY,
             summary="ROI healthy – continue current pricing",
             default_action="Monitor ROI and keep current vendor terms",
-            why=[{"title": "ROI healthy", "detail": f"{roi_value:.1f}% >= {ROI_TARGET:.1f}%", "code": "roi_ok"}],
-            alternatives=[{"decision": "wait_until", "label": "Revisit after next snapshot"}],
-            entity=_build_entity(candidate),
+            why=[_reason("roi_ok", f"{roi_value:.1f}% >= {ROI_TARGET:.1f}%")],
+            alternatives=[_alternative("wait_until", label="Revisit after next snapshot")],
             metrics=metrics_payload,
         )
 
@@ -184,8 +244,16 @@ async def generate_tasks(
 
 def _record_created_metrics(saved: Sequence[DecisionTaskRecord]) -> None:
     counter = Counter(task.decision for task in saved)
+    by_priority = Counter((task.decision, task.priority) for task in saved)
     for decision, count in counter.items():
         DECISION_TASKS_CREATED_TOTAL.labels(**_metric_labels(decision=decision)).inc(count)
+    for (decision, priority), count in by_priority.items():
+        logger.info(
+            "decision.tasks.created",
+            decision=decision,
+            priority=priority,
+            count=count,
+        )
 
 
 async def _update_inbox_gauge(session: AsyncSession) -> None:
@@ -212,6 +280,13 @@ async def apply_task(
     if updated:
         DECISION_TASKS_RESOLVED_TOTAL.labels(**_metric_labels(decision=updated.decision, state="applied")).inc()
         await _update_inbox_gauge(session)
+        logger.info(
+            "decision.tasks.resolved",
+            task_id=task_id,
+            decision=updated.decision,
+            state="applied",
+            priority=updated.priority,
+        )
     return updated
 
 
@@ -235,11 +310,19 @@ async def dismiss_task(
     if updated:
         DECISION_TASKS_RESOLVED_TOTAL.labels(**_metric_labels(decision=updated.decision, state="dismissed")).inc()
         await _update_inbox_gauge(session)
+        logger.info(
+            "decision.tasks.resolved",
+            task_id=task_id,
+            decision=updated.decision,
+            state="dismissed",
+            priority=updated.priority,
+        )
     return updated
 
 
 __all__ = [
     "apply_task",
+    "build_decision_task",
     "dismiss_task",
     "generate_tasks",
 ]

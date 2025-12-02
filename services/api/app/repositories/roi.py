@@ -60,8 +60,6 @@ def _roi_listing_sql(
     clauses = ["vf.roi_pct >= :roi_min"]
     if include_roi_max:
         clauses.append("vf.roi_pct <= :roi_max")
-    if include_vendor:
-        clauses.append("vp.vendor_id = :vendor")
     if include_category:
         clauses.append("LOWER(p.category) = :category")
     if include_search:
@@ -83,7 +81,13 @@ def _roi_listing_sql(
             COUNT(*) OVER() AS total_count
         FROM {quoted} vf
         JOIN products p ON p.asin = vf.asin
-        JOIN vendor_prices vp ON vp.sku = p.asin
+        JOIN LATERAL (
+            SELECT vendor_id, cost
+            FROM vendor_prices
+            WHERE sku = p.asin {"AND vendor_id = :vendor" if include_vendor else ""}
+            ORDER BY updated_at DESC
+            LIMIT 1
+        ) vp ON TRUE
         JOIN freight_rates fr ON fr.lane = 'EU→IT' AND fr.mode = 'sea'
         JOIN fees_raw f ON f.asin = p.asin
         WHERE {where_clause}
@@ -105,8 +109,6 @@ def _roi_count_sql(
     clauses = ["vf.roi_pct >= :roi_min"]
     if include_roi_max:
         clauses.append("vf.roi_pct <= :roi_max")
-    if include_vendor:
-        clauses.append("vp.vendor_id = :vendor")
     if include_category:
         clauses.append("LOWER(p.category) = :category")
     if include_search:
@@ -117,7 +119,13 @@ def _roi_count_sql(
         SELECT COUNT(*) AS total
         FROM {quoted} vf
         JOIN products p ON p.asin = vf.asin
-        JOIN vendor_prices vp ON vp.sku = p.asin
+        JOIN LATERAL (
+            SELECT vendor_id, cost
+            FROM vendor_prices
+            WHERE sku = p.asin {"AND vendor_id = :vendor" if include_vendor else ""}
+            ORDER BY updated_at DESC
+            LIMIT 1
+        ) vp ON TRUE
         JOIN freight_rates fr ON fr.lane = 'EU→IT' AND fr.mode = 'sea'
         JOIN fees_raw f ON f.asin = p.asin
         WHERE {where_clause}
@@ -137,7 +145,13 @@ def _pending_sql(view_name: str, include_vendor: bool, include_category: bool) -
                vf.roi_pct
         FROM {quoted} vf
         JOIN products p   ON p.asin = vf.asin
-        JOIN vendor_prices vp ON vp.sku = p.asin
+        JOIN LATERAL (
+            SELECT vendor_id, cost
+            FROM vendor_prices
+            WHERE sku = p.asin {"AND vendor_id = :vendor" if include_vendor else ""}
+            ORDER BY updated_at DESC
+            LIMIT 1
+        ) vp ON TRUE
         JOIN freight_rates fr ON fr.lane = 'EU→IT' AND fr.mode = 'sea'
         JOIN fees_raw f  ON f.asin = p.asin
         WHERE vf.roi_pct >= :roi_min
@@ -250,7 +264,7 @@ async def fetch_pending_rows(
     )
     params: dict[str, object] = {"roi_min": roi_min, "limit": PENDING_LIMIT}
     if vendor is not None:
-        params["vendor"] = str(vendor)
+        params["vendor"] = vendor
     if category is not None:
         params["category"] = category
     result = await session.execute(stmt, params)

@@ -164,22 +164,30 @@ class SkuApprovalResponse(BaseStrictModel):
     changed: int = Field(..., description="Number of rows changed by the approval operation")
 
 
-class DecisionReasonItem(BaseStrictModel):
-    title: str
-    detail: str | None = None
-    code: str | None = None
+class DecisionReason(BaseStrictModel):
+    code: str
+    message: str
+    data: dict[str, Any] | None = None
     metric: str | None = None
 
 
-DecisionReason = DecisionReasonItem | str
-
-
 class DecisionAlternative(BaseStrictModel):
-    decision: str
+    action: str
     label: str | None = None
-    default_action: str | None = None
-    why: list[DecisionReason] | None = None
     impact: str | None = None
+    confidence: float | None = None
+    why: list[DecisionReason] = Field(default_factory=list)
+
+
+class DecisionLinks(BaseStrictModel):
+    asin: str | None = None
+    vendor_id: int | None = None
+    thread_id: str | None = None
+    entity_type: str | None = None
+    campaign_id: int | None = None
+    price_list_row_id: str | None = None
+    entity_id: str | None = None
+    category: str | None = None
 
 
 class DecisionTask(BaseStrictModel):
@@ -188,15 +196,17 @@ class DecisionTask(BaseStrictModel):
     entity: dict[str, Any]
     decision: str
     priority: int
+    status: str
     deadline_at: dt.datetime | None = None
     default_action: str | None = None
     why: list[DecisionReason] = Field(default_factory=list)
     alternatives: list[DecisionAlternative] = Field(default_factory=list)
     next_request_at: dt.datetime | None = None
-    state: str
+    state: str | None = None
     assignee: str | None = None
     summary: str | None = None
     metrics: dict[str, Any] | None = None
+    links: DecisionLinks = Field(default_factory=DecisionLinks)
     created_at: dt.datetime | None = None
     updated_at: dt.datetime | None = None
 
@@ -219,7 +229,7 @@ class DecisionTaskListResponse(BaseStrictModel):
 
 
 class TaskUpdateRequest(BaseStrictModel):
-    state: str | None = None
+    state: Literal["pending", "snoozed", "applied", "dismissed", "expired"] | None = None
     assignee: str | None = None
     note: str | None = None
     next_request_at: dt.datetime | None = None
@@ -251,9 +261,9 @@ __all__ = [
     "SkuResponse",
     "SkuApprovalResponse",
     "DecisionAlternative",
+    "DecisionLinks",
     "DecisionPreviewResponse",
     "DecisionReason",
-    "DecisionReasonItem",
     "DecisionTask",
     "DecisionTaskListResponse",
     "DecisionTaskSummary",

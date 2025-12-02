@@ -30,6 +30,7 @@ async def list_inbox_tasks(
     page: int = Query(1, ge=1),
     page_size: int = Query(repository.DEFAULT_PAGE_SIZE, ge=1, le=repository.MAX_PAGE_SIZE, alias="pageSize"),
     state: str | None = Query(None),
+    status: str | None = Query(None),
     source: str | None = Query(None),
     priority: int | None = Query(None),
     assignee: str | None = Query(None),
@@ -41,11 +42,12 @@ async def list_inbox_tasks(
     _limit: None = Depends(limit_ops),
 ) -> DecisionTaskListResponse:
     _ = user  # unused but ensures RBAC
+    state_filter = status or state
     items, total, summary = await repository.list_tasks(
         session,
         page=page,
         page_size=page_size,
-        state=state,
+        state=state_filter,
         source=source,
         priority=priority,
         assignee=assignee,

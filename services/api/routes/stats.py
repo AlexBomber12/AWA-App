@@ -115,10 +115,10 @@ def _returns_order_clause(sort: ReturnsSort, source) -> tuple[Any, ...]:
     qty = source.c.qty
     refund = source.c.refund_amount
     mapping: dict[ReturnsSort, tuple[Any, ...]] = {
-        "refund_desc": (refund.desc(), asin.asc()),
-        "refund_asc": (refund.asc(), asin.asc()),
-        "qty_desc": (qty.desc(), asin.asc()),
-        "qty_asc": (qty.asc(), asin.asc()),
+        "refund_desc": (refund.desc().nullslast(), asin.asc()),
+        "refund_asc": (refund.asc().nullslast(), asin.asc()),
+        "qty_desc": (qty.desc().nullslast(), asin.asc()),
+        "qty_asc": (qty.asc().nullslast(), asin.asc()),
         "asin_desc": (asin.desc(),),
         "asin_asc": (asin.asc(),),
     }
