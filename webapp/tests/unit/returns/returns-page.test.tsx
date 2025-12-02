@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { rest } from "msw";
 import { setupServer } from "msw/node";
 import type { ReactNode } from "react";
+import { SessionProvider, type Session } from "next-auth/react";
 
 import { ReturnsPage } from "@/components/features/returns/ReturnsPage";
 import type { ReturnsListResponse, ReturnsSummary } from "@/lib/api/returnsClient";
@@ -61,17 +62,25 @@ const buildListResponse = (page: number, pageSize: number): ReturnsListResponse 
   const items = Array.from({ length: Math.min(pageSize, 5) }, (_, index) => {
     const asinNumber = (page - 1) * pageSize + index + 1;
     const asin = `RET-${asinNumber.toString().padStart(4, "0")}`;
-    const qty = asinNumber * 2;
-    const refundAmount = qty * 3.5;
+    const quantity = asinNumber * 2;
+    const reimbursementAmount = quantity * 3.5;
     return {
+      returnId: asin,
       asin,
-      qty,
-      refundAmount,
+      sku: `SKU-${asinNumber}`,
+      quantity,
+      reimbursementAmount,
       avgRefundPerUnit: 3.5,
+      reason: "damaged",
+      currency: "EUR",
+      status: "paid",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     };
   });
 
   return {
+    data: items,
     items,
     pagination: {
       page,
@@ -93,11 +102,20 @@ const summaryResponse: ReturnsSummary = {
 
 const listCalls: string[] = [];
 
+const session: Session = {
+  user: {
+    name: "Test User",
+    email: "test@example.com",
+    roles: ["viewer"],
+  },
+  expires: "",
+};
+
 const server = setupServer(
   rest.get("http://localhost:3000/api/bff/returns", (req, res, ctx) => {
     const resource = req.url.searchParams.get("resource");
     if (resource === "stats") {
-      return res(ctx.json(summaryResponse));
+      return res(ctx.json({ data: summaryResponse }));
     }
     const page = Number(req.url.searchParams.get("page") ?? "1");
     const pageSize = Number(req.url.searchParams.get("page_size") ?? "25");
@@ -120,7 +138,11 @@ const renderWithClient = (ui: ReactNode) => {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
-  return render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>);
+  return render(
+    <SessionProvider session={session}>
+      <QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>
+    </SessionProvider>
+  );
 };
 
 describe("ReturnsPage", () => {

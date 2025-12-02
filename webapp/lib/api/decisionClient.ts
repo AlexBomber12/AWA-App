@@ -4,21 +4,8 @@ import { fetchFromBff } from "@/lib/api/fetchFromBff";
 import type { ApiError } from "@/lib/api/apiError";
 import { useApiMutation } from "@/lib/api/useApiMutation";
 import { useApiQuery, type UseApiQueryOptions } from "@/lib/api/useApiQuery";
-
-import type {
-  DecisionPayload,
-  Rule,
-  SimulationInput,
-  SimulationScenario,
-} from "./decisionTypes";
-
-export type DecisionRulesResponse = {
-  rules: Rule[];
-};
-
-export type SimulationScenariosResponse = {
-  scenarios: SimulationScenario[];
-};
+import type { DecisionSummary, Rule, SimulationScenario } from "@/lib/api/bffTypes";
+import type { DecisionPayload, SimulationInput } from "@/lib/api/decisionTypes";
 
 export type RunSimulationPayload = {
   ruleId: string;
@@ -27,47 +14,73 @@ export type RunSimulationPayload = {
 
 const DECISION_ENDPOINT = "/api/bff/decision";
 
+export const decisionSummaryQueryKey = ["decision", "summary"] as const;
 export const decisionRulesQueryKey = ["decision", "rules"] as const;
 export const simulationScenariosQueryKey = ["decision", "scenarios"] as const;
 
 const buildResourceUrl = (resource: "rules" | "scenarios") => `${DECISION_ENDPOINT}?resource=${resource}`;
 
-export async function fetchDecisionRules(signal?: AbortSignal): Promise<DecisionRulesResponse> {
-  return fetchFromBff<DecisionRulesResponse>(buildResourceUrl("rules"), {
+export async function fetchDecisionSummary(signal?: AbortSignal): Promise<DecisionSummary> {
+  const response = await fetchFromBff<{ data: DecisionSummary }>(DECISION_ENDPOINT, {
     method: "GET",
     signal,
   });
+  return response.data;
+}
+export const getDecisionSummary = fetchDecisionSummary;
+
+export async function fetchDecisionRules(signal?: AbortSignal): Promise<Rule[]> {
+  const response = await fetchFromBff<{ data: Rule[] }>(buildResourceUrl("rules"), {
+    method: "GET",
+    signal,
+  });
+  return response.data;
 }
 
-export async function fetchSimulationScenarios(signal?: AbortSignal): Promise<SimulationScenariosResponse> {
-  return fetchFromBff<SimulationScenariosResponse>(buildResourceUrl("scenarios"), {
+export async function fetchSimulationScenarios(signal?: AbortSignal): Promise<SimulationScenario[]> {
+  const response = await fetchFromBff<{ data: SimulationScenario[] }>(buildResourceUrl("scenarios"), {
     method: "GET",
     signal,
   });
+  return response.data;
 }
 
 export async function runSimulation(payload: RunSimulationPayload): Promise<SimulationScenario> {
-  return fetchFromBff<SimulationScenario>(DECISION_ENDPOINT, {
+  const response = await fetchFromBff<{ data: SimulationScenario }>(DECISION_ENDPOINT, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
     body: JSON.stringify(payload),
   });
+  return response.data;
 }
 
+type UseDecisionSummaryQueryOptions = Omit<
+  UseApiQueryOptions<DecisionSummary, ApiError, DecisionSummary, typeof decisionSummaryQueryKey>,
+  "queryKey" | "queryFn"
+>;
+
 type UseDecisionRulesQueryOptions = Omit<
-  UseApiQueryOptions<DecisionRulesResponse, ApiError, DecisionRulesResponse, typeof decisionRulesQueryKey>,
+  UseApiQueryOptions<Rule[], ApiError, Rule[], typeof decisionRulesQueryKey>,
   "queryKey" | "queryFn"
 >;
 
 type UseSimulationScenariosQueryOptions = Omit<
-  UseApiQueryOptions<SimulationScenariosResponse, ApiError, SimulationScenariosResponse, typeof simulationScenariosQueryKey>,
+  UseApiQueryOptions<SimulationScenario[], ApiError, SimulationScenario[], typeof simulationScenariosQueryKey>,
   "queryKey" | "queryFn"
 >;
 
+export function useDecisionSummaryQuery(options?: UseDecisionSummaryQueryOptions) {
+  return useApiQuery<DecisionSummary, ApiError, DecisionSummary, typeof decisionSummaryQueryKey>({
+    queryKey: decisionSummaryQueryKey,
+    queryFn: ({ signal }) => fetchDecisionSummary(signal),
+    ...options,
+  });
+}
+
 export function useDecisionRulesQuery(options?: UseDecisionRulesQueryOptions) {
-  return useApiQuery<DecisionRulesResponse, ApiError, DecisionRulesResponse, typeof decisionRulesQueryKey>({
+  return useApiQuery<Rule[], ApiError, Rule[], typeof decisionRulesQueryKey>({
     queryKey: decisionRulesQueryKey,
     queryFn: ({ signal }) => fetchDecisionRules(signal),
     ...options,
@@ -75,12 +88,7 @@ export function useDecisionRulesQuery(options?: UseDecisionRulesQueryOptions) {
 }
 
 export function useSimulationScenariosQuery(options?: UseSimulationScenariosQueryOptions) {
-  return useApiQuery<
-    SimulationScenariosResponse,
-    ApiError,
-    SimulationScenariosResponse,
-    typeof simulationScenariosQueryKey
-  >({
+  return useApiQuery<SimulationScenario[], ApiError, SimulationScenario[], typeof simulationScenariosQueryKey>({
     queryKey: simulationScenariosQueryKey,
     queryFn: ({ signal }) => fetchSimulationScenarios(signal),
     ...options,

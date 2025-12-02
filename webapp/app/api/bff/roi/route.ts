@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { isApiError } from "@/lib/api/fetchFromApi";
+import { handleApiError, parseSortMeta, requirePermission, buildPaginationMeta } from "@/app/api/bff/utils";
+import type { RoiItem } from "@/lib/api/bffTypes";
 import { roiApiClient } from "@/lib/api/roiApiClient";
 import {
   ROI_TABLE_DEFAULTS,
@@ -18,6 +19,11 @@ export const dynamic = "force-dynamic";
 const OBSERVE_ONLY_ROI_THRESHOLD = 20;
 
 export async function GET(request: NextRequest) {
+  const permission = await requirePermission("roi", "view");
+  if (!permission.ok) {
+    return permission.response;
+  }
+
   try {
     const partial = parseRoiSearchParams(request.nextUrl.searchParams);
     const state = mergeRoiTableStateWithDefaults(partial);
@@ -50,29 +56,47 @@ export async function GET(request: NextRequest) {
     const total = pagination?.total ?? apiResponse.items?.length ?? 0;
     const totalPages = pagination?.total_pages ?? (total > 0 ? Math.ceil(total / pageSize) : 1);
 
+    const data = (apiResponse.items ?? []).map((item) => toRoiItem(item));
+
     const jsonResponse = {
-      items: apiResponse.items ?? [],
-      pagination: {
-        page,
-        pageSize,
-        total,
-        totalPages,
-      },
+      data,
+      items: data,
+      pagination: buildPaginationMeta(page, pageSize, total ?? 0),
+      sort: parseSortMeta(state.sort ?? ROI_TABLE_DEFAULTS.sort ?? undefined),
+      filters: normalizedFilters,
     };
 
     return NextResponse.json(jsonResponse);
   } catch (error) {
-    if (isApiError(error)) {
-      return NextResponse.json(
-        { code: error.code, message: error.message, status: error.status, details: error.details },
-        { status: error.status }
-      );
-    }
-
-    console.error("Unhandled ROI BFF error", error);
-    return NextResponse.json(
-      { code: "BFF_ERROR", message: "Unable to load ROI rows.", status: 500 },
-      { status: 500 }
-    );
+    return handleApiError(error, "Unable to load ROI rows.");
   }
 }
+
+const toNumberOrZero = (value?: number | null): number => (typeof value === "number" && Number.isFinite(value) ? value : 0);
+
+const toRoiItem = (item: RoiListResponse["items"][number]): RoiItem => {
+  const cost = toNumberOrZero(item.cost);
+  const freight = toNumberOrZero(item.freight);
+  const fees = toNumberOrZero(item.fees);
+  const roiPct = toNumberOrZero(item.roi_pct);
+  const buyPrice = cost + freight + fees;
+  const margin = Number(((roiPct / 100) * buyPrice).toFixed(2));
+  const sellPrice = Number((buyPrice + margin).toFixed(2));
+
+  return {
+    sku: item.asin ?? "",
+    asin: item.asin ?? "",
+    title: item.title ?? "",
+    roi: roiPct,
+    margin,
+    currency: "EUR",
+    buyPrice,
+    sellPrice,
+    salesRank: null,
+    category: item.category ?? null,
+    vendorId: item.vendor_id !== undefined && item.vendor_id !== null ? String(item.vendor_id) : null,
+    fees: item.fees ?? null,
+    freight: item.freight ?? null,
+    cost: item.cost ?? null,
+  };
+};

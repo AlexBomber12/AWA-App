@@ -10,35 +10,43 @@ import type { ReactNode } from "react";
 import { InboxPage } from "@/components/features/inbox/InboxPage";
 import { ToastProvider } from "@/components/providers/ToastProvider";
 import type { InboxListResponse } from "@/lib/api/inboxClient";
+import type { Task } from "@/lib/api/inboxTypes";
+
+jest.mock("next/navigation", () => ({
+  useRouter: () => ({ replace: jest.fn(), push: jest.fn() }),
+}));
 
 const user = userEvent.setup();
 
-const inboxResponse: InboxListResponse = {
-  items: [
-    {
-      id: "test-task-1",
-      source: "decision_engine",
-      entity: { type: "sku_vendor", asin: "B00TEST1", vendorId: "22", label: "Test SKU 1" },
-      summary: "Review mock decision",
-      assignee: "Ops User",
-      state: "open",
-      decision: {
-        decision: "update_price",
-        priority: "high",
-        deadlineAt: new Date().toISOString(),
-        defaultAction: "Increase price by 1%",
-        why: ["ROI dipped below guardrail"],
-        alternatives: [{ decision: "request_discount", label: "Request discount" }],
-        metrics: { roi: 12.1, riskAdjustedRoi: 10.2, maxCogs: 14.5 },
-      },
+const inboxItems: Task[] = [
+  {
+    id: "test-task-1",
+    source: "decision_engine",
+    entity: { type: "sku_vendor", asin: "B00TEST1", vendorId: "22", label: "Test SKU 1" },
+    summary: "Review mock decision",
+    assignee: "Ops User",
+    state: "open",
+    decision: {
+      decision: "update_price",
       priority: "high",
       deadlineAt: new Date().toISOString(),
+      defaultAction: "Increase price by 1%",
       why: ["ROI dipped below guardrail"],
       alternatives: [{ decision: "request_discount", label: "Request discount" }],
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      metrics: { roi: 12.1, riskAdjustedRoi: 10.2, maxCogs: 14.5 },
     },
-  ],
+    priority: "high",
+    deadlineAt: new Date().toISOString(),
+    why: ["ROI dipped below guardrail"],
+    alternatives: [{ decision: "request_discount", label: "Request discount" }],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  },
+];
+
+const inboxResponse: InboxListResponse = {
+  data: inboxItems,
+  items: inboxItems,
   pagination: { page: 1, pageSize: 25, total: 1, totalPages: 1 },
   summary: { open: 1, inProgress: 0, blocked: 0 },
 };

@@ -1,11 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import type { InboxListResponse } from "@/lib/api/inboxClient";
-import type { Task, TaskState } from "@/lib/api/inboxTypes";
+import { buildPaginationMeta, parseSortMeta, requirePermission } from "@/app/api/bff/utils";
+import type { Task, TaskPriority, TaskState } from "@/lib/api/bffTypes";
 import type { DecisionPriority } from "@/lib/api/decisionTypes";
-import { getServerAuthSession } from "@/lib/auth";
 import { parsePositiveInt, parseString } from "@/lib/parsers";
-import { can, getUserRolesFromSession } from "@/lib/permissions/server";
 
 export const dynamic = "force-dynamic";
 
@@ -13,17 +11,70 @@ type InboxSort = "priority" | "deadline" | "createdAt";
 
 const BASE_DATE = Date.parse("2024-04-15T12:00:00.000Z");
 
-const buildTask = (task: Omit<Task, "priority" | "defaultAction" | "deadlineAt" | "why" | "alternatives" | "nextRequestAt">): Task => {
-  const decisionPriority = task.decision.priority ?? "medium";
-  const deadline = task.decision.deadlineAt;
+const toTaskPriority = (priority: DecisionPriority | undefined): TaskPriority => {
+  if (priority === "low" || priority === "medium" || priority === "high" || priority === "critical") {
+    return priority;
+  }
+  if (typeof priority === "number") {
+    if (priority >= 90) return "critical";
+    if (priority >= 70) return "high";
+    if (priority >= 40) return "medium";
+    return "low";
+  }
+  return "medium";
+};
+
+const toStatusFromState = (state: TaskState): Task["status"] => {
+  switch (state) {
+    case "done":
+      return "completed";
+    case "cancelled":
+      return "archived";
+    case "snoozed":
+    case "blocked":
+    case "in_progress":
+      return "in_progress";
+    default:
+      return "open";
+  }
+};
+
+type InboxTaskInput = {
+  id: string;
+  source: Task["source"];
+  entity: Task["entity"];
+  summary: string;
+  assignee?: string;
+  state: TaskState;
+  decision: NonNullable<Task["decision"]>;
+  createdAt: string;
+  updatedAt: string;
+};
+
+const buildTask = (task: InboxTaskInput): Task => {
+  const priority = toTaskPriority(task.decision.priority);
+  const deadline = task.decision.deadlineAt ?? null;
+
   return {
-    ...task,
-    priority: decisionPriority as DecisionPriority,
-    defaultAction: task.decision.defaultAction,
-    deadlineAt: deadline,
+    id: task.id,
+    type: task.entity?.type ?? task.source ?? "task",
+    title: task.summary,
+    description: task.decision.defaultAction ?? null,
+    status: toStatusFromState(task.state),
+    priority,
+    createdAt: task.createdAt,
+    updatedAt: task.updatedAt,
+    dueAt: deadline,
+    decisionId: task.decision.decision,
+    assignee: task.assignee ?? null,
+    source: task.source ?? null,
+    summary: task.summary,
+    entity: task.entity,
+    decision: task.decision,
+    state: task.state,
     why: task.decision.why,
     alternatives: task.decision.alternatives,
-    nextRequestAt: task.decision.nextRequestAt,
+    nextRequestAt: task.decision.nextRequestAt ?? null,
   };
 };
 
@@ -175,17 +226,45 @@ const MOCK_TASKS: Task[] = [
 ];
 
 const errorResponse = (status: number, code: string, message: string) =>
-  NextResponse.json({ code, message, status }, { status });
+  NextResponse.json({ error: { code, message, status } }, { status });
 
-const normalizePriority = (value?: string | null): DecisionPriority | undefined => {
+const normalizePriority = (value?: string | null): TaskPriority | undefined => {
   if (!value) {
     return undefined;
   }
+  if (value === "low" || value === "medium" || value === "high" || value === "critical") {
+    return value;
+  }
   const numeric = Number(value);
   if (Number.isFinite(numeric)) {
-    return numeric;
+    return toTaskPriority(numeric);
   }
-  return value as DecisionPriority;
+  return undefined;
+};
+
+const priorityWeight = (priority?: TaskPriority): number => {
+  switch (priority) {
+    case "critical":
+      return 100;
+    case "high":
+      return 80;
+    case "medium":
+      return 60;
+    case "low":
+      return 40;
+    default:
+      return 0;
+  }
+};
+
+const sortMetaFromInboxSort = (sort: InboxSort) => {
+  if (sort === "priority") {
+    return { sortBy: "priority", sortDir: "desc" as const };
+  }
+  if (sort === "deadline") {
+    return { sortBy: "dueAt", sortDir: "asc" as const };
+  }
+  return { sortBy: "createdAt", sortDir: "desc" as const };
 };
 
 const sortTasks = (items: Task[], sort?: InboxSort) => {
@@ -195,16 +274,14 @@ const sortTasks = (items: Task[], sort?: InboxSort) => {
   const copy = [...items];
   switch (sort) {
     case "priority":
-      return copy.sort((a, b) => {
-        const aPriority = typeof a.priority === "number" ? a.priority : 50;
-        const bPriority = typeof b.priority === "number" ? b.priority : 50;
-        return bPriority - aPriority;
-      });
+      return copy.sort((a, b) => priorityWeight(b.priority) - priorityWeight(a.priority));
     case "deadline":
       return copy.sort((a, b) => {
-        const aDate = a.deadlineAt ? Date.parse(a.deadlineAt) : Number.POSITIVE_INFINITY;
-        const bDate = b.deadlineAt ? Date.parse(b.deadlineAt) : Number.POSITIVE_INFINITY;
-        return aDate - bDate;
+        const aDate = a.dueAt ?? a.decision?.deadlineAt ?? "";
+        const bDate = b.dueAt ?? b.decision?.deadlineAt ?? "";
+        const aTime = aDate ? Date.parse(aDate) : Number.POSITIVE_INFINITY;
+        const bTime = bDate ? Date.parse(bDate) : Number.POSITIVE_INFINITY;
+        return aTime - bTime;
       });
     case "createdAt":
       return copy.sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
@@ -219,7 +296,7 @@ const filterTasks = (
     state?: TaskState;
     source?: string;
     assignee?: string;
-    priority?: DecisionPriority;
+    priority?: TaskPriority;
     search?: string;
     taskId?: string;
   }
@@ -244,24 +321,14 @@ const filterTasks = (
     if (filter.assignee && task.assignee !== filter.assignee) {
       return false;
     }
-    if (filter.priority !== undefined) {
-      const priorityValue = typeof filter.priority === "number" ? filter.priority : filter.priority;
-      if (
-        typeof priorityValue === "number" &&
-        typeof task.priority === "number" &&
-        task.priority < priorityValue
-      ) {
-        return false;
-      }
-      if (typeof priorityValue === "string" && task.priority !== priorityValue) {
-        return false;
-      }
+    if (filter.priority !== undefined && task.priority !== filter.priority) {
+      return false;
     }
     if (filter.search) {
       const match =
-        matcher(task.summary, filter.search) ||
-        matcher(task.entity.label ?? ("label" in task.entity ? task.entity.label : undefined), filter.search) ||
-        matcher(task.entity.type, filter.search);
+        matcher(task.summary ?? task.title, filter.search) ||
+        matcher(task.entity?.label ?? ("label" in (task.entity ?? {}) ? (task.entity as { label?: string }).label : undefined), filter.search) ||
+        matcher(task.entity?.type, filter.search);
       if (!match) {
         return false;
       }
@@ -277,25 +344,26 @@ const buildSummary = (items: Task[]) => {
     blocked: 0,
   };
   items.forEach((task) => {
+    if (task.state === "blocked") {
+      summary.blocked += 1;
+      summary.inProgress += 1;
+      return;
+    }
     if (task.state === "open") {
       summary.open += 1;
-    } else if (task.state === "in_progress" || task.state === "snoozed") {
+      return;
+    }
+    if (task.state === "in_progress" || task.state === "snoozed") {
       summary.inProgress += 1;
-    } else if (task.state === "blocked") {
-      summary.blocked += 1;
     }
   });
   return summary;
 };
 
 export async function GET(request: NextRequest) {
-  const session = await getServerAuthSession();
-  if (!session) {
-    return errorResponse(401, "UNAUTHORIZED", "Authentication required.");
-  }
-  const roles = getUserRolesFromSession(session);
-  if (!can({ resource: "inbox", action: "view", roles })) {
-    return errorResponse(403, "FORBIDDEN", "You do not have access to the inbox.");
+  const permission = await requirePermission("inbox", "view");
+  if (!permission.ok) {
+    return permission.response;
   }
 
   const params = request.nextUrl.searchParams;
@@ -316,27 +384,22 @@ export async function GET(request: NextRequest) {
 
   const sorted = sortTasks(filtered, sort);
   const total = sorted.length;
-  const totalPages = Math.max(1, Math.ceil(total / limit));
   const start = (page - 1) * limit;
   const items = sorted.slice(start, start + limit);
 
-  const response: InboxListResponse = {
+  return NextResponse.json({
+    data: items,
     items,
-    pagination: {
-      page,
-      pageSize: limit,
-      total,
-      totalPages,
-    },
+    pagination: buildPaginationMeta(page, limit, total),
+    sort: sortMetaFromInboxSort(sort),
+    filters: { state, source, assignee, priority, search, taskId },
     summary: buildSummary(sorted),
-  };
-
-  return NextResponse.json(response);
+  });
 }
 
 const methodNotAllowed = () =>
   NextResponse.json(
-    { code: "METHOD_NOT_ALLOWED", message: "Only GET is supported for this endpoint.", status: 405 },
+    { error: { code: "METHOD_NOT_ALLOWED", message: "Only GET is supported for this endpoint.", status: 405 } },
     {
       status: 405,
       headers: {

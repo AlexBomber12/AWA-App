@@ -14,11 +14,11 @@ describe("roiClient (BFF)", () => {
 
   it("serializes ROI table params into query string", async () => {
     mockFetch.mockResolvedValue({
-      items: [],
+      data: [],
       pagination: { page: 1, pageSize: 50, total: 0, totalPages: 1 },
     });
 
-    await roiClient.getRoiList({
+    await roiClient.getRoiPage({
       page: 3,
       pageSize: 25,
       sort: "asin_desc",
@@ -40,11 +40,11 @@ describe("roiClient (BFF)", () => {
 
   it("falls back to defaults when params are missing", async () => {
     mockFetch.mockResolvedValue({
-      items: [],
+      data: [],
       pagination: { page: 1, pageSize: 50, total: 0, totalPages: 1 },
     });
 
-    await roiClient.getRoiList({ page: 1, pageSize: 50 });
+    await roiClient.getRoiPage({ page: 1, pageSize: 50 });
 
     const calledUrl = mockFetch.mock.calls[0]?.[0] as string;
     const params = new URL(calledUrl, "http://placeholder").searchParams;

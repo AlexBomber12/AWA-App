@@ -19,7 +19,7 @@ describe("returnsClient", () => {
 
   it("constructs list queries with filters and defaults", async () => {
     mockFetch.mockResolvedValue({
-      items: [],
+      data: [],
       pagination: { page: 1, pageSize: 25, total: 0, totalPages: 1 },
     });
 
@@ -45,7 +45,7 @@ describe("returnsClient", () => {
 
   it("applies defaults when filters are empty and keeps stable query keys", async () => {
     mockFetch.mockResolvedValue({
-      items: [],
+      data: [],
       pagination: { page: 1, pageSize: 25, total: 0, totalPages: 1 },
     });
 
@@ -61,10 +61,12 @@ describe("returnsClient", () => {
 
   it("builds stats query with provided filters", async () => {
     mockFetch.mockResolvedValue({
-      totalAsins: 1,
-      totalUnits: 2,
-      totalRefundAmount: 3,
-      avgRefundPerUnit: 1.5,
+      data: {
+        totalAsins: 1,
+        totalUnits: 2,
+        totalRefundAmount: 3,
+        avgRefundPerUnit: 1.5,
+      },
     });
 
     await getReturnsStats({ vendor: "99", asin: "B00-STATS" });

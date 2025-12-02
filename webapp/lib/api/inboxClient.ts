@@ -3,29 +3,21 @@ import type { ApiError } from "@/lib/api/apiError";
 import { useApiMutation } from "@/lib/api/useApiMutation";
 import { useApiQuery, type UseApiQueryOptions } from "@/lib/api/useApiQuery";
 
-import type { Task, TaskSource, TaskState } from "./inboxTypes";
-import type { DecisionPriority } from "./decisionTypes";
+import type { BffListResponse, Task, TaskSource, TaskState } from "./bffTypes";
 
 export type InboxQuery = {
   page?: number;
   pageSize?: number;
   state?: TaskState | "all";
   source?: TaskSource;
-  priority?: DecisionPriority;
+  priority?: Task["priority"];
   assignee?: string;
   search?: string;
   taskId?: string;
   sort?: "priority" | "deadline" | "createdAt";
 };
 
-export type InboxListResponse = {
-  items: Task[];
-  pagination: {
-    page: number;
-    pageSize: number;
-    total: number;
-    totalPages: number;
-  };
+export type InboxListResponse = BffListResponse<Task> & {
   summary?: {
     open: number;
     inProgress: number;
@@ -78,10 +70,11 @@ export async function fetchInboxTasks(query?: InboxQuery, signal?: AbortSignal):
     signal,
   });
 }
+export const getInboxTasks = fetchInboxTasks;
 
 export async function fetchTaskById(taskId: string, signal?: AbortSignal): Promise<Task | null> {
   const response = await fetchInboxTasks({ taskId, page: 1, pageSize: 1 }, signal);
-  return response.items[0] ?? null;
+  return response.data?.[0] ?? null;
 }
 
 type UseInboxTasksOptions = Omit<

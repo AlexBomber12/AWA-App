@@ -11,6 +11,9 @@ jest.mock("@/lib/api/returnsApiClient", () => ({
     fetchStats: jest.fn(),
   },
 }));
+jest.mock("@/lib/auth", () => ({
+  getServerAuthSession: jest.fn(async () => ({ user: { roles: ["viewer"] } })),
+}));
 
 const mockedFetch = returnsApiClient.fetchStats as jest.MockedFunction<typeof returnsApiClient.fetchStats>;
 
@@ -52,7 +55,8 @@ describe("Returns BFF route", () => {
     });
     const payload = await response.json();
     expect(payload.pagination).toEqual({ page: 3, pageSize: 50, total: 50, totalPages: 1 });
-    expect(payload.items[0]).toMatchObject({ asin: "A1", avgRefundPerUnit: 2 });
+    expect(payload.data[0]).toMatchObject({ asin: "A1", avgRefundPerUnit: 2 });
+    expect(payload.summary).toBeDefined();
   });
 
   it("returns summary payload using backend summary", async () => {
@@ -79,7 +83,7 @@ describe("Returns BFF route", () => {
       filters: expect.objectContaining({ vendor: "ACME" }),
     });
     const payload = await response.json();
-    expect(payload).toEqual({
+    expect(payload.data).toEqual({
       totalAsins: 10,
       totalUnits: 25,
       totalRefundAmount: 100,

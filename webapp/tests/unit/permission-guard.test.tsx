@@ -8,6 +8,9 @@ jest.mock("next-auth/react", () => ({
   useSession: jest.fn(),
   SessionProvider: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }));
+jest.mock("next/navigation", () => ({
+  useRouter: () => ({ replace: jest.fn() }),
+}));
 
 const mockUseSession = useSession as jest.MockedFunction<typeof useSession>;
 
@@ -55,6 +58,16 @@ describe("PermissionGuard", () => {
     );
 
     expect(screen.getByText("No access")).toBeInTheDocument();
+  });
+
+  it("blocks when required roles are missing", () => {
+    render(
+      <PermissionGuard requiredRoles={["admin"]} fallback={<p>Role blocked</p>}>
+        <span>Hidden</span>
+      </PermissionGuard>
+    );
+
+    expect(screen.getByText("Role blocked")).toBeInTheDocument();
   });
 
   it("renders nothing when access is denied and no fallback is provided", () => {

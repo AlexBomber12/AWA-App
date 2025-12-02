@@ -7,11 +7,11 @@ import { useRouter } from "next/navigation";
 import { PaginationControls, VirtualizedTable } from "@/components/data";
 import { Checkbox } from "@/components/ui";
 
-import type { RoiListResponse, RoiRow } from "./types";
+import type { RoiItem, RoiListResponse } from "./types";
 import type { RoiSort } from "@/lib/tableState/roi";
 
 type RoiTableProps = {
-  rows: RoiRow[];
+  rows: RoiItem[];
   pagination?: RoiListResponse["pagination"];
   isLoading?: boolean;
   page: number;
@@ -52,10 +52,16 @@ const formatPercent = (value?: number | null) => {
   return `${value.toFixed(1)}%`;
 };
 
-const getMarginValue = (row: RoiRow): number => {
-  const roiPct = row.roi_pct ?? 0;
-  const totalCost = (row.cost ?? 0) + (row.freight ?? 0) + (row.fees ?? 0);
-  return (roiPct / 100) * totalCost;
+const getMarginValue = (row: RoiItem): number => {
+  if (typeof row.margin === "number" && Number.isFinite(row.margin)) {
+    return row.margin;
+  }
+  const roiPct = typeof row.roi === "number" && Number.isFinite(row.roi) ? row.roi : 0;
+  const baseCost =
+    Number.isFinite(row.buyPrice) && typeof row.buyPrice === "number"
+      ? row.buyPrice
+      : (row.cost ?? 0) + (row.freight ?? 0) + (row.fees ?? 0);
+  return (roiPct / 100) * baseCost;
 };
 
 const SortableHeader = ({ label, asc, desc, currentSort, onSortChange }: SortableHeaderProps) => {
@@ -117,9 +123,9 @@ export function RoiTable({
     void router.push(`/sku/${asin}`);
   }, [router]);
 
-  const columns = useMemo<ColumnDef<RoiRow>[]>(
+  const columns = useMemo<ColumnDef<RoiItem>[]>(
     () => {
-      const tableColumns: ColumnDef<RoiRow>[] = [];
+      const tableColumns: ColumnDef<RoiItem>[] = [];
 
       if (canApprove) {
         tableColumns.push({
@@ -174,7 +180,7 @@ export function RoiTable({
           ),
         },
         {
-          accessorKey: "vendor_id",
+          accessorKey: "vendorId",
           header: () => (
             <SortableHeader
               label="Vendor"
@@ -184,7 +190,7 @@ export function RoiTable({
               onSortChange={onSortChange}
             />
           ),
-          cell: ({ row }) => <span>{row.original.vendor_id ?? "—"}</span>,
+          cell: ({ row }) => <span>{row.original.vendorId ?? "—"}</span>,
         },
         {
           accessorKey: "category",
@@ -220,7 +226,7 @@ export function RoiTable({
           cell: ({ row }) => <span>{formatCurrency(getMarginValue(row.original))}</span>,
         },
         {
-          accessorKey: "roi_pct",
+          accessorKey: "roi",
           header: () => (
             <SortableHeader
               label="ROI %"
@@ -231,7 +237,7 @@ export function RoiTable({
             />
           ),
           cell: ({ row }) => (
-            <span className="font-semibold">{formatPercent(row.original.roi_pct)}</span>
+            <span className="font-semibold">{formatPercent(row.original.roi)}</span>
           ),
         }
       );
@@ -260,7 +266,7 @@ export function RoiTable({
         getRowId={(original, index) => original.asin ?? `row-${index}`}
         height={520}
         isLoading={isLoading}
-        getRowClassName={(row: Row<RoiRow>) =>
+        getRowClassName={(row: Row<RoiItem>) =>
           selectedAsins.has(row.original.asin ?? "") ? "bg-brand/5" : undefined
         }
       />

@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 
-import type { Rule, SimulationInput, SimulationScenario } from "@/lib/api/decisionTypes";
+import type { Rule, SimulationInput, SimulationScenario } from "@/lib/api/decisionClient";
 import { PermissionGuard } from "@/lib/permissions/client";
 import { cn } from "@/lib/utils";
 
@@ -143,7 +143,7 @@ export function SimulationPanel({
                 >
                   <p className="text-sm font-semibold">{scenario.name}</p>
                   <p className="text-xs text-muted-foreground">
-                    {scenario.metrics ? "Simulation only, not saved" : "Pending"}
+                    {scenario.result ? "Simulation only, not saved" : "Pending"}
                   </p>
                 </button>
               );
@@ -156,28 +156,28 @@ export function SimulationPanel({
         <p className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Scenario result</p>
         {!activeScenario ? (
           <p className="mt-4 text-sm text-muted-foreground">Select a simulation to view details.</p>
-        ) : activeScenario.metrics ? (
+        ) : activeScenario.result ? (
           <div className="mt-4 space-y-4">
             <div>
               <p className="text-base font-semibold">{activeScenario.description ?? "Simulation output"}</p>
               <p className="text-xs text-muted-foreground">Simulation only, not saved.</p>
               <div className="mt-3 grid gap-3 sm:grid-cols-3">
-                {activeScenario.metrics.roi !== undefined ? (
+                {activeScenario.result.roi !== undefined ? (
                   <div className="rounded-lg border border-border bg-muted/20 p-3 text-sm">
                     <p className="text-xs uppercase text-muted-foreground">ROI</p>
-                    <p className="text-lg font-semibold">{activeScenario.metrics.roi.toFixed(1)}%</p>
+                    <p className="text-lg font-semibold">{activeScenario.result.roi.toFixed(1)}%</p>
                   </div>
                 ) : null}
-                {activeScenario.metrics.riskAdjustedRoi !== undefined ? (
+                {activeScenario.result.riskAdjustedRoi !== undefined ? (
                   <div className="rounded-lg border border-border bg-muted/20 p-3 text-sm">
                     <p className="text-xs uppercase text-muted-foreground">Risk-adjusted ROI</p>
-                    <p className="text-lg font-semibold">{activeScenario.metrics.riskAdjustedRoi.toFixed(1)}%</p>
+                    <p className="text-lg font-semibold">{activeScenario.result.riskAdjustedRoi.toFixed(1)}%</p>
                   </div>
                 ) : null}
-                {activeScenario.metrics.maxCogs !== undefined ? (
+                {activeScenario.result.maxCogs !== undefined ? (
                   <div className="rounded-lg border border-border bg-muted/20 p-3 text-sm">
                     <p className="text-xs uppercase text-muted-foreground">Max COGS</p>
-                    <p className="text-lg font-semibold">${activeScenario.metrics.maxCogs.toFixed(2)}</p>
+                    <p className="text-lg font-semibold">${activeScenario.result.maxCogs.toFixed(2)}</p>
                   </div>
                 ) : null}
               </div>

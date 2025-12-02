@@ -1,58 +1,42 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import type { DecisionRulesResponse, SimulationScenariosResponse } from "@/lib/api/decisionClient";
-import type { SimulationScenario } from "@/lib/api/decisionTypes";
-import { getServerAuthSession } from "@/lib/auth";
+import { errorResponse, requirePermission } from "@/app/api/bff/utils";
+import type { DecisionSummary, SimulationScenario } from "@/lib/api/bffTypes";
+import type { SimulationInput } from "@/lib/api/decisionTypes";
 import { parseString } from "@/lib/parsers";
-import { can, getUserRolesFromSession } from "@/lib/permissions/server";
 
 import { DECISION_RULES, SIMULATION_SCENARIOS, buildSimulationScenario, findRuleById } from "./data";
 
 export const dynamic = "force-dynamic";
 
-const errorResponse = (status: number, code: string, message: string) =>
-  NextResponse.json({ code, message, status }, { status });
-
 export async function GET(request: NextRequest) {
-  const session = await getServerAuthSession();
-  if (!session) {
-    return errorResponse(401, "UNAUTHORIZED", "Authentication required.");
-  }
-
-  const roles = getUserRolesFromSession(session);
-  if (!can({ resource: "decision", action: "view", roles })) {
-    return errorResponse(403, "FORBIDDEN", "You do not have access to Decision Engine data.");
+  const permission = await requirePermission("decision", "view");
+  if (!permission.ok) {
+    return permission.response;
   }
 
   const resource = parseString(request.nextUrl.searchParams.get("resource"));
 
   if (resource === "rules") {
-    const payload: DecisionRulesResponse = { rules: DECISION_RULES };
-    return NextResponse.json(payload);
+    return NextResponse.json({ data: DECISION_RULES });
   }
 
   if (resource === "scenarios") {
-    const payload: SimulationScenariosResponse = { scenarios: SIMULATION_SCENARIOS };
-    return NextResponse.json(payload);
+    return NextResponse.json({ data: SIMULATION_SCENARIOS });
   }
 
-  const payload: DecisionRulesResponse & SimulationScenariosResponse = {
+  const payload: DecisionSummary = {
     rules: DECISION_RULES,
     scenarios: SIMULATION_SCENARIOS,
   };
 
-  return NextResponse.json(payload);
+  return NextResponse.json({ data: payload });
 }
 
 export async function POST(request: NextRequest) {
-  const session = await getServerAuthSession();
-  if (!session) {
-    return errorResponse(401, "UNAUTHORIZED", "Authentication required.");
-  }
-
-  const roles = getUserRolesFromSession(session);
-  if (!can({ resource: "decision", action: "configure", roles })) {
-    return errorResponse(403, "FORBIDDEN", "You do not have access to run simulations.");
+  const permission = await requirePermission("decision", "configure");
+  if (!permission.ok) {
+    return permission.response;
   }
 
   let payload: { ruleId?: string; input?: Record<string, unknown> };
@@ -72,13 +56,13 @@ export async function POST(request: NextRequest) {
     return errorResponse(404, "NOT_FOUND", "Rule not found for simulation.");
   }
 
-  const scenario: SimulationScenario = buildSimulationScenario(rule.id, (payload.input ?? {}) as SimulationScenario["input"]);
-  return NextResponse.json(scenario, { status: 201 });
+  const scenario: SimulationScenario = buildSimulationScenario(rule.id, (payload.input ?? {}) as SimulationInput);
+  return NextResponse.json({ data: scenario }, { status: 201 });
 }
 
 const methodNotAllowed = () =>
   NextResponse.json(
-    { code: "METHOD_NOT_ALLOWED", message: "Only GET and POST are supported for this endpoint.", status: 405 },
+    { error: { code: "METHOD_NOT_ALLOWED", message: "Only GET and POST are supported for this endpoint.", status: 405 } },
     {
       status: 405,
       headers: {

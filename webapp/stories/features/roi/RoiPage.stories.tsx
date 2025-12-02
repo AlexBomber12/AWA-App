@@ -10,7 +10,7 @@ import {
   type RoiSort,
   type RoiTableFilters,
 } from "@/lib/tableState/roi";
-import type { RoiListResponse, RoiRow } from "@/components/features/roi/types";
+import type { RoiItem, RoiListResponse } from "@/components/features/roi/types";
 import { AppShell } from "@/components/layout";
 
 import { FetchMock, type FetchMockHandler } from "../../utils/fetchMock";
@@ -27,39 +27,55 @@ const mockSession = {
 
 const OBSERVE_ONLY_ROI_THRESHOLD = 20;
 
-const createRoiRow = (index: number): RoiRow => ({
-  asin: `ROI-${(index + 1).toString().padStart(4, "0")}`,
-  title: `Storybook ROI SKU ${index + 1}`,
-  vendor_id: (index % 9) + 1,
-  category: ["Beauty", "Electronics", "Outdoors"][index % 3],
-  cost: 10 + (index % 5),
-  freight: 2 + (index % 3),
-  fees: 1.5 + (index % 4),
-  roi_pct: 12 + (index % 35),
-});
-
-const MOCK_ROWS: RoiRow[] = Array.from({ length: 150 }, (_, index) => createRoiRow(index));
-
-const marginValue = (row: RoiRow): number => {
-  const roiPct = row.roi_pct ?? 0;
-  const cost = (row.cost ?? 0) + (row.freight ?? 0) + (row.fees ?? 0);
-  return (roiPct / 100) * cost;
+const createRoiRow = (index: number): RoiItem => {
+  const asin = `ROI-${(index + 1).toString().padStart(4, "0")}`;
+  const cost = 10 + (index % 5);
+  const freight = 2 + (index % 3);
+  const fees = 1.5 + (index % 4);
+  const roi = 12 + (index % 35);
+  const buyPrice = cost + freight + fees;
+  const margin = (roi / 100) * buyPrice;
+  return {
+    sku: asin,
+    asin,
+    title: `Storybook ROI SKU ${index + 1}`,
+    vendorId: String((index % 9) + 1),
+    category: ["Beauty", "Electronics", "Outdoors"][index % 3],
+    cost,
+    freight,
+    fees,
+    roi,
+    margin,
+    buyPrice,
+    sellPrice: buyPrice + margin,
+    currency: "EUR",
+  };
 };
 
-const matchesFilters = (row: RoiRow, filters: RoiTableFilters): boolean => {
+const MOCK_ROWS: RoiItem[] = Array.from({ length: 150 }, (_, index) => createRoiRow(index));
+
+const marginValue = (row: RoiItem): number => {
+  if (typeof row.margin === "number") {
+    return row.margin;
+  }
+  const cost = (row.cost ?? 0) + (row.freight ?? 0) + (row.fees ?? 0);
+  return ((row.roi ?? 0) / 100) * cost;
+};
+
+const matchesFilters = (row: RoiItem, filters: RoiTableFilters): boolean => {
   const roiMin = typeof filters.roiMin === "number" ? filters.roiMin : 0;
   const vendor = filters.vendor?.trim();
   const category = filters.category?.trim().toLowerCase();
   const search = filters.search?.trim().toLowerCase();
   const observeOnly = Boolean(filters.observeOnly);
 
-  if ((row.roi_pct ?? 0) < roiMin) {
+  if ((row.roi ?? 0) < roiMin) {
     return false;
   }
-  if (observeOnly && (row.roi_pct ?? 0) > OBSERVE_ONLY_ROI_THRESHOLD) {
+  if (observeOnly && (row.roi ?? 0) > OBSERVE_ONLY_ROI_THRESHOLD) {
     return false;
   }
-  if (vendor && String(row.vendor_id ?? "") !== vendor) {
+  if (vendor && String(row.vendorId ?? "") !== vendor) {
     return false;
   }
   if (category && (row.category ?? "").toLowerCase() !== category) {
@@ -74,11 +90,11 @@ const matchesFilters = (row: RoiRow, filters: RoiTableFilters): boolean => {
   return true;
 };
 
-const sortRows = (rows: RoiRow[], sort: RoiSort | undefined) => {
+const sortRows = (rows: RoiItem[], sort: RoiSort | undefined) => {
   const next = [...rows];
   switch (sort) {
     case "roi_pct_asc":
-      return next.sort((a, b) => (a.roi_pct ?? 0) - (b.roi_pct ?? 0));
+      return next.sort((a, b) => (a.roi ?? 0) - (b.roi ?? 0));
     case "asin_asc":
       return next.sort((a, b) => (a.asin ?? "").localeCompare(b.asin ?? ""));
     case "asin_desc":
@@ -88,12 +104,12 @@ const sortRows = (rows: RoiRow[], sort: RoiSort | undefined) => {
     case "margin_desc":
       return next.sort((a, b) => marginValue(b) - marginValue(a));
     case "vendor_asc":
-      return next.sort((a, b) => (a.vendor_id ?? 0) - (b.vendor_id ?? 0));
+      return next.sort((a, b) => Number(a.vendorId ?? 0) - Number(b.vendorId ?? 0));
     case "vendor_desc":
-      return next.sort((a, b) => (b.vendor_id ?? 0) - (a.vendor_id ?? 0));
+      return next.sort((a, b) => Number(b.vendorId ?? 0) - Number(a.vendorId ?? 0));
     case "roi_pct_desc":
     default:
-      return next.sort((a, b) => (b.roi_pct ?? 0) - (a.roi_pct ?? 0));
+      return next.sort((a, b) => (b.roi ?? 0) - (a.roi ?? 0));
   }
 };
 
@@ -107,7 +123,7 @@ const buildRoiHandlers = (mode: RoiStoryMode = "default"): FetchMockHandler[] =>
     predicate: ({ url, method }) => method === "GET" && url.includes("/api/bff/roi") && !url.includes("/bulk-approve"),
     response: ({ url }) => {
       if (mode === "error") {
-        return new Response(JSON.stringify({ code: "BFF_ERROR", message: "Unable to load ROI rows." }), {
+        return new Response(JSON.stringify({ error: { code: "BFF_ERROR", message: "Unable to load ROI rows." } }), {
           status: 500,
           headers: { "Content-Type": "application/json" },
         });
@@ -116,13 +132,14 @@ const buildRoiHandlers = (mode: RoiStoryMode = "default"): FetchMockHandler[] =>
       if (mode === "empty") {
         return new Response(
           JSON.stringify({
-            items: [],
+            data: [],
             pagination: {
               page: 1,
               pageSize: 50,
               total: 0,
               totalPages: 1,
             },
+            filters: {},
           }),
           { status: 200, headers: { "Content-Type": "application/json" } }
         );
@@ -140,13 +157,14 @@ const buildRoiHandlers = (mode: RoiStoryMode = "default"): FetchMockHandler[] =>
       const start = (safePage - 1) * state.pageSize;
       const items = sorted.slice(start, start + state.pageSize);
       const response: RoiListResponse = {
-        items,
+        data: items,
         pagination: {
           page: safePage,
           pageSize: state.pageSize,
           total,
           totalPages,
         },
+        filters,
       };
       const payload = new Response(JSON.stringify(response), {
         status: 200,

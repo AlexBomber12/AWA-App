@@ -8,6 +8,9 @@ jest.mock("@/lib/api/roiApiClient", () => ({
 jest.mock("@/lib/api/fetchFromApi", () => ({
   isApiError: () => false,
 }));
+jest.mock("@/lib/auth", () => ({
+  getServerAuthSession: jest.fn(async () => ({ user: { roles: ["viewer"] } })),
+}));
 
 const mockedModule = jest.requireMock("@/lib/api/roiApiClient") as {
   roiApiClient: {
@@ -72,6 +75,7 @@ describe("ROI BFF route", () => {
       total: 10,
       totalPages: 1,
     });
-    expect(payload.items[0].asin).toBe("A1");
+    expect(payload.data[0].asin).toBe("A1");
+    expect(payload.sort).toEqual({ sortBy: "asin", sortDir: "asc" });
   });
 });

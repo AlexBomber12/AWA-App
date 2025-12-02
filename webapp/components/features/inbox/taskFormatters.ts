@@ -1,7 +1,7 @@
 import type { DecisionPriority, DecisionReason } from "@/lib/api/decisionTypes";
-import type { Task, TaskEntity } from "@/lib/api/inboxTypes";
+import type { Task, TaskEntity, TaskState } from "@/lib/api/inboxTypes";
 
-export const TASK_STATE_STYLES: Record<Task["state"], string> = {
+export const TASK_STATE_STYLES: Record<TaskState, string> = {
   open: "bg-emerald-100 text-emerald-900",
   in_progress: "bg-sky-100 text-sky-900",
   done: "bg-zinc-200 text-zinc-900",
@@ -37,7 +37,7 @@ export const taskPriorityStyle = (priority: DecisionPriority) => {
   return PRIORITY_CLASS_MAP[priority] ?? PRIORITY_CLASS_MAP.medium;
 };
 
-export const formatTaskState = (state: Task["state"]) =>
+export const formatTaskState = (state: TaskState) =>
   ({
     open: "Open",
     in_progress: "In progress",

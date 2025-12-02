@@ -31,14 +31,22 @@ const buildDefaultListPayload = (pageParam: number, pageSizeParam: number): Retu
   const items = Array.from({ length: endIndex - startIndex }, (_, index) => {
     const id = startIndex + index + 1;
     return {
+      returnId: formatAsin(id),
       asin: formatAsin(id),
-      qty: id * 2,
-      refundAmount: id * 25,
+      sku: `SKU-${id}`,
+      quantity: id * 2,
+      reimbursementAmount: id * 25,
       avgRefundPerUnit: 25,
+      reason: "customer_return",
+      currency: "EUR",
+      status: "paid",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     };
   });
 
   return {
+    data: items,
     items,
     pagination: {
       page,
@@ -73,7 +81,7 @@ const buildHandlers = (mode: ReturnsStoryMode): FetchMockHandler[] => [
     predicate: ({ url, method }) => method === "GET" && url.includes("/api/bff/returns") && new URL(url).searchParams.get("resource") === "list",
     response: ({ url }) => {
       if (mode.list === "error") {
-        return new Response(JSON.stringify({ code: "BFF_ERROR", message: "Failed to load returns list." }), {
+        return new Response(JSON.stringify({ error: { code: "BFF_ERROR", message: "Failed to load returns list." } }), {
           status: 500,
           headers: { "Content-Type": "application/json" },
         });
@@ -81,7 +89,7 @@ const buildHandlers = (mode: ReturnsStoryMode): FetchMockHandler[] => [
       if (mode.list === "empty") {
         return new Response(
           JSON.stringify({
-            items: [],
+            data: [],
             pagination: { page: 1, pageSize: 25, total: 0, totalPages: 1 },
           }),
           { status: 200, headers: { "Content-Type": "application/json" } }
@@ -98,7 +106,7 @@ const buildHandlers = (mode: ReturnsStoryMode): FetchMockHandler[] => [
   {
     predicate: ({ url, method }) => method === "GET" && url.includes("/api/bff/returns") && new URL(url).searchParams.get("resource") === "stats",
     response: () => {
-      const payload = JSON.stringify(summaryResponse);
+      const payload = JSON.stringify({ data: summaryResponse });
       const response = new Response(payload, { status: 200, headers: { "Content-Type": "application/json" } });
       return mode.stats === "loading" ? delayedResponse(response) : response;
     },
