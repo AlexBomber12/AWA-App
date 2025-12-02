@@ -31,22 +31,28 @@ CI has three logical test groups plus an e2e smoke check that rides on top of in
 
 ## How to run tests locally
 1. **Bootstrap tooling**
+  ```bash
+  python3.12 -m venv .venv
+  source .venv/bin/activate
+  pip install -r requirements-dev.txt -c constraints.txt
+  pre-commit install
+  ```
+2. **Full stack (backend + webapp)**
    ```bash
-   python3.12 -m venv .venv
-   source .venv/bin/activate
-   pip install -r requirements-dev.txt -c constraints.txt
-   pre-commit install
+   make test-all  # runs `make qa` for Python + `npm run qa` inside webapp/
    ```
-2. **Unit slice (fast feedback)**
-   ```bash
-   ./scripts/ci/run_unit.sh
-   ```
-3. **Integration slice**
+   Use when you need parity with CI’s `webapp-qa` job; install Node 20 dependencies in `webapp/`
+   first (`npm ci`).
+3. **Unit slice (fast feedback)**
+  ```bash
+  ./scripts/ci/run_unit.sh
+  ```
+4. **Integration slice**
    ```bash
    docker compose -f docker-compose.ci.yml up -d --wait db redis
    pytest -q -m integration tests/integration
    ```
-4. **Selective targets** — run any path directly (`pytest -q tests/unit/services/price_importer/test_parser.py`) when iterating on a single module.
+5. **Selective targets** — run any path directly (`pytest -q tests/unit/services/price_importer/test_parser.py`) when iterating on a single module.
 
 ## Coverage policy
 - Backend gates run via `scripts/ci/check_coverage_thresholds.py` (api.routes, worker, etl, awa_common.etl) after `./scripts/ci/run_unit.sh` emits `coverage.xml`. Integration tests still upload coverage XML for diffing but do not gate merges.
