@@ -42,6 +42,13 @@ def _fake_redis(monkeypatch: pytest.MonkeyPatch):
     FastAPILimiter.redis = None
 
 
+@pytest.fixture(autouse=True)
+def _reset_limiter_cache():
+    settings.__dict__.pop("limiter", None)
+    yield
+    settings.__dict__.pop("limiter", None)
+
+
 def _test_user() -> UserCtx:
     return UserCtx(
         sub="user-1",
@@ -153,3 +160,28 @@ async def test_rate_limit_allows_when_redis_errors(monkeypatch: pytest.MonkeyPat
     assert metrics_calls["count"] == 1
     assert error_calls["count"] == 1
     assert sentry_calls["count"] == 1
+
+
+async def test_rate_limit_warns_near_threshold(monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture):
+    caplog.set_level("WARNING")
+    monkeypatch.setattr(settings, "RATE_LIMIT_VIEWER", "2/second", raising=False)
+    monkeypatch.setattr(settings, "RATE_LIMIT_OPS", "2/second", raising=False)
+    monkeypatch.setattr(settings, "RATE_LIMIT_ADMIN", "2/second", raising=False)
+    monkeypatch.setattr(settings, "LIMITER_NEAR_LIMIT_THRESHOLD", 0.5, raising=False)
+    monkeypatch.setattr(settings, "LIMITER_WARN_INTERVAL_S", 0, raising=False)
+    settings.__dict__.pop("limiter", None)
+    calls: list[tuple[str, str]] = []
+    monkeypatch.setattr(rate_limit, "record_limiter_near_limit", lambda key, role: calls.append((key, role)))
+
+    limiter = rate_limit.SmartRateLimiter(settings)
+    dependency = limiter.dependency()
+
+    request = _make_request("/score")
+    request.state.user = _test_user()
+
+    await dependency(request)
+    await dependency(request)
+
+    assert calls
+    assert any("rate_limit.near_limit" in rec.message for rec in caplog.records)
+    settings.__dict__.pop("limiter", None)

@@ -1,22 +1,25 @@
 from __future__ import annotations
 
 import asyncio
-import logging
+import time
 from collections.abc import Awaitable, Callable, Iterable, Mapping, Sequence
 from functools import wraps
 from typing import Any
 
+import structlog
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi_limiter import FastAPILimiter
 from fastapi_limiter.depends import RateLimiter
 
+from awa_common.metrics import record_limiter_near_limit
 from awa_common.security import oidc
 from awa_common.security.models import Role, UserCtx
 from awa_common.settings import parse_rate_limit, settings as default_settings
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 _DEFAULT_SKIP_PATHS = {"/ready", "/health", "/metrics"}
+_LIMITER_WARNED_AT: dict[str, float] = {}
 
 
 def _select_role(user: UserCtx | None) -> Role:
@@ -56,6 +59,74 @@ def _rate_limit_identifier(request: Request) -> str:
     return f"ip:{_client_ip(request)}"
 
 
+async def _build_rate_limiter_key(limiter: RateLimiter, request: Request) -> str | None:
+    route_index = 0
+    dep_index = 0
+    try:
+        for i, route in enumerate(request.app.routes):
+            if route.path == request.scope.get("path") and request.method in getattr(route, "methods", []):
+                route_index = i
+                for j, dependency in enumerate(route.dependencies):
+                    if limiter is dependency.dependency:
+                        dep_index = j
+                        break
+                break
+        identifier = limiter.identifier or FastAPILimiter.identifier
+        rate_key = await identifier(request)
+        prefix = FastAPILimiter.prefix or "fastapi-limiter"
+        return f"{prefix}:{rate_key}:{route_index}:{dep_index}"
+    except Exception:
+        return None
+
+
+async def _maybe_warn_near_limit(
+    key: str | None,
+    *,
+    limit: int,
+    window_seconds: int,
+    role_label: str,
+    warn_threshold: float,
+    warn_interval_s: float,
+) -> None:
+    if key is None or limit <= 0 or warn_threshold <= 0:
+        return
+    redis = getattr(FastAPILimiter, "redis", None)
+    if redis is None:
+        return
+    now = time.monotonic()
+    if warn_interval_s > 0:
+        last_check = _LIMITER_WARNED_AT.get(key, 0.0)
+        if now - last_check < warn_interval_s:
+            return
+    try:
+        current = await redis.get(key)
+    except Exception:
+        return
+    raw = current
+    if isinstance(raw, (bytes, bytearray)):
+        try:
+            raw = raw.decode()
+        except Exception:
+            raw = None
+    try:
+        used = int(raw or 0)
+    except (TypeError, ValueError):
+        return
+    ratio = used / max(limit, 1)
+    _LIMITER_WARNED_AT[key] = now
+    if ratio < warn_threshold:
+        return
+    logger.warning(
+        "rate_limit.near_limit",
+        key=key,
+        role=role_label,
+        used=used,
+        limit=limit,
+        window_s=window_seconds,
+    )
+    record_limiter_near_limit(key, role_label)
+
+
 def _normalize_limit(value: Any, fallback: str) -> tuple[int, int]:
     if isinstance(value, tuple) and len(value) == 2:
         return int(value[0]), int(value[1])
@@ -72,11 +143,17 @@ def _resolve_limit_for_role(
     overrides: Mapping[Role, Any],
     cfg: Any,
 ) -> tuple[int, int]:
+    limiter_cfg = getattr(cfg, "limiter", None)
+    viewer_limit = (
+        getattr(limiter_cfg, "viewer_limit", None) if limiter_cfg else getattr(cfg, "RATE_LIMIT_VIEWER", None)
+    )
+    ops_limit = getattr(limiter_cfg, "ops_limit", None) if limiter_cfg else getattr(cfg, "RATE_LIMIT_OPS", None)
+    admin_limit = getattr(limiter_cfg, "admin_limit", None) if limiter_cfg else getattr(cfg, "RATE_LIMIT_ADMIN", None)
     if role is Role.admin:
-        return _normalize_limit(overrides.get(Role.admin), cfg.RATE_LIMIT_ADMIN)
+        return _normalize_limit(overrides.get(Role.admin), admin_limit)
     if role is Role.ops:
-        return _normalize_limit(overrides.get(Role.ops), cfg.RATE_LIMIT_OPS)
-    return _normalize_limit(overrides.get(Role.viewer), cfg.RATE_LIMIT_VIEWER)
+        return _normalize_limit(overrides.get(Role.ops), ops_limit)
+    return _normalize_limit(overrides.get(Role.viewer), viewer_limit)
 
 
 def RoleBasedRateLimiter(  # noqa: C901
@@ -90,6 +167,18 @@ def RoleBasedRateLimiter(  # noqa: C901
     """Return a dependency enforcing rate limits based on request role."""
 
     cfg = settings or default_settings
+    try:
+        cfg.__dict__.pop("limiter", None)
+    except Exception:
+        pass
+    limiter_cfg = getattr(cfg, "limiter", None)
+    warn_threshold = float(
+        getattr(limiter_cfg, "near_limit_threshold", getattr(cfg, "LIMITER_NEAR_LIMIT_THRESHOLD", 0.9))
+    )
+    warn_threshold = max(0.0, min(warn_threshold, 1.0))
+    warn_interval = max(
+        0.0, float(getattr(limiter_cfg, "warn_interval_s", getattr(cfg, "LIMITER_WARN_INTERVAL_S", 60.0)))
+    )
     skip = {path for path in (skip_paths or [])} | _DEFAULT_SKIP_PATHS
     overrides = {Role.viewer: viewer, Role.ops: ops, Role.admin: admin}
 
@@ -136,6 +225,15 @@ def RoleBasedRateLimiter(  # noqa: C901
             if "required positional argument" not in message:
                 raise
             await limiter(request, None)
+        limiter_key = await _build_rate_limiter_key(limiter, request)
+        await _maybe_warn_near_limit(
+            limiter_key,
+            limit=times,
+            window_seconds=seconds,
+            role_label=role.value,
+            warn_threshold=warn_threshold,
+            warn_interval_s=warn_interval,
+        )
 
     return dependency
 

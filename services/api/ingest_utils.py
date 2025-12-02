@@ -115,8 +115,14 @@ async def read_upload_file(
 
     safe_name, extension = sanitize_filename(file.filename or "")
     chunk = max(1, int(chunk_size or _upload_limits()[0]))
-    limit = int(max_bytes if max_bytes is not None else settings.MAX_REQUEST_BYTES)
-    spool_limit = int(spool_threshold if spool_threshold is not None else getattr(settings, "SPOOL_MAX_BYTES", limit))
+    ingest_cfg = getattr(settings, "ingestion", None)
+    limit = int(
+        max_bytes
+        if max_bytes is not None
+        else (ingest_cfg.max_request_bytes if ingest_cfg else settings.MAX_REQUEST_BYTES)
+    )
+    spool_default = ingest_cfg.spool_max_bytes if ingest_cfg else getattr(settings, "SPOOL_MAX_BYTES", limit)
+    spool_limit = int(spool_threshold if spool_threshold is not None else spool_default)
     hasher = hashlib.sha256()
     total = 0
     buffer = bytearray()
@@ -381,9 +387,15 @@ async def download_uri_to_temp(uri: str, *, log: BoundLogger) -> IngestUpload:
 
 
 def _upload_limits() -> tuple[int, int]:
-    chunk_size = max(1, int(settings.INGEST_CHUNK_SIZE_MB) * 1024 * 1024)
-    max_bytes = int(settings.MAX_REQUEST_BYTES)
-    return chunk_size, max_bytes
+    try:
+        settings.__dict__.pop("ingestion", None)
+    except Exception:
+        pass
+    ingest_cfg = getattr(settings, "ingestion", None)
+    chunk_mb = ingest_cfg.chunk_size_mb if ingest_cfg else getattr(settings, "INGEST_CHUNK_SIZE_MB", 8)
+    max_bytes = ingest_cfg.max_request_bytes if ingest_cfg else getattr(settings, "MAX_REQUEST_BYTES", 268_435_456)
+    chunk_size = max(1, int(chunk_mb) * 1024 * 1024)
+    return chunk_size, int(max_bytes)
 
 
 async def _upload_payload_to_minio(
@@ -480,11 +492,15 @@ async def _download_minio(parsed: ParseResult) -> IngestUpload:
 
 
 async def _download_http(uri: str, scheme: str) -> IngestUpload:
+    etl_cfg = getattr(settings, "etl", None)
+    total_timeout = float(etl_cfg.total_timeout_s if etl_cfg else settings.HTTP_TOTAL_TIMEOUT_S)
+    connect_timeout = float(etl_cfg.connect_timeout_s if etl_cfg else settings.HTTP_CONNECT_TIMEOUT_S)
+    read_timeout = float(etl_cfg.read_timeout_s if etl_cfg else settings.HTTP_READ_TIMEOUT_S)
     timeout = httpx.Timeout(
-        timeout=settings.ETL_TOTAL_TIMEOUT_S,
-        connect=settings.ETL_CONNECT_TIMEOUT_S,
-        read=settings.ETL_READ_TIMEOUT_S,
-        write=settings.ETL_READ_TIMEOUT_S,
+        timeout=total_timeout,
+        connect=connect_timeout,
+        read=read_timeout,
+        write=read_timeout,
     )
     chunk_size, _ = _upload_limits()
     start = time.perf_counter()
@@ -493,7 +509,7 @@ async def _download_http(uri: str, scheme: str) -> IngestUpload:
         async with AsyncHTTPClient(
             integration="ingest_download",
             timeout=timeout,
-            total_timeout_s=float(settings.ETL_TOTAL_TIMEOUT_S),
+            total_timeout_s=total_timeout,
         ) as client:
             response = await client.request("GET", uri, follow_redirects=True, timeout=timeout)
 
@@ -592,7 +608,8 @@ async def _download_file(parsed: ParseResult) -> IngestUpload:
 async def _write_stream_to_temp(chunks: AsyncIterator[bytes], *, scheme: str) -> tuple[Path, str, int]:
     tmp_dir = Path(tempfile.mkdtemp(prefix="ingest_api_"))
     tmp_path = tmp_dir / "payload.csv"
-    max_bytes = int(settings.MAX_REQUEST_BYTES)
+    ingest_cfg = getattr(settings, "ingestion", None)
+    max_bytes = int(ingest_cfg.max_request_bytes if ingest_cfg else getattr(settings, "MAX_REQUEST_BYTES", 268_435_456))
     hasher = hashlib.sha256()
     total = 0
     with tmp_path.open("wb") as handle:

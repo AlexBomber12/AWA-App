@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import logging
 import os
 import re
 from decimal import Decimal
 from functools import cached_property
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import AliasChoices, Field, FieldValidationInfo, field_validator
+from pydantic import Field, FieldValidationInfo, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import make_url
 
@@ -17,6 +18,8 @@ from .configuration import (
     DatabaseSettings,
     EmailSettings,
     EtlSettings,
+    IngestionSettings,
+    LimiterSettings,
     LLMSettings,
     MaintenanceSettings,
     ObservabilitySettings,
@@ -34,6 +37,8 @@ from .dsn import build_dsn
 EnvName = Literal["local", "test", "dev", "stage", "staging", "prod"]
 AppRuntimeEnv = Literal["dev", "stage", "prod"]
 
+logger = logging.getLogger(__name__)
+
 
 def _default_env_file() -> str | None:
     # Prefer explicit ENV, fallback to .env.local for developers,
@@ -45,6 +50,58 @@ def _default_env_file() -> str | None:
         return ".env.test" if os.path.exists(".env.test") else None
     # staging/prod expected to use real env/secrets manager
     return None
+
+
+_LEGACY_ENV_ALIASES: dict[str, str] = {
+    "CELERY_BROKER_URL": "BROKER_URL",
+    "CELERY_RESULT_BACKEND": "RESULT_BACKEND",
+    "ETL_CONNECT_TIMEOUT_S": "HTTP_CONNECT_TIMEOUT_S",
+    "ETL_READ_TIMEOUT_S": "HTTP_READ_TIMEOUT_S",
+    "ETL_TOTAL_TIMEOUT_S": "HTTP_TOTAL_TIMEOUT_S",
+    "ETL_POOL_TIMEOUT_S": "HTTP_POOL_TIMEOUT_S",
+    "ETL_HTTP_POOL_QUEUE_TIMEOUT_S": "HTTP_POOL_TIMEOUT_S",
+    "ETL_HTTP_MAX_CONNECTIONS": "HTTP_MAX_CONNECTIONS",
+    "ETL_HTTP_KEEPALIVE": "HTTP_MAX_KEEPALIVE_CONNECTIONS",
+    "ETL_HTTP_KEEPALIVE_CONNECTIONS": "HTTP_MAX_KEEPALIVE_CONNECTIONS",
+    "ETL_RETRY_ATTEMPTS": "HTTP_MAX_RETRIES",
+    "ETL_MAX_RETRIES": "HTTP_MAX_RETRIES",
+    "ETL_RETRY_BASE_S": "HTTP_BACKOFF_BASE_S",
+    "ETL_BACKOFF_BASE_S": "HTTP_BACKOFF_BASE_S",
+    "ETL_RETRY_MAX_S": "HTTP_BACKOFF_MAX_S",
+    "ETL_BACKOFF_MAX_S": "HTTP_BACKOFF_MAX_S",
+    "ETL_RETRY_JITTER_S": "HTTP_BACKOFF_JITTER_S",
+    "ETL_RETRY_STATUS_CODES": "HTTP_RETRY_STATUS_CODES",
+    "OPENAI_API_KEY": "LLM_CLOUD_API_KEY",
+    "OPENAI_API_BASE": "LLM_CLOUD_API_BASE",
+    "LLM_TIMEOUT_SECS": "LLM_REQUEST_TIMEOUT_S",
+    "TELEGRAM_CHAT_ID": "TELEGRAM_DEFAULT_CHAT_ID",
+    "ENABLE_ALERTS": "ALERTS_ENABLED",
+    "ALERTS_CRON": "ALERTS_EVALUATION_INTERVAL_CRON",
+}
+_LEGACY_ENV_USED: list[tuple[str, str]] = []
+_LEGACY_LOGGED: set[tuple[str, str]] = set()
+
+
+def _apply_legacy_env_aliases() -> list[tuple[str, str]]:
+    """Copy legacy env vars into their canonical names with a warning."""
+
+    global _LEGACY_ENV_USED
+    used: list[tuple[str, str]] = []
+    for legacy, canonical in _LEGACY_ENV_ALIASES.items():
+        if canonical in os.environ:
+            continue
+        legacy_value = os.environ.get(legacy)
+        if legacy_value is None:
+            continue
+        os.environ[canonical] = legacy_value
+        pair = (legacy, canonical)
+        used.append(pair)
+        if pair not in _LEGACY_ENV_USED:
+            _LEGACY_ENV_USED.append(pair)
+    return used
+
+
+_apply_legacy_env_aliases()
 
 
 _RATE_UNIT_SECONDS: dict[str, int] = {
@@ -115,14 +172,8 @@ class Settings(BaseSettings):
     CACHE_REDIS_URL: str | None = None
     CACHE_DEFAULT_TTL_S: int = 300
     CACHE_NAMESPACE: str = "cache:"
-    BROKER_URL: str | None = Field(
-        default=None,
-        validation_alias=AliasChoices("BROKER_URL", "CELERY_BROKER_URL"),
-    )
-    RESULT_BACKEND: str | None = Field(
-        default=None,
-        validation_alias=AliasChoices("RESULT_BACKEND", "CELERY_RESULT_BACKEND"),
-    )
+    BROKER_URL: str | None = None
+    RESULT_BACKEND: str | None = None
     QUEUE_NAMES: str | None = None
     SCHEDULE_MV_REFRESH: bool = Field(
         default=True,
@@ -178,6 +229,8 @@ class Settings(BaseSettings):
     RATE_LIMIT_WINDOW_SECONDS: int = 60
     RATE_LIMIT_SCORE_PER_USER: int = 8
     RATE_LIMIT_ROI_BY_VENDOR_PER_USER: int = 12
+    LIMITER_NEAR_LIMIT_THRESHOLD: float = 0.9
+    LIMITER_WARN_INTERVAL_S: float = 60.0
     MAX_REQUEST_BYTES: int = 268_435_456  # 256 MB ceiling for uploads
     INGEST_STREAMING_ENABLED: bool = True
     INGEST_STREAMING_THRESHOLD_MB: int = 50
@@ -226,6 +279,8 @@ class Settings(BaseSettings):
     CELERY_LOOP_LAG_MONITOR: bool = True
     CELERY_LOOP_LAG_INTERVAL_S: float | None = None
     BACKLOG_PROBE_SECONDS: int = 15
+    REDIS_BACKLOG_WARN_SIZE: int = 1000
+    REDIS_BACKLOG_WARN_INTERVAL_S: float = 60.0
     SCHEDULE_NIGHTLY_MAINTENANCE: bool = Field(
         default=True,
         description="Enable the nightly maintenance beat entry (`SCHEDULE_NIGHTLY_MAINTENANCE`).",
@@ -273,52 +328,17 @@ class Settings(BaseSettings):
         raise ValueError("LLM provider must be 'local' or 'cloud'")
 
     # Shared HTTP client defaults
-    HTTP_CONNECT_TIMEOUT_S: float = Field(
-        default=5.0,
-        validation_alias=AliasChoices("HTTP_CONNECT_TIMEOUT_S", "ETL_CONNECT_TIMEOUT_S"),
-    )
-    HTTP_READ_TIMEOUT_S: float = Field(
-        default=30.0,
-        validation_alias=AliasChoices("HTTP_READ_TIMEOUT_S", "ETL_READ_TIMEOUT_S"),
-    )
-    HTTP_TOTAL_TIMEOUT_S: float = Field(
-        default=60.0,
-        validation_alias=AliasChoices("HTTP_TOTAL_TIMEOUT_S", "ETL_TOTAL_TIMEOUT_S"),
-    )
-    HTTP_POOL_TIMEOUT_S: float = Field(
-        default=5.0,
-        validation_alias=AliasChoices("HTTP_POOL_TIMEOUT_S", "ETL_POOL_TIMEOUT_S", "ETL_HTTP_POOL_QUEUE_TIMEOUT_S"),
-    )
-    HTTP_MAX_CONNECTIONS: int = Field(
-        default=20,
-        validation_alias=AliasChoices("HTTP_MAX_CONNECTIONS", "ETL_HTTP_MAX_CONNECTIONS"),
-    )
-    HTTP_MAX_KEEPALIVE_CONNECTIONS: int = Field(
-        default=5,
-        validation_alias=AliasChoices(
-            "HTTP_MAX_KEEPALIVE_CONNECTIONS", "ETL_HTTP_KEEPALIVE", "ETL_HTTP_KEEPALIVE_CONNECTIONS"
-        ),
-    )
-    HTTP_MAX_RETRIES: int = Field(
-        default=5,
-        validation_alias=AliasChoices("HTTP_MAX_RETRIES", "ETL_RETRY_ATTEMPTS", "ETL_MAX_RETRIES"),
-    )
-    HTTP_BACKOFF_BASE_S: float = Field(
-        default=0.5,
-        validation_alias=AliasChoices("HTTP_BACKOFF_BASE_S", "ETL_RETRY_BASE_S", "ETL_BACKOFF_BASE_S"),
-    )
-    HTTP_BACKOFF_MAX_S: float = Field(
-        default=30.0,
-        validation_alias=AliasChoices("HTTP_BACKOFF_MAX_S", "ETL_RETRY_MAX_S", "ETL_BACKOFF_MAX_S"),
-    )
-    HTTP_BACKOFF_JITTER_S: float = Field(
-        default=1.0,
-        validation_alias=AliasChoices("HTTP_BACKOFF_JITTER_S", "ETL_RETRY_JITTER_S"),
-    )
-    HTTP_RETRY_STATUS_CODES: list[int] = Field(
-        default_factory=lambda: [429, 500, 502, 503, 504],
-        validation_alias=AliasChoices("HTTP_RETRY_STATUS_CODES", "ETL_RETRY_STATUS_CODES"),
-    )
+    HTTP_CONNECT_TIMEOUT_S: float = 5.0
+    HTTP_READ_TIMEOUT_S: float = 30.0
+    HTTP_TOTAL_TIMEOUT_S: float = 60.0
+    HTTP_POOL_TIMEOUT_S: float = 5.0
+    HTTP_MAX_CONNECTIONS: int = 20
+    HTTP_MAX_KEEPALIVE_CONNECTIONS: int = 5
+    HTTP_MAX_RETRIES: int = 5
+    HTTP_BACKOFF_BASE_S: float = 0.5
+    HTTP_BACKOFF_MAX_S: float = 30.0
+    HTTP_BACKOFF_JITTER_S: float = 1.0
+    HTTP_RETRY_STATUS_CODES: list[int] = Field(default_factory=lambda: [429, 500, 502, 503, 504])
     ETL_RETRY_MIN_S: float = 0.5
     ENABLE_LIVE: bool = False
     TASK_ID: str | None = None
@@ -334,21 +354,14 @@ class Settings(BaseSettings):
     # LLM routing
     LLM_PROVIDER: str = Field(default="local")
     LLM_SECONDARY_PROVIDER: str | None = None
-    LLM_BASE_URL: str = Field(default="http://localhost:8000", validation_alias=AliasChoices("LLM_BASE_URL"))
+    LLM_BASE_URL: str = "http://localhost:8000"
     LLM_PROVIDER_BASE_URL: str | None = None
     LLM_API_KEY: str | None = None
     LLM_LOCAL_MODEL: str = "gpt-4o-mini"
     LLM_CLOUD_MODEL: str = "gpt-5"
-    LLM_CLOUD_API_KEY: str | None = Field(
-        default=None, validation_alias=AliasChoices("LLM_CLOUD_API_KEY", "OPENAI_API_KEY")
-    )
-    LLM_CLOUD_API_BASE: str | None = Field(
-        default=None, validation_alias=AliasChoices("LLM_CLOUD_API_BASE", "OPENAI_API_BASE")
-    )
-    LLM_REQUEST_TIMEOUT_S: float = Field(
-        default=60.0,
-        validation_alias=AliasChoices("LLM_REQUEST_TIMEOUT_S", "LLM_TIMEOUT_SECS"),
-    )
+    LLM_CLOUD_API_KEY: str | None = None
+    LLM_CLOUD_API_BASE: str | None = None
+    LLM_REQUEST_TIMEOUT_S: float = 60.0
     LLM_LAN_HEALTH_TIMEOUT_S: float = 1.0
     LLM_EMAIL_CLOUD_THRESHOLD_CHARS: int = 12000
     LLM_PRICELIST_CLOUD_THRESHOLD_ROWS: int = 500
@@ -374,15 +387,9 @@ class Settings(BaseSettings):
 
     # Alert bot configuration
     TELEGRAM_TOKEN: str = ""
-    TELEGRAM_DEFAULT_CHAT_ID: int | str | None = Field(
-        default=None,
-        validation_alias=AliasChoices("TELEGRAM_DEFAULT_CHAT_ID", "TELEGRAM_CHAT_ID"),
-    )
+    TELEGRAM_DEFAULT_CHAT_ID: int | str | None = None
     TELEGRAM_API_BASE: str = "https://api.telegram.org"
-    ALERTS_ENABLED: bool = Field(
-        default=True,
-        validation_alias=AliasChoices("ALERTS_ENABLED", "ENABLE_ALERTS"),
-    )
+    ALERTS_ENABLED: bool = True
     ALERT_RULES_SOURCE: Literal["yaml", "db"] = "yaml"
     ALERT_RULES_FILE: str = "config/alert_rules.yaml"
     ALERT_RULES_PATH: str = "services/alert_bot/config.yaml"
@@ -390,9 +397,7 @@ class Settings(BaseSettings):
     ALERT_RULES_WATCH_INTERVAL_S: float = 60.0
     ALERT_RULES_OVERRIDE: str | None = None
     ALERTS_EVALUATION_INTERVAL_CRON: str = Field(
-        default="*/5 * * * *",
-        validation_alias=AliasChoices("ALERTS_EVALUATION_INTERVAL_CRON", "ALERTS_CRON"),
-        description="Cron cadence for `alertbot.run` (default every 5 minutes).",
+        default="*/5 * * * *", description="Cron cadence for `alertbot.run` (default every 5 minutes)."
     )
     ALERT_SCHEDULE_CRON: str = Field(
         default="*/1 * * * *",
@@ -422,6 +427,8 @@ class Settings(BaseSettings):
     ASYNC_DB_POOL_SIZE: int = 10
     ASYNC_DB_MAX_OVERFLOW: int = 10
     ASYNC_DB_POOL_TIMEOUT: float = 30.0
+    DB_POOL_WARN_PCT: float = 0.85
+    DB_POOL_WARN_INTERVAL_S: float = 60.0
     DB_STATEMENT_TIMEOUT_SECONDS: int = 30
 
     # Logistics ETL configuration
@@ -459,6 +466,24 @@ class Settings(BaseSettings):
     REPRICER_BUYBOX_GAP: Decimal = Decimal("0.05")
     REPRICER_ROUND: Decimal = Decimal("0.10")
 
+    def __init__(self, **values: Any) -> None:
+        _apply_legacy_env_aliases()
+        super().__init__(**values)
+
+    def model_post_init(self, __context: Any) -> None:  # type: ignore[override]
+        super().model_post_init(__context)
+        global _LEGACY_LOGGED
+        if _LEGACY_ENV_USED:
+            for legacy, canonical in _LEGACY_ENV_USED:
+                pair = (legacy, canonical)
+                if pair in _LEGACY_LOGGED:
+                    continue
+                logger.warning(
+                    "config.legacy_env_alias",
+                    extra={"legacy_env": legacy, "canonical_env": canonical},
+                )
+                _LEGACY_LOGGED.add(pair)
+
     @cached_property
     def app(self) -> AppSettings:
         return AppSettings.from_settings(self)
@@ -484,6 +509,10 @@ class Settings(BaseSettings):
         return SecuritySettings.from_settings(self)
 
     @cached_property
+    def limiter(self) -> LimiterSettings:
+        return LimiterSettings.from_settings(self)
+
+    @cached_property
     def observability(self) -> ObservabilitySettings:
         return ObservabilitySettings.from_settings(self)
 
@@ -502,6 +531,10 @@ class Settings(BaseSettings):
     @cached_property
     def etl(self) -> EtlSettings:
         return EtlSettings.from_settings(self)
+
+    @cached_property
+    def ingestion(self) -> IngestionSettings:
+        return IngestionSettings.from_settings(self)
 
     @cached_property
     def maintenance(self) -> MaintenanceSettings:
@@ -613,6 +646,9 @@ class Settings(BaseSettings):
             "DATABASE_URL": _mask(self.DATABASE_URL),
             "PG_ASYNC_DSN": _mask(self.PG_ASYNC_DSN),
             "REDIS_URL": _mask(self.REDIS_URL),
+            "CACHE_REDIS_URL": _mask(self.CACHE_REDIS_URL),
+            "CACHE_DEFAULT_TTL_S": self.CACHE_DEFAULT_TTL_S,
+            "CACHE_NAMESPACE": self.CACHE_NAMESPACE,
             "BROKER_URL": _mask(self.BROKER_URL),
             "RESULT_BACKEND": _mask(getattr(self, "RESULT_BACKEND", None)),
             "SENTRY_DSN": "set" if bool(self.SENTRY_DSN) else None,
@@ -638,6 +674,9 @@ class Settings(BaseSettings):
             "RATE_LIMIT_VIEWER": self.RATE_LIMIT_VIEWER,
             "RATE_LIMIT_OPS": self.RATE_LIMIT_OPS,
             "RATE_LIMIT_ADMIN": self.RATE_LIMIT_ADMIN,
+            "LIMITER_NEAR_LIMIT_THRESHOLD": self.LIMITER_NEAR_LIMIT_THRESHOLD,
+            "REDIS_BACKLOG_WARN_SIZE": self.REDIS_BACKLOG_WARN_SIZE,
+            "DB_POOL_WARN_PCT": self.DB_POOL_WARN_PCT,
             "MAX_REQUEST_BYTES": self.MAX_REQUEST_BYTES,
             "HELIUM10_KEY": bool(self.HELIUM10_KEY),
             "METRICS_TEXTFILE_DIR": bool(self.METRICS_TEXTFILE_DIR),

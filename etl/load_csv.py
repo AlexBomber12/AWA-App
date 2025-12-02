@@ -52,18 +52,19 @@ class ImportValidationError(ImportFileError):
 
 
 _ETL_CFG = getattr(settings, "etl", None)
+_INGEST_CFG = getattr(settings, "ingestion", None)
 USE_COPY = bool(_ETL_CFG.use_copy if _ETL_CFG else getattr(settings, "USE_COPY", True))
 STREAMING_CHUNK_ENV = int(
-    _ETL_CFG.ingest_streaming_chunk_size if _ETL_CFG else getattr(settings, "INGEST_STREAMING_CHUNK_SIZE", 50_000)
+    _INGEST_CFG.streaming_chunk_size if _INGEST_CFG else getattr(settings, "INGEST_STREAMING_CHUNK_SIZE", 50_000)
 )
 STREAMING_CHUNK_SIZE_MB = int(
-    _ETL_CFG.ingest_streaming_chunk_size_mb if _ETL_CFG else getattr(settings, "INGEST_STREAMING_CHUNK_SIZE_MB", 8)
+    _INGEST_CFG.streaming_chunk_size_mb if _INGEST_CFG else getattr(settings, "INGEST_STREAMING_CHUNK_SIZE_MB", 8)
 )
 STREAMING_ENABLED = bool(
-    _ETL_CFG.ingest_streaming_enabled if _ETL_CFG else getattr(settings, "INGEST_STREAMING_ENABLED", True)
+    _INGEST_CFG.streaming_enabled if _INGEST_CFG else getattr(settings, "INGEST_STREAMING_ENABLED", True)
 )
 STREAMING_THRESHOLD_MB = int(
-    _ETL_CFG.ingest_streaming_threshold_mb if _ETL_CFG else getattr(settings, "INGEST_STREAMING_THRESHOLD_MB", 50)
+    _INGEST_CFG.streaming_threshold_mb if _INGEST_CFG else getattr(settings, "INGEST_STREAMING_THRESHOLD_MB", 50)
 )
 BUCKET = get_bucket_name()
 CSV_EXTENSIONS = {".csv", ".txt", ".tsv"}
@@ -554,8 +555,10 @@ def import_file(  # noqa: C901
         raise ImportValidationError("Unknown report: cannot detect dialect")
 
     target_table = _target_table_for(dialect)
-    idempotent_enabled = bool(_ETL_CFG.ingest_idempotent if _ETL_CFG else getattr(settings, "INGEST_IDEMPOTENT", True))
-    analyze_min = int(_ETL_CFG.analyze_min_rows if _ETL_CFG else getattr(settings, "ANALYZE_MIN_ROWS", 50_000))
+    idempotent_enabled = bool(
+        _INGEST_CFG.ingest_idempotent if _INGEST_CFG else getattr(settings, "INGEST_IDEMPOTENT", True)
+    )
+    analyze_min = int(_INGEST_CFG.analyze_min_rows if _INGEST_CFG else getattr(settings, "ANALYZE_MIN_ROWS", 50_000))
     warnings: list[str] = []
 
     meta_extra: dict[str, Any] = {

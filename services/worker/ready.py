@@ -17,8 +17,9 @@ async def ready():
     # 1) broker connectivity
     try:
         timeout = float(getattr(settings, "HEALTHCHECK_REDIS_SOCKET_TIMEOUT_S", 2.0))
+        redis_cfg = getattr(settings, "redis", None)
         r = redis.from_url(
-            settings.REDIS_URL,
+            redis_cfg.url if redis_cfg else settings.REDIS_URL,
             socket_connect_timeout=timeout,
             socket_timeout=timeout,
         )

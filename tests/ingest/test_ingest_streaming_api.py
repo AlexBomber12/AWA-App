@@ -12,8 +12,8 @@ pytestmark = pytest.mark.integration
 
 def _make_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     monkeypatch.setenv("CELERY_TASK_ALWAYS_EAGER", "true")
-    monkeypatch.setenv("CELERY_BROKER_URL", "memory://")
-    monkeypatch.setenv("CELERY_RESULT_BACKEND", "cache+memory://")
+    monkeypatch.setenv("BROKER_URL", "memory://")
+    monkeypatch.setenv("RESULT_BACKEND", "cache+memory://")
     monkeypatch.setenv("CELERY_TASK_STORE_EAGER_RESULT", "true")
     monkeypatch.setenv("INGEST_STREAMING_ENABLED", "1")
     monkeypatch.setenv("INGEST_STREAMING_THRESHOLD_MB", "1")
@@ -24,6 +24,7 @@ def _make_client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     from awa_common.settings import settings
 
     settings.__dict__.pop("etl", None)
+    settings.__dict__.pop("ingestion", None)
     monkeypatch.setattr(settings, "INGEST_STREAMING_ENABLED", True, raising=False)
     monkeypatch.setattr(settings, "INGEST_STREAMING_THRESHOLD_MB", 1, raising=False)
     monkeypatch.setattr(settings, "INGEST_STREAMING_CHUNK_SIZE_MB", 1, raising=False)

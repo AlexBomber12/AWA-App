@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import importlib
+import os
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -49,8 +50,19 @@ def _get_celery_cfg() -> CelerySettings | None:
 
 def make_celery() -> Celery:
     celery_cfg = _get_celery_cfg()
-    broker = celery_cfg.broker_url if celery_cfg else (settings.BROKER_URL or settings.REDIS_URL)
-    backend = celery_cfg.result_backend if celery_cfg else (settings.RESULT_BACKEND or settings.REDIS_URL)
+    redis_cfg = getattr(settings, "redis", None)
+    env_broker = os.getenv("BROKER_URL") or os.getenv("CELERY_BROKER_URL")
+    env_backend = os.getenv("RESULT_BACKEND") or os.getenv("CELERY_RESULT_BACKEND")
+    broker = (
+        env_broker or celery_cfg.broker_url
+        if celery_cfg
+        else (redis_cfg.broker_url if redis_cfg else (settings.BROKER_URL or settings.REDIS_URL))
+    )
+    backend = (
+        env_backend or celery_cfg.result_backend
+        if celery_cfg
+        else (settings.RESULT_BACKEND or (redis_cfg.url if redis_cfg else settings.REDIS_URL))
+    )
     app = Celery("awa_app", broker=broker, backend=backend)
     worker_prefetch = int(celery_cfg.prefetch_multiplier if celery_cfg else settings.CELERY_WORKER_PREFETCH_MULTIPLIER)
     task_time_limit = int(celery_cfg.task_time_limit if celery_cfg else settings.CELERY_TASK_TIME_LIMIT)
@@ -212,23 +224,37 @@ def _run_alertbot_startup_validation(**_: Any) -> None:
 
 
 if getattr(getattr(settings, "observability", None), "enable_metrics", True):
-    broker_url = getattr(getattr(settings, "redis", None), "broker_url", None) or settings.REDIS_URL
     redis_cfg = getattr(settings, "redis", None)
-    raw_queue_names = getattr(settings, "QUEUE_NAMES", None)
-    queue_names: list[str] | None = None
-    if isinstance(raw_queue_names, str) and raw_queue_names.strip():
-        queue_names = [item.strip() for item in raw_queue_names.split(",") if item.strip()]
-    elif redis_cfg and redis_cfg.queue_names:
-        queue_names = list(redis_cfg.queue_names)
+    broker_url = redis_cfg.broker_url if redis_cfg else settings.REDIS_URL
+    env_broker = os.getenv("BROKER_URL") or os.getenv("CELERY_BROKER_URL")
+    if env_broker:
+        broker_url = env_broker
     celery_cfg = _get_celery_cfg()
-    interval_s = int(celery_cfg.backlog_probe_seconds if celery_cfg else getattr(settings, "BACKLOG_PROBE_SECONDS", 15))
-    enable_celery_metrics(
-        celery_app,
-        broker_url=broker_url,
-        queue_names=queue_names,
-        backlog_interval_s=interval_s,
+    always_eager = env_bool(
+        "CELERY_TASK_ALWAYS_EAGER",
+        default=bool(celery_cfg.always_eager if celery_cfg else getattr(settings, "CELERY_TASK_ALWAYS_EAGER", False)),
     )
-    start_worker_metrics_http_if_enabled()
+    broker_mem = (broker_url or "").startswith(("memory://", "cache+memory://"))
+    if not always_eager and not broker_mem:
+        queue_names: list[str] | None = None
+        if redis_cfg and redis_cfg.queue_names:
+            queue_names = list(redis_cfg.queue_names)
+        else:
+            raw_queue_names = getattr(settings, "QUEUE_NAMES", None)
+            if isinstance(raw_queue_names, str) and raw_queue_names.strip():
+                queue_names = [item.strip() for item in raw_queue_names.split(",") if item.strip()]
+        interval_s = int(
+            celery_cfg.backlog_probe_seconds
+            if celery_cfg
+            else (redis_cfg.backlog_probe_seconds if redis_cfg else getattr(settings, "BACKLOG_PROBE_SECONDS", 15))
+        )
+        enable_celery_metrics(
+            celery_app,
+            broker_url=broker_url,
+            queue_names=queue_names,
+            backlog_interval_s=interval_s,
+        )
+        start_worker_metrics_http_if_enabled()
 
 nested_celery_cfg = _get_celery_cfg()
 

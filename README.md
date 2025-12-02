@@ -36,7 +36,7 @@ The AWA App monorepo powers wholesale automation: ETL agents ingest marketplace 
 - `packages/awa_common/settings.py` is the single source of truth for service configuration. Import `from awa_common.settings import settings` (or instantiate `Settings()` when a fresh read is required) instead of calling `os.getenv` inside services.
 - Shared parsing helpers live in `awa_common.utils.env`. Use `env_int`, `env_float`, or `env_bool` when a module must read a raw environment variable (for example inside CLI glue code) so that bounds and defaults stay consistent.
 - Database DSNs must come from `awa_common.dsn.build_dsn`. Ad-hoc DSN builders under `services/**` were removed in favour of the shared helper to keep aliases such as `PG_ASYNC_DSN` and `DATABASE_URL` aligned.
-- New knobs such as `ETL_HTTP_MAX_CONNECTIONS`, `LOGISTICS_TIMEOUT_S`, `FREIGHT_API_URL`, and `ALERT_DB_POOL_MAX_SIZE` are documented in `.env.example`. Copy the sample file when bootstrapping a new environment and add overrides there instead of sprinkling new env lookups through the codebase.
+- New knobs such as `HTTP_MAX_CONNECTIONS`, `LOGISTICS_TIMEOUT_S`, `FREIGHT_API_URL`, and `ALERT_DB_POOL_MAX_SIZE` are documented in `.env.example`. Copy the sample file when bootstrapping a new environment and add overrides there instead of sprinkling new env lookups through the codebase.
 
 ## Documentation
 - [Architecture Blueprint](docs/blueprint.md) — system map, deployment targets, and workflow for rolling out changes.

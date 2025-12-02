@@ -64,6 +64,8 @@ class DatabaseSettings(SettingsGroup):
     pool_size: int
     max_overflow: int
     pool_timeout: float
+    pool_warn_pct: float
+    pool_warn_interval_s: float
     statement_timeout_seconds: int
     alert_pool_min_size: int
     alert_pool_max_size: int
@@ -80,6 +82,8 @@ class DatabaseSettings(SettingsGroup):
             pool_size=int(cfg.ASYNC_DB_POOL_SIZE),
             max_overflow=int(cfg.ASYNC_DB_MAX_OVERFLOW),
             pool_timeout=float(cfg.ASYNC_DB_POOL_TIMEOUT),
+            pool_warn_pct=float(cfg.DB_POOL_WARN_PCT),
+            pool_warn_interval_s=float(cfg.DB_POOL_WARN_INTERVAL_S),
             statement_timeout_seconds=int(cfg.DB_STATEMENT_TIMEOUT_SECONDS),
             alert_pool_min_size=int(cfg.ALERT_DB_POOL_MIN_SIZE),
             alert_pool_max_size=int(cfg.ALERT_DB_POOL_MAX_SIZE),
@@ -93,17 +97,30 @@ class DatabaseSettings(SettingsGroup):
 class RedisSettings(SettingsGroup):
     url: str
     broker_url: str
+    cache_url: str
+    cache_ttl_s: int
+    cache_namespace: str
     queue_names: list[str]
     health_critical: bool
+    backlog_probe_seconds: int
+    backlog_warn_size: int
+    backlog_warn_interval_s: float
 
     @classmethod
     def from_settings(cls, cfg: Settings) -> RedisSettings:
         broker = cfg.BROKER_URL or cfg.REDIS_URL
+        cache_url = cfg.CACHE_REDIS_URL or cfg.REDIS_URL
         return cls(
             url=cfg.REDIS_URL,
             broker_url=broker,
+            cache_url=cache_url,
+            cache_ttl_s=int(cfg.CACHE_DEFAULT_TTL_S),
+            cache_namespace=cfg.CACHE_NAMESPACE,
             queue_names=_split_csv(cfg.QUEUE_NAMES),
             health_critical=bool(cfg.REDIS_HEALTH_CRITICAL),
+            backlog_probe_seconds=int(cfg.BACKLOG_PROBE_SECONDS),
+            backlog_warn_size=int(cfg.REDIS_BACKLOG_WARN_SIZE),
+            backlog_warn_interval_s=float(cfg.REDIS_BACKLOG_WARN_INTERVAL_S),
         )
 
 
@@ -207,9 +224,10 @@ class CelerySettings(SettingsGroup):
     @classmethod
     def from_settings(cls, cfg: Settings) -> CelerySettings:
         redis = cfg.REDIS_URL
+        redis_cfg = getattr(cfg, "redis", None)
         return cls(
-            broker_url=cfg.BROKER_URL or redis,
-            result_backend=cfg.RESULT_BACKEND or redis,
+            broker_url=cfg.BROKER_URL or (redis_cfg.broker_url if redis_cfg else redis),
+            result_backend=cfg.RESULT_BACKEND or (redis_cfg.url if redis_cfg else redis),
             prefetch_multiplier=int(cfg.CELERY_WORKER_PREFETCH_MULTIPLIER),
             task_time_limit=int(cfg.CELERY_TASK_TIME_LIMIT),
             store_eager_result=bool(cfg.CELERY_TASK_STORE_EAGER_RESULT),
@@ -219,7 +237,9 @@ class CelerySettings(SettingsGroup):
             loop_lag_monitor_enabled=bool(cfg.CELERY_LOOP_LAG_MONITOR),
             loop_lag_interval_s=float(cfg.CELERY_LOOP_LAG_INTERVAL_S or cfg.LOOP_LAG_INTERVAL_S),
             enable_metrics=bool(cfg.ENABLE_METRICS),
-            backlog_probe_seconds=int(cfg.BACKLOG_PROBE_SECONDS),
+            backlog_probe_seconds=int(
+                redis_cfg.backlog_probe_seconds if redis_cfg else getattr(cfg, "BACKLOG_PROBE_SECONDS", 15)
+            ),
             schedule_nightly_maintenance=bool(cfg.SCHEDULE_NIGHTLY_MAINTENANCE),
             nightly_maintenance_cron=cfg.NIGHTLY_MAINTENANCE_CRON,
             schedule_mv_refresh=bool(cfg.SCHEDULE_MV_REFRESH),
@@ -257,12 +277,6 @@ class SecuritySettings(SettingsGroup):
     oidc_jwks_timeout_total_s: float
     oidc_jwks_pool_limit: int
     oidc_jwks_background_refresh: bool
-    rate_limit_viewer: str
-    rate_limit_ops: str
-    rate_limit_admin: str
-    rate_limit_window_seconds: int
-    rate_limit_score_per_user: int
-    rate_limit_roi_by_vendor_per_user: int
     audit_enabled: bool
 
     @classmethod
@@ -284,13 +298,35 @@ class SecuritySettings(SettingsGroup):
             oidc_jwks_timeout_total_s=float(cfg.OIDC_JWKS_TIMEOUT_TOTAL_S),
             oidc_jwks_pool_limit=int(cfg.OIDC_JWKS_POOL_LIMIT),
             oidc_jwks_background_refresh=bool(cfg.OIDC_JWKS_BACKGROUND_REFRESH),
-            rate_limit_viewer=cfg.RATE_LIMIT_VIEWER,
-            rate_limit_ops=cfg.RATE_LIMIT_OPS,
-            rate_limit_admin=cfg.RATE_LIMIT_ADMIN,
-            rate_limit_window_seconds=int(cfg.RATE_LIMIT_WINDOW_SECONDS),
-            rate_limit_score_per_user=int(cfg.RATE_LIMIT_SCORE_PER_USER),
-            rate_limit_roi_by_vendor_per_user=int(cfg.RATE_LIMIT_ROI_BY_VENDOR_PER_USER),
             audit_enabled=bool(cfg.SECURITY_ENABLE_AUDIT),
+        )
+
+
+class LimiterSettings(SettingsGroup):
+    backend_url: str
+    viewer_limit: str
+    ops_limit: str
+    admin_limit: str
+    window_seconds: int
+    score_per_user: int
+    roi_by_vendor_per_user: int
+    near_limit_threshold: float
+    warn_interval_s: float
+
+    @classmethod
+    def from_settings(cls, cfg: Settings) -> LimiterSettings:
+        redis_cfg = getattr(cfg, "redis", None)
+        backend = redis_cfg.url if redis_cfg else cfg.REDIS_URL
+        return cls(
+            backend_url=backend,
+            viewer_limit=cfg.RATE_LIMIT_VIEWER,
+            ops_limit=cfg.RATE_LIMIT_OPS,
+            admin_limit=cfg.RATE_LIMIT_ADMIN,
+            window_seconds=int(cfg.RATE_LIMIT_WINDOW_SECONDS),
+            score_per_user=int(cfg.RATE_LIMIT_SCORE_PER_USER),
+            roi_by_vendor_per_user=int(cfg.RATE_LIMIT_ROI_BY_VENDOR_PER_USER),
+            near_limit_threshold=float(cfg.LIMITER_NEAR_LIMIT_THRESHOLD),
+            warn_interval_s=float(cfg.LIMITER_WARN_INTERVAL_S),
         )
 
 
@@ -482,17 +518,17 @@ class EtlSettings(SettingsGroup):
     @classmethod
     def from_settings(cls, cfg: Settings) -> EtlSettings:
         return cls(
-            connect_timeout_s=float(cfg.ETL_CONNECT_TIMEOUT_S),
-            read_timeout_s=float(cfg.ETL_READ_TIMEOUT_S),
-            total_timeout_s=float(cfg.ETL_TOTAL_TIMEOUT_S),
-            pool_timeout_s=float(cfg.ETL_POOL_TIMEOUT_S),
-            http_keepalive=int(cfg.ETL_HTTP_KEEPALIVE),
-            http_max_connections=int(cfg.ETL_HTTP_MAX_CONNECTIONS),
-            retry_attempts=int(cfg.ETL_RETRY_ATTEMPTS),
-            retry_base_s=float(cfg.ETL_RETRY_BASE_S),
-            retry_max_s=float(cfg.ETL_RETRY_MAX_S),
-            retry_jitter_s=float(cfg.ETL_RETRY_JITTER_S),
-            retry_status_codes=list(cfg.ETL_RETRY_STATUS_CODES or []),
+            connect_timeout_s=float(cfg.HTTP_CONNECT_TIMEOUT_S),
+            read_timeout_s=float(cfg.HTTP_READ_TIMEOUT_S),
+            total_timeout_s=float(cfg.HTTP_TOTAL_TIMEOUT_S),
+            pool_timeout_s=float(cfg.HTTP_POOL_TIMEOUT_S),
+            http_keepalive=int(cfg.HTTP_MAX_KEEPALIVE_CONNECTIONS),
+            http_max_connections=int(cfg.HTTP_MAX_CONNECTIONS),
+            retry_attempts=int(cfg.HTTP_MAX_RETRIES),
+            retry_base_s=float(cfg.HTTP_BACKOFF_BASE_S),
+            retry_max_s=float(cfg.HTTP_BACKOFF_MAX_S),
+            retry_jitter_s=float(cfg.HTTP_BACKOFF_JITTER_S),
+            retry_status_codes=list(cfg.HTTP_RETRY_STATUS_CODES or []),
             use_copy=bool(cfg.USE_COPY),
             ingest_chunk_size_mb=int(cfg.INGEST_CHUNK_SIZE_MB),
             ingest_streaming_threshold_mb=int(cfg.INGEST_STREAMING_THRESHOLD_MB),
@@ -515,6 +551,34 @@ class EtlSettings(SettingsGroup):
             sp_client_id=cfg.SP_CLIENT_ID,
             sp_client_secret=cfg.SP_CLIENT_SECRET,
             sp_api_base_url=cfg.SP_API_BASE_URL,
+        )
+
+
+class IngestionSettings(SettingsGroup):
+    max_request_bytes: int
+    chunk_size_mb: int
+    streaming_enabled: bool
+    streaming_threshold_mb: int
+    streaming_chunk_size_mb: int
+    streaming_chunk_size: int
+    spool_max_bytes: int
+    ingest_idempotent: bool
+    analyze_min_rows: int
+    queue_names: list[str]
+
+    @classmethod
+    def from_settings(cls, cfg: Settings) -> IngestionSettings:
+        return cls(
+            max_request_bytes=int(cfg.MAX_REQUEST_BYTES),
+            chunk_size_mb=int(cfg.INGEST_CHUNK_SIZE_MB),
+            streaming_enabled=bool(cfg.INGEST_STREAMING_ENABLED),
+            streaming_threshold_mb=int(cfg.INGEST_STREAMING_THRESHOLD_MB),
+            streaming_chunk_size_mb=int(cfg.INGEST_STREAMING_CHUNK_SIZE_MB),
+            streaming_chunk_size=int(cfg.INGEST_STREAMING_CHUNK_SIZE),
+            spool_max_bytes=int(getattr(cfg, "SPOOL_MAX_BYTES", 0)),
+            ingest_idempotent=bool(cfg.INGEST_IDEMPOTENT),
+            analyze_min_rows=int(cfg.ANALYZE_MIN_ROWS),
+            queue_names=_split_csv(cfg.QUEUE_NAMES),
         )
 
 
@@ -565,6 +629,8 @@ __all__ = [
     "DatabaseSettings",
     "EmailSettings",
     "EtlSettings",
+    "IngestionSettings",
+    "LimiterSettings",
     "LLMSettings",
     "MaintenanceSettings",
     "ObservabilitySettings",

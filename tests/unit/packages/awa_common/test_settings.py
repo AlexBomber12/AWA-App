@@ -1,3 +1,6 @@
+import pytest
+
+import awa_common.settings as settings_module
 from awa_common.settings import Settings
 
 
@@ -15,18 +18,22 @@ def test_redacted_masks_credentials() -> None:
     assert redacted["DATABASE_URL"] == "postgresql+psycopg://user:****@db/app"
 
 
-def test_celery_broker_alias(monkeypatch) -> None:
+def test_celery_broker_alias(monkeypatch, caplog: pytest.LogCaptureFixture) -> None:
+    settings_module._LEGACY_LOGGED.clear()
+    settings_module._LEGACY_ENV_USED.clear()
     monkeypatch.setenv("CELERY_BROKER_URL", "memory://")
-    settings = Settings()
-    assert settings.BROKER_URL == "memory://"
+    cfg = Settings()
+    assert cfg.BROKER_URL == "memory://"
+    assert ("CELERY_BROKER_URL", "BROKER_URL") in settings_module._LEGACY_ENV_USED
+    assert any("config.legacy_env_alias" in rec.message for rec in caplog.records)
 
 
 def test_new_logistics_and_http_fields(monkeypatch) -> None:
-    monkeypatch.setenv("ETL_HTTP_MAX_CONNECTIONS", "32")
+    monkeypatch.setenv("HTTP_MAX_CONNECTIONS", "32")
     monkeypatch.setenv("LOGISTICS_TIMEOUT_S", "21")
     monkeypatch.setenv("FREIGHT_API_URL", "https://example.com/rates.csv")
     settings = Settings()
-    assert settings.ETL_HTTP_MAX_CONNECTIONS == 32
+    assert settings.HTTP_MAX_CONNECTIONS == 32
     assert settings.LOGISTICS_TIMEOUT_S == 21
     assert settings.FREIGHT_API_URL == "https://example.com/rates.csv"
 

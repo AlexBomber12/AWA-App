@@ -108,13 +108,17 @@ def _resolve_uri_to_path(uri: str) -> Path:
 
 
 def _streaming_knobs() -> tuple[bool, int, int, int]:
-    etl_cfg = getattr(settings, "etl", None)
-    enabled = bool(etl_cfg.ingest_streaming_enabled if etl_cfg else getattr(settings, "INGEST_STREAMING_ENABLED", True))
+    try:
+        settings.__dict__.pop("ingestion", None)
+    except Exception:
+        pass
+    ingest_cfg = getattr(settings, "ingestion", None)
+    enabled = bool(ingest_cfg.streaming_enabled if ingest_cfg else getattr(settings, "INGEST_STREAMING_ENABLED", True))
     threshold_mb = int(
-        etl_cfg.ingest_streaming_threshold_mb if etl_cfg else getattr(settings, "INGEST_STREAMING_THRESHOLD_MB", 0)
+        ingest_cfg.streaming_threshold_mb if ingest_cfg else getattr(settings, "INGEST_STREAMING_THRESHOLD_MB", 0)
     )
     default_chunk_rows = (
-        etl_cfg.ingest_streaming_chunk_size if etl_cfg else getattr(settings, "INGEST_STREAMING_CHUNK_SIZE", 50_000)
+        ingest_cfg.streaming_chunk_size if ingest_cfg else getattr(settings, "INGEST_STREAMING_CHUNK_SIZE", 50_000)
     )
     env_chunk_override = os.getenv("INGEST_STREAMING_CHUNK_SIZE")
     if env_chunk_override is not None:
@@ -126,7 +130,7 @@ def _streaming_knobs() -> tuple[bool, int, int, int]:
         chunk_rows = int(default_chunk_rows)
     chunk_rows = max(1, chunk_rows)
     chunk_size_mb = int(
-        etl_cfg.ingest_streaming_chunk_size_mb if etl_cfg else getattr(settings, "INGEST_STREAMING_CHUNK_SIZE_MB", 0)
+        ingest_cfg.streaming_chunk_size_mb if ingest_cfg else getattr(settings, "INGEST_STREAMING_CHUNK_SIZE_MB", 0)
     )
     return enabled, threshold_mb, chunk_rows, chunk_size_mb
 

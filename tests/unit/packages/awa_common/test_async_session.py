@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 
@@ -10,6 +12,7 @@ from awa_common.db import async_session as async_db
 def _reset_state():
     async_db._ENGINE = None
     async_db._SESSIONMAKER = None
+    async_db._POOL_WARNINGS.clear()
 
 
 def teardown_module():
@@ -89,6 +92,55 @@ def test_getters_initialize_when_missing(monkeypatch):
     assert async_db.get_async_engine() == "engine-2"
     async_db._ENGINE = "engine-existing"
     assert async_db.get_async_engine() == "engine-existing"
+
+
+def test_pool_monitor_warns_near_capacity(monkeypatch, caplog):
+    caplog.set_level("WARNING")
+    usage: list[tuple[tuple, dict]] = []
+    near: list[str] = []
+    hooks: list[Callable[..., Any]] = []
+
+    monkeypatch.setattr(async_db, "record_db_pool_usage", lambda *args, **kwargs: usage.append((args, kwargs)))
+    monkeypatch.setattr(async_db, "record_db_pool_near_limit", lambda pool: near.append(pool))
+
+    def fake_listens_for(_target, _event_name):
+        def decorator(fn):
+            hooks.append(fn)
+            return fn
+
+        return decorator
+
+    monkeypatch.setattr(async_db.event, "listens_for", fake_listens_for)
+
+    class FakePool:
+        def __init__(self, checked: int, overflow: int = 0) -> None:
+            self._checked = checked
+            self._overflow = overflow
+
+        def checkedout(self) -> int:
+            return self._checked
+
+        def overflow(self) -> int:
+            return self._overflow
+
+    pool = FakePool(checked=9, overflow=1)
+    engine = SimpleNamespace(sync_engine=SimpleNamespace(pool=pool))
+    async_db._POOL_WARNINGS.clear()
+
+    async_db._install_pool_monitor(
+        engine,
+        pool_label="api",
+        pool_size=10,
+        max_overflow=0,
+        warn_pct=0.5,
+        warn_interval_s=0,
+    )
+
+    assert near == ["api"]
+    assert any("db_pool.near_limit" in rec.message for rec in caplog.records)
+    assert usage
+    for hook in hooks:
+        hook()
 
 
 @pytest.mark.asyncio
