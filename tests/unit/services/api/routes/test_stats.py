@@ -4,6 +4,7 @@ from typing import Any
 
 import pytest
 from cashews.exceptions import CacheBackendInteractionError
+from sqlalchemy import column, select, table
 from sqlalchemy.exc import SQLAlchemyError
 
 from awa_common import cache as cache_module
@@ -303,3 +304,11 @@ async def test_returns_stats_uses_cache(monkeypatch):
             meta_found = True
             break
     assert meta_found
+
+
+def test_returns_order_clause_nulls_last():
+    src = table("returns", column("asin"), column("qty"), column("refund_amount"))
+    order = stats_module._returns_order_clause("refund_desc", src)
+    stmt = select(src.c.asin).order_by(*order)
+    compiled = str(stmt)
+    assert "NULLS LAST" in compiled.upper()

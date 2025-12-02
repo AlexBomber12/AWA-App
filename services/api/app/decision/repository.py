@@ -13,6 +13,8 @@ from services.api.app.decision.models import (
     DecisionTaskRecord,
     PlannedDecisionTask,
     events,
+    normalize_alternatives,
+    normalize_reasons,
     tasks,
 )
 from services.api.roi_views import get_roi_view_name, quote_identifier
@@ -92,10 +94,40 @@ def _normalize_page_size(page_size: int | None) -> int:
 def _sort_clause(sort: str | None) -> Sequence[Any]:
     sort_key = (sort or "priority").lower()
     if sort_key == "deadline":
-        return (tasks.c.deadline_at.asc().nullslast(), tasks.c.priority.desc())
+        return (
+            tasks.c.deadline_at.asc().nullslast(),
+            tasks.c.priority.desc(),
+            tasks.c.created_at.desc(),
+            tasks.c.id.asc(),
+        )
     if sort_key == "created_at":
-        return (tasks.c.created_at.desc(),)
-    return (tasks.c.priority.desc(), tasks.c.deadline_at.asc().nullslast(), tasks.c.created_at.desc())
+        return (tasks.c.created_at.desc(), tasks.c.id.desc())
+    return (
+        tasks.c.priority.desc(),
+        tasks.c.deadline_at.asc().nullslast(),
+        tasks.c.created_at.desc(),
+        tasks.c.id.asc(),
+    )
+
+
+def _normalize_state(value: str | None) -> str | None:
+    if value is None:
+        return None
+    normalized = value.lower()
+    state_map = {
+        "open": "pending",
+        "pending": "pending",
+        "done": "applied",
+        "resolved": "applied",
+        "applied": "applied",
+        "dismissed": "dismissed",
+        "cancelled": "dismissed",
+        "blocked": "expired",
+        "expired": "expired",
+        "snoozed": "snoozed",
+        "in_progress": "snoozed",
+    }
+    return state_map.get(normalized, normalized)
 
 
 def _task_filters(
@@ -108,8 +140,9 @@ def _task_filters(
     task_id: str | None = None,
 ) -> list[Any]:
     conditions: list[Any] = []
-    if state and state != "all":
-        conditions.append(tasks.c.state == state)
+    state_filter = _normalize_state(state)
+    if state_filter and state_filter != "all":
+        conditions.append(tasks.c.state == state_filter)
     if source:
         conditions.append(tasks.c.source == source)
     if priority is not None:
@@ -228,6 +261,7 @@ async def upsert_tasks(
     saved: list[DecisionTaskRecord] = []
     for plan in plans:
         key = (plan.asin, plan.vendor_id, plan.decision)
+        links = _links_for_plan(plan)
         payload = {
             "source": plan.source or DECISION_SOURCE,
             "entity_type": plan.entity_type,
@@ -240,8 +274,9 @@ async def upsert_tasks(
             "priority": plan.priority,
             "deadline_at": plan.deadline_at,
             "default_action": plan.default_action,
-            "why": plan.why or [],
-            "alternatives": plan.alternatives or [],
+            "why": normalize_reasons(plan.why),
+            "alternatives": normalize_alternatives(plan.alternatives),
+            "links": links,
             "metrics": plan.metrics,
             "next_request_at": plan.next_request_at,
             "state": plan.state,
@@ -271,6 +306,25 @@ def _default_entity(plan: PlannedDecisionTask) -> dict[str, Any]:
     if plan.vendor_id is not None:
         entity["vendor_id"] = plan.vendor_id
     return entity
+
+
+def _links_for_plan(plan: PlannedDecisionTask) -> dict[str, Any]:
+    links = dict(plan.links or {})
+    if plan.asin and "asin" not in links:
+        links["asin"] = plan.asin
+    if plan.vendor_id is not None and "vendor_id" not in links:
+        links["vendor_id"] = plan.vendor_id
+    if plan.thread_id and "thread_id" not in links:
+        links["thread_id"] = plan.thread_id
+    if plan.entity_type and "entity_type" not in links:
+        links["entity_type"] = plan.entity_type
+    entity = plan.entity or {}
+    if isinstance(entity, Mapping):
+        for key in ("asin", "vendor_id", "campaign_id", "price_list_row_id", "entity_id"):
+            value = entity.get(key)
+            if value is not None and key not in links:
+                links[key] = value
+    return links
 
 
 async def update_task_state(

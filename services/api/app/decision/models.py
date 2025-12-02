@@ -62,6 +62,12 @@ tasks = sa.Table(
     sa.Column("next_request_at", sa.TIMESTAMP(timezone=True), nullable=True),
     sa.Column("state", sa.String(length=32), nullable=False, server_default=sa.text("'pending'")),
     sa.Column("assignee", sa.String(length=120), nullable=True),
+    sa.Column(
+        "links",
+        postgresql.JSONB(astext_type=sa.Text()),
+        nullable=False,
+        server_default=sa.text("'{}'::jsonb"),
+    ),
     sa.Column("created_at", sa.TIMESTAMP(timezone=True), server_default=sa.text("now()"), nullable=False),
     sa.Column(
         "updated_at",
@@ -90,6 +96,21 @@ sa.Index("ix_inbox_threads_vendor_id", inbox_threads.c.vendor_id)
 sa.Index("ix_inbox_threads_last_msg_at", inbox_threads.c.last_msg_at)
 
 sa.Index("ix_tasks_state_priority_deadline", tasks.c.state, tasks.c.priority, tasks.c.deadline_at)
+sa.Index(
+    "ix_tasks_state_priority_deadline_created",
+    tasks.c.state,
+    tasks.c.priority.desc(),
+    tasks.c.deadline_at.asc().nullslast(),
+    tasks.c.created_at.desc(),
+    tasks.c.id,
+)
+sa.Index(
+    "ix_tasks_priority_deadline_created",
+    tasks.c.priority.desc(),
+    tasks.c.deadline_at.asc().nullslast(),
+    tasks.c.created_at.desc(),
+    tasks.c.id,
+)
 sa.Index("ix_tasks_assignee_state", tasks.c.assignee, tasks.c.state)
 sa.Index("ix_tasks_asin_vendor", tasks.c.asin, tasks.c.vendor_id)
 
@@ -147,6 +168,126 @@ def _parse_json(value: Any, fallback: Any) -> Any:
     return value
 
 
+def _normalize_reason(item: Any) -> dict[str, Any]:
+    if item is None:
+        return {}
+    if isinstance(item, str):
+        return {"code": "info", "message": item}
+    if isinstance(item, Mapping):
+        code = str(item.get("code") or "info")
+        message = item.get("message") or item.get("detail") or item.get("title") or ""
+        data = item.get("data") or {}
+        if isinstance(data, Mapping):
+            data = dict(data)
+        metric = item.get("metric")
+        if not message:
+            message = code
+        if item.get("detail") and isinstance(data, dict) and "detail" not in data:
+            data = {**data, "detail": item.get("detail")}
+        if metric is not None:
+            try:
+                metric_value = float(metric) if not isinstance(metric, str) else metric
+            except (TypeError, ValueError):
+                metric_value = metric
+            data = {**(data or {}), "metric": metric_value}
+        payload: dict[str, Any] = {"code": code, "message": str(message)}
+        if data:
+            payload["data"] = data
+        if metric is not None:
+            payload["metric"] = metric
+        return payload
+    return {"code": "info", "message": str(item)}
+
+
+def normalize_reasons(items: Sequence[Any] | None) -> list[dict[str, Any]]:
+    reasons: list[dict[str, Any]] = []
+    if not items:
+        return reasons
+    is_sequence = isinstance(items, Sequence) and not isinstance(items, (str, Mapping))
+    items_iterable: Sequence[Any] = items if is_sequence else [items]
+    for item in items_iterable:
+        normalized = _normalize_reason(item)
+        if normalized:
+            reasons.append(normalized)
+    return reasons
+
+
+def _normalize_alternative(item: Any) -> dict[str, Any]:
+    if not isinstance(item, Mapping):
+        return {"action": str(item)}
+    action = item.get("action") or item.get("decision") or item.get("code") or "unspecified"
+    payload: dict[str, Any] = {"action": str(action)}
+    for key in ("label", "impact"):
+        value = item.get(key)
+        if value is not None:
+            payload[key] = value
+    confidence = item.get("confidence")
+    try:
+        if confidence is not None:
+            payload["confidence"] = float(confidence)
+    except (TypeError, ValueError):
+        pass
+    nested_reasons = item.get("why") or item.get("reasons")
+    reasons = normalize_reasons(nested_reasons if isinstance(nested_reasons, Sequence) else None)
+    if reasons:
+        payload["why"] = reasons
+    return payload
+
+
+def normalize_alternatives(items: Sequence[Any] | None) -> list[dict[str, Any]]:
+    alternatives: list[dict[str, Any]] = []
+    if not items:
+        return alternatives
+    is_sequence = isinstance(items, Sequence) and not isinstance(items, (str, Mapping))
+    items_iterable: Sequence[Any] = items if is_sequence else [items]
+    for item in items_iterable:
+        normalized = _normalize_alternative(item)
+        if normalized:
+            alternatives.append(normalized)
+    return alternatives
+
+
+def normalize_links(data: Mapping[str, Any]) -> dict[str, Any]:
+    links_raw = _parse_json(data.get("links"), {}) or {}
+    allowed_keys = {
+        "asin",
+        "vendor_id",
+        "thread_id",
+        "entity_type",
+        "campaign_id",
+        "price_list_row_id",
+        "entity_id",
+        "category",
+    }
+    merged: dict[str, Any] = {}
+    if isinstance(links_raw, Mapping):
+        for key, value in links_raw.items():
+            if value is not None and str(key) in allowed_keys:
+                merged[str(key)] = value
+    for key in ("asin", "vendor_id", "thread_id", "entity_type"):
+        value = data.get(key)
+        if value is not None and key not in merged:
+            merged[key] = value
+    entity = data.get("entity")
+    if isinstance(entity, Mapping):
+        asin = entity.get("asin")
+        vendor_id = entity.get("vendor_id")
+        campaign_id = entity.get("campaign_id")
+        price_list_row_id = entity.get("price_list_row_id")
+        entity_id = entity.get("entity_id")
+        if asin is not None:
+            merged.setdefault("asin", asin)
+        if vendor_id is not None:
+            merged.setdefault("vendor_id", vendor_id)
+        if campaign_id is not None:
+            merged.setdefault("campaign_id", campaign_id)
+        if price_list_row_id is not None:
+            merged.setdefault("price_list_row_id", price_list_row_id)
+        if entity_id is not None:
+            merged.setdefault("entity_id", entity_id)
+    return merged
+
+
 @dataclass(slots=True)
 class DecisionCandidate:
     asin: str
@@ -179,6 +320,7 @@ class PlannedDecisionTask:
     metrics: dict[str, Any] | None = None
     thread_id: str | None = None
     assignee: str | None = None
+    links: dict[str, Any] | None = None
 
 
 @dataclass(slots=True)
@@ -203,6 +345,7 @@ class DecisionTaskRecord:
     assignee: str | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
+    links: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
     def from_mapping(cls, data: Mapping[str, Any]) -> DecisionTaskRecord:
@@ -225,13 +368,14 @@ class DecisionTaskRecord:
             thread_id=data.get("thread_id"),
             deadline_at=data.get("deadline_at"),
             default_action=data.get("default_action"),
-            why=list(_parse_json(data.get("why"), [])),
-            alternatives=list(_parse_json(data.get("alternatives"), [])),
+            why=normalize_reasons(_parse_json(data.get("why"), []) or []),
+            alternatives=normalize_alternatives(_parse_json(data.get("alternatives"), []) or []),
             metrics=_parse_json(data.get("metrics"), None),
             next_request_at=data.get("next_request_at"),
             assignee=data.get("assignee"),
             created_at=data.get("created_at"),
             updated_at=data.get("updated_at"),
+            links=normalize_links(data),
         )
 
 
@@ -302,5 +446,8 @@ __all__: Sequence[str] = [  # pragma: no cover - export list only
     "events",
     "inbox_messages",
     "inbox_threads",
+    "normalize_alternatives",
+    "normalize_links",
+    "normalize_reasons",
     "tasks",
 ]
