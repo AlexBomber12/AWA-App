@@ -51,8 +51,8 @@ describe("Decision BFF route", () => {
     } as RequestInit);
     const response = await POST(request);
     expect(response.status).toBe(201);
-    const scenario = (await response.json()) as SimulationScenario;
-    expect(scenario.decisions.length).toBeGreaterThan(0);
-    expect(scenario.metrics?.roi).toBeDefined();
+    const scenario = (await response.json()) as SimulationScenario & { metrics?: SimulationScenario["result"] };
+    expect((scenario as any).decisions.length).toBeGreaterThan(0);
+    expect((scenario.metrics ?? scenario.result)?.roi).toBeDefined();
   });
 });

@@ -72,8 +72,11 @@ export function SimulationPanel({
     onRunSimulation(payload);
   };
 
+  const activeMetrics =
+    activeScenario?.result ?? (activeScenario as { metrics?: SimulationScenario["result"] } | null)?.metrics;
+
   return (
-  <div className="space-y-6">
+    <div className="space-y-6">
       <form onSubmit={handleSubmit} className="space-y-4 rounded-2xl border border-border bg-background p-5 shadow-sm">
         <div>
           <p className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Simulation input</p>
@@ -130,6 +133,7 @@ export function SimulationPanel({
         ) : (
           <div className="mt-4 space-y-2">
             {filteredScenarios.map((scenario) => {
+              const metrics = scenario.result ?? (scenario as { metrics?: SimulationScenario["result"] }).metrics;
               const isSelected = scenario.id === activeScenario?.id;
               return (
                 <button
@@ -143,7 +147,7 @@ export function SimulationPanel({
                 >
                   <p className="text-sm font-semibold">{scenario.name}</p>
                   <p className="text-xs text-muted-foreground">
-                    {scenario.result ? "Simulation only, not saved" : "Pending"}
+                    {metrics ? "Simulation only, not saved" : "Pending"}
                   </p>
                 </button>
               );
@@ -156,28 +160,32 @@ export function SimulationPanel({
         <p className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">Scenario result</p>
         {!activeScenario ? (
           <p className="mt-4 text-sm text-muted-foreground">Select a simulation to view details.</p>
-        ) : activeScenario.result ? (
+        ) : !activeMetrics ? (
+          <p className="mt-4 text-sm text-muted-foreground">
+            Simulation is pending. Once the result is available it will appear here.
+          </p>
+        ) : (
           <div className="mt-4 space-y-4">
             <div>
               <p className="text-base font-semibold">{activeScenario.description ?? "Simulation output"}</p>
               <p className="text-xs text-muted-foreground">Simulation only, not saved.</p>
               <div className="mt-3 grid gap-3 sm:grid-cols-3">
-                {activeScenario.result.roi !== undefined ? (
+                {activeMetrics.roi !== undefined ? (
                   <div className="rounded-lg border border-border bg-muted/20 p-3 text-sm">
                     <p className="text-xs uppercase text-muted-foreground">ROI</p>
-                    <p className="text-lg font-semibold">{activeScenario.result.roi.toFixed(1)}%</p>
+                    <p className="text-lg font-semibold">{activeMetrics.roi.toFixed(1)}%</p>
                   </div>
                 ) : null}
-                {activeScenario.result.riskAdjustedRoi !== undefined ? (
+                {activeMetrics.riskAdjustedRoi !== undefined ? (
                   <div className="rounded-lg border border-border bg-muted/20 p-3 text-sm">
                     <p className="text-xs uppercase text-muted-foreground">Risk-adjusted ROI</p>
-                    <p className="text-lg font-semibold">{activeScenario.result.riskAdjustedRoi.toFixed(1)}%</p>
+                    <p className="text-lg font-semibold">{activeMetrics.riskAdjustedRoi.toFixed(1)}%</p>
                   </div>
                 ) : null}
-                {activeScenario.result.maxCogs !== undefined ? (
+                {activeMetrics.maxCogs !== undefined ? (
                   <div className="rounded-lg border border-border bg-muted/20 p-3 text-sm">
                     <p className="text-xs uppercase text-muted-foreground">Max COGS</p>
-                    <p className="text-lg font-semibold">${activeScenario.result.maxCogs.toFixed(2)}</p>
+                    <p className="text-lg font-semibold">${activeMetrics.maxCogs.toFixed(2)}</p>
                   </div>
                 ) : null}
               </div>
@@ -206,10 +214,6 @@ export function SimulationPanel({
               </div>
             </div>
           </div>
-        ) : (
-          <p className="mt-4 text-sm text-muted-foreground">
-            Simulation is pending. Once the result is available it will appear here.
-          </p>
         )}
       </div>
     </div>

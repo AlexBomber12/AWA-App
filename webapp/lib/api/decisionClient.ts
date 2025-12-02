@@ -21,39 +21,45 @@ export const simulationScenariosQueryKey = ["decision", "scenarios"] as const;
 const buildResourceUrl = (resource: "rules" | "scenarios") => `${DECISION_ENDPOINT}?resource=${resource}`;
 
 export async function fetchDecisionSummary(signal?: AbortSignal): Promise<DecisionSummary> {
-  const response = await fetchFromBff<{ data: DecisionSummary }>(DECISION_ENDPOINT, {
+  const response = await fetchFromBff<{ data?: DecisionSummary; rules?: Rule[]; scenarios?: SimulationScenario[] }>(DECISION_ENDPOINT, {
     method: "GET",
     signal,
   });
-  return response.data;
+  if (response.data) {
+    return response.data;
+  }
+  return {
+    rules: response.rules ?? [],
+    scenarios: response.scenarios ?? [],
+  };
 }
 export const getDecisionSummary = fetchDecisionSummary;
 
 export async function fetchDecisionRules(signal?: AbortSignal): Promise<Rule[]> {
-  const response = await fetchFromBff<{ data: Rule[] }>(buildResourceUrl("rules"), {
+  const response = await fetchFromBff<{ data?: Rule[]; rules?: Rule[] }>(buildResourceUrl("rules"), {
     method: "GET",
     signal,
   });
-  return response.data;
+  return response.data ?? response.rules ?? [];
 }
 
 export async function fetchSimulationScenarios(signal?: AbortSignal): Promise<SimulationScenario[]> {
-  const response = await fetchFromBff<{ data: SimulationScenario[] }>(buildResourceUrl("scenarios"), {
+  const response = await fetchFromBff<{ data?: SimulationScenario[]; scenarios?: SimulationScenario[] }>(buildResourceUrl("scenarios"), {
     method: "GET",
     signal,
   });
-  return response.data;
+  return response.data ?? response.scenarios ?? [];
 }
 
 export async function runSimulation(payload: RunSimulationPayload): Promise<SimulationScenario> {
-  const response = await fetchFromBff<{ data: SimulationScenario }>(DECISION_ENDPOINT, {
+  const response = await fetchFromBff<{ data?: SimulationScenario }>(DECISION_ENDPOINT, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
     body: JSON.stringify(payload),
   });
-  return response.data;
+  return response.data ?? (response as unknown as SimulationScenario);
 }
 
 type UseDecisionSummaryQueryOptions = Omit<

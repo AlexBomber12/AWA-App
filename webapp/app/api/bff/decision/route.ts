@@ -7,6 +7,12 @@ import { parseString } from "@/lib/parsers";
 
 import { DECISION_RULES, SIMULATION_SCENARIOS, buildSimulationScenario, findRuleById } from "./data";
 
+const withIsActive = (rules: typeof DECISION_RULES) =>
+  rules.map((rule) => ({
+    ...rule,
+    isActive: (rule as { isActive?: boolean }).isActive ?? Boolean(rule.enabled),
+  }));
+
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
@@ -18,19 +24,20 @@ export async function GET(request: NextRequest) {
   const resource = parseString(request.nextUrl.searchParams.get("resource"));
 
   if (resource === "rules") {
-    return NextResponse.json({ data: DECISION_RULES });
+    const rules = withIsActive(DECISION_RULES);
+    return NextResponse.json({ data: rules, rules });
   }
 
   if (resource === "scenarios") {
-    return NextResponse.json({ data: SIMULATION_SCENARIOS });
+    return NextResponse.json({ data: SIMULATION_SCENARIOS, scenarios: SIMULATION_SCENARIOS });
   }
 
   const payload: DecisionSummary = {
-    rules: DECISION_RULES,
+    rules: withIsActive(DECISION_RULES),
     scenarios: SIMULATION_SCENARIOS,
   };
 
-  return NextResponse.json({ data: payload });
+  return NextResponse.json({ data: payload, ...payload });
 }
 
 export async function POST(request: NextRequest) {
@@ -56,8 +63,12 @@ export async function POST(request: NextRequest) {
     return errorResponse(404, "NOT_FOUND", "Rule not found for simulation.");
   }
 
-  const scenario: SimulationScenario = buildSimulationScenario(rule.id, (payload.input ?? {}) as SimulationInput);
-  return NextResponse.json({ data: scenario }, { status: 201 });
+  const scenario = buildSimulationScenario(rule.id, (payload.input ?? {}) as SimulationInput);
+  const withMetrics: SimulationScenario & { metrics: SimulationScenario["result"] } = {
+    ...scenario,
+    metrics: scenario.result ?? scenario.metrics,
+  };
+  return NextResponse.json({ data: withMetrics, ...withMetrics }, { status: 201 });
 }
 
 const methodNotAllowed = () =>

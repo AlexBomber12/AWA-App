@@ -74,7 +74,8 @@ export const getInboxTasks = fetchInboxTasks;
 
 export async function fetchTaskById(taskId: string, signal?: AbortSignal): Promise<Task | null> {
   const response = await fetchInboxTasks({ taskId, page: 1, pageSize: 1 }, signal);
-  return response.data?.[0] ?? null;
+  const items = response.data ?? response.items ?? [];
+  return items[0] ?? null;
 }
 
 type UseInboxTasksOptions = Omit<
