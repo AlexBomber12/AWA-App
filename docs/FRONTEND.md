@@ -11,8 +11,22 @@ follow the conventions below.
    the App Router pages, proxy authenticated calls, and apply UI-specific shaping before forwarding
    to FastAPI. ROI, Returns, Inbox, and Decision Engine all flow through these endpoints.
 3. **FastAPI backend (`services/api`).** Remains the system of record for auth, RBAC, business
-   workflows, and event ingestion. UI calls it via `NEXT_PUBLIC_API_URL` through the upcoming BFF
-   layer or directly for simple read-only endpoints.
+   workflows, and event ingestion. UI calls it via `NEXT_PUBLIC_API_URL` through the BFF layer for
+   ROI, Returns, Inbox, and Decision flows; only explicitly simple read-only endpoints hit FastAPI
+   directly.
+
+### BFF responsibilities
+- Each major feature uses a dedicated BFF route: `/api/bff/roi` (listing, filters, pagination,
+  sorting), `/api/bff/returns` (returns stats/listing), `/api/bff/inbox` (task lists plus
+  apply/dismiss/snooze/undo actions), and `/api/bff/decision` (decision preview/run endpoints and
+  simulation helpers).
+- Routes load the server session with `getServerAuthSession`, enforce the same ACL that
+  `PermissionGuard`/`requirePermission` relies on, and forward bearer tokens to FastAPI.
+- Handlers reshape the FastAPI responses (typed from `lib/api/types.generated.ts`) into UI-friendly
+  camelCase DTOs without altering business semantics.
+- Feature clients (`roiClient`, `returnsClient`, `inboxClient`, `decisionClient`, etc.) call these
+  routes via `fetchFromBff`; direct FastAPI access is reserved for explicitly documented,
+  read-only cases.
 
 ## Project layout
 - `webapp/app/`
@@ -20,7 +34,9 @@ follow the conventions below.
   - `page.tsx` redirects to `/dashboard`.
   - `app/dashboard|roi|sku|ingest|returns|inbox|decision|settings/page.tsx` are presentational stub
     routes so navigation can be validated visually.
-  - `app/api/bff/*` will host API handlers that terminate in FastAPI once PR-UI-1B lands.
+  - `app/api/bff/*` hosts BFF API handlers that terminate in FastAPI; `/api/bff/roi`,
+    `/api/bff/returns`, `/api/bff/inbox`, and `/api/bff/decision` back the ROI, Returns, Inbox, and
+    Decision Engine pages.
 - `webapp/components/layout/` hosts the shell primitives shared by every route:
   - `AppShell` wires auth + permissions and renders the sidebar/header.
   - `PageHeader`, `PageBody`, and `Breadcrumbs` provide consistent page structure.
@@ -236,16 +252,13 @@ React Query caches, DTO shaping, and permission checks consistent. `PermissionGu
 buttons (ROI bulk approve, Inbox actions, Decision simulations) for non-authorized roles and renders
 fallback messaging in Storybook, unit tests, and production.
 
-## Roadmap & scope guardrails
-- **PR-UI-1A (this change):** Bootstrap App Router, Tailwind design tokens, shadcn/ui wiring,
-  navigation stubs, Jest + Playwright smoke coverage, docker + docs integration.
-- **PR-UI-1B:** Added NextAuth with Keycloak, the BFF routes under `app/api/bff`, and Settings controls
-  for environment + RBAC toggles.
-- **Later milestones:** Fill in ROI, SKU, Ingest, Returns, Inbox, and Decision Engine workflows as
-  described in the ROI and Virtual Buyer specifications.
-
-Until PR-UI-1B lands:
-- **Do not** ship Keycloak/NextAuth wiring, API mutations, or RBAC switches. Keep routes stubbed.
-- **Do not** add bespoke layout shells. Extend `AppShell` instead so navigation stays uniform.
-- **Do** keep all new code in TypeScript (`.ts`/`.tsx`) and follow the Tailwind tokens defined in
-  `globals.css`.
+## Scope guardrails
+- Current stack: App Router, Tailwind design tokens, shadcn/ui wiring, navigation stubs, Jest +
+  Playwright smoke coverage, docker + docs integration.
+- Auth/BFF: NextAuth with Keycloak and the `app/api/bff/*` routes are live; Settings controls expose
+  environment and RBAC toggles.
+- Active feature work: ROI, SKU, Ingest, Returns, Inbox, and Decision Engine workflows follow the
+  ROI and Virtual Buyer specifications.
+- Guardrails: keep NextAuth/BFF wiring intact (no direct FastAPI calls outside documented
+  read-only exceptions), extend `AppShell` instead of bespoke layout shells, and keep new UI code in
+  TypeScript with the Tailwind tokens defined in `globals.css`.
