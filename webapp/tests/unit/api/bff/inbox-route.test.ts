@@ -62,7 +62,7 @@ describe("Inbox BFF route", () => {
       status: "open",
       why: [{ code: "roi_guardrail", message: "ROI low" }],
       alternatives: [{ action: "wait_until", label: "Wait" }],
-      state: "open",
+      state: "applied",
       summary: "Review ROI",
       created_at: "2024-01-01T00:00:00.000Z",
       updated_at: "2024-01-02T00:00:00.000Z",
@@ -85,7 +85,7 @@ describe("Inbox BFF route", () => {
     expect(payload.items[0]).toEqual(
       expect.objectContaining({
         id: "task-1",
-        state: "open",
+        state: "done",
         decision: expect.objectContaining({ decision: "request_price" }),
         priority: "critical",
       })

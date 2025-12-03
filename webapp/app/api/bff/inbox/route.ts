@@ -51,6 +51,29 @@ const priorityFilterValue = (value?: string | null): number | undefined => {
   return undefined;
 };
 
+const normalizeState = (state: string | null | undefined): TaskState => {
+  switch (state) {
+    case "pending":
+    case "open":
+      return "open";
+    case "applied":
+    case "done":
+      return "done";
+    case "dismissed":
+    case "cancelled":
+      return "cancelled";
+    case "expired":
+    case "blocked":
+      return "blocked";
+    case "snoozed":
+      return "snoozed";
+    case "in_progress":
+      return "in_progress";
+    default:
+      return "open";
+  }
+};
+
 const toStatusFromState = (state: TaskState): Task["status"] => {
   switch (state) {
     case "done":
@@ -180,7 +203,7 @@ const normalizeEntity = (entity: DecisionTask["entity"]) => {
 
 export const toTask = (task: DecisionTask): Task => {
   const decision = toDecisionPayload(task);
-  const state = (task.state as TaskState | null) ?? "open";
+  const state = normalizeState(task.state);
   const entity = normalizeEntity(task.entity);
 
   return {
