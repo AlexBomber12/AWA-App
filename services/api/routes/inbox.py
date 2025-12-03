@@ -95,3 +95,38 @@ async def dismiss_task(
     if updated is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
     return serialize_task(updated)
+
+
+@router.post("/tasks/{task_id}/snooze", response_model=DecisionTask)
+async def snooze_task(
+    task_id: str,
+    body: TaskUpdateRequest | None = None,
+    session: AsyncSession = Depends(get_async_session),
+    user: UserCtx = Depends(require_ops),
+    _limit: None = Depends(limit_ops),
+) -> DecisionTask:
+    next_request_at = body.next_request_at if body else None
+    updated = await service.snooze_task(
+        session,
+        task_id,
+        actor=_resolve_actor(user),
+        note=body.note if body else None,
+        next_request_at=next_request_at,
+    )
+    if updated is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+    return serialize_task(updated)
+
+
+@router.post("/tasks/{task_id}/undo", response_model=DecisionTask)
+async def undo_task(
+    task_id: str,
+    body: TaskUpdateRequest | None = None,
+    session: AsyncSession = Depends(get_async_session),
+    user: UserCtx = Depends(require_ops),
+    _limit: None = Depends(limit_ops),
+) -> DecisionTask:
+    updated = await service.reopen_task(session, task_id, actor=_resolve_actor(user), note=body.note if body else None)
+    if updated is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+    return serialize_task(updated)

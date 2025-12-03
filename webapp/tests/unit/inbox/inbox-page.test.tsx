@@ -44,21 +44,56 @@ const inboxItems: Task[] = [
   },
 ];
 
-const inboxResponse: InboxListResponse = {
-  data: inboxItems,
-  items: inboxItems,
-  pagination: { page: 1, pageSize: 25, total: 1, totalPages: 1 },
-  summary: { open: 1, inProgress: 0, blocked: 0 },
-};
+let currentItems: Task[] = [...inboxItems];
+
+const buildInboxResponse = (): InboxListResponse => ({
+  data: currentItems,
+  items: currentItems,
+  pagination: { page: 1, pageSize: 25, total: currentItems.length, totalPages: 1 },
+  summary: { open: currentItems.filter((task) => task.state === "open").length, inProgress: 0, blocked: 0 },
+});
 
 const server = setupServer(
   rest.get("http://localhost:3000/api/bff/inbox", (_req, res, ctx) => {
-    return res(ctx.json(inboxResponse));
+    return res(ctx.json(buildInboxResponse()));
+  }),
+  rest.post("http://localhost:3000/api/bff/inbox/tasks/:taskId/apply", (req, res, ctx) => {
+    const taskId = req.params.taskId as string;
+    currentItems = currentItems.map((task) => (task.id === taskId ? { ...task, state: "done" } : task));
+    const match = currentItems.find((task) => task.id === taskId) ?? currentItems[0];
+    return res(ctx.json({ data: match }));
+  }),
+  rest.post("http://localhost:3000/api/bff/inbox/tasks/:taskId/dismiss", (req, res, ctx) => {
+    const taskId = req.params.taskId as string;
+    currentItems = currentItems.map((task) => (task.id === taskId ? { ...task, state: "cancelled" } : task));
+    const match = currentItems.find((task) => task.id === taskId) ?? currentItems[0];
+    return res(ctx.json({ data: match }));
+  }),
+  rest.post("http://localhost:3000/api/bff/inbox/tasks/:taskId/snooze", async (req, res, ctx) => {
+    const body = await req.json();
+    const taskId = req.params.taskId as string;
+    const nextRequestAt = (body as { next_request_at?: string }).next_request_at ?? new Date().toISOString();
+    currentItems = currentItems.map((task) =>
+      task.id === taskId
+        ? { ...task, state: "snoozed", decision: { ...task.decision, nextRequestAt } }
+        : task
+    );
+    const match = currentItems.find((task) => task.id === taskId) ?? currentItems[0];
+    return res(ctx.json({ data: match }));
+  }),
+  rest.post("http://localhost:3000/api/bff/inbox/tasks/:taskId/undo", (req, res, ctx) => {
+    const taskId = req.params.taskId as string;
+    currentItems = currentItems.map((task) => (task.id === taskId ? { ...task, state: "open" } : task));
+    const match = currentItems.find((task) => task.id === taskId) ?? currentItems[0];
+    return res(ctx.json({ data: match }));
   })
 );
 
 beforeAll(() => server.listen());
-afterEach(() => server.resetHandlers());
+afterEach(() => {
+  server.resetHandlers();
+  currentItems = [...inboxItems];
+});
 afterAll(() => server.close());
 
 const buildSession = (roles: string[]): Session => ({

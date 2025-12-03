@@ -320,9 +320,66 @@ async def dismiss_task(
     return updated
 
 
+async def snooze_task(
+    session: AsyncSession,
+    task_id: str,
+    *,
+    actor: str | None = None,
+    note: str | None = None,
+    next_request_at: dt.datetime | None = None,
+) -> DecisionTaskRecord | None:
+    updated = await repository.update_task_state(
+        session,
+        task_id,
+        "snoozed",
+        actor=actor,
+        note=note,
+        next_request_at=next_request_at,
+        event_type="decision_snoozed",
+    )
+    if updated:
+        await _update_inbox_gauge(session)
+        logger.info(
+            "decision.tasks.snoozed",
+            task_id=task_id,
+            decision=updated.decision,
+            next_request_at=next_request_at,
+            priority=updated.priority,
+        )
+    return updated
+
+
+async def reopen_task(
+    session: AsyncSession,
+    task_id: str,
+    *,
+    actor: str | None = None,
+    note: str | None = None,
+) -> DecisionTaskRecord | None:
+    updated = await repository.update_task_state(
+        session,
+        task_id,
+        "pending",
+        actor=actor,
+        note=note,
+        event_type="decision_reopened",
+    )
+    if updated:
+        await _update_inbox_gauge(session)
+        logger.info(
+            "decision.tasks.reopened",
+            task_id=task_id,
+            decision=updated.decision,
+            priority=updated.priority,
+        )
+    return updated
+
+
 __all__ = [
     "apply_task",
     "build_decision_task",
     "dismiss_task",
     "generate_tasks",
+    "reopen_task",
+    "snooze_task",
 ]

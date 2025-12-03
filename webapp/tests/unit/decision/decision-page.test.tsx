@@ -92,15 +92,15 @@ const server = setupServer(
   rest.get("http://localhost:3000/api/bff/decision", (req, res, ctx) => {
     const resource = req.url.searchParams.get("resource");
     if (resource === "rules") {
-      return res(ctx.json(rulesResponse));
+      return res(ctx.json({ data: rulesResponse.rules, rules: rulesResponse.rules }));
     }
     if (resource === "scenarios") {
-      return res(ctx.json(scenariosResponse));
+      return res(ctx.json({ data: scenariosResponse.scenarios, scenarios: scenariosResponse.scenarios }));
     }
-    return res(ctx.json({ rules: rulesResponse.rules, scenarios: scenariosResponse.scenarios }));
+    return res(ctx.json({ data: { rules: rulesResponse.rules, scenarios: scenariosResponse.scenarios } }));
   }),
   rest.post("http://localhost:3000/api/bff/decision", (_req, res, ctx) => {
-    return res(ctx.status(201), ctx.json(newScenario));
+    return res(ctx.status(201), ctx.json({ data: newScenario, ...newScenario }));
   })
 );
 

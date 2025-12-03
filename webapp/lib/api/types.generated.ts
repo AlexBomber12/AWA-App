@@ -55,6 +55,125 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/inbox/tasks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Inbox Tasks */
+        get: operations["list_inbox_tasks_inbox_tasks_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/inbox/tasks/{task_id}/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Apply Task */
+        post: operations["apply_task_inbox_tasks__task_id__apply_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/inbox/tasks/{task_id}/dismiss": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Dismiss Task */
+        post: operations["dismiss_task_inbox_tasks__task_id__dismiss_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/inbox/tasks/{task_id}/snooze": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Snooze Task */
+        post: operations["snooze_task_inbox_tasks__task_id__snooze_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/inbox/tasks/{task_id}/undo": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Undo Task */
+        post: operations["undo_task_inbox_tasks__task_id__undo_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/decision/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Preview Decisions */
+        get: operations["preview_decisions_decision_preview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/decision/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Run Decision Engine */
+        post: operations["run_decision_engine_decision_run_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/roi": {
         parameters: {
             query?: never;
@@ -264,6 +383,152 @@ export interface components {
              * Format: binary
              */
             file: string;
+        };
+        /** DecisionAlternative */
+        DecisionAlternative: {
+            /** Action */
+            action: string;
+            /** Label */
+            label?: string | null;
+            /** Impact */
+            impact?: string | null;
+            /** Confidence */
+            confidence?: number | null;
+            /** Why */
+            why?: components["schemas"]["DecisionReason"][];
+        };
+        /** DecisionLinks */
+        DecisionLinks: {
+            /** Asin */
+            asin?: string | null;
+            /** Vendor Id */
+            vendor_id?: number | null;
+            /** Thread Id */
+            thread_id?: string | null;
+            /** Entity Type */
+            entity_type?: string | null;
+            /** Campaign Id */
+            campaign_id?: number | null;
+            /** Price List Row Id */
+            price_list_row_id?: string | null;
+            /** Entity Id */
+            entity_id?: string | null;
+            /** Category */
+            category?: string | null;
+        };
+        /** DecisionPreviewResponse */
+        DecisionPreviewResponse: {
+            /** Planned */
+            planned: components["schemas"]["DecisionTask"][];
+            /** Generated */
+            generated: number;
+            /** Candidates */
+            candidates: number;
+        };
+        /** DecisionReason */
+        DecisionReason: {
+            /** Code */
+            code: string;
+            /** Message */
+            message: string;
+            /** Data */
+            data?: {
+                [key: string]: unknown;
+            } | null;
+            /** Metric */
+            metric?: string | null;
+        };
+        /** DecisionTask */
+        DecisionTask: {
+            /** Id */
+            id: string;
+            /** Source */
+            source: string;
+            /** Entity */
+            entity: {
+                [key: string]: unknown;
+            };
+            /** Decision */
+            decision: string;
+            /** Priority */
+            priority: number;
+            /** Status */
+            status: string;
+            /** Deadline At */
+            deadline_at?: string | null;
+            /** Default Action */
+            default_action?: string | null;
+            /** Why */
+            why?: components["schemas"]["DecisionReason"][];
+            /** Alternatives */
+            alternatives?: components["schemas"]["DecisionAlternative"][];
+            /** Next Request At */
+            next_request_at?: string | null;
+            /** State */
+            state?: string | null;
+            /** Assignee */
+            assignee?: string | null;
+            /** Summary */
+            summary?: string | null;
+            /** Metrics */
+            metrics?: {
+                [key: string]: unknown;
+            } | null;
+            links?: components["schemas"]["DecisionLinks"];
+            /** Created At */
+            created_at?: string | null;
+            /** Updated At */
+            updated_at?: string | null;
+        };
+        /** DecisionTaskListResponse */
+        DecisionTaskListResponse: {
+            /** Items */
+            items: components["schemas"]["DecisionTask"][];
+            pagination: components["schemas"]["PaginationMeta"];
+            summary?: components["schemas"]["DecisionTaskSummary"] | null;
+        };
+        /** DecisionTaskSummary */
+        DecisionTaskSummary: {
+            /**
+             * Pending
+             * @default 0
+             */
+            pending: number;
+            /**
+             * Applied
+             * @default 0
+             */
+            applied: number;
+            /**
+             * Dismissed
+             * @default 0
+             */
+            dismissed: number;
+            /**
+             * Expired
+             * @default 0
+             */
+            expired: number;
+            /**
+             * Snoozed
+             * @default 0
+             */
+            snoozed: number;
+            /**
+             * Open
+             * @default 0
+             */
+            open: number;
+            /**
+             * In Progress
+             * @default 0
+             */
+            in_progress: number;
+            /**
+             * Blocked
+             * @default 0
+             */
+            blocked: number;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -605,6 +870,17 @@ export interface components {
         StatsKPIResponse: {
             kpi: components["schemas"]["StatsKPI"];
         };
+        /** TaskUpdateRequest */
+        TaskUpdateRequest: {
+            /** State */
+            state?: ("pending" | "snoozed" | "applied" | "dismissed" | "expired") | null;
+            /** Assignee */
+            assignee?: string | null;
+            /** Note */
+            note?: string | null;
+            /** Next Request At */
+            next_request_at?: string | null;
+        };
         /** ValidationError */
         ValidationError: {
             /** Location */
@@ -713,6 +989,248 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_inbox_tasks_inbox_tasks_get: {
+        parameters: {
+            query?: {
+                page?: number;
+                pageSize?: number;
+                state?: string | null;
+                status?: string | null;
+                source?: string | null;
+                priority?: number | null;
+                assignee?: string | null;
+                search?: string | null;
+                taskId?: string | null;
+                sort?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DecisionTaskListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    apply_task_inbox_tasks__task_id__apply_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["TaskUpdateRequest"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DecisionTask"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    dismiss_task_inbox_tasks__task_id__dismiss_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["TaskUpdateRequest"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DecisionTask"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    snooze_task_inbox_tasks__task_id__snooze_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["TaskUpdateRequest"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DecisionTask"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    undo_task_inbox_tasks__task_id__undo_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["TaskUpdateRequest"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DecisionTask"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_decisions_decision_preview_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DecisionPreviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    run_decision_engine_decision_run_post: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DecisionTaskListResponse"];
                 };
             };
             /** @description Validation Error */

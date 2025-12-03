@@ -16,7 +16,14 @@ import {
   SelectValue,
 } from "@/components/ui";
 import type { InboxListResponse, InboxQuery } from "@/lib/api/inboxClient";
-import { inboxTasksQueryKey, useInboxTasks } from "@/lib/api/inboxClient";
+import {
+  inboxTasksQueryKey,
+  useDismissTaskMutation,
+  useInboxTasks,
+  useMarkTaskDoneMutation,
+  useSnoozeTaskMutation,
+  useUndoTaskActionMutation,
+} from "@/lib/api/inboxClient";
 import type { Task, TaskSource, TaskState } from "@/lib/api/inboxTypes";
 import type { DecisionPriority } from "@/lib/api/decisionTypes";
 
@@ -72,8 +79,13 @@ export function InboxPage() {
   const [draftFilters, setDraftFilters] = useState<FilterState>(DEFAULT_FILTERS);
   const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
   const [sort, setSort] = useState<InboxSort>("priority");
+  const [lastTaskId, setLastTaskId] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const { runAction, undoLastAction, canUndo, isRunning, lastActionLabel } = useActionFlow();
+  const markDoneMutation = useMarkTaskDoneMutation();
+  const snoozeMutation = useSnoozeTaskMutation();
+  const dismissMutation = useDismissTaskMutation();
+  const undoTaskMutation = useUndoTaskActionMutation();
 
   const query = useMemo<InboxQuery>(
     () => ({
@@ -130,6 +142,24 @@ export function InboxPage() {
     [queryClient, queryKey]
   );
 
+  const replaceTaskInCache = useCallback(
+    (updated: Task) => {
+      queryClient.setQueryData<InboxListResponse>(queryKey, (current) => {
+        if (!current) {
+          return current;
+        }
+        const items = current.data ?? current.items ?? [];
+        const nextItems = items.map((task) => (task.id === updated.id ? updated : task));
+        return { ...current, data: nextItems, items: nextItems };
+      });
+    },
+    [queryClient, queryKey]
+  );
+
+  const refreshTasks = useCallback(() => {
+    void inboxQuery.refetch();
+  }, [inboxQuery]);
+
   const handleApply = useCallback(
     (task: Task) => {
       void runAction({
@@ -143,9 +173,15 @@ export function InboxPage() {
             state: "done",
             updatedAt: new Date().toISOString(),
           })),
+        handler: async () => {
+          const updated = await markDoneMutation.mutateAsync(task.id);
+          setLastTaskId(task.id);
+          replaceTaskInCache(updated);
+          refreshTasks();
+        },
       });
     },
-    [runAction, updateTask]
+    [markDoneMutation, refreshTasks, replaceTaskInCache, runAction, updateTask]
   );
 
   const handleDecline = useCallback(
@@ -160,9 +196,15 @@ export function InboxPage() {
             state: "cancelled",
             updatedAt: new Date().toISOString(),
           })),
+        handler: async () => {
+          const updated = await dismissMutation.mutateAsync(task.id);
+          setLastTaskId(task.id);
+          replaceTaskInCache(updated);
+          refreshTasks();
+        },
       });
     },
-    [runAction, updateTask]
+    [dismissMutation, refreshTasks, replaceTaskInCache, runAction, updateTask]
   );
 
   const handleSnooze = useCallback(
@@ -179,10 +221,30 @@ export function InboxPage() {
             updatedAt: new Date().toISOString(),
             decision: current.decision ? { ...current.decision, nextRequestAt: nextFollowUp } : undefined,
           })),
+        handler: async () => {
+          const updated = await snoozeMutation.mutateAsync({ taskId: task.id, nextRequestAt: nextFollowUp });
+          setLastTaskId(task.id);
+          replaceTaskInCache(updated);
+          refreshTasks();
+        },
       });
     },
-    [runAction, updateTask]
+    [refreshTasks, replaceTaskInCache, runAction, snoozeMutation, updateTask]
   );
+
+  const handleUndo = useCallback(() => {
+    if (lastTaskId) {
+      void undoTaskMutation
+        .mutateAsync(lastTaskId)
+        .then((updated) => {
+          replaceTaskInCache(updated);
+          refreshTasks();
+        })
+        .catch(() => refreshTasks());
+    }
+    undoLastAction();
+    setLastTaskId(null);
+  }, [lastTaskId, refreshTasks, replaceTaskInCache, undoLastAction, undoTaskMutation]);
 
   const handleSelectTask = (task: Task) => {
     setSelectedTaskId(task.id);
@@ -195,6 +257,8 @@ export function InboxPage() {
   };
 
   const summary = inboxQuery.data?.summary;
+  const isMutating =
+    isRunning || markDoneMutation.isPending || snoozeMutation.isPending || dismissMutation.isPending || undoTaskMutation.isPending;
 
   return (
     <>
@@ -342,8 +406,8 @@ export function InboxPage() {
           onDecline={handleDecline}
           onSnooze={handleSnooze}
           canUndo={canUndo}
-          onUndo={undoLastAction}
-          isActionPending={isRunning}
+          onUndo={handleUndo}
+          isActionPending={isMutating}
           lastActionLabel={lastActionLabel}
         />
       </PageBody>
