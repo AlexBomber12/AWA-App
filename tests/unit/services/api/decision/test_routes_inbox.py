@@ -97,3 +97,45 @@ def test_inbox_dismiss(monkeypatch, inbox_client):
     response = inbox_client.post("/inbox/tasks/t-2/dismiss", json={"note": "skip"})
     assert response.status_code == 200
     assert response.json()["id"] == "t-2"
+
+
+def test_inbox_snooze(monkeypatch, inbox_client):
+    task = _task_record("t-3")
+
+    async def _fake_snooze(*_args, **_kwargs):
+        return task
+
+    monkeypatch.setattr(decision_service, "snooze_task", _fake_snooze)
+    response = inbox_client.post("/inbox/tasks/t-3/snooze", json={"note": "later"})
+    assert response.status_code == 200
+    assert response.json()["id"] == "t-3"
+
+
+def test_inbox_undo(monkeypatch, inbox_client):
+    task = _task_record("t-4")
+
+    async def _fake_undo(*_args, **_kwargs):
+        return task
+
+    monkeypatch.setattr(decision_service, "reopen_task", _fake_undo)
+    response = inbox_client.post("/inbox/tasks/t-4/undo", json={"note": "reopen"})
+    assert response.status_code == 200
+    assert response.json()["id"] == "t-4"
+
+
+def test_inbox_snooze_not_found(monkeypatch, inbox_client):
+    async def _fake_snooze(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(decision_service, "snooze_task", _fake_snooze)
+    response = inbox_client.post("/inbox/tasks/missing/snooze", json={"note": "later"})
+    assert response.status_code == 404
+
+
+def test_inbox_undo_not_found(monkeypatch, inbox_client):
+    async def _fake_undo(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(decision_service, "reopen_task", _fake_undo)
+    response = inbox_client.post("/inbox/tasks/missing/undo", json={"note": "undo"})
+    assert response.status_code == 404

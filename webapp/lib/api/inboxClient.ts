@@ -3,7 +3,7 @@ import type { ApiError } from "@/lib/api/apiError";
 import { useApiMutation } from "@/lib/api/useApiMutation";
 import { useApiQuery, type UseApiQueryOptions } from "@/lib/api/useApiQuery";
 
-import type { BffListResponse, Task, TaskSource, TaskState } from "./bffTypes";
+import type { BffItemResponse, BffListResponse, Task, TaskSource, TaskState } from "./bffTypes";
 
 export type InboxQuery = {
   page?: number;
@@ -110,35 +110,57 @@ export function useTaskById(taskId: string | null, options?: UseTaskByIdOptions)
 export type TaskStateUpdate = {
   taskId: string;
   state: TaskState;
-  nextRequestAt?: string;
+  nextRequestAt?: string | null;
 };
 
-export async function markTaskDone(taskId: string): Promise<TaskStateUpdate> {
-  return Promise.resolve({ taskId, state: "done" });
+const taskActionPath = (taskId: string, action: "apply" | "dismiss" | "snooze" | "undo") =>
+  `${INBOX_ENDPOINT}/tasks/${taskId}/${action}`;
+
+const runTaskMutation = async (taskId: string, action: Parameters<typeof taskActionPath>[1], body?: object): Promise<Task> => {
+  const response = await fetchFromBff<BffItemResponse<Task>>(taskActionPath(taskId, action), {
+    method: "POST",
+    headers: body ? { "Content-Type": "application/json" } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  return response.data;
+};
+
+export async function markTaskDone(taskId: string): Promise<Task> {
+  return runTaskMutation(taskId, "apply");
 }
 
-export async function snoozeTask(taskId: string, nextRequestAt: string): Promise<TaskStateUpdate> {
-  return Promise.resolve({ taskId, state: "snoozed", nextRequestAt });
+export async function snoozeTask(taskId: string, nextRequestAt: string): Promise<Task> {
+  return runTaskMutation(taskId, "snooze", { next_request_at: nextRequestAt });
 }
 
-export async function undoTaskAction(taskId: string): Promise<{ taskId: string }> {
-  return Promise.resolve({ taskId });
+export async function dismissTask(taskId: string): Promise<Task> {
+  return runTaskMutation(taskId, "dismiss");
+}
+
+export async function undoTaskAction(taskId: string): Promise<Task> {
+  return runTaskMutation(taskId, "undo");
 }
 
 export function useMarkTaskDoneMutation() {
-  return useApiMutation<TaskStateUpdate, ApiError, string>({
+  return useApiMutation<Task, ApiError, string>({
     mutationFn: (taskId) => markTaskDone(taskId),
   });
 }
 
 export function useSnoozeTaskMutation() {
-  return useApiMutation<TaskStateUpdate, ApiError, { taskId: string; nextRequestAt: string }>({
+  return useApiMutation<Task, ApiError, { taskId: string; nextRequestAt: string }>({
     mutationFn: ({ taskId, nextRequestAt }) => snoozeTask(taskId, nextRequestAt),
   });
 }
 
 export function useUndoTaskActionMutation() {
-  return useApiMutation<{ taskId: string }, ApiError, string>({
+  return useApiMutation<Task, ApiError, string>({
     mutationFn: (taskId) => undoTaskAction(taskId),
+  });
+}
+
+export function useDismissTaskMutation() {
+  return useApiMutation<Task, ApiError, string>({
+    mutationFn: (taskId) => dismissTask(taskId),
   });
 }

@@ -7,9 +7,9 @@ follow the conventions below.
 1. **Browser → Next.js webapp (App Router).** The web console lives under `webapp/` and uses
    Next.js 14+ with the App Router and TypeScript-only modules. Component code renders on the
    server by default and opt into client interactivity when needed in `/components`.
-2. **Next.js BFF routes (`app/api/bff/*`).** Back-end-for-frontend (BFF) handlers will be added in
-   PR-UI-1B. They sit next to the App Router pages, proxy authenticated calls, and apply any UI
-   specific shaping before forwarding to the API.
+2. **Next.js BFF routes (`app/api/bff/*`).** The Back-end-for-frontend (BFF) handlers sit next to
+   the App Router pages, proxy authenticated calls, and apply UI-specific shaping before forwarding
+   to FastAPI. ROI, Returns, Inbox, and Decision Engine all flow through these endpoints.
 3. **FastAPI backend (`services/api`).** Remains the system of record for auth, RBAC, business
    workflows, and event ingestion. UI calls it via `NEXT_PUBLIC_API_URL` through the upcoming BFF
    layer or directly for simple read-only endpoints.
@@ -223,8 +223,13 @@ camelCase, and enforces RBAC via `requirePermission`:
 | --- | --- | --- | --- |
 | `/api/bff/roi` | `/roi` | `lib/api/roiClient.ts` / `useRoiQuery` | ROI table/dashboard (`/roi`) |
 | `/api/bff/returns` | `/stats/returns` | `lib/api/returnsClient.ts` / `useReturnsListQuery` | Returns list + summary (`/returns`) |
-| `/api/bff/inbox` | `/decision/inbox` | `lib/api/inboxClient.ts` / `useInboxTasksQuery` | Inbox task list + TaskDetails drawer (`/inbox`) |
-| `/api/bff/decision` | `/decision/*` | `lib/api/decisionClient.ts` / `useDecisionSummaryQuery` | Decision Engine rules + simulations (`/decision`) |
+| `/api/bff/inbox` | `/inbox/tasks` (+ `/apply`, `/dismiss`, `/snooze`, `/undo`) | `lib/api/inboxClient.ts` / `useInboxTasksQuery` | Inbox task list + TaskDetails drawer (`/inbox`) |
+| `/api/bff/decision` | `/decision/preview`, `/decision/run` | `lib/api/decisionClient.ts` / `useDecisionSummaryQuery` | Decision Engine previews + simulations (`/decision`) |
+
+These routes are the canonical ingress points for the webapp: ROI and Returns proxy read paths,
+Inbox exposes task listings plus apply/dismiss/snooze/undo actions, and Decision Engine proxies the
+preview/run APIs from FastAPI. All BFF handlers enforce `requirePermission` so the same RBAC rules
+apply as the backend.
 
 Front-end components must call these BFF clients instead of hitting FastAPI directly; this keeps
 React Query caches, DTO shaping, and permission checks consistent. `PermissionGuard` blocks action
@@ -234,7 +239,7 @@ fallback messaging in Storybook, unit tests, and production.
 ## Roadmap & scope guardrails
 - **PR-UI-1A (this change):** Bootstrap App Router, Tailwind design tokens, shadcn/ui wiring,
   navigation stubs, Jest + Playwright smoke coverage, docker + docs integration.
-- **PR-UI-1B:** Add NextAuth with Keycloak, BFF routes under `app/api/bff`, and Settings controls
+- **PR-UI-1B:** Added NextAuth with Keycloak, the BFF routes under `app/api/bff`, and Settings controls
   for environment + RBAC toggles.
 - **Later milestones:** Fill in ROI, SKU, Ingest, Returns, Inbox, and Decision Engine workflows as
   described in the ROI and Virtual Buyer specifications.
